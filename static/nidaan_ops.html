@@ -13685,10 +13685,18 @@ function l2Table(b){
     const mv = (b.moves || []);
     const fwd = mv.filter(function(x){ return x.kind === 'forward'; })[0];
     const others = mv.filter(function(x){ return x !== fwd; });
+    // LIVE CASES HAS NO ONE-CLICK FORWARD. Everywhere else the obvious next bucket is a primary
+    // button, because the work is linear. Out of Live Cases it is not: the claim leaves for
+    // Pending Draft only once the gist is written, and a bright "→ Pending Draft" sitting on
+    // every row invited exactly the accidental move the confirm dialog was added to stop
+    // (founder, 19 Sep: "Movement happens through Move, not a shortcut button"). The
+    // destination is unchanged — it is in the Move… menu, one deliberate click further away.
+    const shortcut = (b.bucket_key !== 'live_cases') ? fwd : null;
+    const menu = shortcut ? others : mv;
     const btns =
-        (fwd ? '<button class="l2mv p" onclick="l2Move(' + i.claim_id + ',\'' + fwd.to_key + '\')">→ '
-              + esc(fwd.name_en) + '</button>' : '')
-      + (others.length ? '<button class="l2mv g" onclick="l2MoveMenu(' + i.claim_id + ')">Move…</button>' : '')
+        (shortcut ? '<button class="l2mv p" onclick="l2Move(' + i.claim_id + ',\'' + shortcut.to_key + '\')">→ '
+              + esc(shortcut.name_en) + '</button>' : '')
+      + (menu.length ? '<button class="l2mv g" onclick="l2MoveMenu(' + i.claim_id + ')">Move…</button>' : '')
       + (b.bucket_key === 'pending_draft'
           ? '<button class="l2mv d" onclick="l2QueryRaise(' + i.claim_id + ')">\u2753 Query</button>' : '')
       + (b.bucket_key === 'live_cases' && i.query && i.query.state === 'open'
@@ -14175,7 +14183,12 @@ function l2CaseRender(rem){
     // bucket's job is the strong button.
     + '<div class="csrtools" style="margin:.1rem 0 .2rem">'
     +   '<button class="l2mv ' + (st.bucket === 'live_cases' ? 'p' : 'g') + '" onclick="csrGist(' + id + ')">\u270d\ufe0f Gist</button>'
-    +   '<button class="l2mv ' + (st.bucket === 'pending_draft' ? 'p' : 'g') + '" onclick="csrDraft(' + id + ')">\ud83d\udcdd Draft</button>'
+    // Not in Live Cases. That bucket's job is the gist; the draft is written in the next one,
+    // and offering the draft here invited people to start it a bucket early (founder, 19 Sep:
+    // "Live Cases builds the gist; the draft belongs to the next bucket"). Every other bucket
+    // still reaches it, because a drafted case is read long after it was written.
+    +   (st.bucket === 'live_cases' ? ''
+        : '<button class="l2mv ' + (st.bucket === 'pending_draft' ? 'p' : 'g') + '" onclick="csrDraft(' + id + ')">\ud83d\udcdd Draft</button>')
     +   '<button class="l2mv g" onclick="csrSheet(' + id + ')">\ud83d\udcc4 Assessment sheet</button>'
     +   '<button class="l2mv g" onclick="csrReport(' + id + ')">\ud83d\udccb Case report</button>'
     + '</div>'
@@ -15999,8 +16012,35 @@ async function dwOpen(claimId){
   // times out of ten, and unticking is easier than hunting.
   (_dwData.docs || []).forEach(function(d){ if (!d.received) _dwPick[d.key] = true; });
   _dwMsg = '';
+  // WHO ASKED LAST, BEFORE YOU ASK AGAIN. The server has always recorded every ask and has
+  // always refused a second one inside the cooling-off window without a typed reason — but the
+  // person only met that refusal AFTER writing the message, which reads as the system being
+  // obstructive. Told here instead, it is information; told there, it is an argument.
+  // Fetched separately and never allowed to block: if it fails, the window opens as before.
+  _dwLast = null;
+  try{
+    const lr = await API('/claims/' + claimId + '/last-ask');
+    if (lr.ok) _dwLast = await lr.json();
+  }catch(e){}
   dwRender();
   dwRefreshDraft();
+}
+
+// The banner itself. Silent when nobody has asked — a first ask needs no warning.
+let _dwLast = null;
+function _dwLastAsk(){
+  const a = _dwLast;
+  if (!a || !a.asked) return '';
+  const who = a.by ? esc(a.by) : 'someone';
+  const when = a.days === 0 ? 'today' : (a.days === 1 ? 'yesterday' : a.days + ' days ago');
+  if (!a.recent){
+    return '<div class="l2ban" style="font-size:.84rem">Last asked <b>' + when
+         + '</b> by ' + who + '.</div>';
+  }
+  return '<div class="l2ban amber" style="font-size:.84rem">This claim was already asked <b>'
+       + when + '</b> by ' + who + '. Asking again so soon needs a reason — you will be asked '
+       + 'for one, and it is recorded. If they are simply slow, a reminder is kinder than a '
+       + 'second request.</div>';
 }
 
 function dwRender(){
@@ -16111,7 +16151,8 @@ function dwRender(){
     : '';
 
   body.innerHTML =
-      '<div class="dwrow">'
+      _dwLastAsk()
+    + '<div class="dwrow">'
     +   '<span style="font-size:.83rem;color:var(--nd-text-muted)">Claim type</span>' + typeSel
     +   '<span class="bdsub">the list below follows from this — correct it first if it is wrong</span>'
     + '</div>'

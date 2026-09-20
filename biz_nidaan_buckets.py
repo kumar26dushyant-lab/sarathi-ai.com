@@ -344,6 +344,21 @@ _CONFIG_FIXES = (
     # received on any claim, and one more line on a list people already find long.
     ("UPDATE nidaan_claim_doc_checklist SET required=0 WHERE doc_key='prior_medical' "
      "AND required=1", ()),
+    # …and off the claims that already carried it. Dropping it from the template was only half
+    # the job: effective_docs() re-adds ANY checklist row the template does not recognise as a
+    # CUSTOM document, labelled "Asked for on this case." So on 55 live claims the line came
+    # back wearing a worse hat — it now read as something a staffer had specifically demanded
+    # for that claim, rather than a template line nobody wanted.
+    #
+    # Marked removed rather than deleted, so it leaves the list the same way a staffer's own
+    # removal does: it moves to removed_docs() with a name and a reason somebody can read back.
+    # Guarded on received=0 — if a document was ever actually collected against this line, it
+    # stays. (Live at the time of writing: 77 rows, 0 ever received.)
+    ("UPDATE nidaan_claim_doc_checklist SET removed_at=CURRENT_TIMESTAMP, "
+     "removed_by='NidaanPartner', removed_reason='Taken off the standard health list — this "
+     "document is no longer asked for.' "
+     "WHERE doc_key='prior_medical' AND removed_at IS NULL "
+     "AND COALESCE(received,0)=0", ()),
     ("UPDATE nidaan_claims SET pipeline_sub='escalated' WHERE pipeline_stage='escalation' "
      "AND COALESCE(pipeline_sub,'') IN ('','pending') AND claim_id IN "
      "(SELECT claim_id FROM nidaan_claim_fields WHERE field_key='escalation_date' "
