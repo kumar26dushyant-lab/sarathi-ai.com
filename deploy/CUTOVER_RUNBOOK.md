@@ -109,7 +109,7 @@ sudo chown -R sarathi:sarathi /opt/sarathi/sarathi_biz.db /opt/sarathi/uploads \
 sudo -u sarathi sqlite3 /opt/sarathi/sarathi_biz.db "SELECT COUNT(*) FROM nidaan_claims;"
 ```
 
-## Step 4 — Real secrets (Oracle)
+## Step 4 — Real secrets, and lifting the send-block (Oracle)
 
 ```bash
 # Place the real biz.env. NEVER via a world-readable path, never committed anywhere.
@@ -119,6 +119,34 @@ grep -c '^[A-Z0-9_]*=' /opt/sarathi/biz.env   # expect 74
 ```
 
 **The ownership line is not a formality** — `biz.env` owned by root has 502'd both sites before.
+
+### ⚠️ Remove `NIDAAN_NO_OUTBOUND` — miss this and the live site sends nothing
+
+While the box was being verified it held **real claim data with a running worker**, so every
+service was given `NIDAAN_NO_OUTBOUND=1`. That guard is honoured in *every* send path — email,
+WhatsApp, Telegram, web push. Left in place after cutover, the site looks perfectly healthy and
+silently delivers **no login codes, no document requests, no notifications at all.** That is the
+worst failure mode we have: green everywhere, nothing arriving.
+
+```bash
+sudo sed -i '/^NIDAAN_NO_OUTBOUND=/d' /etc/sarathi/sarathi-web-1.env \
+        /etc/sarathi/sarathi-web-2.env /etc/sarathi/sarathi-worker.env
+grep -r NIDAAN_NO_OUTBOUND /etc/sarathi/ || echo "  gone — sending is live"
+```
+
+Then, after the restart in Step 5, **prove it is really gone from the running processes**:
+
+```bash
+for u in sarathi-web@1 sarathi-web@2 sarathi-worker; do
+  PID=$(systemctl show -p MainPID --value $u)
+  printf '%-16s ' "$u"
+  sudo cat /proc/$PID/environ | tr '\0' '\n' | grep -q '^NIDAAN_NO_OUTBOUND=1$' \
+    && echo '*** STILL BLOCKED — FIX BEFORE THE FLIP ***' || echo 'sending enabled'
+done
+```
+
+*(It is deliberately the same check used to confirm the guard was on. Checking the file is not
+enough — the value that matters is the one the process actually has.)*
 
 ## Step 5 — Start, and prove it before anyone sees it
 
