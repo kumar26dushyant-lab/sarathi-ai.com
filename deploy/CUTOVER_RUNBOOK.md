@@ -162,6 +162,30 @@ cd /opt/sarathi && NIDAAN_NO_OUTBOUND=1 ./venv/bin/python -m journeys.run --quie
 #   → expect: 20 passed  0 failed
 ```
 
+**Prove no data was lost** — counts on Contabo must equal counts here, table for table:
+
+```bash
+# on Contabo, before it is started again
+sqlite3 /opt/sarathi/sarathi_biz.db "SELECT name FROM sqlite_master WHERE type='table'   AND name NOT LIKE 'sqlite_%' ORDER BY name;" | while read -r t; do
+  echo "$t $(sqlite3 /opt/sarathi/sarathi_biz.db "SELECT COUNT(*) FROM \"$t\";")"; done > /tmp/live.counts
+
+# on Oracle, same loop against /opt/sarathi/sarathi_biz.db > /tmp/new.counts
+diff /tmp/live.counts /tmp/new.counts && echo "every table, every row, accounted for"
+```
+
+*Verified 20 Sep on a rehearsal: 158 tables, **79,454 rows**, identical through snapshot AND
+transfer (same md5 either side of the wire).*
+
+**Prove the product behaves the same** — same functions, same data, both machines:
+
+```bash
+# on each box, against the SAME database file
+NIDAAN_NO_OUTBOUND=1 ./venv/bin/python deploy/verify-parity.py /path/to/same.db > /tmp/parity.txt
+diff contabo-parity.txt oracle-parity.txt && echo "124/124 identical"
+```
+
+*Verified 20 Sep: **124 checks, zero differences, zero raised.***
+
 Then, still on the test hostnames (production is still Contabo, still stopped):
 
 ```bash
