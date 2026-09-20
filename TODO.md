@@ -78,6 +78,20 @@ The pinned-Host landmine is **structurally gone** — replaced by the real cutov
 - **Memory measured, answering "do we need more for Sarathi":** web@1 205 MB, web@2 206 MB, worker 238 MB = **~650 MB** (production: ~750 MB). After the split, two apps ≈ **1.3 GB of 11.9 GB**. **No Oracle increase needed** — and since the free A1 pool is full, increasing would cost money for headroom the numbers say is unnecessary.
 - Only test-only difference left: each block sends its product's real hostname as `Host` (the app selects product from Host, and the test names are not the production names). Becomes `$host` at cutover; documented in the config header.
 
+### 🔴 FOUND ON CONTABO — CLAIM DOCUMENTS HAVE NO OFF-SITE BACKUP (2026-09-20)
+**Pre-existing on production, not caused by the migration.** Found while proving backup parity.
+- The nightly tarball (**873 MB**: database + `uploads` + `generated_pdfs` + videos) is encrypted with GPG and copied to `s3mumbai:sarathi-backups-mumbai` via rclone. **That copy has never worked** — `rclone.conf` **does not exist anywhere on the server**, so the `s3mumbai` remote is undefined. The log shows *"Offsite rclone FAILED"* on 17, 18, 19 and 20 Sep.
+- The off-site backup that *does* work (`sarathi-db-backups`, proven restorable today) contains **only the database** — a 3.1 MB encrypted blob.
+- **Net effect: the 914 MB of claim documents exist only on the server**, plus 9 local tarballs spanning 12–20 Sep on the *same disk*. Lose the machine and the documents go with it — while the database survives.
+- **Why nothing caught it:** `backup-db.service` exits **0** even when the rclone step fails; it only logs a warning. So the new "Scheduled jobs" check would not catch it either — the unit did not fail. Another member of the silent-failure family: the dashboard is honest about what it measures, and it was measuring the wrong thing.
+- 🔵 **FOUNDER ACTION:** this needs an S3/B2 bucket and `rclone config` — credentials I do not have. Worth doing before cutover if convenient, but **not a blocker**: the migration itself gives a second full copy of the documents on two machines for the 2–4 week overlap, which is more redundancy than exists today.
+
+### ✅ CLAMAV — A BROKEN FLOW CAUGHT BEFORE CUTOVER (2026-09-20)
+**Every document upload would have been refused on the new box.** Uploads are virus-scanned and the code **refuses when the scanner is down**; ClamAV simply was not installed. Neither the 20 journeys nor the 124 function checks touch the upload path, so nothing had caught it.
+- Installed, definitions fetched (85 MB main + 23 MB daily), and configured to match production **exactly** — `StreamMaxLength 64M`, `MaxFileSize 64M`, `MaxScanSize 256M`, `MaxThreads 12`. Not cosmetic: uploads are capped at 25 MB and clamd refuses a stream longer than `StreamMaxLength`, so a stock 25M default would start rejecting documents at exactly the size the product allows.
+- **Proven through the app's own scanner on both boxes:** clean PDF `(True, '')`, EICAR `(False, 'Eicar-Test-Signature')` — identical.
+- Systematic follow-up: audited every external binary the code invokes. Only `node` (used by a dev-only JS syntax check) and `rclone` (above) differ; nothing else load-bearing is missing.
+
 ### ✅ OFF-SITE ENCRYPTED BACKUP PROVEN ON THE NEW BOX (2026-09-20)
 The last pre-cutover blocker is closed. **A backup that cannot be restored is not a backup**, so the whole chain was proven, not just the push.
 - Write deploy key added (founder's extension **correctly challenged my instruction** — I had said "the previous key was read-only", which was true of the *code* repo, not this one. The existing `sarathi-db-backup` key is **Contabo's**, verified by fingerprint, 3 successful pushes in 3 days. Left untouched; per-machine keys so each can be revoked independently).
