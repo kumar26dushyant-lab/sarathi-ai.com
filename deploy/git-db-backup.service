@@ -1,0 +1,23 @@
+#  Encrypted off-server DB backup — the one backup that survives losing the whole machine.
+#
+#  TRACKED IN GIT ON PURPOSE. This unit and its timer lived only on the server until 20 Sep 2026,
+#  which meant a rebuild-from-source produced a box with NO off-site database backup and nothing
+#  to say so. Its own script carries the same scar: git-db-backup.sh used to be untracked too, and
+#  a deploy's `git clean` deleted it on 2026-07-22, silently breaking off-server backups for a day.
+#
+#  Runs as root: the deploy key for the private backup repo lives at /root/.ssh/id_backup_repo,
+#  and the passphrase comes from BACKUP_ENC_PASSPHRASE in /opt/sarathi/biz.env.
+#
+#  Install:
+#    sudo cp deploy/git-db-backup.service deploy/git-db-backup.timer /etc/systemd/system/
+#    sudo systemctl daemon-reload && sudo systemctl enable --now git-db-backup.timer
+[Unit]
+Description=Encrypted off-server DB backup to private GitHub repo
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/sarathi/deploy/git-db-backup.sh
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=git-db-backup

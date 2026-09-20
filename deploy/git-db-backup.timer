@@ -1,0 +1,11 @@
+#  Daily, 02:30. Persistent=true so a missed run (box was down) fires on the next boot rather
+#  than being skipped in silence — a backup you didn't notice not happening is the whole problem.
+[Unit]
+Description=Daily encrypted off-server DB backup
+
+[Timer]
+OnCalendar=*-*-* 02:30:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
