@@ -78,6 +78,15 @@ The pinned-Host landmine is **structurally gone** — replaced by the real cutov
 - **Memory measured, answering "do we need more for Sarathi":** web@1 205 MB, web@2 206 MB, worker 238 MB = **~650 MB** (production: ~750 MB). After the split, two apps ≈ **1.3 GB of 11.9 GB**. **No Oracle increase needed** — and since the free A1 pool is full, increasing would cost money for headroom the numbers say is unnecessary.
 - Only test-only difference left: each block sends its product's real hostname as `Host` (the app selects product from Host, and the test names are not the production names). Becomes `$host` at cutover; documented in the config header.
 
+### 🟡 IN PROGRESS — giving claim documents a real off-site backup (2026-09-20)
+- **Chosen: Oracle Object Storage, same tenancy, Mumbai** — data residency kept, Always Free includes 20 GB, and with **instance-principal auth no access key or secret is ever created or stored anywhere**. The server proves its own identity.
+- Ubuntu's packaged rclone (1.60.1+dfsg) **strips the Oracle backend**, so the official build is installed instead — v1.75.1, **checksum verified against the published SHA256SUMS**, and the installed binary confirmed to be the one from the verified archive. Backend is `oos` (not `oracleobjectstorage`; my first grep looked for the wrong name and wrongly reported it missing).
+- **`backup.sh` fixed, two faults:** (1) only *local* copies were pruned, so the remote would grow past a 20 GB tier in ~3 weeks; (2) a failed offsite **logged a warning and exited 0**, which is exactly why Contabo's has been silently broken since at least 17 Sep. Now exits non-zero so App Health's *Scheduled jobs* check can see it — a warning in a log file is not something a dashboard can watch. "Not configured" still exits 0: a decision, not a fault.
+- Verified on the new box: 870 MB archive, offsite correctly *skipped*, service result **success**.
+- ⚠️ **Deploying this to Contabo will correctly turn its backup unit RED**, because its offsite genuinely is failing. That is the intent, and it goes green once the bucket exists. Holding that deploy until then so we do not create a red that is only waiting on us.
+- 🔵 **Founder steps issued** (bucket + dynamic group + policy). On confirmation: configure rclone keyless, wire it in, run a real backup, and **restore from it** to prove it — same standard as the database backup.
+- ⚠️ **My heredoc ate the line-continuation backslashes** when first patching `backup.sh`, silently joining lines. Still valid bash and `bash -n` passed, so nothing would have complained. Reverted and redone via a file-based patch that keeps backslashes out of literals; continuations verified present in the raw bytes afterwards.
+
 ### ✅ VIRUS SCANNING NOW COVERS EVERY PATH, ON BOTH BOXES (2026-09-20)
 Founder: *"Virus scan at upload and at any other places we're using, must also be working."* Auditing "any other places" found two real holes.
 - **All 11 HTTP upload paths** already used the single `validate_upload_scanned()` gate — confirmed, no upload path bypasses it.
