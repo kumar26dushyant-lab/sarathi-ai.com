@@ -69,6 +69,32 @@ All 15 journeys were NidaanPartner. Before cutting a 29k-line file in half, the 
 - ⚠️ **Finding: a missing `TELEGRAM_BOT_TOKEN` kills the WEB tier.** `main()` does `sys.exit(1)` on an empty token regardless of `APP_ROLE`, so both web instances crash-looped until a placeholder was set. **A typo when rotating the Telegram token would take the whole website down, not just the bot.** Not changed mid-migration; worth fixing separately.
 - ⚠️ **Deliberate deviation: no UFW.** This Oracle image ships its own persisted iptables ruleset; layering UFW means two managers writing the same tables, which is how you lock yourself out of a box in Mumbai. Protection is equivalent — OCI security list (22/80/443) + host iptables + fail2ban.
 
+### ✅ BOTH PRODUCTS SERVE CORRECTLY ON ORACLE, BY HOSTNAME (2026-09-20)
+The pinned-Host landmine is **structurally gone** — replaced by the real cutover shape: one nginx server block per product, chosen by `server_name`.
+- **https://new.nidaanpartner.com** → Nidaan (`/` 200 · `/nidaan/ops` **Nidaan Ops — Internal Portal** 1,231,837b · `/admins` same)
+- **https://new.sarathi-ai.com** → Sarathi (`/` 200 · `/superadmin` **Cockpit — Sarathi-AI** 87,928b · `/partner` 92,917b)
+- Both over valid TLS (`ssl_verify_result 0`), both certificates issued, `sites-enabled` holds exactly **one** file (a stray duplicate upstream takes nginx down).
+- Earlier, app-level: **30 routes × 2 products = 60 checks, ZERO differences** vs production, and content fingerprinted — identical product, title and byte size on all ten key pages.
+- **Memory measured, answering "do we need more for Sarathi":** web@1 205 MB, web@2 206 MB, worker 238 MB = **~650 MB** (production: ~750 MB). After the split, two apps ≈ **1.3 GB of 11.9 GB**. **No Oracle increase needed** — and since the free A1 pool is full, increasing would cost money for headroom the numbers say is unnecessary.
+- Only test-only difference left: each block sends its product's real hostname as `Host` (the app selects product from Host, and the test names are not the production names). Becomes `$host` at cutover; documented in the config header.
+
+### 📋 PENDING — the honest list (2026-09-20)
+**Before cutover:**
+1. **Data sync plan** — new box has none of it: DB 1.6 MB (fresh schema) vs **20 MB**, uploads **20 KB vs 914 MB**, pdfs 4 KB vs 9 MB, apk 2.9 MB vs 98 MB, docsplit 8 KB vs 5.6 MB.
+2. **Backups not armed on the new box** — only `certbot` and the OS dpkg timer are running. `backup-db`, `git-backup` and the encrypted off-site `git-db-backup` all need installing + keys.
+3. **Real `biz.env`** — currently 74 placeholder keys. Real secrets go on at cutover, never before.
+4. **Deploy mechanism** — `sarathi-deploy.service`/`.path` not installed or tested on the new box.
+5. **Cutover runbook** — not written: exact order, verification at each step, rollback at each step.
+6. **Integrations to re-verify with real credentials** — Email Radar IMAP, WhatsApp Cloud webhook, Razorpay webhook, Telegram bot. Same domain, so DNS carries them, but each must be proven after the flip.
+
+**At cutover (the window):** stop app → final DB + uploads sync → real biz.env → start → flip Cloudflare origin → verify both products → Contabo stays warm.
+
+**After cutover:** soak 2–4 weeks → remove `new.*` DNS records and their certs → restore `proxy_set_header Host $host` and real `server_name`s → then decommission Contabo.
+
+**The split (separate project, after the move settles):** cut plan for `sarathi_biz.py` (450 Nidaan / 394 Sarathi endpoints, 5 contiguous runs) → second repo + C-drive folder → two deploys → the 7 shared modules.
+
+**Deliberately deferred (not during a migration):** IST consolidation + 9 naive `datetime.now()` call sites · `TELEGRAM_BOT_TOKEN` killing the web tier · Brevo exhausted · 5 branches with no contact · conversation-on-claim panel · immune-system phases · Pending-Draft approval gate.
+
 ### ⚠️ CAUGHT BY THE FOUNDER — new.nidaanpartner.com was serving the Sarathi site (2026-09-20)
 **Not a migration fault — the monolith working exactly as designed, and a gap in MY verification.**
 - The app picks its product from the **Host header**: `_is_nidaan_host()` matches exactly `nidaanpartner.com` and `www.nidaanpartner.com`; the `home()` docstring says *"Sarathi homepage everywhere else."* `new.nidaanpartner.com` is neither, so it served Sarathi and **every `/nidaan/` route returned 404**.
