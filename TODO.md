@@ -4,7 +4,7 @@ _Auto-maintained by Claude **every conversation**, alongside `PROJECT_MASTER_CON
 _**Two-terminal workflow:** work 🟦 NidaanPartner items in one VS Code terminal, 🟩 Sarathi items in another. Each app's section is self-contained so both can progress simultaneously without collision._
 _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned · ✅ done_
 
-**Last updated:** 2026-09-19 (money removed from every message that reaches an outside party; alarms split into incidents that page and gaps that do not; a 15-journey / 96-step safety net now runs against a copy of the live DB before anything ships)
+**Last updated:** 2026-09-20 — 🟢 **CUTOVER COMPLETE. NidaanPartner.com and Sarathi-AI.com are LIVE on Oracle Mumbai (161.118.186.201, aarch64).** Contabo parked as rollback, untouched.
 
 ### ✅ SHIPPED 2026-09-19 — messages that say less, alarms that mean more
 - ✅ **The ₹588 leak closed at one choke point.** A branch paid us ₹588 and charged the complainant ₹1,200; our confirmation showed the complainant **₹588**. Founder's ruling was wider than the bug — *"only welcome message should go to all parties, not containing the amount or plan or whatever… whosoever is doing payment they will get payment message from their bank."* `_strip_money()` in the WhatsApp orchestrator, `thank_you_payment` rewritten money-free, money out of the funnel notifications. **Price nudges suppressed when a branch or CP is the payer** (`_paid_for_by_an_intermediary()` — 71 branch claims protected from being asked for a fee somebody else owes). **Subscription email names the plan, not the amount.**
@@ -77,6 +77,20 @@ The pinned-Host landmine is **structurally gone** — replaced by the real cutov
 - Earlier, app-level: **30 routes × 2 products = 60 checks, ZERO differences** vs production, and content fingerprinted — identical product, title and byte size on all ten key pages.
 - **Memory measured, answering "do we need more for Sarathi":** web@1 205 MB, web@2 206 MB, worker 238 MB = **~650 MB** (production: ~750 MB). After the split, two apps ≈ **1.3 GB of 11.9 GB**. **No Oracle increase needed** — and since the free A1 pool is full, increasing would cost money for headroom the numbers say is unnecessary.
 - Only test-only difference left: each block sends its product's real hostname as `Host` (the app selects product from Host, and the test names are not the production names). Becomes `$host` at cutover; documented in the config header.
+
+### 🟢 CUTOVER COMPLETE — BOTH SITES LIVE ON ORACLE (2026-09-20, Sunday evening)
+Window: **16:24–16:31 UTC — about 7 minutes**, of which the user-visible outage was the gap between freezing Contabo and the Cloudflare flip landing.
+- **No data loss, measured not assumed:** snapshot md5 `da30f2ca…` identical either side of the wire; **158 tables, 79,613 rows** identical; `integrity_check ok`; **824 claim documents**, 914 MB uploads in place.
+- **Both products verified through Cloudflare:** `nidaanpartner.com` (Nidaan) · `/nidaan/ops` **Nidaan Ops 1,232,775b** · `/admins` · `/nidaan/dashboard` — and `sarathi-ai.com` (Sarathi-AI) · `/superadmin` **Cockpit** · `/partner` · `/login`. Each serving **its own** product.
+- **20/20 journeys pass on live production data.** App Health: 21 checks, 2 failing — both known GAPS, **"would page: nobody"**, exactly matching Contabo.
+- **Integrations live with real credentials:** `@NidaanOpsBot` Telegram polling active · Email Radar polling 2 mailboxes · reminder scheduler started · WAL mode, DB and `uploads/nidaan-docs` writable.
+- **Send-block lifted and PROVEN gone from the running processes** (not just the file) — the failure mode where the site looks healthy and silently delivers nothing.
+- **Backup ownership transferred cleanly:** Contabo's timers disabled, Oracle's enabled, and **both proven by running them immediately** — encrypted DB pushed to git, and a **912 MB full backup (DB + 914 MB documents) to Oracle Object Storage**, keyless. Remote pruning ran.
+- **Origin locked to Cloudflare:** direct access to `161.118.186.201` on 80/443 now **refused (000)**, both sites 200 through Cloudflare, SSH intact. This control existed on Contabo and would otherwise have been silently lost.
+- **`max_fails=0` had to be re-applied** — installing Contabo's nginx config verbatim reintroduced the 502-on-deploy bug. Caught by my own check, not by luck.
+- **Rollback stays available:** Contabo powered, services **stopped** (so it cannot take writes and diverge), data intact at 162 claims, 374 GB free. Rollback IP **`84.247.172.252`**, read off the DNS records themselves.
+- ℹ️ `staging.*` deliberately still points at Contabo — it is a separate service there, and retires with the box.
+- ℹ️ Pre-existing, NOT caused by the move: the legacy Sarathi bot token is rejected by Telegram (**96 times in 7 days on Contabo**). The app continues without it; scheduler, Nidaan bot and digests unaffected.
 
 ### ✅ DONE — claim documents now have a working, proven off-site backup (2026-09-20)
 - **Chosen: Oracle Object Storage, same tenancy, Mumbai** — data residency kept, Always Free includes 20 GB, and with **instance-principal auth no access key or secret is ever created or stored anywhere**. The server proves its own identity.
