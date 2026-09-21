@@ -7,6 +7,27 @@ _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned ·
 **Last updated:** 2026-09-22 — 🟢 **CUTOVER COMPLETE. NidaanPartner.com and Sarathi-AI.com are LIVE on Oracle Mumbai (161.118.186.201, aarch64).** Contabo parked as rollback, untouched.
 
 ### ✅ SHIPPED 2026-09-22 — the case email, and the ten items closed
+- ✅ **One tap, one action (founder, 22 Sep: *"most are impatient they tap/click multiple times,
+  so we dont want any glitch"*).** The cause is worth naming: people tap again because **nothing
+  visibly happened**. A move takes half a second on a good connection and three on a phone in a
+  basement, and in that gap the button looks exactly as it did before. So the guard does two
+  things — it swallows the extra taps, and it **shows that the first one landed**.
+  - **One place, capture phase**, before any onclick runs. A guard added button by button is one
+    somebody forgets on the button that mattered. Covers buttons, claim rows, board and task
+    cards and tabs.
+  - **How long it stays shut** is the part that needed care: it watches the requests **that tap**
+    started (those beginning in the 200ms after it) and reopens when they finish — not "any
+    request in flight", or the background notification poll would leave every button dead. A
+    button that sends nothing reopens after 200ms. **Ten-second ceiling** so a hung request can
+    never leave somebody unable to move a claim: noisy is recoverable, stuck is not.
+  - **The other shape of it:** tap *Move*, a dialog appears under the finger already coming down,
+    and the second tap lands on *Yes*. Dialog buttons are not live for 280ms — no flicker,
+    nothing greyed; the guard just ignores a tap nobody could have aimed.
+  - **Server side checked, not assumed:** a move to the bucket a claim is already in, a second
+    handover, a second draft query and a second start are each refused — so two people racing
+    cannot double-apply anything either.
+  - **18 assertions in a real browser**, kept as `uitest/one-tap.js`. Run it after any change to
+    that guard or to `openModal`.
 - ✅ **The case email, answered (founder, 22 Sep: it comes from WhatsApp AND from staff typing
   it).** The value was already single — one row in `nidaan_claim_fields`, written by the WhatsApp
   handler and by staff through the same `set_field()`, read by every screen. **There are no copies

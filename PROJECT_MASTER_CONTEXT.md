@@ -7596,3 +7596,24 @@ never written into the claim's timeline.
 
 Its failure message used to say the gist was locked; `NEVER_LOCK` makes that impossible for these
 two fields, so it now says what is actually true - it could not be saved, put them on by hand.
+
+
+**One tap, one action (22 Sep).** A single capture-phase listener in `nidaan_ops.html`, before
+any `onclick` runs, covering buttons, claim rows, board/task cards and tabs. It marks the tapped
+element busy, shows it (`.nd-working`, dimmed with a pulsing dot, `aria-busy`), and releases when
+the requests THAT TAP started have settled - tracked by wrapping `window.fetch` and keeping only
+the promises created in the 200ms after the tap, so the background notification poll does not
+hold every button down. No request in that window means a screen-only button, released at 200ms.
+A ten-second ceiling releases anything else, because a guard that can leave somebody unable to
+move a claim is worse than the double tap it prevents. `data-nd-rapid="1"` opts out.
+
+`openModal()` marks its footer buttons `data-nd-arming="1"` for 280ms, which the same guard
+refuses - a dialog appearing under a finger that is still coming down must not act on that tap.
+A sequence number stops an earlier timer arming a dialog that replaced it.
+
+The server was already idempotent where it matters, and this was checked rather than assumed:
+`move()` refuses `to_key == cur_key`, `hand_over()` refuses a second handover, `raise_query()`
+refuses a second open query, `start_l2()` refuses a claim already in the pipeline.
+
+Test: `uitest/one-tap.js` (Playwright, 18 assertions) - run it after touching the guard or
+`openModal`.

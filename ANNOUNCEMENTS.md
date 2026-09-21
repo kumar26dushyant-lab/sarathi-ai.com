@@ -32,6 +32,10 @@ and the Remarks say what the address was before.
 • **The Escalation list now shows a green line** on every escalated case: *Escalated on
 18-09-2026 · 4 days ago*. You can see at a glance how long the insurance company has been silent.
 
+• **One tap is enough.** If a button takes a moment, it now dims and shows a small moving dot
+while it works — that means we have got it. Tapping again does nothing, so you cannot accidentally
+move a case twice or send the same thing twice. Please give it that second.
+
 • **"All documents received" now asks you first.** Ticking it says, in your name, that every paper
 has reached us, and it is what opens the way to Level-2. A yes/no box now appears before it is
 saved. Unticking asks too.
@@ -65,6 +69,10 @@ Delay)। पहले से दर्ज कुछ भी मिटा नह�
 
 • **Escalation सूची में अब हरी लाइन दिखेगी**: *Escalated on 18-09-2026 · 4 days ago*। एक नज़र में
 पता चलेगा कि बीमा कंपनी कितने दिन से चुप है।
+
+• **एक बार दबाना काफ़ी है।** अगर किसी बटन में थोड़ा समय लगे, तो अब वह हल्का पड़ जाएगा और
+उस पर एक छोटा टिमटिमाता बिंदु दिखेगा — मतलब काम हो रहा है। दोबारा दबाने से कुछ नहीं होता,
+इसलिए गलती से कोई केस दो बार मूव या दो बार भेजा नहीं जाएगा। बस एक पल रुकिए।
 
 • **"All documents received" अब पहले पूछता है।** यह टिक आपके नाम से कहता है कि सारे कागज़ात
 आ चुके हैं, और इसी से Level-2 का रास्ता खुलता है। अब सेव होने से पहले हाँ/नहीं पूछा जाएगा।
