@@ -4,7 +4,59 @@ _Auto-maintained by Claude **every conversation**, alongside `PROJECT_MASTER_CON
 _**Two-terminal workflow:** work 🟦 NidaanPartner items in one VS Code terminal, 🟩 Sarathi items in another. Each app's section is self-contained so both can progress simultaneously without collision._
 _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned · ✅ done_
 
-**Last updated:** 2026-09-21 — 🟢 **CUTOVER COMPLETE. NidaanPartner.com and Sarathi-AI.com are LIVE on Oracle Mumbai (161.118.186.201, aarch64).** Contabo parked as rollback, untouched.
+**Last updated:** 2026-09-22 — 🟢 **CUTOVER COMPLETE. NidaanPartner.com and Sarathi-AI.com are LIVE on Oracle Mumbai (161.118.186.201, aarch64).** Contabo parked as rollback, untouched.
+
+### ✅ SHIPPED 2026-09-22 — the gaps document is finished, page by page
+Re-read end to end against the code, not against notes. Everything in it is now either done or a
+question the founder marked for discussion.
+
+- ✅ **Page 10 — the Live bucket asks for his fifteen, in his order, in his words.** Company Name
+  · Policy type · Policy No. · Policy inception Date · Disputed Amount · Name Of Hospital · Date of
+  Admission · Date Of Discharge · Diagnosis · Patient Complaint · Claim No. · Rejection Date ·
+  Rejection Reason · Comment · **Assign To**. The bucket's own fields are relabelled and reordered
+  in the database too, so the claim panel, the assessment sheet and the case report read the same
+  way round as the form. Two of the fifteen are not ordinary fields: **Policy type** re-seeds the
+  document checklist, so it calls that endpoint rather than writing the column behind its back;
+  **Assign To** calls the same assignment endpoint the claim panel uses.
+  - **Company Name is now the SHARED picker** (`nidaan_insurers.js`) in all four places that ask
+    it — claim header, gist, draft form, claim edit. I had written a second dropdown with the same
+    rules; two copies of one rule is how a company ends up spelled four ways.
+  - **Off the form:** "On behalf of" and the old ClaimShield "Claim Type" (the kind of *dispute*)
+    — deactivated, not deleted; **6 claims** still hold values and still show them. And the **case
+    email stops being required to leave Live Cases** — it is not one of the fifteen, and pages 7-8
+    put it on the Escalation screen. **Both** claims sitting in Live Cases were blocked by exactly
+    that.
+- ✅ **Pages 7-8 — the case email and password are correctable where they are used.** They were
+  already shown on the Escalation screen, behind a "Correct" button that jumped to a **Live Cases**
+  field which is not on that screen — so it had never done anything. Each line now has its own
+  pencil and edits in place. No pencil on the password for someone who cannot see it.
+  **The credentials never lock**: everything else locks once a claim moves past its bucket because
+  it is finished work; an email account is not a finding, it is how we write to the insurer.
+- ✅ **Page 7 — the Escalation board says what was DONE.** A green
+  *"✅ Escalated on 18-09-2026 · 4 days ago"*, the same shape as the draft-query-resolved badge.
+  Every other column answers "what is missing"; once we have written to the insurer nothing is.
+- ✅ **#6 — the case report reads 1 to 15.** Its case-details block was in ClaimShield's order.
+  Money is now its own section; the company, claim number, amount and rejection reason were
+  printed **twice** in two different orders and are printed once. The assessment sheet drops the
+  two lines it can no longer fill instead of printing them empty on every new claim.
+- ✅ **Page 1 — "All documents received" asks before it speaks in your name.** It never moved the
+  claim; what it does is unlock Move and put the ticker's **name** against "every paper is in". One
+  stray click on a dense card list did both silently. Both places that tick it now ask, through
+  the shared `ndConfirm`, and **saying no puts the checkbox back** — without that, cancelling
+  leaves a tick that does not match the server, which is worse than never asking.
+- ✅ **Caught before shipping:** moving Company Name to the shared picker turned it into a mount
+  point, and the **Draft form** draws its facts in one go and mounted nothing — it would have
+  shipped a blank space where a dropdown was. Found by asking who else renders a shared control.
+
+**Already done, confirmed on re-read:** page 1 L2-Claims filters (authorisation / complainant
+dashboard / email verified — `insured_email_verified` is a real column set when they open the
+portal from that email) · page 2 Past Medical Records removed · page 3 back-option on stacked
+windows and the insurer's own claim number on Live Cases · page 4 discharge-before-admission and
+the no-return-to-Live-Cases fence · page 5 Approved by / Approved on removed · page 6 Draft button
+hidden in Live Cases, draft query moves nothing, step picker gone.
+
+**The one open question in the document is his own:** page 2 — *how* the case email and password
+get captured (from the WhatsApp document-collection step?). Marked "we can discuss".
 
 ### ✅ SHIPPED 2026-09-21 — the bucket screens do what the founder actually described
 Founder's ten-item list, with screenshots. His framing: *"every step is manual… at this stage any
@@ -132,14 +184,6 @@ does not parse.
   flags have passed, **the claim does not move on its own**. 19 passed, 0 failed, 1 skipped.
 
 **Still open from the ten-item list:**
-- 🔴 **#6 and Page 10 — BLOCKED, need the PDF again.** The document is no longer in this
-  session, and both items are specified entirely by it: the **case report format** (#6) and the
-  **Live Bucket field names in the founder's order** with **Assign To** as #15. Guessing either
-  is exactly the kind of wrong-understanding that costs a rebuild. What the Gist asks for today,
-  in its current order, is: Patient Name · Complainant name · On Behalf of · Claim Type · Claim
-  Amount · Policy Number · Claim Number · Date of Policy Inception · Company Name · Hospital Name ·
-  Date of Admission · Date of Discharge · Diagnosis · Patient complain · Rejection Reason ·
-  Rejection date · Comments · Email ID · Email Password — **19 fields, and no Assign To.**
 
 ### ✅ SHIPPED 2026-09-19 — messages that say less, alarms that mean more
 - ✅ **The ₹588 leak closed at one choke point.** A branch paid us ₹588 and charged the complainant ₹1,200; our confirmation showed the complainant **₹588**. Founder's ruling was wider than the bug — *"only welcome message should go to all parties, not containing the amount or plan or whatever… whosoever is doing payment they will get payment message from their bank."* `_strip_money()` in the WhatsApp orchestrator, `thank_you_payment` rewritten money-free, money out of the funnel notifications. **Price nudges suppressed when a branch or CP is the payer** (`_paid_for_by_an_intermediary()` — 71 branch claims protected from being asked for a fee somebody else owes). **Subscription email names the plan, not the amount.**

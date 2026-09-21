@@ -2,7 +2,7 @@
 
 > **Purpose:** Single source of truth for project recovery. If a development session is lost, feed this document to a new session to restore full context instantly.
 >
-> **Last Updated:** Sep 21, 2026. Newest work is at the BOTTOM — read **A99** and **A98** (live testing), then A94–A97 (Level-2 buckets), then **A93**, then A92/A91/A90 backwards for what's current. Older numbered sections 1–73 are the original detailed reference. Also load the memory index: `C:\Users\imdus\.claude\projects\c--sarathi-business\memory\MEMORY.md`.
+> **Last Updated:** Sep 22, 2026. Newest work is at the BOTTOM — read **A99** and **A98** (live testing), then A94–A97 (Level-2 buckets), then **A93**, then A92/A91/A90 backwards for what's current. Older numbered sections 1–73 are the original detailed reference. Also load the memory index: `C:\Users\imdus\.claude\projects\c--sarathi-business\memory\MEMORY.md`.
 >
 > **Maintainer:** Update this doc after every significant change.
 
@@ -7546,3 +7546,41 @@ Reason, Rejection date, Comments, Email ID, Email Password) and has no **Assign 
 **Open:** #6 (case report format), page 10 (Live
 Bucket field order; **Assign To** missing from `CSR_GIST`), page 5 (Telegram to the *assignee* at
 every stage).
+
+
+---
+
+## 🧾 A102 THE GAPS DOCUMENT, FINISHED (Sep 22 2026)
+
+**Page 10 - the Live bucket's fifteen.** `CSR_GIST` is his list in his order with his labels, and
+`_CONFIG_FIXES` relabels and reorders the bucket's own fields to match, so the form, the claim
+panel, the assessment sheet and the case report all read the same way round. Two entries are
+`kind: 'claim'` - columns with their own endpoints, because changing them does more than store a
+value: **Policy type** re-seeds the document checklist, **Assign To** is the same assignment the
+claim panel makes. Company Name mounts the shared `nidaan_insurers.js` picker, now used by all
+four screens that ask the question.
+
+Dropped from the form: `relationship` and `rejection_type` (deactivated, 6 claims still hold
+values), and `case_email` loses `required_exit` - both live claims were blocked by a field that
+is not on his list. `NEVER_LOCK = {case_email, case_email_password}` because page 7 puts them on
+a screen three buckets after the one that owns them.
+
+**Pages 7-8.** Each credential edits in place on the Escalation screen; the old "Correct" button
+called `csrFocus()` to jump to a Live Cases field that is not on that screen, so it had never
+done anything. The Escalation board carries a green "Escalated on <date> - N days ago", from
+`escalation_date` now returned with each board row.
+
+**#6.** The case report's details block runs 1-15. Money is its own section. Four facts that were
+printed in both the header and the details, in two different orders, are printed once.
+
+**Page 1.** Both "All documents received" ticks ask first through the shared `ndConfirm`, and a
+"no" restores the checkbox - a tick left on screen that the server does not hold is worse than
+never asking.
+
+**The bug this session's habit caught.** Moving Company Name to the shared picker made it a mount
+point. The gist mounts it per line; the DRAFT form draws every fact in one go and mounted
+nothing, so it would have shipped a blank space. Found by asking, of any shared control: who else
+renders this?
+
+**Still open in the document, and it is the founder's own question:** page 2 - how the case email
+and password are captured in the first place.

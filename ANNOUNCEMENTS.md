@@ -1,5 +1,67 @@
 # Staff Announcement Drafts
 
+## 2026-09-22 — The Live Cases form, and where things are corrected
+
+**Title (EN):**
+📋 Live Cases now asks for 15 things, in order · ✏️ Correct a detail where you see it
+
+**Details (EN):**
+• **The Live Cases form has a new order.** It now asks, top to bottom: Company Name, Policy type,
+Policy No., Policy inception Date, Disputed Amount, Name Of Hospital, Date of Admission, Date Of
+Discharge, Diagnosis, Patient Complaint, Claim No., Rejection Date, Rejection Reason, Comment,
+and **Assign To** — the person who will prepare the draft. The case report prints them in the
+same order, so the form and the report match.
+
+• **The insurance company is now chosen from a list**, not typed. Pick the company's full name.
+If it is not on the list, choose **Other** and type it. This is the same list used everywhere else
+on the site.
+
+• **Two questions are gone** — "On behalf of" and the old "Claim type" (Rejection / Deduction /
+Delay). Nothing already recorded is lost; those cases still show what was written.
+
+• **The case email is no longer needed to move a claim out of Live Cases.** It is now kept on the
+**Escalation** screen, where it is actually used — with a small **✏️** next to the email and next
+to the password, so either can be corrected right there.
+
+• **The Escalation list now shows a green line** on every escalated case: *Escalated on
+18-09-2026 · 4 days ago*. You can see at a glance how long the insurance company has been silent.
+
+• **"All documents received" now asks you first.** Ticking it says, in your name, that every paper
+has reached us, and it is what opens the way to Level-2. A yes/no box now appears before it is
+saved. Unticking asks too.
+
+React 👍 once read; ask the office IT SPOC if anything is unclear.
+
+**Title (HI):**
+📋 Live Cases फ़ॉर्म अब 15 जानकारी क्रम से पूछता है · ✏️ जहाँ गलती दिखे, वहीं सुधारिए
+
+**Details (HI):**
+• **Live Cases फ़ॉर्म का क्रम बदल गया है।** अब ऊपर से नीचे यह पूछा जाएगा: Company Name,
+Policy type, Policy No., Policy inception Date, Disputed Amount, Name Of Hospital, Date of
+Admission, Date Of Discharge, Diagnosis, Patient Complaint, Claim No., Rejection Date, Rejection
+Reason, Comment, और **Assign To** — वह व्यक्ति जो ड्राफ़्ट बनाएगा। केस रिपोर्ट में भी यही
+क्रम छपेगा।
+
+• **बीमा कंपनी अब सूची से चुननी है**, टाइप नहीं करनी। कंपनी का पूरा नाम चुनिए। अगर सूची में
+न हो तो **Other** चुनकर लिख दीजिए। यह वही सूची है जो पूरी साइट पर इस्तेमाल होती है।
+
+• **दो सवाल हटा दिए गए** — "On behalf of" और पुराना "Claim type" (Rejection / Deduction /
+Delay)। पहले से दर्ज कुछ भी मिटा नहीं है; उन केस में जो लिखा था वह दिखता रहेगा।
+
+• **Live Cases से केस आगे बढ़ाने के लिए अब case email ज़रूरी नहीं।** अब वह **Escalation**
+स्क्रीन पर रहता है, जहाँ उसका सचमुच इस्तेमाल होता है — ईमेल और पासवर्ड दोनों के बगल में
+छोटा **✏️** है, वहीं से सुधार सकते हैं।
+
+• **Escalation सूची में अब हरी लाइन दिखेगी**: *Escalated on 18-09-2026 · 4 days ago*। एक नज़र में
+पता चलेगा कि बीमा कंपनी कितने दिन से चुप है।
+
+• **"All documents received" अब पहले पूछता है।** यह टिक आपके नाम से कहता है कि सारे कागज़ात
+आ चुके हैं, और इसी से Level-2 का रास्ता खुलता है। अब सेव होने से पहले हाँ/नहीं पूछा जाएगा।
+टिक हटाने पर भी पूछा जाएगा।
+
+पढ़ने के बाद 👍 करें; कोई बात समझ न आए तो ऑफ़िस IT SPOC से पूछें।
+
+
 ## 2026-09-21 — The case screens got simpler
 
 **Title (EN):**
