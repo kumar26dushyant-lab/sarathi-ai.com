@@ -992,12 +992,16 @@ async def move(claim_id: int, to_key: str, *, sub: str = "", reason: str = "",
     # something, and since 19 Sep that does it WITHOUT moving the claim - so a backward move here
     # is now always either a mistake or a genuine reversal, and a genuine reversal is a
     # super-admin's call. Theirs still works, and is recorded as a pull-back.
-    if kind == "back" and cur_key == QUERY_FROM and to_key == QUERY_TO \
+    if kind == "back" and cur_key in NO_RETURN_TO_LIVE and to_key == QUERY_TO \
             and (actor_role or "") != SUPER:
         return {"ok": False, "error":
-                "Drafting has started on this claim, so it does not go back to Live Cases. "
-                "If something is missing, raise a draft query - the claim stays here and Live "
-                "Cases is told. A super admin can pull it back if it truly has to move."}
+                ("Drafting has started on this claim, so it does not go back to Live Cases. "
+                 "If something is missing, raise a draft query - the claim stays here and Live "
+                 "Cases is told. A super admin can pull it back if it truly has to move."
+                 if cur_key == QUERY_FROM else
+                 "This claim has been escalated to the insurer, so it does not go back to Live "
+                 "Cases. Raise an escalation query if something is needed - the claim stays "
+                 "here. A super admin can pull it back if it truly has to move.")}
 
     # What is still blank, worked out BEFORE we ask for the comment - so the one prompt can say
     # both things at once. Leaving a bucket forwards means finishing it; going back or parking is
@@ -1128,6 +1132,18 @@ async def move(claim_id: int, to_key: str, *, sub: str = "", reason: str = "",
 # ══ The draft query ════════════════════════════════════════════════════════════
 QUERY_FROM = "pending_draft"
 QUERY_TO = "live_cases"
+
+# Buckets a claim does not drift back to Live Cases from.
+#
+# Pending Draft was the original fence (founder, 19 Sep): once drafting starts, a backward move is
+# either a mistake or a genuine reversal, and a reversal is a super-admin's call. Escalation joins
+# it for the same reason and a stronger one - the insurer has already been written to, so "back to
+# Live Cases" describes something that did not happen (founder, 21 Sep).
+#
+# Lokpal is deliberately NOT here yet: it was not asked for, and a fence nobody requested is the
+# kind of thing that gets worked around. Adding it later is this one line.
+NO_RETURN_TO_LIVE = (QUERY_FROM, "escalation")
+
 
 
 async def _supers_only() -> list:
