@@ -2637,13 +2637,51 @@ async def _notify_move(claim_id: int, *, to_key: str, to_name: str, from_name: s
     body = ("From: %s\nMoved by: %s\n\n%s" % (from_name, actor or "staff",
                                               (reason or "").strip() or "(no note)"))
     if unstaffed:
-        body += ("\n\n⚠ Nobody is on duty for %s, so this went to the admins instead."
+        body += ("\n\n\u26a0 Nobody is on duty for %s, so this went to the admins instead."
                  % to_name)
+
+    # WHOEVER IS HOLDING THIS CLAIM (founder, 21 Sep: a Telegram to the assigned staff at every
+    # stage). The notice above goes to whoever is on duty for the bucket the claim has ARRIVED
+    # in, which is usually not the person the claim belongs to. They are taken out of the roster
+    # list below so that nobody is told the same thing twice.
+    owner = 0
     try:
-        await _nnot.notify_staff_inapp(
-            ids, head, body, event_key="bucket.move", email=False, claim_id=claim_id)
+        row = await _claim_row(claim_id)
+        owner = int((row or {}).get("assigned_to_staff_id") or 0)
     except Exception as e:  # noqa: BLE001
-        logger.warning("move notification failed for %s: %s", claim_id, e)
+        logger.warning("assignee lookup failed for %s: %s", claim_id, e)
+
+    rest = [i for i in ids if int(i) != owner]
+    if rest:
+        try:
+            await _nnot.notify_staff_inapp(
+                rest, head, body, event_key="bucket.move", email=False, claim_id=claim_id)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("move notification failed for %s: %s", claim_id, e)
+
+    if owner:
+        # Said as theirs, and saying what the bucket is FOR - the next person picks this up cold,
+        # and a line telling them what this step expects saves them opening the guide.
+        if kind == "back":
+            mine = "\u21a9 Your claim %s has come back to %s" % (label, to_name)
+        elif kind == "park":
+            mine = "\u23f8 Your claim %s is paused" % label
+        elif kind == "resume":
+            mine = "\u25b6 Your claim %s is off hold, in %s" % (label, to_name)
+        else:
+            mine = "\u2192 Your claim %s is now in %s" % (label, to_name)
+        job = ""
+        try:
+            b = {x["bucket_key"]: x for x in await buckets(include_inactive=True)}.get(to_key) or {}
+            job = (b.get("guide_do") or "").strip()
+        except Exception:
+            job = ""
+        mbody = body + (("\n\nWhat this step needs: %s" % job) if job else "")
+        try:
+            await _nnot.notify_staff_inapp(
+                [owner], mine, mbody, event_key="bucket.move", email=False, claim_id=claim_id)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("assignee move notification failed for %s: %s", claim_id, e)
 
 
 async def _notify_sender_back(claim_id: int, *, to_name: str, reason: str,
