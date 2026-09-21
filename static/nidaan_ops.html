@@ -3982,7 +3982,7 @@ function _l2HandoverControls(c){
   return '<label style="display:flex;gap:.3rem;align-items:center;font-size:.7rem;cursor:pointer;'
       + 'margin-bottom:.25rem;color:' + (done ? 'var(--nd-success-text)' : 'var(--nd-text-secondary)') + '">'
       +   '<input type="checkbox"' + (done ? ' checked' : '')
-      +   ' onclick="event.stopPropagation()" onchange="l2DocsTick(' + c.claim_id + ',this.checked)">'
+      +   ' onclick="event.stopPropagation()" onchange="l2DocsTick(' + c.claim_id + ',this.checked,this)">'
       +   'All documents received</label>'
     + (done ? '<div style="font-size:.64rem;color:var(--nd-text-faint);margin-bottom:.25rem">✔ '
               + esc(c.docs_complete_by || '') + '</div>' : '')
@@ -15016,7 +15016,38 @@ async function l2SendBackGo(claimId){
 window.l2SendBack = l2SendBack; window.l2SendBackGo = l2SendBackGo;
 
 // The L2 Claims tick, straight from the row.
-async function l2DocsTick(claimId, on){
+// ASK BEFORE, NOT AFTER. Ticking this says, in your name, that every paper for this claim is in,
+// and it is what opens the way to Level-2. One stray click on a list of cards should not be able
+// to say that for you (founder, page 1: "check box checked and then a dialog box of yes/no for
+// confirmation before moving and it's recorded who moved").
+//
+// `el` is the checkbox itself, so saying no can put it back. Without that, cancelling leaves a
+// tick on the screen that does not match what the server holds - which is worse than no question
+// at all, because the next person believes it.
+function _docsTickAsk(claimId, on, el, go){
+  const put_back = function(){ if (el) el.checked = !on; };
+  if (on){
+    ndConfirm('Are all the documents in?',
+      'Ticking this says, in your name, that every paper on NP-' + claimId + ' has reached us. '
+      + 'Only then can the claim move to Level-2, where the gist is prepared from those papers. '
+      + 'If something is still missing, say no and chase it first.',
+      function(){ go(); }, 'Yes, they are all in');
+  } else {
+    ndConfirm('Take that back?',
+      'This removes the confirmation that every paper on NP-' + claimId + ' is in, and the claim '
+      + 'stays in L2 Claims until somebody ticks it again.',
+      function(){ go(); }, 'Yes, take it back');
+  }
+  // The dialog's Cancel just closes it, so the box is put back now and set again by the reload
+  // if the answer turns out to be yes.
+  put_back();
+}
+
+async function l2DocsTick(claimId, on, el){
+  _docsTickAsk(claimId, on, el, function(){ _l2DocsTickDo(claimId, on); });
+}
+
+async function _l2DocsTickDo(claimId, on){
   try{
     const r = await API('/cases/' + claimId + '/docs-complete',
       {method:'POST', body: JSON.stringify({done: !!on})});
@@ -15193,7 +15224,7 @@ async function docsRender(msg, ok){
           + '</span></div>' : '')
     : '<label class="dcdone' + (done ? ' on' : '') + '">'
       + '<input type="checkbox" id="dcDone"' + (done ? ' checked' : '')
-      +   ' onchange="docsMarkDone(this.checked)">'
+      +   ' onchange="docsMarkDone(this.checked,this)">'
       + '<span><b>All documents received</b><br>'
       + (done ? '<span class="bdsub">Marked by ' + esc(claim.docs_complete_by || 'staff')
                 + '. The claim can now move to Level-2.</span>'
@@ -15428,7 +15459,13 @@ async function docsUpload(btn){
   }
 }
 
-async function docsMarkDone(on){
+async function docsMarkDone(on, el){
+  // Same question, same words, wherever the tick is (founder's rule: one concept, one behaviour
+  // at every place that performs it).
+  _docsTickAsk(_dcClaim, on, el, function(){ _docsMarkDoneDo(on); });
+}
+
+async function _docsMarkDoneDo(on){
   try{
     const r = await API('/cases/' + _dcClaim + '/docs-complete',
       {method:'POST', body: JSON.stringify({done: !!on})});
