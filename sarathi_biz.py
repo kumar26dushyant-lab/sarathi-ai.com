@@ -416,6 +416,31 @@ async def impersonation_audit_middleware(request: Request, call_next):
 
 
 @app.middleware("http")
+async def _doc_download_name(stored_name: str) -> str:
+    """The name this file had when somebody uploaded it, ready for a Content-Disposition header.
+
+    Returns "" when there is nothing safe or useful to say, and the header is then left as a bare
+    attachment exactly as before - a download with an ugly name beats a download that fails.
+
+    Quotes, backslashes and control characters are stripped rather than escaped: this value goes
+    into a response header, and a filename is never worth a header-injection risk.
+    """
+    try:
+        import aiosqlite as _sq
+        async with _sq.connect(db.DB_PATH) as c:
+            row = await (await c.execute(
+                "SELECT original_name FROM nidaan_claim_documents WHERE stored_name=? LIMIT 1",
+                (stored_name,))).fetchone()
+        name = (row[0] if row else "") or ""
+    except Exception:
+        return ""
+    name = "".join(ch for ch in name if ch.isprintable() and ch not in '"\\')
+    name = name.replace("\r", "").replace("\n", "").strip().strip(".")
+    if not name or name in (".", ".."):
+        return ""
+    return name[:150]
+
+
 async def nidaan_doc_access_guard(request: Request, call_next):
     """Gate direct access to uploaded Nidaan claim documents. The files sit under
     the public /uploads mount, but are served only via short-lived signed URLs
@@ -444,12 +469,23 @@ async def nidaan_doc_access_guard(request: Request, call_next):
         # to its PDF viewer, which runs apart from our pages, never parse it as a page of ours.
         # (Chrome's viewer will not draw under a sandbox CSP, so frame-ancestors alone here.)
         # Everything else, and every request that does not ask, still downloads.
+        # THE NAME THE FILE ARRIVED WITH. Without a filename= the browser falls back to the last
+        # path segment, which is the storage UUID - staff were saving f79a2278d2b8....pdf instead
+        # of NP-65_rejection_letter.pdf. RFC 5987 (filename*) carries Hindi or accented names
+        # intact; the plain filename= stays as an ASCII fallback for older clients.
+        _dl = await _doc_download_name(stored_name)
+        if _dl:
+            from urllib.parse import quote as _q
+            _ascii = _dl.encode("ascii", "replace").decode("ascii").replace("?", "_")
+            _fn = '; filename="%s"; filename*=UTF-8\'\'%s' % (_ascii, _q(_dl))
+        else:
+            _fn = ""
         if (request.query_params.get("inline") == "1"
                 and stored_name.lower().endswith(".pdf")):
-            response.headers["Content-Disposition"] = "inline"
+            response.headers["Content-Disposition"] = "inline" + _fn
             response.headers["Content-Security-Policy"] = "frame-ancestors 'self'"
         else:
-            response.headers["Content-Disposition"] = "attachment"
+            response.headers["Content-Disposition"] = "attachment" + _fn
             response.headers["Content-Security-Policy"] = "sandbox; default-src 'none'"
         return response
     return await call_next(request)
@@ -8767,9 +8803,13 @@ async def ops_escalation_reply(claim_id: int, body: _EscReplyReq, request: Reque
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     caller = _require_staff(request, "team_member")
-    res = await buckets.escalation_reply(claim_id, body.outcome, note=body.note,
-                                         actor=_actor_label(caller),
-                                         actor_role=(caller or {}).get("role", ""))
+    # `buckets` was never a name in this module - every other call site imports it as `_bk`.
+    # This raised NameError on every insurer reply, which the screen reported as the far more
+    # innocent-sounding "Could not record that."
+    import biz_nidaan_buckets as _bk
+    res = await _bk.escalation_reply(claim_id, body.outcome, note=body.note,
+                                     actor=_actor_label(caller),
+                                     actor_role=(caller or {}).get("role", ""))
     if not res.get("ok"):
         raise HTTPException(status_code=400, detail=res.get("error") or "Could not record that.")
     await _ops_audit(request, "escalation.reply", "claim", str(claim_id),
@@ -8801,7 +8841,10 @@ async def ops_escalation_due(request: Request):
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     _require_staff(request, "team_member")
-    return await buckets.escalation_due()
+    # Same missing name as the reply endpoint above. This one is the REMINDER CLOCK, so while it
+    # was raising NameError the 10/20/30-day reminders surfaced to nobody at all.
+    import biz_nidaan_buckets as _bk
+    return await _bk.escalation_due()
 
 
 @app.get("/nidaan/ops/api/doc-desk")
