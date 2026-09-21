@@ -53,3 +53,15 @@ behind `--allow-writes`, off by default.
 
 Each run drops PNGs in `screenshots/` — useful when a check fails and you want to see
 what the page actually looked like. Not committed.
+
+## one-tap.js — impatient taps
+
+`node one-tap.js` (from this folder)
+
+Lifts the one-tap guard out of `static/nidaan_ops.html` and clicks it the way a person waiting on
+a slow connection clicks: five times, fast. Proves the action runs ONCE, that the button says it
+is working, that it comes back afterwards, that a request which never answers still releases it,
+that a background poll does not freeze the screen, and that a dialog opening under a finger does
+not act on the tap that opened it.
+
+Run it after any change to that guard or to `openModal`.
