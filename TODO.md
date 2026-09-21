@@ -4,7 +4,66 @@ _Auto-maintained by Claude **every conversation**, alongside `PROJECT_MASTER_CON
 _**Two-terminal workflow:** work 🟦 NidaanPartner items in one VS Code terminal, 🟩 Sarathi items in another. Each app's section is self-contained so both can progress simultaneously without collision._
 _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned · ✅ done_
 
-**Last updated:** 2026-09-20 — 🟢 **CUTOVER COMPLETE. NidaanPartner.com and Sarathi-AI.com are LIVE on Oracle Mumbai (161.118.186.201, aarch64).** Contabo parked as rollback, untouched.
+**Last updated:** 2026-09-21 — 🟢 **CUTOVER COMPLETE. NidaanPartner.com and Sarathi-AI.com are LIVE on Oracle Mumbai (161.118.186.201, aarch64).** Contabo parked as rollback, untouched.
+
+### ✅ SHIPPED 2026-09-21 — the bucket screens do what the founder actually described
+Founder's ten-item list, with screenshots. His framing: *"every step is manual… at this stage any
+incorrect flow or incorrect processing we cannot afford. Nidaan client is upset due to not setup
+the bucketing system correctly as per their expectations. most times we overbuilded rather to keep
+things simple and manual."* So the pattern through all of it is **take decisions away from the
+software and give them back to the person.**
+
+- ✅ **#2 — the escalation question box and the reminder clock were both 500ing.** Two endpoints
+  (`ops_escalation_reply`, `ops_escalation_due`) used `bk.` with nothing of that name imported — a
+  `NameError` on every call, which the screen showed as *"could not record"*. Both now
+  `import biz_nidaan_buckets as _bk`. Live: `escalation_due()` returns reminders=1, owed=1.
+- ✅ **#5 — downloaded documents keep their name.** `_doc_download_name()` + a
+  `Content-Disposition` with RFC 5987 `filename*`, so a Hindi or bracketed name survives the trip.
+  (Cost an outage on the way: the helper was inserted *between* `@app.middleware("http")` and its
+  function, which handed the decorator the wrong callable. **Never insert above a decorated
+  function.** The health gate stopped the rollout at slot 1 and both sites stayed up.)
+- ✅ **#7 + #8 — Escalation stops deciding things.** Out: *"What did the insurer say?"* with
+  **They agreed** / **They refused**, which closed the case or sent it to Lokpal on the software's
+  reading. Out: the three *"reminder sent on"* date fields. In: **10 / 20 / 30 days gone** flags
+  computed from the escalation date — visibility only, they send nothing and move nothing — and an
+  **❓ Escalation query** button in the same shape as Pending Draft's, for when the insurer is
+  waiting on *us*. Lokpal is a button a person presses. The reminder fields are **deactivated, not
+  deleted**, so dates already recorded stay readable.
+- ✅ **#10 — an escalated claim does not go back to Live Cases.** `NO_RETURN_TO_LIVE` in
+  `biz_nidaan_buckets.py`; a super admin still can, with a reason. 8/8 on live data, and checked
+  that nothing *else* got fenced: Escalation → Lokpal and Live Cases → Pending Draft untouched.
+- ✅ **#9 — the Gist is a page you read, with a pencil on each line.** It used to open as nineteen
+  input boxes and one Submit; changing one fact re-submitted the other eighteen, and the remark it
+  left said *"Case details updated by X (7 items)"* and named none of them. Now every line shows
+  its value as text with **✏️ Change** beside it, opening that line alone — same controls as
+  before, so the insurer list, the date pickers and the admission-before-discharge check all still
+  apply. **Each change writes its own remark**, naming the field and both values:
+  *"✏️ Hospital name: “Apollo” → “Fortis”"*. Re-submitting an unchanged box writes nothing.
+- 🔒 **Found while building #9: a row of dots could overwrite the case email password.** Anyone
+  without credential rights reads that field as `••••••••`; nothing stopped the form sending the dots
+  back as the new value, which would have locked the team out of the case mailbox with nothing in
+  the log to say why. Guard added in **`set_field`** — the one door every field write passes
+  through — so it holds at every endpoint, not just the gist form. 8/8 on a copy of the live DB.
+  **⚠️ Still to check: whether any live claim already has dots stored as its password.** Needs a
+  read of the production DB, which I could not run.
+- ✅ **Two journeys stopped crying wolf** at ordinary staff work (a real query raised, a real
+  reminder recorded), and the escalation journey was **rewritten to the new model** rather than
+  deleted — it now proves the day count is arithmetic anyone can check, and that however many
+  flags have passed, **the claim does not move on its own**. 19 passed, 0 failed, 1 skipped.
+
+**Still open from the ten-item list:**
+- 🟡 **#1** — move *With (assign staff)* off the board as a column and into the **Draft** section.
+  *Claim type* stays a column.
+- 🔴 **#3** — *"pending draft button is not working"*. **Awaiting the founder:** what happens on
+  the click — nothing at all, a window that then fails, or a red message? Three theories checked
+  and all three were wrong; `missing_required(NP-65)` returns `[]`, so the required-fields gate is
+  not it. Also still to do: the sweep of every other button on that screen.
+- 🟡 **#4** — drop **START HERE / To start**; a claim leaving L2 Claims lands in **Live Cases**.
+- 🟡 **#6** — the case report in the PDF's format, built up bucket by bucket.
+- 🟡 **Page 10** — Live Bucket field names and order as the PDF lists them; **Assign To** (#15) is
+  missing from `CSR_GIST` entirely.
+- 🟡 **Page 5** — a Telegram message to the **assigned staffer** at every stage up to escalation.
+  Today `_notify_move` tells the receiving bucket's duty roster, which is not the same person.
 
 ### ✅ SHIPPED 2026-09-19 — messages that say less, alarms that mean more
 - ✅ **The ₹588 leak closed at one choke point.** A branch paid us ₹588 and charged the complainant ₹1,200; our confirmation showed the complainant **₹588**. Founder's ruling was wider than the bug — *"only welcome message should go to all parties, not containing the amount or plan or whatever… whosoever is doing payment they will get payment message from their bank."* `_strip_money()` in the WhatsApp orchestrator, `thank_you_payment` rewritten money-free, money out of the funnel notifications. **Price nudges suppressed when a branch or CP is the payer** (`_paid_for_by_an_intermediary()` — 71 branch claims protected from being asked for a fee somebody else owes). **Subscription email names the plan, not the amount.**

@@ -778,6 +778,12 @@ async def set_field(claim_id: int, field_key: str, value: str, actor: str = "",
         val = (value or "").strip()
         if ftype == "richtext":
             val = sanitize_rich(val)
+        # A row of dots is not a password. Anyone without credential rights READS this field as
+        # MASK; if their form hands the dots back, the real password would be overwritten with
+        # them and the case mailbox would be locked out with no way to tell what happened.
+        # Sending the mask back means "leave it alone", which is what the person intended.
+        if field_key in SECRET_FIELDS and val == MASK:
+            return {"ok": True, "unchanged": True}
         limit = _FIELD_MAX.get(ftype, 2000)
         if len(val) > limit:
             # Refuse rather than cut: a truncated legal draft looks complete and is not.

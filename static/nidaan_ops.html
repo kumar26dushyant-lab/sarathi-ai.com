@@ -15476,6 +15476,29 @@ function _csrStyles(){
   .csrf input:focus,.csrf select:focus,.csred:focus{outline:2px solid var(--nd-brand-cyan);
     outline-offset:1px}
   .csrsub{display:flex;justify-content:center;margin-top:1rem}
+  /* The Gist at rest: a line per fact, readable without touching anything. */
+  .csrrow{display:flex;align-items:flex-start;gap:.6rem;padding:.55rem .15rem;
+    border-bottom:1px solid var(--nd-border)}
+  .csrrow:last-child{border-bottom:0}
+  .csrrow .txt{flex:1;min-width:0}
+  .csrlab{font-size:.71rem;font-weight:700;color:var(--nd-text-muted);
+    text-transform:uppercase;letter-spacing:.04em}
+  .csrv{font-size:.93rem;color:var(--nd-text-primary);word-break:break-word;margin-top:.12rem}
+  .csrv.blank{color:var(--nd-text-faint);font-style:italic}
+  .csrpen{flex:0 0 auto;background:var(--nd-bg-surface-2);color:var(--nd-text-primary);
+    border:1px solid var(--nd-border-strong);border-radius:8px;cursor:pointer;
+    min-height:2.5rem;padding:0 .6rem;font-family:inherit;font-size:.8rem;font-weight:600;
+    white-space:nowrap}
+  .csrpen:hover{border-color:var(--nd-brand-cyan)}
+  .csrlk{flex:0 0 auto;color:var(--nd-text-faint);font-size:.78rem;padding-top:.5rem;
+    white-space:nowrap}
+  .csrrow.editing{background:var(--nd-bg-surface-2);border-radius:10px;
+    border:1px solid var(--nd-brand-cyan);padding:.7rem;margin:.3rem 0}
+  .csrrow.editing .csrf label{color:var(--nd-text-primary)}
+  .csrbtns{display:flex;gap:.45rem;margin-top:.55rem;flex-wrap:wrap}
+  .csrbtns button{min-height:2.4rem;padding:0 .9rem;border-radius:8px;cursor:pointer;
+    font-family:inherit;font-size:.84rem;font-weight:600}
+  @media (max-width:520px){ .csrpen{padding:0 .5rem;font-size:.75rem} }
   .csrrt{margin-top:.9rem}
   .csrrt>label{display:block;font-size:.76rem;font-weight:700;color:var(--nd-text-primary);
     margin-bottom:.3rem}
@@ -15529,6 +15552,95 @@ function _csrLockBanner(fields){
     + (hit.length === keys.length ? 'it' : 'the greyed boxes') + '. '
     + '<button class="l2mv g" onclick="l2RequestChange(\'the gist / drafts\',' + _csrClaim + ')">\u270b Request a change</button></div>';
 }
+// WHICH LINE IS OPEN. One at a time, deliberately: nineteen boxes open at once is the form this
+// replaces, and it is what made a change to one fact re-submit the other eighteen.
+let _csrEditing = null;
+
+// What a fact looks like when nobody is editing it.
+function _csrText(f){
+  const [, kind, key, type] = f;
+  let v = _csrVal(kind, key);
+  if (!v) return '';
+  if (type === 'date') v = v.slice(0, 10);
+  if (key === 'disputed_amount' && /^[0-9.]+$/.test(v)){
+    const n = Number(v);
+    if (!isNaN(n)) return '\u20b9' + n.toLocaleString('en-IN');
+  }
+  return v;
+}
+
+function _csrLine(f, idx){
+  const [label, , key] = f;
+  if (_csrEditing === idx){
+    return '<div class="csrrow editing">'
+      + '<div class="txt">' + _csrInput(f)
+      +   '<div class="csrbtns">'
+      +     '<button class="btn btn-primary" onclick="csrFieldSave(' + idx + ')">Save</button>'
+      +     '<button class="btn btn-ghost" onclick="csrFieldCancel()">Cancel</button>'
+      +   '</div>'
+      + '</div></div>';
+  }
+  const v = _csrText(f);
+  const locked = _csrLocked(key);
+  // The case email password is shown to this person as dots, or not at all. Offering Change on
+  // dots means saving the dots back - the server refuses that, so the button would do nothing
+  // while saying it had. Say plainly who can change it instead.
+  const hidden = (key === 'case_email_password') && _csr && !_csr.can_see_secrets;
+  return '<div class="csrrow">'
+    + '<div class="txt"><div class="csrlab">' + esc(label) + '</div>'
+    +   '<div class="csrv' + (v ? '' : ' blank') + '">' + (v ? esc(v) : 'Not filled yet') + '</div>'
+    + '</div>'
+    + (hidden
+        ? '<div class="csrlk" title="Only a super admin can see or change this">\ud83d\udd12 Hidden</div>'
+        : locked
+          ? '<div class="csrlk" title="Finished work \u2014 only a super admin can change it">\ud83d\udd12 Locked</div>'
+          : '<button class="csrpen" onclick="csrFieldEdit(' + idx + ')" '
+            + 'aria-label="Change ' + esc(label) + '">\u270f\ufe0f Change</button>')
+    + '</div>';
+}
+
+function _csrGistBody(){
+  return CSR_GIST.map(_csrLine).join('');
+}
+
+// Opening a line. If another is open with something typed in it, say so rather than throwing it
+// away - a silent discard here is a fact somebody believes they recorded.
+function csrFieldEdit(idx){
+  if (_csrEditing !== null && _csrEditing !== idx && _csrDirty){
+    const other = CSR_GIST[_csrEditing];
+    if (!confirm('You have not saved your change to "' + other[0] + '".\n\nDiscard it and open "'
+                 + CSR_GIST[idx][0] + '" instead?')) return;
+  }
+  _csrEditing = idx;
+  _csrDirty = false;
+  _csrPaint();
+  const f = CSR_GIST[idx];
+  const el = document.getElementById('csr_' + f[1] + '_' + f[2]);
+  if (el){ el.focus(); if (el.select) try{ el.select(); }catch(e){} }
+}
+function csrFieldCancel(){
+  _csrEditing = null;
+  _csrDirty = false;
+  _csrPaint();
+}
+async function csrFieldSave(idx){
+  const f = CSR_GIST[idx];
+  const ok = await _csrSave(_csrCollect([f]), 'csrMsg', 'Saved \u2014 the change is in Remarks.');
+  if (!ok) return;                      // stays open, so what was typed is not lost
+  // The message line sits at the bottom of the window; on a phone, a line edited near the top
+  // saves off-screen and looks like nothing happened.
+  if (window.ndUI && ndUI.toast) ndUI.toast(f[0] + ' saved \u2014 added to Remarks', 'success');
+  _csrEditing = null;
+  _csrPaint();
+}
+function _csrPaint(){
+  const box = document.getElementById('csrGistBody');
+  if (box) box.innerHTML = _csrGistBody();
+}
+window.csrFieldEdit = csrFieldEdit;
+window.csrFieldCancel = csrFieldCancel;
+window.csrFieldSave = csrFieldSave;
+
 function _csrInput(f){
   const [label, kind, key, type] = f;
   const id = 'csr_' + kind + '_' + key;
@@ -15765,23 +15877,22 @@ async function _csrSave(payload, msgId, okText){
 // ── the gist form ────────────────────────────────────────────────────────────
 async function csrGist(claimId){
   _csrStyles();
-  openModal('Gist — NP-' + claimId, '<div class="empty"><p>Loading…</p></div>', [], true);
+  _csrEditing = null; _csrDirty = false;
+  openModal('Gist \u2014 NP-' + claimId, '<div class="empty"><p>Loading\u2026</p></div>', [], true);
   try{ await _csrLoad(claimId); }
   catch(e){ document.getElementById('modalBody').innerHTML = '<div class="empty"><p>Could not open the gist.</p></div>'; return; }
   document.getElementById('modalBody').innerHTML =
       _csrLockBanner(CSR_GIST)
     + _csrInsurerList()
-    + '<div class="csrg c3">' + CSR_GIST.map(_csrInput).join('') + '</div>'
-    + (_csrAllLocked(CSR_GIST) ? '' : '<div class="csrsub"><button class="btn btn-primary" onclick="csrGistSave()">Submit</button></div>')
+    + '<div class="hint" style="margin-bottom:.4rem">Press <b>\u270f\ufe0f Change</b> on a line to '
+    + 'correct it. Each change is saved on its own and written into <b>Remarks</b>, so the case '
+    + 'file shows who changed what.</div>'
+    + '<div id="csrGistBody">' + _csrGistBody() + '</div>'
     + '<div class="csrtools" style="justify-content:center;margin-top:.7rem">'
-    +   '<button class="l2mv g" onclick="csrSheet(' + claimId + ')">📄 Initial Claim Assessment Sheet</button>'
-    +   '<button class="l2mv g" onclick="csrReport(' + claimId + ')">📋 Case report</button>'
+    +   '<button class="l2mv g" onclick="csrSheet(' + claimId + ')">\ud83d\udcc4 Initial Claim Assessment Sheet</button>'
+    +   '<button class="l2mv g" onclick="csrReport(' + claimId + ')">\ud83d\udccb Case report</button>'
     + '</div>'
     + '<div id="csrMsg" style="font-size:.84rem;text-align:center"></div>';
-}
-async function csrGistSave(){
-  await _csrSave(_csrCollect(CSR_GIST), 'csrMsg',
-    'Saved. The assessment sheet and case report now show it.');
 }
 
 // ── the draft form ───────────────────────────────────────────────────────────
@@ -15934,7 +16045,7 @@ async function csrReport(claimId){
     + '</div>');
 }
 
-window.csrGist = csrGist; window.csrGistSave = csrGistSave;
+window.csrGist = csrGist;
 window.csrDraft = csrDraft; window.csrDraftSave = csrDraftSave;
 window.csrSheet = csrSheet; window.csrReport = csrReport;
 

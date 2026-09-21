@@ -7379,6 +7379,62 @@ class _GistSaveReq(BaseModel):
     fields: dict = Field(default_factory=dict)
 
 
+# What the six claim columns are called on the gist, so a remark reads the way the screen does.
+_GIST_CORE_LABELS = {
+    "insured_name": "Patient name", "complainant_name": "Complainant name",
+    "insurer_name": "Company name", "policy_no": "Policy number",
+    "policy_inception_date": "Date of policy inception", "disputed_amount": "Claim amount",
+}
+
+
+def _gist_show(v) -> str:
+    """One field's value, short enough to read in a remarks line."""
+    t = "" if v is None else str(v).strip()
+    if "<" in t and ">" in t:          # a draft, not a fact - its text does not belong in remarks
+        return ""
+    return (t[:57] + "\u2026") if len(t) > 60 else t
+
+
+def _gist_remark(label: str, before, after, secret: bool = False) -> str:
+    """What changed, in the words a person would use.
+
+    Deliberately says the OLD value as well as the new one. Six months on, the question asked of
+    a case file is never "what does it say" - it is "who changed this, and what did it say
+    before".
+    """
+    if secret:
+        return "\u270f\ufe0f %s was changed" % label
+    a, b = _gist_show(before), _gist_show(after)
+    nb = "" if after is None else str(after).strip()
+    na = "" if before is None else str(before).strip()
+    if not a and not b:
+        return "\u270f\ufe0f %s was updated" % label
+    if not na:
+        return "\u270f\ufe0f %s set to \u201c%s\u201d" % (label, b) if b else \
+               "\u270f\ufe0f %s was updated" % label
+    if not nb:
+        return "\u270f\ufe0f %s cleared (it was \u201c%s\u201d)" % (label, a) if a else \
+               "\u270f\ufe0f %s cleared" % label
+    if not a or not b:
+        return "\u270f\ufe0f %s was updated" % label
+    return "\u270f\ufe0f %s: \u201c%s\u201d \u2192 \u201c%s\u201d" % (label, a, b)
+
+
+def _gist_same(key: str, before, after) -> bool:
+    """Did this actually change? A form that re-submits every box must not fill the remarks with
+    news that nothing happened."""
+    a = "" if before is None else str(before).strip()
+    b = "" if after is None else str(after).strip()
+    if key == "disputed_amount":
+        try:
+            return (int(float(a)) if a else None) == (int(float(b)) if b else None)
+        except ValueError:
+            return a == b
+    if key.endswith("_date") or key == "policy_inception_date":
+        return a[:10] == b[:10]
+    return a == b
+
+
 @app.get("/nidaan/ops/api/cases/{claim_id}/report")
 async def ops_case_report(claim_id: int, request: Request):
     """Everything the Initial Claim Assessment Sheet and the Case Report print, in one call.
@@ -7504,6 +7560,11 @@ async def ops_case_report(claim_id: int, request: Request):
         "locked": _locks,
         "locked_all": await _bk.locked_fields(await _bk._claim_row(claim_id), ""),
         "is_super": (caller.get("role") or "") == "super_admin",
+        # Whether this person is seeing the case email password or a row of dots. The screen needs
+        # to know: offering "Change" on a value you cannot see leads to saving the dots back,
+        # which the server now refuses - and a refusal that looks like a save is worse than
+        # no button at all.
+        "can_see_secrets": _bk.may_see_secrets(caller.get("role") or ""),
     }
 
 
@@ -7523,6 +7584,19 @@ async def ops_case_gist(claim_id: int, body: _GistSaveReq, request: Request):
     role = caller.get("role") or ""
     import biz_nidaan_buckets as _bk
     changed = []
+    # Read the case as it stands before a single write, so each remark can say what the field
+    # said before. Taken here, once, rather than per field - the gist form submits in one go.
+    import aiosqlite as _aiob
+    async with _aiob.connect(nidaan.DB_PATH) as _c:
+        _c.row_factory = _aiob.Row
+        _row0 = await (await _c.execute(
+            "SELECT %s FROM nidaan_claims WHERE claim_id=?" % ", ".join(_GIST_CORE),
+            (claim_id,))).fetchone()
+        _labels0 = {k: (lab or k) for k, lab in await (await _c.execute(
+            "SELECT field_key, label_en FROM nidaan_bucket_fields")).fetchall()}
+    before_core = dict(_row0) if _row0 else {}
+    before_fields = await _bk.claim_fields(claim_id)
+    remarks = []
 
     core = {k: v for k, v in (body.core or {}).items() if k in _GIST_CORE}
     # Finished work is locked: a core fact that is locked may be re-sent unchanged, never changed.
@@ -7581,6 +7655,9 @@ async def ops_case_gist(claim_id: int, body: _GistSaveReq, request: Request):
             sets.append("%s=?" % k)
             vals.append(v)
             changed.append(k)
+            if not _gist_same(k, before_core.get(k), v):
+                remarks.append(_gist_remark(_GIST_CORE_LABELS.get(k, k.replace("_", " ")),
+                                            before_core.get(k), v))
         import aiosqlite as _aio
         async with _aio.connect(nidaan.DB_PATH) as c:
             cur = await c.execute("UPDATE nidaan_claims SET %s WHERE claim_id=?" % ", ".join(sets),
@@ -7595,19 +7672,29 @@ async def ops_case_gist(claim_id: int, body: _GistSaveReq, request: Request):
                                   role=role)
         if res.get("ok"):
             changed.append(k)
+            if not res.get("unchanged") and not _gist_same(k, before_fields.get(k), v):
+                remarks.append(_gist_remark(
+                    _labels0.get(k, str(k).replace("_", " ")).strip(),
+                    before_fields.get(k), v, secret=(k in _bk.SECRET_FIELDS)))
         else:
             errors.append("%s: %s" % (k, res.get("error")))
     if errors and not changed:
         raise HTTPException(400, "; ".join(errors))
 
-    if changed:
-        try:
+    if remarks:
+        # ONE LINE PER CHANGE (founder, 21 Sep: "each change should be adding to remarks").
+        # The old single line said "7 items" and named none of them, and counted boxes that were
+        # merely re-submitted unchanged. Capped so a bulk submit cannot bury the remarks a person
+        # actually wrote; the audit trail holds the full list either way.
+        for line in remarks[:12]:
+            await nidaan.record_claim_activity(claim_id, "gist", actor=who, summary=line)
+        if len(remarks) > 12:
             await nidaan.record_claim_activity(
                 claim_id, "gist", actor=who,
-                summary="Case details updated by %s (%d item%s)" % (
-                    who, len(changed), "" if len(changed) == 1 else "s"))
-        except Exception:
-            pass
+                summary="\u270f\ufe0f and %d more case details were updated" % (len(remarks) - 12))
+    if changed:
+        # The audit trail records every box that was SENT, changed or not - it answers a
+        # different question from the remarks, so it keeps its own, fuller list.
         await _ops_audit(request, "claim.gist", "claim", str(claim_id),
                          ", ".join(changed)[:160])
     return {"ok": True, "saved": changed, "errors": errors}

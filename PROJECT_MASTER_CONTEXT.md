@@ -2,7 +2,7 @@
 
 > **Purpose:** Single source of truth for project recovery. If a development session is lost, feed this document to a new session to restore full context instantly.
 >
-> **Last Updated:** Sep 14, 2026. Newest work is at the BOTTOM — read **A99** and **A98** (live testing), then A94–A97 (Level-2 buckets), then **A93**, then A92/A91/A90 backwards for what's current. Older numbered sections 1–73 are the original detailed reference. Also load the memory index: `C:\Users\imdus\.claude\projects\c--sarathi-business\memory\MEMORY.md`.
+> **Last Updated:** Sep 21, 2026. Newest work is at the BOTTOM — read **A99** and **A98** (live testing), then A94–A97 (Level-2 buckets), then **A93**, then A92/A91/A90 backwards for what's current. Older numbered sections 1–73 are the original detailed reference. Also load the memory index: `C:\Users\imdus\.claude\projects\c--sarathi-business\memory\MEMORY.md`.
 >
 > **Maintainer:** Update this doc after every significant change.
 
@@ -7388,3 +7388,70 @@ pre-staged in a `700` dir nginx cannot serve) · integration re-verification wit
 `/claims-view` (merging the three claim screens — Q11–13 answered, build pending),
 `/doc-collect` (pending-document window — open discussion), `/end-to-end` (original operating model).
 
+
+---
+
+## 🧾 A101 THE BUCKET SCREENS, CORRECTED (Sep 21 2026)
+
+Founder's ten-item list with screenshots, and one sentence underneath all of it: *"most times we
+overbuilded rather to keep things simple and manual."* Every item below removes a judgement the
+software was making and hands it back to a person.
+
+**Escalation (#7, #8).** Escalation means: we wrote to the insurance company, and now we wait.
+That is all it means. The screen used to ask *"What did the insurer say?"* and offer **They
+agreed** (closed the case) and **They refused** (sent it to Lokpal) — the software deciding the
+outcome of a case from a dropdown. Gone. It also kept three *"reminder sent on"* date fields,
+a ledger nobody wanted to maintain. Gone, **deactivated rather than deleted** so dates already
+recorded stay readable on the claims that hold them. What is there now: the escalation date, and
+**10 / 20 / 30 days gone** flags counted from it. The flags send nothing, move nothing and page
+nobody — they exist so a staffer opening the claim can see how long it has been. Moving to Lokpal
+is a person pressing **Move**. New **❓ Escalation query** button, same shape as Pending Draft's,
+for the case where the insurer has come back asking *us* something: the claim stays put and the
+day count no longer reads as their silence.
+
+**#10.** A claim in Escalation cannot be sent back to Live Cases. `NO_RETURN_TO_LIVE` in
+`biz_nidaan_buckets.py`, enforced in `move()`; a super admin still can, with a reason.
+
+**The Gist (#9).** It opened as nineteen input boxes with one Submit at the bottom. To read one
+fact you read it out of an input; to correct one fact you re-submitted all nineteen. That is also
+why its remark said *"Case details updated by Ravi (7 items)"* — and the 7 counted boxes that were
+merely re-sent unchanged. Now: a line per fact, label and value as plain text, **✏️ Change**
+beside it. Pressing it opens **that line only**, reusing `_csrInput()` so the insurer datalist,
+the date pickers and the admission-before-discharge check are unchanged. Saving sends one field.
+`ops_case_gist` takes a before-snapshot and writes **one remark per real change** —
+*"✏️ Hospital name: “Apollo” → “Fortis”"*, *"✏️ Diagnosis set to “Dengue”"*,
+*"✏️ Diagnosis cleared (it was “Dengue”)"*. A draft's text never lands in the remarks; the
+password's value never does, in either direction; an unchanged re-submit writes nothing at all.
+The audit trail keeps its own fuller list — it answers a different question.
+
+**A credential bug found on the way.** `mask_secrets()` shows `case_email_password` as
+`••••••••` to anyone outside `SECRET_ROLES`. Nothing stopped a form sending those dots straight back
+as the new value — the real password overwritten with punctuation, the case mailbox locked out,
+and nothing in the log to explain it. The guard went into **`set_field()`**, the single writer to
+`nidaan_claim_fields`, so every endpoint inherits it rather than the gist form alone. The screen
+now shows **🔒 Hidden** instead of a Change button for people who cannot see the value, because a
+refusal that looks like a save is worse than no button.
+
+**Two endpoints were 500ing (#2)** — `ops_escalation_reply` and `ops_escalation_due` both used
+`bk.` with nothing of that name imported. The screen reported *"could not record"*, which reads
+like a validation problem and is not.
+
+**Downloads keep their names (#5)** — `_doc_download_name()` + RFC 5987 `filename*`.
+
+**The outage this caused, and the rule from it.** `_doc_download_name` was inserted "just above"
+`nidaan_doc_access_guard` and landed *between* `@app.middleware("http")` and its function, so the
+decorator wrapped the wrong callable: `TypeError: _doc_download_name() takes 1 positional argument
+but 2 were given`, sarathi-ai.com 500. The health-gated deploy aborted before the second slot, so
+both sites stayed up on one instance. **Inserting above a function is unsafe when that function is
+decorated.**
+
+**Tests.** The escalation journey was rewritten to the new model rather than deleted — four steps
+asserted the behaviour of a reminder ledger that no longer exists. It now proves the day count is
+arithmetic anyone can check against the date on the claim, and that with all three flags passed
+the claim still does **not** move by itself. That last assertion is there to stop a future
+well-meaning auto-Lokpal. 19 passed, 0 failed, 1 skipped.
+
+**Open:** #1 (With → into the Draft section), #3 (the Pending Draft button — waiting on the
+founder for what he sees on click), #4 (drop START HERE), #6 (case report format), page 10 (Live
+Bucket field order; **Assign To** missing from `CSR_GIST`), page 5 (Telegram to the *assignee* at
+every stage).
