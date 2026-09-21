@@ -13761,6 +13761,7 @@ function l2Table(b){
       // The column the office opens this screen to read. It replaced Origin, which is on
       // the claim itself and which nobody triages by.
       + '<td class="l2why">'
+      +   _escBadge(i)
       +   _qBadge(i.query)
       +   (!(i.query && i.query.state) && i.back && i.back.at
           ? '<div class="l2back' + (i.back.super ? ' su' : '') + '">\u21a9 '
@@ -14680,6 +14681,24 @@ async function l2QuerySend(claimId, preset){
 window.l2QueryRaise = l2QueryRaise; window.l2QueryResolve = l2QueryResolve; window.l2QuerySend = l2QuerySend;
 
 // The query's badge - on a row and on the case sheet.
+// WHAT WAS DONE, on the Escalation board. Every other column on this screen answers "what is
+// missing"; once we have written to the insurer nothing is missing, and the only fact that
+// matters is that it went and how long ago. Green, like the draft-query-resolved badge, because
+// this is a step completed and not a warning (founder, page 7).
+function _escBadge(i){
+  if (i.bucket !== 'escalation' || (i.sub || '') !== 'escalated') return '';
+  const raw = String(i.escalation_date || '').slice(0, 10);
+  if (!raw) return '';
+  const d = new Date(raw + 'T00:00:00Z');
+  if (isNaN(d.getTime())) return '';
+  const days = Math.floor((Date.now() - d.getTime()) / 86400000);
+  return '<div style="display:inline-block;padding:.15rem .45rem;border-radius:6px;'
+    + 'font-size:.72rem;font-weight:700;margin-bottom:.2rem;'
+    + 'color:var(--nd-success-text);background:var(--nd-success-soft);'
+    + 'border:1px solid var(--nd-success-text)">\u2705 Escalated on ' + esc(raw)
+    + ' \u00b7 ' + days + ' day' + (days === 1 ? '' : 's') + ' ago</div>';
+}
+
 function _qBadge(q){
   if (!q || !q.state) return '';
   if (q.state === 'open')
@@ -15966,33 +15985,106 @@ function _escCreds(st){
   const mail = vals['case_email'] || '';
   const pwd = vals['case_email_password'] || '';
   const cid = (_l2Case && _l2Case.claim_id) || 0;
-  if (!mail && !pwd){
-    return '<div class="l2ban amber" style="margin-top:.5rem">No case email recorded yet — the '
-         + 'insurer and the authorities are written to from it. It is normally captured during '
-         + 'document collection; add it in the fields below if you have it.</div>';
+  if (!mail && !pwd && _escCredEdit === null){
+    return '<div id="escCreds" class="l2ban amber" style="margin-top:.5rem">No case email '
+         + 'recorded yet \u2014 the insurer and the authorities are written to from it. It is '
+         + 'normally captured during document collection. '
+         + '<button class="l2mv g" onclick="escCredEdit(&#39;case_email&#39;)">'
+         + '\u270f\ufe0f Add it</button></div>';
   }
   const reveal = !pwd ? ''
     : (st.may_see_secrets
         ? ' <button class="l2mv g" onclick="l2ShowSecret(' + cid + ',&#39;case_email_password&#39;)">'
           + 'Show it</button>'
-        : ' <span class="hint">Hidden — super admins and sub-super admins can see it.</span>');
-  return '<div style="margin-top:.5rem;padding:.5rem .6rem;border:1px solid var(--nd-border);'
-    + 'border-radius:6px;background:var(--nd-bg-surface-2)">'
+        : ' <span class="hint">Hidden \u2014 super admins and sub-super admins can see it.</span>');
+  return '<div id="escCreds" style="margin-top:.5rem;padding:.5rem .6rem;'
+    + 'border:1px solid var(--nd-border);border-radius:6px;background:var(--nd-bg-surface-2)">'
     + '<div class="l2sec" style="margin:0 0 .25rem">Case email</div>'
-    + '<div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;font-size:.86rem">'
-    +   '<span>' + esc(mail || '\u2014') + '</span>'
-    +   '<span style="color:var(--nd-text-faint)">|</span>'
-    +   '<span>' + esc(pwd || '\u2014') + '</span>' + reveal
-    +   ' <button class="l2mv g" onclick="csrFocus(&#39;case_email&#39;)">\u270f\ufe0f Correct</button>'
-    + '</div></div>';
+    + _escCredLine('case_email', 'Email ID', mail, true)
+    + _escCredLine('case_email_password', 'Password', pwd, !!st.may_see_secrets, reveal)
+    + '<div id="escCredMsg" style="font-size:.78rem;margin-top:.25rem"></div>'
+    + '</div>';
 }
 
-// Jump to the field rather than duplicating it: one box owns each value, so a correction made
-// here cannot disagree with the one made below.
-function csrFocus(key){
-  const el = document.getElementById('csr_claim_' + key) || document.getElementById('csr_l2_' + key);
-  if (el){ el.scrollIntoView({block:'center'}); el.focus(); }
+// One credential, readable, with a pencil beside it (founder, page 8: "editable pencil icon for
+// email ID and password would be good for correction if needed"). The old button called
+// csrFocus() to jump to the Live Cases field - which is not on this screen at all, so it had
+// never done anything.
+let _escCredEdit = null;
+
+function _escCredLine(key, label, value, mayEdit, extra){
+  if (_escCredEdit === key){
+    return '<div style="margin:.3rem 0">'
+      + '<label style="font-size:.72rem;color:var(--nd-text-muted)">' + esc(label) + '</label>'
+      + '<input id="escCredIn" value="' + esc(value || '') + '" '
+      + 'style="width:100%;background:var(--nd-bg-surface);color:var(--nd-text-primary);'
+      + 'border:1px solid var(--nd-brand-cyan);border-radius:7px;padding:.35rem .45rem;'
+      + 'font-size:.86rem;font-family:inherit">'
+      + '<div style="display:flex;gap:.35rem;margin-top:.3rem">'
+      +   '<button class="l2mv p" onclick="escCredSave(&#39;' + key + '&#39;)">Save</button>'
+      +   '<button class="l2mv g" onclick="escCredCancel()">Cancel</button>'
+      + '</div></div>';
+  }
+  return '<div style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;'
+    + 'font-size:.86rem;margin:.15rem 0">'
+    + '<span style="font-size:.72rem;color:var(--nd-text-muted);min-width:4.2rem">'
+    +   esc(label) + '</span>'
+    + '<span style="font-weight:600;word-break:break-all">' + esc(value || '\u2014') + '</span>'
+    + (extra || '')
+    + (mayEdit
+        ? ' <button class="l2mv g" title="Change ' + esc(label) + '" '
+          + 'onclick="escCredEdit(&#39;' + key + '&#39;)">\u270f\ufe0f</button>'
+        : '')
+    + '</div>';
 }
+
+function escCredEdit(key){
+  _escCredEdit = key;
+  _escCredRepaint();
+  const el = document.getElementById('escCredIn');
+  if (el){ el.focus(); try{ el.select(); }catch(e){} }
+}
+function escCredCancel(){ _escCredEdit = null; _escCredRepaint(); }
+
+function _escCredRepaint(){
+  const box = document.getElementById('escCreds');
+  if (!box || !_l2Case) return;
+  const holder = document.createElement('div');
+  holder.innerHTML = _escCreds(_l2Case.st || {});
+  const fresh = holder.firstChild;
+  if (fresh) box.replaceWith(fresh);
+}
+
+async function escCredSave(key){
+  const el = document.getElementById('escCredIn');
+  const msg = document.getElementById('escCredMsg');
+  if (!el || !_l2Case) return;
+  const v = (el.value || '').trim();
+  el.disabled = true;
+  try{
+    // The same endpoint the gist uses, so the same rules apply and the same remark is written.
+    const r = await API('/cases/' + _l2Case.claim_id + '/gist',
+      {method:'POST', body: JSON.stringify({core: {}, fields: {[key]: v}})});
+    const d = await r.json().catch(function(){ return {}; });
+    if (!r.ok || (d.errors && d.errors.length)){
+      el.disabled = false;
+      if (msg){ msg.style.color = 'var(--nd-danger-text)';
+                msg.textContent = (d.errors && d.errors.length)
+                  ? d.errors.join('; ') : _l2Err(d, 'Could not save that.'); }
+      return;
+    }
+    if (_l2Case.st && _l2Case.st.values) _l2Case.st.values[key] = v;
+    _escCredEdit = null;
+    _escCredRepaint();
+    ndUI.toast((key === 'case_email' ? 'Case email' : 'Password')
+             + ' saved \u2014 the change is in Remarks', 'success');
+  }catch(e){
+    el.disabled = false;
+    if (msg){ msg.style.color = 'var(--nd-danger-text)'; msg.textContent = 'Could not save that.'; }
+  }
+}
+window.escCredEdit = escCredEdit; window.escCredCancel = escCredCancel;
+window.escCredSave = escCredSave;
 
 async function escQuery(claimId){
   // The insurer has asked US something. The claim stays put; the only thing that changes is that

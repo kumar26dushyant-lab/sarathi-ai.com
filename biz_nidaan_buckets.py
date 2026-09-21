@@ -2005,6 +2005,10 @@ async def board(bucket_key: str = "", *, sub: str = "", q: str = "",
             # need before they can write a sentence (founder, 19 Sep). Already loaded with the
             # claim's other fields — nothing extra is fetched to show it.
             "insurer_claim_no": (vals.get("insurer_claim_no") or "").strip(),
+            # What was DONE, for the Escalation board: the date we wrote to the insurer is the
+            # whole status of that bucket, and the column should say so rather than describing
+            # what is missing (founder, page 7). Already loaded with the claim's other fields.
+            "escalation_date": (vals.get("escalation_date") or "").strip(),
             "claim_type": (r.get("claim_type") or "").strip(),
             "amount": r.get("disputed_amount") or 0,
             "bucket": bk, "bucket_name": b.get("name_en", bk), "bucket_icon": b.get("icon", ""),
