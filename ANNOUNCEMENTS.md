@@ -1,5 +1,78 @@
 # Staff Announcement Drafts
 
+## 2026-09-21 — The case screens got simpler
+
+**Title (EN):**
+✏️ Change one thing at a time on the Gist · 📅 Escalation now just counts the days
+
+**Details (EN):**
+• **The Gist is now something you read.** Open it and every detail is written out in plain text.
+To correct one of them, press **✏️ Change** on that line. Only that line opens, you fix it, you
+press **Save**. You no longer have to submit the whole form to change one word.
+
+• **Every change is written into Remarks.** It says what you changed and what it was before —
+for example *"Hospital name: Apollo → Fortis"*. So anyone opening the case later can see who
+changed what, and when.
+
+• **Escalation is simpler.** The questions *"Did they agree / Did they refuse"* are gone, and so
+are the three *reminder sent on* boxes. Record the **escalation date**, and the screen counts for
+you: **10 days gone, 20 days gone, 30 days gone**. Nothing is sent and nothing moves on its own —
+these are only for you to see how long it has been. When you decide the case should go to Lokpal,
+press **Move**, as always.
+
+• **New: ❓ Escalation query.** If the insurance company writes back asking *us* for something,
+press this and write down what they asked. The case stays in Escalation and everyone can see that
+they are waiting on us, not the other way round.
+
+• **An escalated case cannot go back to Live Cases.** If it genuinely has to, a super admin can
+do it and must give a reason.
+
+• **No more "To start".** When a case is handed over from L2 Claims it now goes straight into
+**Live Cases**. There is no second step to press.
+
+• **"With" has moved.** Who is working on a case is no longer a column on the board — open the
+case and you will find **With — who is working on this** just under the case details. Pick a name
+and it saves straight away.
+
+• **Downloaded documents keep their proper name**, and the question box in Escalation that was
+showing *"could not record"* is fixed.
+
+React 👍 once read; ask the office IT SPOC if anything is unclear.
+
+**Title (HI):**
+✏️ Gist में एक-एक चीज़ बदलिए · 📅 Escalation में अब सिर्फ़ दिन गिने जाएंगे
+
+**Details (HI):**
+• **Gist अब पढ़ने के लिए है।** खोलने पर हर जानकारी साफ़ लिखी दिखेगी। किसी एक को ठीक
+करना हो तो उसी लाइन पर **✏️ Change** दबाइए। सिर्फ़ वही लाइन खुलेगी, सुधारिए और **Save**
+दबाइए। एक शब्द बदलने के लिए पूरा फ़ॉर्म भेजने की ज़रूरत अब नहीं।
+
+• **हर बदलाव Remarks में दर्ज होता है।** क्या बदला और पहले क्या था — जैसे
+*"Hospital name: Apollo → Fortis"*। बाद में केस खोलने वाला देख सकता है कि किसने क्या बदला।
+
+• **Escalation आसान हुआ।** *"मान गए / मना कर दिया"* वाले विकल्प और तीनों *reminder* वाले
+बॉक्स हटा दिए गए हैं। सिर्फ़ **escalation की तारीख़** दर्ज कीजिए — स्क्रीन खुद गिनेगी:
+**10 दिन, 20 दिन, 30 दिन**। इससे न कुछ भेजा जाता है, न केस खुद आगे बढ़ता है — ये सिर्फ़ आपको
+दिखाने के लिए हैं कि कितना समय हो गया। Lokpal भेजना हो तो पहले की तरह **Move** दबाइए।
+
+• **नया: ❓ Escalation query.** अगर बीमा कंपनी हमसे कुछ पूछती है, यह दबाकर लिख दीजिए कि
+उन्होंने क्या पूछा। केस Escalation में ही रहता है और सबको दिखता है कि अब इंतज़ार हमारी तरफ़ से है।
+
+• **Escalation वाला केस वापस Live Cases में नहीं जाएगा।** अगर सचमुच ज़रूरी हो तो सुपर एडमिन
+कारण लिखकर कर सकते हैं।
+
+• **"To start" अब नहीं है।** L2 Claims से केस सौंपते ही वह सीधा **Live Cases** में चला जाएगा।
+दूसरा बटन दबाने की ज़रूरत नहीं।
+
+• **"With" की जगह बदली।** केस पर कौन काम कर रहा है — यह अब बोर्ड का कॉलम नहीं। केस खोलिए,
+विवरण के नीचे **With — who is working on this** मिलेगा। नाम चुनते ही सेव हो जाता है।
+
+• **डाउनलोड किए दस्तावेज़ों का नाम अब सही आता है**, और Escalation का सवाल वाला बॉक्स जो
+*"could not record"* दिखा रहा था, वह ठीक हो गया है।
+
+पढ़ने के बाद 👍 करें; कोई बात समझ न आए तो ऑफ़िस IT SPOC से पूछें।
+
+
 ## 2026-09-17 (2) — Branch login fixed, and a WhatsApp way in
 
 **Title (EN):**
