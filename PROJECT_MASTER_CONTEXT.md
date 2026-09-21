@@ -7582,5 +7582,17 @@ point. The gist mounts it per line; the DRAFT form draws every fact in one go an
 nothing, so it would have shipped a blank space. Found by asking, of any shared control: who else
 renders this?
 
-**Still open in the document, and it is the founder's own question:** page 2 - how the case email
-and password are captured in the first place.
+**The case email, answered (22 Sep).** It arrives two ways - the complainant sends it on
+WhatsApp, or a staffer types it - and both write the SAME row in `nidaan_claim_fields` through
+`set_field()`. No copies exist, so there is nothing to keep in step. The block moved off
+`_escPanel` and onto the claim itself, shown in every bucket, because the person holding the
+information should not have to be in Escalation to write it down.
+
+`_capture_case_email()` in the WhatsApp orchestrator gated on `"mail_credentials" in pending`,
+which stops being true the moment the first message arrives - so a complainant correcting a typo
+was parsed and discarded silently. It now also accepts a message whose address DIFFERS from what
+is stored, and records it as a correction naming the previous address. The password is still
+never written into the claim's timeline.
+
+Its failure message used to say the gist was locked; `NEVER_LOCK` makes that impossible for these
+two fields, so it now says what is actually true - it could not be saved, put them on by hand.

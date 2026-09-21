@@ -6,6 +6,32 @@ _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned ·
 
 **Last updated:** 2026-09-22 — 🟢 **CUTOVER COMPLETE. NidaanPartner.com and Sarathi-AI.com are LIVE on Oracle Mumbai (161.118.186.201, aarch64).** Contabo parked as rollback, untouched.
 
+### ✅ SHIPPED 2026-09-22 — the case email, and the ten items closed
+- ✅ **The case email, answered (founder, 22 Sep: it comes from WhatsApp AND from staff typing
+  it).** The value was already single — one row in `nidaan_claim_fields`, written by the WhatsApp
+  handler and by staff through the same `set_field()`, read by every screen. **There are no copies
+  to keep in step**, which is the only way "changed in one place, changed everywhere" is ever
+  actually true. What was not flexible was WHERE a person could see it: the block lived on the
+  **Escalation screen alone**, so a staffer in Pending Docs with the complainant on the phone had
+  nowhere to type it. It is on the claim now, in **every bucket**.
+  - 🐞 **And the WhatsApp side had a real gap.** The capture only ran while the checklist still
+    *wanted* the credentials — so the first message was taken, the line was ticked, and a later
+    message **correcting a typo in the address was read and thrown away in silence**. Every letter
+    to the insurer goes from that mailbox. A genuine correction now lands and is recorded **as a
+    correction**, naming what it was before; the same address sent twice writes nothing.
+  - Also removed a message that can no longer be true: a failed save told the claim *"the gist is
+    locked — a super admin has to put them on the claim"*. Those fields are in `NEVER_LOCK` now,
+    so that message would have sent somebody hunting for a lock that is not there.
+
+### ✅ THE TEN SCREENSHOT ITEMS (21 Sep) — ALL CLOSED
+Re-checked on 22 Sep against the file a browser actually receives, not against notes:
+**1** With off the board and on the claim · **2** the escalation question box saves (the two
+`NameError` endpoints) · **3** the Pending Draft button — and with it **every** forward move,
+which had been dead for two days · **4** no "To start" step · **5** downloads keep their name ·
+**6** the case report reads 1-15 · **7** the Escalation query button · **8** 10/20/30 day flags,
+no reminder ledger · **9** a pencil on each field where it is read · **10** Escalation does not
+go back to Live Cases.
+
 ### ✅ SHIPPED 2026-09-22 — the gaps document is finished, page by page
 Re-read end to end against the code, not against notes. Everything in it is now either done or a
 question the founder marked for discussion.
@@ -55,8 +81,7 @@ windows and the insurer's own claim number on Live Cases · page 4 discharge-bef
 the no-return-to-Live-Cases fence · page 5 Approved by / Approved on removed · page 6 Draft button
 hidden in Live Cases, draft query moves nothing, step picker gone.
 
-**The one open question in the document is his own:** page 2 — *how* the case email and password
-get captured (from the WhatsApp document-collection step?). Marked "we can discuss".
+**Page 2's open question is now answered** — see the case-email entry above.
 
 ### ✅ SHIPPED 2026-09-21 — the bucket screens do what the founder actually described
 Founder's ten-item list, with screenshots. His framing: *"every step is manual… at this stage any

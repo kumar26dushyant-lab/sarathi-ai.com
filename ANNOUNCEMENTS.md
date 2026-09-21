@@ -19,9 +19,15 @@ on the site.
 • **Two questions are gone** — "On behalf of" and the old "Claim type" (Rejection / Deduction /
 Delay). Nothing already recorded is lost; those cases still show what was written.
 
-• **The case email is no longer needed to move a claim out of Live Cases.** It is now kept on the
-**Escalation** screen, where it is actually used — with a small **✏️** next to the email and next
-to the password, so either can be corrected right there.
+• **The case email is now on every claim screen, in every bucket.** It reaches us two ways — the
+complainant sends it on WhatsApp, or you type it while you are on the phone to them. Either way
+it is the **same one entry**: correct it anywhere and it is corrected everywhere, because there
+is only one copy. A small **✏️** sits next to the email and next to the password.
+It is also no longer needed to move a claim out of Live Cases.
+
+• **If the complainant sends a corrected email later, it now reaches us.** Before, once they had
+sent it the first time, a follow-up message fixing a typo was ignored. It now updates the claim
+and the Remarks say what the address was before.
 
 • **The Escalation list now shows a green line** on every escalated case: *Escalated on
 18-09-2026 · 4 days ago*. You can see at a glance how long the insurance company has been silent.
@@ -48,9 +54,14 @@ Reason, Comment, और **Assign To** — वह व्यक्ति जो �
 • **दो सवाल हटा दिए गए** — "On behalf of" और पुराना "Claim type" (Rejection / Deduction /
 Delay)। पहले से दर्ज कुछ भी मिटा नहीं है; उन केस में जो लिखा था वह दिखता रहेगा।
 
-• **Live Cases से केस आगे बढ़ाने के लिए अब case email ज़रूरी नहीं।** अब वह **Escalation**
-स्क्रीन पर रहता है, जहाँ उसका सचमुच इस्तेमाल होता है — ईमेल और पासवर्ड दोनों के बगल में
-छोटा **✏️** है, वहीं से सुधार सकते हैं।
+• **Case email अब हर बकेट की केस स्क्रीन पर है।** यह दो तरह से आता है — शिकायतकर्ता WhatsApp पर
+भेजते हैं, या फ़ोन पर बात करते हुए आप खुद लिख देते हैं। दोनों हाल में यह **एक ही प्रविष्टि** है:
+कहीं भी सुधारिए, हर जगह सुधर जाएगा, क्योंकि कॉपी एक ही है। ईमेल और पासवर्ड दोनों के बगल में
+छोटा **✏️** है। Live Cases से केस आगे बढ़ाने के लिए अब यह ज़रूरी भी नहीं।
+
+• **शिकायतकर्ता बाद में सही ईमेल भेजें तो अब वह दर्ज हो जाएगा।** पहले एक बार भेजने के बाद,
+गलती सुधारने वाला दूसरा संदेश अनदेखा हो जाता था। अब केस अपडेट होता है और Remarks में लिखा
+रहता है कि पहले पता क्या था।
 
 • **Escalation सूची में अब हरी लाइन दिखेगी**: *Escalated on 18-09-2026 · 4 days ago*। एक नज़र में
 पता चलेगा कि बीमा कंपनी कितने दिन से चुप है।
