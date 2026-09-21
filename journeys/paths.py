@@ -151,6 +151,18 @@ async def _q1(ctx):
     if not r:
         raise Skip("no claim is sitting in Pending Draft right now")
     ctx["q_claim"] = int(dict(r)["claim_id"])
+    # A claim that ALREADY has an open query cannot have another raised on it - that refusal is
+    # correct behaviour, not a fault, and this journey went red on it the first time a staffer
+    # raised a real query. Exercise one that can be exercised, or say so.
+    async with aiosqlite.connect(ctx["db"]) as c:
+        c.row_factory = aiosqlite.Row
+        free = await (await c.execute(
+            "SELECT claim_id FROM nidaan_claims WHERE pipeline_stage='pending_draft' "
+            "AND COALESCE(archived,0)=0 AND COALESCE(query_state,'') <> 'open' "
+            "ORDER BY claim_id DESC LIMIT 1")).fetchone()
+    if not free:
+        raise Skip("every Pending Draft claim already has an open query")
+    ctx["q_claim"] = int(dict(free)["claim_id"])
 
 
 @query.step("raising a query is accepted")
@@ -610,8 +622,21 @@ async def _e5(ctx):
     assert d.get("ok")
     mine = [r for r in d["reminders"] if r["claim_id"] == ctx["esc_claim"]]
     assert mine, "a claim escalated well past day 10 is not showing a reminder as due"
-    assert mine[0]["number"] == 1, "it skipped to reminder %d" % mine[0]["number"]
+    # ONE reminder at a time, and it must be the next UNSENT one - not necessarily the first.
+    # Hard-coding 1 made this go red the moment a staffer recorded reminder 1 on a real claim,
+    # which is the clock working exactly as intended.
+    async with aiosqlite.connect(ctx["db"]) as c:
+        c.row_factory = aiosqlite.Row
+        sent = {dict(x)["field_key"] for x in await (await c.execute(
+            "SELECT field_key FROM nidaan_claim_fields WHERE claim_id=? "
+            "AND field_key IN ('esc_reminder_1','esc_reminder_2','esc_reminder_3') "
+            "AND TRIM(COALESCE(value,'')) <> ''", (ctx["esc_claim"],))).fetchall()}
+    expected = 1 + len(sent)
+    assert len(mine) == 1, "the clock offered %d reminders at once" % len(mine)
+    assert mine[0]["number"] == expected, \
+        "the clock says reminder %d but %d have been sent" % (mine[0]["number"], len(sent))
     assert mine[0]["overdue_by"] >= 0
+    ctx["esc_next_reminder"] = expected
 
 
 @esc.step("sending reminder one moves the clock to reminder two")
