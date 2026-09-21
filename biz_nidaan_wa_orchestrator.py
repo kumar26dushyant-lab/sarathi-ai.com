@@ -632,11 +632,21 @@ async def _capture_case_email(claim_id, text: str, lang: str, msisdn: str) -> di
         pending = {d["key"] for d in await _ck.pending_required_docs(claim_id, ctype)}
     except Exception:  # noqa: BLE001
         return {}
-    # Only when the claim is actually waiting for it.
-    if "mail_credentials" not in pending:
+    email = m.group(0)
+    # WAITING FOR IT, OR BEING CORRECTED. The checklist stops asking once the credentials arrive,
+    # and the old rule stopped listening at the same moment - so a complainant writing back to fix
+    # a typo in the address was read and thrown away without a word. Every letter to the insurer
+    # goes from this mailbox; a wrong address is not a small thing to swallow.
+    was = ""
+    try:
+        import biz_nidaan_buckets as _bk0
+        was = ((await _bk0.claim_fields(claim_id)).get("case_email") or "").strip()
+    except Exception:  # noqa: BLE001
+        was = ""
+    correcting = bool(was) and was.lower() != email.lower()
+    if "mail_credentials" not in pending and not correcting:
         return {}
 
-    email = m.group(0)
     pwd = ""
     hint = _PWD_HINT.search(t)
     if hint:
@@ -654,9 +664,9 @@ async def _capture_case_email(claim_id, text: str, lang: str, msisdn: str) -> di
         who = "complainant (WhatsApp)"
         r1 = await _bk.set_field(claim_id, "case_email", email, actor=who)
         r2 = await _bk.set_field(claim_id, "case_email_password", pwd, actor=who)
-        # The gist locks once the drafts are finished. We do NOT force past that lock - a
-        # complainant's message must not rewrite work somebody has signed off. Instead the claim
-        # says it arrived, and a person decides what to do with it.
+        # These two never lock (biz_nidaan_buckets.NEVER_LOCK): they are not findings somebody
+        # signed off, they are how we write to the insurer, and they must stay correctable at the
+        # point they are used. So a refusal here means something genuinely went wrong.
         saved = bool(r1.get("ok")) and bool(r2.get("ok"))
     except Exception as e:  # noqa: BLE001
         logger.warning("could not save the case email on claim %s: %s", claim_id, e)
@@ -670,12 +680,17 @@ async def _capture_case_email(claim_id, text: str, lang: str, msisdn: str) -> di
         except Exception:
             pass
     # The password never goes into the summary line - a claim's own timeline is read by everybody.
-    await _activity(claim_id, "case_email",
-                    ("Complainant sent the case email (%s) and its password on WhatsApp — saved "
-                     "on the claim, password hidden" % email) if saved
-                    else ("Complainant sent the case email (%s) and a password on WhatsApp, but the "
-                          "gist is locked — a super admin has to put them on the claim" % email),
-                    direction="in")
+    if saved and correcting:
+        note = ("Complainant CORRECTED the case email on WhatsApp — now %s (it was %s). "
+                "The password was sent again too and has been updated; it is not shown here."
+                % (email, was))
+    elif saved:
+        note = ("Complainant sent the case email (%s) and its password on WhatsApp — saved "
+                "on the claim, password hidden" % email)
+    else:
+        note = ("Complainant sent the case email (%s) and a password on WhatsApp, but it could "
+                "not be saved — please put them on the claim by hand." % email)
+    await _activity(claim_id, "case_email", note, direction="in")
     try:
         with _wa.sending_as("critical"):
             await _wa.send_text(msisdn, _GOT_IT.get(lang, _GOT_IT["hinglish"]))

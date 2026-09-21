@@ -14202,6 +14202,12 @@ function l2CaseRender(rem){
           + miss.map(function(x){ return esc(x.label); }).join(', ') + '</b></div>' : '')
     + '<div class="l2kv" id="l2kv">' + _l2KvHtml() + '</div>'
     + _l2AssignPanel(id, c.assigned_to_staff_id)
+    // THE CASE EMAIL, WHEREVER THE CLAIM IS. It reaches us two ways - the complainant sends it on
+    // WhatsApp, or a staffer types it while they are on the phone - and it is read much later,
+    // when the letters go out. One value, one place it is stored, shown and correctable at every
+    // stage (founder, 22 Sep: "flexible at all places, and if changed at any place then it should
+    // be changing to all places").
+    + _escCreds(st)
     // The ClaimShield case record. Every bucket can reach all four; the one that is THIS
     // bucket's job is the strong button.
     + '<div class="csrtools" style="margin:.1rem 0 .2rem">'
@@ -15985,7 +15991,6 @@ window._csrDateBound = _csrDateBound;
 function _escPanel(st, id){
   const sub = st.sub || '';
   const escalated = (sub === 'escalated' || sub === 'query');
-  const cred = _escCreds(st);
   return '<div class="l2fld" style="margin-top:.2rem">'
     + '<div class="l2sec">Where this stands</div>'
     + (sub === 'pending'
@@ -15997,8 +16002,9 @@ function _escPanel(st, id){
             + 'what they said.</div>'
           : '<div class="l2ban ok">Escalated. The days below are simply how long it has been '
             + 'since we wrote to the insurer.</div>')
-    // The case email and password, at the moment the team needs them to write to the insurer.
-    + (escalated ? cred : '')
+    // The case email used to live here. It is on the claim itself now, in every bucket, because
+    // it arrives at any point - from the complainant on WhatsApp, or from a staffer on the phone
+    // to them - and the person holding it should not have to be in Escalation to write it down.
     + (escalated ? _escFlags(st) : '')
     + (escalated
         ? '<div style="margin-top:.55rem">'
@@ -16055,9 +16061,10 @@ function _escCreds(st){
   const pwd = vals['case_email_password'] || '';
   const cid = (_l2Case && _l2Case.claim_id) || 0;
   if (!mail && !pwd && _escCredEdit === null){
-    return '<div id="escCreds" class="l2ban amber" style="margin-top:.5rem">No case email '
-         + 'recorded yet \u2014 the insurer and the authorities are written to from it. It is '
-         + 'normally captured during document collection. '
+    return '<div id="escCreds" class="l2ban info" style="margin-top:.5rem">'
+         + '<b>No case email yet.</b> Every letter to the insurer and the authorities is sent '
+         + 'from it. The complainant can send it on WhatsApp, or type it here if they have '
+         + 'given it to you. '
          + '<button class="l2mv g" onclick="escCredEdit(&#39;case_email&#39;)">'
          + '\u270f\ufe0f Add it</button></div>';
   }
