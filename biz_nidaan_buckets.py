@@ -340,6 +340,51 @@ _CONFIG_FIXES = (
     # judgement.
     ("UPDATE nidaan_bucket_fields SET active=0, required_exit=0 WHERE bucket_key='pending_draft' "
      "AND field_key IN ('approved_by','approved_on') AND active=1", ()),
+    # PAGE 10 - the Live bucket's fields, in the founder's names and his order. His list runs
+    # Company Name, Policy type, Policy No., Policy inception Date, Disputed Amount (all five
+    # columns on the claim), then these ten. Reordered here as well as on the form so that the
+    # claim panel, the assessment sheet and the case report all read the same way round.
+    ("UPDATE nidaan_bucket_fields SET label_en='Name Of Hospital', sort_order=60 "
+     "WHERE bucket_key='live_cases' AND field_key='hospital_name' "
+     "AND (label_en <> 'Name Of Hospital' OR sort_order <> 60)", ()),
+    ("UPDATE nidaan_bucket_fields SET label_en='Date of Admission', sort_order=70 "
+     "WHERE bucket_key='live_cases' AND field_key='admission_date' "
+     "AND (label_en <> 'Date of Admission' OR sort_order <> 70)", ()),
+    ("UPDATE nidaan_bucket_fields SET label_en='Date Of Discharge', sort_order=80 "
+     "WHERE bucket_key='live_cases' AND field_key='discharge_date' "
+     "AND (label_en <> 'Date Of Discharge' OR sort_order <> 80)", ()),
+    ("UPDATE nidaan_bucket_fields SET label_en='Diagnosis', sort_order=90 "
+     "WHERE bucket_key='live_cases' AND field_key='diagnosis' "
+     "AND (label_en <> 'Diagnosis' OR sort_order <> 90)", ()),
+    ("UPDATE nidaan_bucket_fields SET label_en='Patient Complaint', sort_order=100 "
+     "WHERE bucket_key='live_cases' AND field_key='patient_complaint' "
+     "AND (label_en <> 'Patient Complaint' OR sort_order <> 100)", ()),
+    ("UPDATE nidaan_bucket_fields SET label_en='Claim No.', sort_order=110 "
+     "WHERE bucket_key='live_cases' AND field_key='insurer_claim_no' "
+     "AND (label_en <> 'Claim No.' OR sort_order <> 110)", ()),
+    ("UPDATE nidaan_bucket_fields SET label_en='Rejection Date', sort_order=120 "
+     "WHERE bucket_key='live_cases' AND field_key='rejection_date' "
+     "AND (label_en <> 'Rejection Date' OR sort_order <> 120)", ()),
+    ("UPDATE nidaan_bucket_fields SET label_en='Rejection Reason', sort_order=130 "
+     "WHERE bucket_key='live_cases' AND field_key='rejection_reason' "
+     "AND (label_en <> 'Rejection Reason' OR sort_order <> 130)", ()),
+    ("UPDATE nidaan_bucket_fields SET label_en='Comment', sort_order=140 "
+     "WHERE bucket_key='live_cases' AND field_key='gist_comments' "
+     "AND (label_en <> 'Comment' OR sort_order <> 140)", ()),
+    # Not on his list of fifteen. Deactivated rather than deleted: what is already recorded on
+    # real claims stays readable on the case report, it is simply no longer asked for.
+    ("UPDATE nidaan_bucket_fields SET active=0, required_exit=0 WHERE bucket_key='live_cases' "
+     "AND field_key IN ('relationship','rejection_type') AND active=1", ()),
+    # The case email and its password sit at the end, after the fifteen, and the email is no
+    # longer REQUIRED to leave Live Cases. Pages 7-8 put both on the Escalation screen, filled
+    # from what the complainant gave us during document collection. A required field that is not
+    # on the form is how a claim gets stuck with nobody able to say why.
+    ("UPDATE nidaan_bucket_fields SET required_exit=0, sort_order=150 "
+     "WHERE bucket_key='live_cases' AND field_key='case_email' "
+     "AND (required_exit <> 0 OR sort_order <> 150)", ()),
+    ("UPDATE nidaan_bucket_fields SET sort_order=160 "
+     "WHERE bucket_key='live_cases' AND field_key='case_email_password' "
+     "AND sort_order <> 160", ()),
     # The three reminder-date fields, replaced by day flags on the Escalation screen (founder,
     # 21 Sep: "we no need option 1st reminder, second reminder, third reminder... make it simple
     # and manual"). A reminder ledger asked staff to maintain a record; what they actually need on
@@ -705,6 +750,14 @@ CORE_GIST_KEYS = ("insured_name", "complainant_name", "insurer_name", "policy_no
                   "policy_inception_date", "disputed_amount")
 
 
+# The case email account and its password. Every other field locks once the claim moves past the
+# bucket that owns it, because it is finished work somebody signed off. These two are not
+# findings - they are how we write to the insurance company, and page 7 of the founder's document
+# puts them on the Escalation screen with a pencil, which is long after Live Cases has closed.
+# A wrong password there stops the work dead, so it stays correctable wherever it is used.
+NEVER_LOCK = {"case_email", "case_email_password"}
+
+
 async def locked_fields(row: Optional[dict], role: str = "") -> dict:
     """{field_key: name of the bucket that finished it} for everything THIS person may not change
     on this claim. Empty for a super admin, and for a claim that has not started Level-2."""
@@ -736,7 +789,7 @@ async def locked_fields(row: Optional[dict], role: str = "") -> dict:
         # A field kept in two buckets (settlement amount) belongs to the later one.
         if fk not in last or o > last[fk][0]:
             last[fk] = (o, nm)
-    out = {fk: nm for fk, (o, nm) in last.items() if at > o}
+    out = {fk: nm for fk, (o, nm) in last.items() if at > o and fk not in NEVER_LOCK}
     g = bmap.get(GIST_BUCKET) or {}
     g_o = until.get("sort_order") if until.get("sort_order") is not None else g.get("sort_order")
     if g_o is not None and at > g_o:

@@ -15542,33 +15542,38 @@ let _csrClaim = 0;
 
 // Where each ClaimShield label lives. `core` is a column on the claim; everything else is a
 // bucket field. The order is ClaimShield's, row by row.
+// PAGE 10 OF THE FOUNDER'S DOCUMENT, in his order and his words.
+//
+//   [label, where it lives, key, how it is edited]
+//
+// 'core'  - a column on the claim, saved through the gist endpoint
+// 'field' - one of the bucket's own fields, same endpoint
+// 'claim' - a column with its own endpoint, because changing it does more than store a value
+//
+// Not here, deliberately: Patient and Complainant (they sit at the top of the claim with their
+// own pencils), On behalf of and the old ClaimShield "Claim Type" (not on his list), and the
+// case email and password (pages 7-8 put those on the Escalation screen).
 const CSR_GIST = [
-  ['Patient Name', 'core', 'insured_name'],
-  ['Complainant name', 'core', 'complainant_name'],
-  ['On Behalf of', 'field', 'relationship', 'choice'],
-  ['Claim Type', 'field', 'rejection_type', 'choice'],
-  ['Claim Amount', 'core', 'disputed_amount', 'number'],
-  ['Policy Number', 'core', 'policy_no'],
-  ['Claim Number', 'field', 'insurer_claim_no'],
-  ['Date of Policy Inception', 'core', 'policy_inception_date', 'date'],
-  ['Company Name', 'core', 'insurer_name', 'insurer'],
-  ['Hospital Name', 'field', 'hospital_name'],
-  ['Date of Admission', 'field', 'admission_date', 'date'],
-  ['Date of Discharge', 'field', 'discharge_date', 'date'],
-  ['Diagnosis', 'field', 'diagnosis'],
-  ['Patient complain', 'field', 'patient_complaint'],
-  ['Rejection Reason', 'field', 'rejection_reason'],
-  ['Rejection date', 'field', 'rejection_date', 'date'],
-  ['Comments', 'field', 'gist_comments'],
-  ['Email ID', 'field', 'case_email'],
-  ['Email Password', 'field', 'case_email_password'],
-  // Consultation % and CF amount moved to the payment stage (founder, 14 Sep).
+  ['Company Name',          'core',  'insurer_name',          'insurer'],
+  ['Policy type',           'claim', 'claim_type',            'policytype'],
+  ['Policy No.',            'core',  'policy_no'],
+  ['Policy inception Date', 'core',  'policy_inception_date', 'date'],
+  ['Disputed Amount',       'core',  'disputed_amount',       'number'],
+  ['Name Of Hospital',      'field', 'hospital_name'],
+  ['Date of Admission',     'field', 'admission_date',        'date'],
+  ['Date Of Discharge',     'field', 'discharge_date',        'date'],
+  ['Diagnosis',             'field', 'diagnosis'],
+  ['Patient Complaint',     'field', 'patient_complaint'],
+  ['Claim No.',             'field', 'insurer_claim_no'],
+  ['Rejection Date',        'field', 'rejection_date',        'date'],
+  ['Rejection Reason',      'field', 'rejection_reason'],
+  ['Comment',               'field', 'gist_comments'],
+  ['Assign To',             'claim', 'assigned_to_staff_id',  'assignto'],
 ];
 // The draft form repeats the facts of the case above the two drafts, exactly as ClaimShield does.
 const CSR_DRAFT_FACTS = [
   ['Patient Name', 'core', 'insured_name'],
   ['Complainant name', 'core', 'complainant_name'],
-  ['Claim Type', 'field', 'rejection_type', 'choice'],
   ['Claim Amount', 'core', 'disputed_amount', 'number'],
   ['Policy Number', 'core', 'policy_no'],
   ['Claim Number', 'field', 'insurer_claim_no'],
@@ -15659,6 +15664,11 @@ async function _csrLoad(claimId){
 
 function _csrVal(kind, key){
   if (!_csr) return '';
+  if (kind === 'claim'){
+    // The report calls these two by their own names.
+    const v = (key === 'claim_type') ? _csr.claim_kind : _csr.assigned_to;
+    return v == null ? '' : String(v);
+  }
   if (kind === 'core') return _csr[key] == null ? '' : String(_csr[key]);
   const v = (_csr.fields || {})[key];
   return v == null ? '' : String(v);
@@ -15694,6 +15704,11 @@ function _csrText(f){
   const [, kind, key, type] = f;
   let v = _csrVal(kind, key);
   if (!v) return '';
+  if (type === 'assignto'){
+    const p = (_l2Handlers || []).filter(function(x){ return String(x.staff_id) === v; })[0];
+    return p ? p.name : ((_csr && _csr.handler) || v);
+  }
+  if (type === 'policytype') return v.replace(/_/g, ' ');
   if (type === 'date') v = v.slice(0, 10);
   if (key === 'disputed_amount' && /^[0-9.]+$/.test(v)){
     const n = Number(v);
@@ -15748,6 +15763,21 @@ function csrFieldEdit(idx){
   _csrDirty = false;
   _csrPaint();
   const f = CSR_GIST[idx];
+  if (f[3] === 'insurer'){
+    // A component, not markup: it has to be mounted after its box is in the page.
+    try{
+      window.NidaanInsurers.mount('csr_' + f[1] + '_' + f[2] + '_box', {
+        value: _csrVal(f[1], f[2]) || '',
+        style: 'width:100%;box-sizing:border-box;background:var(--nd-bg-surface-2);'
+             + 'border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);'
+             + 'padding:.5rem;border-radius:8px'});
+    }catch(e){
+      const box = document.getElementById('csr_' + f[1] + '_' + f[2] + '_box');
+      if (box) box.innerHTML = '<div class="l2warn">The company list did not load. '
+        + 'Reload the page and try again.</div>';
+    }
+    return;
+  }
   const el = document.getElementById('csr_' + f[1] + '_' + f[2]);
   if (el){ el.focus(); if (el.select) try{ el.select(); }catch(e){} }
 }
@@ -15758,7 +15788,23 @@ function csrFieldCancel(){
 }
 async function csrFieldSave(idx){
   const f = CSR_GIST[idx];
-  const ok = await _csrSave(_csrCollect([f]), 'csrMsg', 'Saved \u2014 the change is in Remarks.');
+  let ok;
+  if (f[1] === 'claim'){
+    const el = document.getElementById('csr_' + f[1] + '_' + f[2]);
+    const m = document.getElementById('csrMsg');
+    if (m){ m.style.color = 'var(--nd-text-muted)'; m.textContent = 'Saving\u2026'; }
+    const res = await _csrSaveClaimCol(f[2], ((el && el.value) || '').trim());
+    if (!res.ok){
+      if (m){ m.style.color = 'var(--nd-danger-text)'; m.textContent = res.error; }
+      return;                           // stays open, so what was chosen is not lost
+    }
+    if (m){ m.style.color = 'var(--nd-success-text)'; m.textContent = 'Saved.'; }
+    _csrDirty = false;
+    await _csrLoad(_csrClaim);
+    ok = true;
+  } else {
+    ok = await _csrSave(_csrCollect([f]), 'csrMsg', 'Saved \u2014 the change is in Remarks.');
+  }
   if (!ok) return;                      // stays open, so what was typed is not lost
   // The message line sits at the bottom of the window; on a phone, a line edited near the top
   // saves off-screen and looks like nothing happened.
@@ -15780,14 +15826,39 @@ function _csrInput(f){
   const v = _csrVal(kind, key);
   const lk = _csrLocked(key) ? ' disabled title="Locked \u2014 only a super admin can change this"' : '';
   let ctl;
-  if (type === 'choice'){
+  if (type === 'policytype'){
+    // The claim type decides the whole document list. Wrong type means weeks of wrong papers,
+    // which is why it is a closed list and not something anybody types.
+    const cur = (v || '').trim();
+    ctl = '<select id="' + id + '"' + lk + '>'
+      + (cur ? '' : '<option value="" selected>\u2014 not set \u2014</option>')
+      + (typeof L2_TYPES !== 'undefined' ? L2_TYPES : []).map(function(t){
+          return '<option value="' + t + '"' + (t === cur ? ' selected' : '') + '>'
+               + t.replace(/_/g, ' ') + '</option>'; }).join('')
+      + '</select>';
+  } else if (type === 'assignto'){
+    // Who will prepare the draft. Only the people who actually work claims are offered: a claim
+    // landing with somebody who does not is how a claim goes quiet.
+    const cur = (v || '').trim();
+    ctl = '<select id="' + id + '"' + lk + '>'
+      + '<option value=""' + (cur ? '' : ' selected') + '>\u2014 nobody yet \u2014</option>'
+      + (_l2Handlers || []).map(function(p){
+          return '<option value="' + p.staff_id + '"'
+               + (String(p.staff_id) === cur ? ' selected' : '') + '>' + esc(p.name)
+               + '</option>'; }).join('')
+      + '</select>';
+  } else if (type === 'insurer'){
+    // A complainant types "Star"; the letter has to carry the company's real name. The shared
+    // picker (nidaan_insurers.js) is the one list every form on the site asks this question
+    // with - it already keeps an off-list company selectable and ends in "Other". It is mounted
+    // after this HTML is in the page, in csrFieldEdit().
+    ctl = '<div id="' + id + '_box"></div>';
+  } else if (type === 'choice'){
     const opts = CSR_CHOICES[key] || ['None'];
     const cur = v || 'None';
     ctl = '<select id="' + id + '"' + lk + '>' + opts.map(function(o){
       return '<option' + (o === cur ? ' selected' : '') + '>' + esc(o) + '</option>'; }).join('')
       + (opts.indexOf(cur) < 0 ? '<option selected>' + esc(cur) + '</option>' : '') + '</select>';
-  } else if (type === 'insurer'){
-    ctl = '<input id="' + id + '" list="csrIns" value="' + esc(v) + '"' + lk + '>';
   } else {
     // The treatment dates bound each other: a discharge before the admission reads as a
     // fabricated claim to an insurer, so the browser refuses the pair before the server has to
@@ -15965,7 +16036,7 @@ async function escQuery(claimId){
 window.escQuery = escQuery; window.csrFocus = csrFocus;
 
 function _csrInsurerList(){
-  const list = (window.NidaanInsurers && NidaanInsurers.list) || [];
+  const list = (window.NidaanInsurers && window.NidaanInsurers.list) || [];
   return '<datalist id="csrIns">' + list.map(function(n){
     return '<option value="' + esc(n) + '">'; }).join('') + '</datalist>';
 }
@@ -15974,7 +16045,17 @@ function _csrCollect(fields){
   const core = {}, flds = {};
   fields.forEach(function(f){
     const [, kind, key, type] = f;
+    if (kind === 'claim') return;           // these save through their own endpoints
     if (_csrLocked(key)) return;            // locked work is not sent at all
+    if (type === 'insurer'){
+      // Always read through the component, which knows whether the answer came from the list or
+      // from its own "Other" box.
+      let v = '';
+      try{ v = (window.NidaanInsurers.value('csr_' + kind + '_' + key + '_box') || '').trim(); }
+      catch(e){ v = ''; }
+      core[key] = v;
+      return;
+    }
     const el = document.getElementById('csr_' + kind + '_' + key);
     if (!el) return;
     let v = (el.value || '').trim();
@@ -15982,6 +16063,23 @@ function _csrCollect(fields){
     if (kind === 'core') core[key] = v; else flds[key] = v;
   });
   return {core: core, fields: flds};
+}
+
+// Policy type and Assign To each already have an endpoint that does more than store a value -
+// one re-seeds the document checklist, the other is the same assignment the claim panel makes.
+// The gist calls those rather than writing the columns behind their backs.
+async function _csrSaveClaimCol(key, value){
+  if (key === 'claim_type'){
+    if (!value) return {ok: false, error: 'Choose the policy type.'};
+    const r = await API('/claims/' + _csrClaim + '/doc-window/type',
+      {method: 'POST', body: JSON.stringify({claim_type: value})});
+    const d = await r.json().catch(function(){ return {}; });
+    return r.ok ? {ok: true} : {ok: false, error: _l2Err(d, 'Could not change the policy type.')};
+  }
+  const r = await API('/cases/' + _csrClaim + '/assign',
+    {method: 'POST', body: JSON.stringify({staff_id: value ? Number(value) : null})});
+  const d = await r.json().catch(function(){ return {}; });
+  return r.ok ? {ok: true} : {ok: false, error: _l2Err(d, 'Could not assign that.')};
 }
 
 async function _csrSave(payload, msgId, okText){
@@ -16011,6 +16109,9 @@ async function _csrSave(payload, msgId, okText){
 async function csrGist(claimId){
   _csrStyles();
   _csrEditing = null; _csrDirty = false;
+  // "Assign To" is a list of people. It is loaded when the BOARD draws, and the gist can be
+  // opened from My Desk or a link where no board ever drew.
+  if (typeof _l2LoadHandlers === 'function'){ try{ await _l2LoadHandlers(); }catch(e){} }
   openModal('Gist \u2014 NP-' + claimId, '<div class="empty"><p>Loading\u2026</p></div>', [], true);
   try{ await _csrLoad(claimId); }
   catch(e){ document.getElementById('modalBody').innerHTML = '<div class="empty"><p>Could not open the gist.</p></div>'; return; }

@@ -7537,6 +7537,9 @@ async def ops_case_report(claim_id: int, request: Request):
         "claim_id": claim_id,
         "created_at": claim.get("created_at"),
         "handler": claim.get("handler_name") or "",
+        # Who will prepare the draft - #15 on the founder's list, and a dropdown on the gist, so
+        # the form needs the id and not only the name it already sent.
+        "assigned_to": claim.get("assigned_to_staff_id"),
         "insured_name": claim.get("insured_name") or "",
         "insured_phone": claim.get("insured_phone") or "",
         "complainant_name": claim.get("complainant_name") or "",
