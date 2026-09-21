@@ -415,7 +415,6 @@ async def impersonation_audit_middleware(request: Request, call_next):
     return response
 
 
-@app.middleware("http")
 async def _doc_download_name(stored_name: str) -> str:
     """The name this file had when somebody uploaded it, ready for a Content-Disposition header.
 
@@ -441,6 +440,7 @@ async def _doc_download_name(stored_name: str) -> str:
     return name[:150]
 
 
+@app.middleware("http")
 async def nidaan_doc_access_guard(request: Request, call_next):
     """Gate direct access to uploaded Nidaan claim documents. The files sit under
     the public /uploads mount, but are served only via short-lived signed URLs
