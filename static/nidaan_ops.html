@@ -13247,7 +13247,7 @@ function _l2Styles(){
   .l2srch{flex:1;min-width:11rem;background:var(--nd-bg-surface-2);border:1px solid var(--nd-border);
     color:var(--nd-text-primary);border-radius:8px;padding:.38rem .6rem;font-size:.84rem;
     font-family:inherit}
-  .l2cell{font-size:.74rem;padding:.1rem .2rem;max-width:8.5rem;background:transparent;
+  .l2cell{font-size:.75rem;padding:.1rem .2rem;max-width:8.5rem;background:transparent;
   border:1px solid transparent;color:var(--nd-text-secondary);border-radius:4px}
 .l2cell:hover,.l2cell:focus{border-color:var(--nd-border-strong);background:var(--nd-bg-surface)}
 .l2cell:disabled{opacity:.5}
@@ -13256,7 +13256,7 @@ function _l2Styles(){
   .l2age.ok{background:var(--nd-success-soft,rgba(52,211,153,.14));color:var(--nd-success-text)}
   .l2age.amber{background:var(--nd-warning-soft);color:var(--nd-warning-text)}
   .l2age.red{background:var(--nd-danger-soft,rgba(248,113,113,.14));color:var(--nd-danger-text)}
-  .l2mv{font-size:.74rem;font-weight:700;font-family:inherit;border:1px solid var(--nd-brand-cyan);
+  .l2mv{font-size:.75rem;font-weight:700;font-family:inherit;border:1px solid var(--nd-brand-cyan);
     color:var(--nd-cyan-text);background:none;border-radius:6px;padding:.14rem .45rem;
     cursor:pointer;white-space:nowrap;margin:.08rem .15rem .08rem 0}
   .l2mv.p{background:var(--nd-brand-cyan);color:var(--nd-text-on-cyan)}
@@ -13268,7 +13268,7 @@ function _l2Styles(){
      being read. The quoted line under it is what the last person said when they moved it. */
   .l2why{font-size:.8rem;color:var(--nd-text-secondary);line-height:1.4;min-width:13rem;
     max-width:22rem}
-  .l2why .nt{font-size:.74rem;color:var(--nd-text-faint);margin-top:.12rem;font-style:italic}
+  .l2why .nt{font-size:.75rem;color:var(--nd-text-faint);margin-top:.12rem;font-style:italic}
   .l2why .nt .by{font-style:normal}
   .l2sum{display:flex;gap:.45rem;flex-wrap:wrap;align-items:center;margin-bottom:.55rem;
     font-size:.8rem}
@@ -13281,7 +13281,7 @@ function _l2Styles(){
   .l2sum .pill.amber b{color:var(--nd-warning-text)}
   .l2sum .pill.ok{border-color:var(--nd-success-text);color:var(--nd-success-text)}
   .l2sum .pill.ok b{color:var(--nd-success-text)}
-  .l2lok{font-size:.72rem;font-weight:700;color:var(--nd-danger-text)}
+  .l2lok{font-size:.75rem;font-weight:700;color:var(--nd-danger-text)}
   .l2built{border-top:2px solid var(--nd-border);padding-top:.6rem;display:flex;flex-direction:column;gap:.55rem}
   .l2bg{background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:9px;padding:.5rem .65rem}
   .l2bgh{font-size:.74rem;font-weight:800;color:var(--nd-text-secondary);margin-bottom:.3rem}
@@ -13294,7 +13294,7 @@ function _l2Styles(){
   /* The toolbar's buttons are sized for B / I / U; the request button sizes to its words. */
   .csrbar.csrlock button{width:auto;height:auto;flex-shrink:0;padding:.2rem .6rem}
   .csrsu{font-size:.72rem;color:var(--nd-cyan-text);margin-left:.5rem;align-self:center}
-  .l2back{font-size:.74rem;font-weight:700;color:var(--nd-warning-text);margin-bottom:.15rem}
+  .l2back{font-size:.75rem;font-weight:700;color:var(--nd-warning-text);margin-bottom:.15rem}
   .qbad{font-size:.76rem;font-weight:800;border-radius:8px;padding:.3rem .5rem;margin-bottom:.25rem;line-height:1.35}
   .qbad.open{background:rgba(239,68,68,.12);border:1px solid var(--nd-danger-text);color:var(--nd-danger-text)}
   .qbad.done{background:rgba(16,185,129,.1);border:1px solid var(--nd-success-text);color:var(--nd-success-text)}
@@ -13363,6 +13363,102 @@ function _l2Styles(){
     .l2rail{flex:1 1 auto;width:100%;position:static;display:grid;
       grid-template-columns:repeat(auto-fill,minmax(9.5rem,1fr));gap:.25rem}
     .l2rh{grid-column:1/-1}
+  }
+
+  /* ── A CLAIM YOU CAN READ ON A PHONE ──────────────────────────────────────
+     Ten columns do not fit 360px, and a work screen you drag sideways to read one claim is one
+     people stop using away from a desk. Below 900px each row becomes a card - same table, same
+     markup, the cells carry their column name in data-label and this does the rest. Two
+     renderers would drift apart and a phone would quietly show something the desk does not. */
+  /* A touch screen gets cards up to 1200px: ten columns plus 44px controls do not fit an
+     iPad in landscape, and shaving padding off them was shaving pixels off a wall. A mouse
+     keeps the table from 901px, because a mouse does not need 44px anything. */
+  @media (max-width:900px), (pointer:coarse) and (max-width:1200px){
+    #l2Main .table-wrap{overflow:visible;border:0;border-radius:0;background:none}
+    #l2Main .table-wrap table,#l2Main .table-wrap tbody,
+    #l2Main .table-wrap tr,#l2Main .table-wrap td{display:block;width:auto}
+    #l2Main .table-wrap thead{position:absolute;left:-9999px}   /* still read aloud, off screen */
+    /* Two facts to a line where they are short, full width where they are not. The order is
+       set below, so the card reads the way a person triages: which claim, whose, who we are
+       arguing with, how much and how long. */
+    #l2Main .table-wrap tr{display:grid;grid-template-columns:1fr 1fr;gap:.15rem .8rem;
+      border:1px solid var(--nd-border);border-radius:12px;
+      background:var(--nd-bg-surface);padding:.75rem .85rem;margin-bottom:.6rem}
+    #l2Main .table-wrap tr:hover{background:var(--nd-bg-surface)}
+    #l2Main .table-wrap td{border:0;padding:.22rem 0;font-size:.85rem;text-align:left !important;
+      white-space:normal !important}
+    /* The column name, small, above its value - so a card is still self-explaining. */
+    #l2Main .table-wrap td::before{content:attr(data-label);display:block;font-size:.64rem;
+      font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--nd-text-faint);
+      margin-bottom:.05rem}
+    /* The four that say what they are without a caption. */
+    #l2Main .table-wrap td.c-ref::before,#l2Main .table-wrap td.c-who::before,
+    #l2Main .table-wrap td.c-act::before,#l2Main .table-wrap td.l2why::before{display:none}
+    /* The claim and the person it belongs to, read first and read together. */
+    #l2Main .table-wrap td.c-ref{font-size:1.02rem;padding-bottom:0}
+    #l2Main .table-wrap td.c-who{font-weight:700;font-size:.96rem;padding-top:0;
+      padding-bottom:.4rem;border-bottom:1px solid var(--nd-border);margin-bottom:.35rem}
+    /* Amount and age sit beside their neighbour rather than each taking a line. */
+    /* What goes where. Full-width for the things that are read as a sentence; paired for the
+       short ones. Document order is the table's order; this is the card's. */
+    #l2Main .table-wrap td.c-ref{order:1}
+    #l2Main .table-wrap td.c-who{order:2}
+    #l2Main .table-wrap td[data-label="Insurance Co."]{order:3}
+    #l2Main .table-wrap td.c-amt{order:4}
+    #l2Main .table-wrap td.c-age{order:5}
+    #l2Main .table-wrap td[data-label="Type"]{order:6}
+    #l2Main .table-wrap td[data-label="Step"]{order:7}
+    #l2Main .table-wrap td[data-label="Docs"]{order:8}
+    #l2Main .table-wrap td.l2why{order:9}
+    #l2Main .table-wrap td.c-act{order:10}
+    #l2Main .table-wrap td.c-ref,#l2Main .table-wrap td.c-who,
+    #l2Main .table-wrap td[data-label="Insurance Co."],
+    #l2Main .table-wrap td[data-label="Docs"],
+    #l2Main .table-wrap td.l2why,#l2Main .table-wrap td.c-act{grid-column:1/-1}
+    /* The amount is the number the eye goes to first on a claim. */
+    #l2Main .table-wrap td.c-amt{font-weight:700;font-size:.95rem}
+    /* The age chip should not stretch across its half. */
+    #l2Main .table-wrap td.c-age .l2age{display:inline-block}
+    /* A dropdown in a card has the whole half to itself. */
+    #l2Main .table-wrap td .l2cell{max-width:100%;width:100%}
+    #l2Main .table-wrap td.l2why{margin-top:.3rem;padding-top:.45rem;min-width:0;
+      border-top:1px solid var(--nd-border)}
+    /* Buttons a thumb can actually hit, across the bottom. */
+    #l2Main .table-wrap td.c-act{margin-top:.55rem;display:flex;flex-wrap:wrap;gap:.4rem}
+    #l2Main .table-wrap td.c-act .l2mv{flex:1 1 auto;min-width:8rem;text-align:center}
+  }
+
+  /* ── A FINGER IS NOT A MOUSE ──────────────────────────────────────────────
+     Measured at 19-22px tall, against the 44px both Apple and Google publish. People miss a
+     19px button and tap again - and tapping again is the thing we have just spent a day
+     stopping. Keyed on the POINTER, not the width: a touchscreen laptop needs this and a small
+     desktop window does not. */
+  /* The insurance company's own claim number, under the reference. It had its size inline,
+     which no stylesheet can answer - and inline is exactly where a 10.6px string hides. */
+  .c-icn{font-size:.75rem;color:var(--nd-text-faint)}
+
+  @media (pointer:coarse){
+    .l2mv,.l2tab,.l2b,.btn,.btn-sm,.csrpen,.pen{min-height:44px}
+    .l2mv,.btn-sm{padding-left:.7rem;padding-right:.7rem;font-size:.82rem}
+    .l2tab{padding:.5rem .8rem}
+    .l2fld input,.l2fld select,.l2fld textarea,.csrf input,.csrf select{min-height:44px}
+    /* input WITHOUT a type attribute is still a text box, and an [type=text] selector does not
+       match it - which is why the bucket search stayed 28px tall. */
+    #l2Main input:not([type=checkbox]):not([type=radio]),#l2Main select{min-height:44px}
+    .l2cell{min-height:40px}
+    /* A shade larger again in the hand. The 12px floor itself is set at source, above. */
+    .l2why,.hint,.pill,.l2sum,.l2age,.c-icn,.l2lok,.l2back{font-size:.79rem}
+    .l2why .nt,.l2why .nt .by{font-size:.79rem}
+    .l2cell,#l2Main select,#l2Main select option{font-size:.82rem}
+    #l2Main .table-wrap td{font-size:.87rem}
+  }
+
+
+  /* A MOUSE IS NOT A FINGER either. 19px is below the published minimum for a pointer too
+     (WCAG 2.5.8 asks 24px), and a row of 19px buttons is fiddly on a laptop as well. */
+  @media (pointer:fine){
+    .l2mv,.l2tab,.btn-sm,.l2cell{min-height:28px}
+    .l2b{min-height:32px}
   }`;
   document.head.appendChild(st);
 }
@@ -13770,8 +13866,12 @@ function l2RenderBucket(){
       + '</div>'
     : '';
 
-  const guide = '<div class="l2ban info"><b>' + esc(b.guide_what || '') + '</b>'
-    + (b.guide_do ? ' — ' + esc(b.guide_do) : '') + '</div>';
+  // A bucket with nothing written against it rendered an empty banner - a bar of colour saying
+  // nothing, which on a phone is a chunk of the screen spent on silence.
+  const guide = (b.guide_what || b.guide_do)
+    ? '<div class="l2ban info"><b>' + esc(b.guide_what || '') + '</b>'
+      + (b.guide_do ? ' — ' + esc(b.guide_do) : '') + '</div>'
+    : '';
 
   const head =
       '<div class="l2hd"><div class="l2ttl">' + (b.icon || '') + ' ' + esc(b.name_en)
@@ -13838,28 +13938,32 @@ function l2Table(b){
       + 'onclick="docsOpen(' + i.claim_id + ')">📂 '
       + (i.files ? i.files + ' file' + (i.files === 1 ? '' : 's') : 'Documents') + '</button>';
     return '<tr>'
-      + '<td><b>NP-' + i.claim_id + '</b>'
+      + '<td data-label="Ref" class="c-ref"><b>NP-' + i.claim_id + '</b>'
       +   (i.insurer_claim_no
-            ? '<div style="font-size:.66rem;color:var(--nd-text-faint)" '
+            ? '<div class="c-icn" '
               + 'title="The insurance company’s own claim number, from the rejection letter">'
               + esc(i.insurer_claim_no) + '</div>'
             : '')
       +   lok + '</td>'
-      + '<td>' + esc(i.who || '(no name)')
+      + '<td data-label="Complainant" class="c-who">' + esc(i.who || '(no name)')
       +   (i.insured && i.insured !== i.who ? '<div style="font-size:.72rem;color:var(--nd-text-faint)">'
           + esc(i.insured) + '</div>' : '') + '</td>'
       // The claim type decides the whole document list, so it is read here and corrected here
       // rather than discovered three weeks later. The screen already warns: "wrong type means
       // weeks of wrong papers."
-      + '<td style="font-size:.78rem">' + _l2TypeCell(i) + '</td>'
-      + '<td>' + (i.insurer ? esc(i.insurer) : '<span class="l2warn">not recorded</span>') + '</td>'
-      + '<td style="text-align:right">' + (i.amount ? '₹' + Number(i.amount).toLocaleString('en-IN') : '—') + '</td>'
-      + '<td>' + docs + '</td>'
-      + (b.substates && b.substates.length ? '<td style="font-size:.78rem">' + esc(i.sub_name || '—') + '</td>' : '')
-      + '<td><span class="l2age ' + i.age_state + '">' + (i.days == null ? '—' : i.days + 'd') + '</span></td>'
+      + '<td data-label="Type" style="font-size:.78rem">' + _l2TypeCell(i) + '</td>'
+      + '<td data-label="Insurance Co.">'
+      +   (i.insurer ? esc(i.insurer) : '<span class="l2warn">not recorded</span>') + '</td>'
+      + '<td data-label="Disputed" class="c-amt" style="text-align:right">'
+      +   (i.amount ? '₹' + Number(i.amount).toLocaleString('en-IN') : '—') + '</td>'
+      + '<td data-label="Docs">' + docs + '</td>'
+      + (b.substates && b.substates.length
+          ? '<td data-label="Step" style="font-size:.78rem">' + esc(i.sub_name || '—') + '</td>' : '')
+      + '<td data-label="In bucket" class="c-age"><span class="l2age ' + i.age_state + '">'
+      +   (i.days == null ? '—' : i.days + 'd') + '</span></td>'
       // The column the office opens this screen to read. It replaced Origin, which is on
       // the claim itself and which nobody triages by.
-      + '<td class="l2why">'
+      + '<td data-label="Why it is waiting" class="l2why">'
       +   _escBadge(i)
       +   _qBadge(i.query)
       +   (!(i.query && i.query.state) && i.back && i.back.at
@@ -13871,7 +13975,7 @@ function l2Table(b){
           + (i.note_by ? ' <span class="by">— ' + esc(i.note_by) + '</span>' : '')
           + '</div>' : '')
       + '</td>'
-      + '<td style="white-space:nowrap">' + btns + '</td></tr>';
+      + '<td class="c-act" style="white-space:nowrap">' + btns + '</td></tr>';
   }).join('');
   return '<div class="table-wrap"><table><thead><tr>'
     + '<th>Ref</th><th>Complainant</th><th>Type</th><th>Insurance Co.</th>'

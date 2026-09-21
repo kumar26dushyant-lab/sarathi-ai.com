@@ -65,3 +65,20 @@ that a background poll does not freeze the screen, and that a dialog opening und
 not act on the tap that opened it.
 
 Run it after any change to that guard or to `openModal`.
+
+## device-audit.js — the bucket screen on real devices
+
+`node device-audit.js` · `THEME=light node device-audit.js` · `SHOTS=1 node device-audit.js`
+
+Renders the REAL bucket screen — the page's own `l2RenderBucket()` with the product's own
+stylesheet and design tokens — at 360, 390, 844, 768, 1024 and 1440, in both themes, and measures
+what makes a work screen unusable rather than merely ugly: the page dragging sideways, tap targets
+under the published minimum (44px for a finger, 24px for a mouse), text under 12px, and text that
+cannot be read against what is behind it.
+
+It prints numbers, so the same run works before and after a change. `SHOTS=1` writes screenshots
+into `screenshots/`.
+
+**It refuses to report on an empty screen.** The first version said "0 problems across 6 devices"
+because a SyntaxError meant nothing had rendered at all; it now proves claims are on screen before
+it measures anything.
