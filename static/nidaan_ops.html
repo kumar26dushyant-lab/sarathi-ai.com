@@ -15586,28 +15586,55 @@ function _escPanel(st, id){
     + '<div class="l2sec">Where this stands</div>'
     + (sub === 'pending'
         ? '<div class="l2ban info">Not escalated yet. <b>Record the escalation date below</b> — '
-          + 'that is what marks it Escalated and starts the reminder clock (day 10, 20, 30).</div>'
+          + 'that is what marks it Escalated and starts counting the days.</div>'
         : sub === 'query'
-          ? '<div class="l2ban amber">The insurer has asked us something. <b>They are waiting on '
-            + 'us</b>, so no reminders are going out. Answer them, then record what they say.</div>'
-          : '<div class="l2ban ok">Escalated. Reminders fall due on day 10, 20 and 30 — you send '
-            + 'them, and record the date you did.</div>')
+          ? '<div class="l2ban amber">Marked <b>Escalation Query</b> — the insurer is waiting on '
+            + 'us, so the day count below is not a silence from them. Answer them, then record '
+            + 'what they said.</div>'
+          : '<div class="l2ban ok">Escalated. The days below are simply how long it has been '
+            + 'since we wrote to the insurer.</div>')
     // The case email and password, at the moment the team needs them to write to the insurer.
     + (escalated ? cred : '')
+    + (escalated ? _escFlags(st) : '')
     + (escalated
-        ? '<div style="margin-top:.5rem"><div class="l2sec">What did the insurer say?</div>'
-          + '<div style="display:flex;gap:.35rem;flex-wrap:wrap">'
-          + '<button class="l2mv p" onclick="escReply(' + id + ',&#39;accepted&#39;)">'
-          + '\u2705 They agreed</button>'
-          + '<button class="l2mv g" onclick="escReply(' + id + ',&#39;refused&#39;)">'
-          + '\u26d4 They refused</button>'
-          + '<button class="l2mv g" onclick="escReply(' + id + ',&#39;query&#39;)">'
-          + '\u2753 They asked a question</button>'
-          + '</div>'
-          + '<div class="hint">Agreed closes the case as settled at escalation. Refused sends it '
-          + 'to Lokpal. A question keeps it here.</div></div>'
+        ? '<div style="margin-top:.55rem">'
+          + '<button class="l2mv d" onclick="escQuery(' + id + ')">\u2753 Escalation query</button>'
+          + '<div class="hint">Use this when the insurer has come back asking us for something. '
+          + 'The claim stays here and the day count stops meaning silence.</div></div>'
         : '')
     + '</div>';
+}
+
+// HOW LONG SINCE WE WROTE TO THEM. Nothing more.
+//
+// This replaced three "reminder sent on" date fields. Those asked staff to keep a ledger of
+// reminders; what a person actually needs when they open this claim is one number - how long the
+// insurer has been silent - and a mark at the points the office cares about. It sends nothing,
+// moves nothing and pages nobody: the founder was explicit that automation here breaks things.
+function _escFlags(st){
+  const raw = ((st && st.values) || {})['escalation_date'] || '';
+  const d = raw ? new Date(String(raw).slice(0, 10) + 'T00:00:00Z') : null;
+  if (!d || isNaN(d.getTime())) return '';
+  const days = Math.floor((Date.now() - d.getTime()) / 86400000);
+  const marks = [10, 20, 30];
+  const chips = marks.map(function(m){
+    const hit = days >= m;
+    return '<span style="display:inline-block;padding:.15rem .5rem;border-radius:999px;'
+      + 'font-size:.78rem;font-weight:600;border:1px solid '
+      + (hit ? 'var(--nd-warning-text)' : 'var(--nd-border)') + ';'
+      + 'color:' + (hit ? 'var(--nd-warning-text)' : 'var(--nd-text-faint)') + ';'
+      + 'background:' + (hit ? 'var(--nd-warning-soft)' : 'transparent') + '">'
+      + (hit ? '\u25cf ' : '\u25cb ') + m + ' days gone</span>';
+  }).join(' ');
+  return '<div style="margin-top:.55rem">'
+    + '<div class="l2sec" style="margin-bottom:.3rem">Since we escalated</div>'
+    + '<div style="display:flex;gap:.35rem;flex-wrap:wrap;align-items:center">'
+    +   '<b style="font-size:.9rem">' + days + ' day' + (days === 1 ? '' : 's') + '</b>'
+    +   '<span style="color:var(--nd-text-faint)">·</span>' + chips
+    + '</div>'
+    + '<div class="hint">Escalated on ' + esc(String(raw).slice(0, 10)) + '. '
+    + 'These are for your eyes only — nothing is sent and nothing moves by itself. '
+    + 'When you are ready, use <b>Move</b> to send it to Lokpal.</div></div>';
 }
 
 // The email account opened for this case. It is already on the claim — captured from the
@@ -15651,43 +15678,46 @@ function csrFocus(key){
   if (el){ el.scrollIntoView({block:'center'}); el.focus(); }
 }
 
-async function escReply(claimId, outcome){
-  const title = {accepted: '\u2705 The insurer agreed', refused: '\u26d4 The insurer refused',
-                 query: '\u2753 The insurer asked a question'}[outcome];
-  const after = {accepted: 'This closes the case as <b>settled at escalation</b>.',
-                 refused: 'This sends the case to <b>Lokpal</b>.',
-                 query: 'The case <b>stays here</b>, marked Escalation Query, and reminders stop '
-                        + 'while they are waiting on us.'}[outcome];
-  openModal(title + ' \u2014 NP-' + fmtClaimNum(claimId),
-      '<div class="l2ban info">' + after + '</div>'
-    + '<div class="l2fld"><label>What did they write? <span class="req">*</span></label>'
-    + '<textarea id="escNote" rows="3" maxlength="1000" placeholder="e.g. Letter dated 14 Sep — '
-    + 'they want the original discharge summary before reconsidering."></textarea>'
+async function escQuery(claimId){
+  // The insurer has asked US something. The claim stays put; the only thing that changes is that
+  // the day count is no longer a silence to chase. Replaces three buttons, two of which MOVED
+  // the claim on the software's judgement rather than a person's.
+  openModal('\u2753 The insurer asked a question — NP-' + claimId,
+      '<div class="l2ban info">The case <b>stays here</b>, marked Escalation Query. The day '
+    + 'count keeps running but now reflects that they are waiting on us.</div>'
+    + '<div class="l2fld"><label>What did they ask? <span style="color:var(--nd-danger-text)">*</span></label>'
+    + '<textarea id="escQNote" rows="4" placeholder="Type what they wrote..."></textarea>'
     + '<div class="hint">The next person starts from this.</div></div>'
-    + '<div id="escMsg" style="font-size:.82rem"></div>',
-    [{label:'Record it', cls:'btn-primary', fn: async function(){
-        const note = (document.getElementById('escNote').value || '').trim();
-        const msg = document.getElementById('escMsg');
-        if (note.length < 3){ msg.style.color='var(--nd-danger-text)';
-          msg.textContent='Say what they wrote.'; return; }
-        this.disabled = true; msg.style.color='var(--nd-text-muted)'; msg.textContent='Saving\u2026';
+    + '<div id="escQMsg" style="font-size:.84rem"></div>',
+    [{label:'Cancel', cls:'btn-ghost', fn:function(){ modalBack(); }},
+     {label:'Record it', cls:'btn-primary', fn:async function(){
+        const el = document.getElementById('escQNote');
+        const msg = document.getElementById('escQMsg');
+        const note = ((el && el.value) || '').trim();
+        if (note.length < 3){
+          if (msg){ msg.style.color = 'var(--nd-danger-text)';
+                    msg.textContent = 'Write what they asked — the next person starts from it.'; }
+          return;
+        }
         try{
           const r = await API('/claims/' + claimId + '/escalation/reply',
-            {method:'POST', body: JSON.stringify({outcome: outcome, note: note})});
+            {method:'POST', body: JSON.stringify({outcome:'query', note: note})});
           const d = await r.json().catch(function(){ return {}; });
-          if (!r.ok){ msg.style.color='var(--nd-danger-text)';
-            msg.textContent = _extractErr(d, 'Could not record that.'); this.disabled=false; return; }
+          if (!r.ok){
+            if (msg){ msg.style.color = 'var(--nd-danger-text)';
+                      msg.textContent = _l2Err(d, 'Could not record that.'); }
+            return;
+          }
           closeModal();
-          ndUI.toast(d.moved_to ? ('NP-' + claimId + ' moved to ' + d.moved_to.replace(/_/g,' '))
-                                : ('NP-' + claimId + ' marked Escalation Query'), 'success');
-          if (typeof _reloadL2 === 'function') _reloadL2();
-          if (typeof l2Open === 'function') l2Open(claimId);
-        }catch(e){ msg.style.color='var(--nd-danger-text)';
-          msg.textContent='Could not record that.'; this.disabled=false; }
-      }},
-     {label:'Cancel', cls:'btn-ghost', fn: closeModal}], false);
+          ndUI.toast('NP-' + claimId + ' is marked Escalation Query', 'success');
+          if (typeof loadL2 === 'function') loadL2();
+        }catch(e){
+          if (msg){ msg.style.color = 'var(--nd-danger-text)';
+                    msg.textContent = 'Could not record that.'; }
+        }
+     }}], true);
 }
-window.escReply = escReply; window.csrFocus = csrFocus;
+window.escQuery = escQuery; window.csrFocus = csrFocus;
 
 function _csrInsurerList(){
   const list = (window.NidaanInsurers && NidaanInsurers.list) || [];

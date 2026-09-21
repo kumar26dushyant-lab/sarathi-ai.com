@@ -340,6 +340,13 @@ _CONFIG_FIXES = (
     # judgement.
     ("UPDATE nidaan_bucket_fields SET active=0, required_exit=0 WHERE bucket_key='pending_draft' "
      "AND field_key IN ('approved_by','approved_on') AND active=1", ()),
+    # The three reminder-date fields, replaced by day flags on the Escalation screen (founder,
+    # 21 Sep: "we no need option 1st reminder, second reminder, third reminder... make it simple
+    # and manual"). A reminder ledger asked staff to maintain a record; what they actually need on
+    # opening the claim is how long the insurer has been silent, which the flags show directly.
+    # Deactivated, not deleted: the dates already recorded on live claims stay readable.
+    ("UPDATE nidaan_bucket_fields SET active=0, required_exit=0 WHERE bucket_key='escalation' "
+     "AND field_key IN ('esc_reminder_1','esc_reminder_2','esc_reminder_3') AND active=1", ()),
     # "Past Medical Records / Doctor's Certificate" off the health list — optional, never once
     # received on any claim, and one more line on a list people already find long.
     ("UPDATE nidaan_claim_doc_checklist SET required=0 WHERE doc_key='prior_medical' "
