@@ -554,19 +554,6 @@ async def _e0(ctx):
     ctx["cfg_fixed"] = first
 
 
-@esc.step("the reminders are dates, not yes/no")
-async def _e1(ctx):
-    import aiosqlite as _sq
-    async with _sq.connect(ctx["db"]) as c:
-        c.row_factory = _sq.Row
-        rows = {r["field_key"]: dict(r) for r in await (await c.execute(
-            "SELECT field_key, field_type, active FROM nidaan_bucket_fields "
-            "WHERE bucket_key='escalation'")).fetchall()}
-    for k in ("esc_reminder_1", "esc_reminder_2", "esc_reminder_3"):
-        assert rows.get(k, {}).get("field_type") == "date", \
-            "%s is still a %s" % (k, rows.get(k, {}).get("field_type"))
-
-
 @esc.step("the grievance reference is gone")
 async def _e2(ctx):
     import aiosqlite as _sq
@@ -614,72 +601,65 @@ async def _e4(ctx):
         "the claim is still '%s' after its escalation date was recorded" % sub
 
 
-@esc.step("the clock says which reminder is due, one at a time")
+@esc.step("the three reminder fields are gone from the screen")
 async def _e5(ctx):
-    if not ctx.get("esc_claim"):
-        raise Skip("no escalated claim to measure")
-    d = await ctx["buckets"].escalation_due()
-    assert d.get("ok")
-    mine = [r for r in d["reminders"] if r["claim_id"] == ctx["esc_claim"]]
-    assert mine, "a claim escalated well past day 10 is not showing a reminder as due"
-    # ONE reminder at a time, and it must be the next UNSENT one - not necessarily the first.
-    # Hard-coding 1 made this go red the moment a staffer recorded reminder 1 on a real claim,
-    # which is the clock working exactly as intended.
-    async with aiosqlite.connect(ctx["db"]) as c:
-        c.row_factory = aiosqlite.Row
-        sent = {dict(x)["field_key"] for x in await (await c.execute(
-            "SELECT field_key FROM nidaan_claim_fields WHERE claim_id=? "
-            "AND field_key IN ('esc_reminder_1','esc_reminder_2','esc_reminder_3') "
-            "AND TRIM(COALESCE(value,'')) <> ''", (ctx["esc_claim"],))).fetchall()}
-    expected = 1 + len(sent)
-    assert len(mine) == 1, "the clock offered %d reminders at once" % len(mine)
-    assert mine[0]["number"] == expected, \
-        "the clock says reminder %d but %d have been sent" % (mine[0]["number"], len(sent))
-    assert mine[0]["overdue_by"] >= 0
-    ctx["esc_next_reminder"] = expected
+    # Replaced by day flags (founder, 21 Sep: "we no need option 1st reminder, second reminder,
+    # third reminder... make it simple and manual"). Deactivated rather than deleted, so anything
+    # already recorded stays readable on the claims that hold it.
+    import aiosqlite as _sq
+    async with _sq.connect(ctx["db"]) as c:
+        c.row_factory = _sq.Row
+        rows = [dict(r) for r in await (await c.execute(
+            "SELECT field_key, active FROM nidaan_bucket_fields WHERE bucket_key='escalation' "
+            "AND field_key IN ('esc_reminder_1','esc_reminder_2','esc_reminder_3')")).fetchall()]
+    assert rows, "the reminder fields vanished entirely - they should be deactivated, not deleted"
+    live = [r["field_key"] for r in rows if r["active"]]
+    assert not live, "still asking staff to log reminders: %s" % ", ".join(live)
 
 
-@esc.step("sending reminder one moves the clock to reminder two")
+@esc.step("escalation records exactly one thing: the date")
 async def _e6(ctx):
-    if not ctx.get("esc_claim"):
-        raise Skip("no escalated claim to measure")
-    from datetime import datetime as _dt, timedelta as _td
-    sent_on = (_dt.utcnow() - _td(days=24)).strftime("%Y-%m-%d")
-    await ctx["buckets"].set_field(ctx["esc_claim"], "esc_reminder_1", sent_on,
-                                   actor="journey-test", role="super_admin")
-    d = await ctx["buckets"].escalation_due()
-    mine = [r for r in d["reminders"] if r["claim_id"] == ctx["esc_claim"]]
-    assert mine and mine[0]["number"] == 2, \
-        "after the first reminder the clock should ask for the second"
+    # Everything else on that screen is now either a fact about time or a button a person presses.
+    fields = await ctx["buckets"].fields("escalation")
+    active = sorted(f["field_key"] for f in fields if f.get("active"))
+    assert active == ["escalation_date"], \
+        "Escalation should record only the escalation date, but asks for: %s" % ", ".join(active)
 
 
-@esc.step("after all three, it asks for Lokpal instead of a fourth reminder")
+@esc.step("the day count is arithmetic a person can check")
 async def _e7(ctx):
     if not ctx.get("esc_claim"):
         raise Skip("no escalated claim to measure")
-    from datetime import datetime as _dt, timedelta as _td
-    for f, back in (("esc_reminder_2", 14), ("esc_reminder_3", 4)):
-        on = (_dt.utcnow() - _td(days=back)).strftime("%Y-%m-%d")
-        await ctx["buckets"].set_field(ctx["esc_claim"], f, on,
-                                       actor="journey-test", role="super_admin")
-    d = await ctx["buckets"].escalation_due()
-    assert not [r for r in d["reminders"] if r["claim_id"] == ctx["esc_claim"]], \
-        "it is still asking for a fourth reminder"
-    assert [r for r in d["lokpal"] if r["claim_id"] == ctx["esc_claim"]], \
-        "three reminders sent and no reply, but Lokpal was not raised"
+    from datetime import datetime as _dt
+    import aiosqlite as _sq
+    async with _sq.connect(ctx["db"]) as c:
+        c.row_factory = _sq.Row
+        r = await (await c.execute(
+            "SELECT value FROM nidaan_claim_fields WHERE claim_id=? AND field_key='escalation_date'",
+            (ctx["esc_claim"],))).fetchone()
+    assert r and (r["value"] or "").strip(), "an escalated claim with no escalation date"
+    on = _dt.strptime(str(r["value"])[:10], "%Y-%m-%d")
+    days = (_dt.utcnow() - on).days
+    assert days >= 0, "the escalation date is in the future (%s)" % r["value"]
+    # The screen marks 10, 20 and 30. Whichever have passed is a matter of counting, not judgement.
+    passed = [m for m in (10, 20, 30) if days >= m]
+    ctx["esc_days"], ctx["esc_passed"] = days, passed
 
 
-@esc.step("and it still moves nothing by itself")
+@esc.step("and none of it moves the claim by itself")
 async def _e8(ctx):
     if not ctx.get("esc_claim"):
         raise Skip("no escalated claim to measure")
     import aiosqlite as _sq
     async with _sq.connect(ctx["db"]) as c:
-        stage = (await (await c.execute(
+        c.row_factory = _sq.Row
+        r = dict(await (await c.execute(
             "SELECT pipeline_stage FROM nidaan_claims WHERE claim_id=?",
-            (ctx["esc_claim"],))).fetchone())[0]
-    assert stage == "escalation", \
-        "the claim moved itself to '%s' — a Lokpal filing is a person's decision" % stage
+            (ctx["esc_claim"],))).fetchone())
+    # However many flags have passed - even all three - the claim stays put until a person
+    # presses Move. This is the assertion that stops a future "helpful" auto-Lokpal.
+    assert r["pipeline_stage"] == "escalation", \
+        "a claim moved out of Escalation on its own (now in %s)" % r["pipeline_stage"]
 
 
 @esc.step("claims escalated before the rule existed are corrected too")
