@@ -72,6 +72,16 @@ software and give them back to the person.**
   ⚠️ **It does not catch the `to`/`toKey` kind** — that needs a real JavaScript linter with scope
   analysis (eslint `no-undef`). A regex version reported 2,000 false names and was thrown away; a
   check people learn to skip is worse than none. **Worth deciding on: adding eslint.**
+- ✅ **Page 5 — the person holding a claim hears about it every time it moves.** A move used to
+  tell whoever is **on duty** for the bucket the claim arrived in — useful, but not the same
+  person. The assignee now gets their own notice, worded as theirs (*"Your claim NP-65 is now in
+  Pending Draft"*) and carrying **what that step needs**, taken from the bucket's own guide so
+  they do not have to go and look it up. They are removed from the roster list, so nobody is told
+  the same thing twice. Rides the existing `bucket.move` key — Telegram and bell, no email —
+  rather than inventing a key whose email behaviour nobody has decided. An unassigned claim
+  behaves exactly as before, and a failed lookup is logged and ignored: **a claim must never fail
+  to move because a notification could not work out who to tell.** 10 assertions on a copy with
+  `notify_staff_inapp` replaced by a recorder, so nothing left the process.
 - ✅ **#9 REDONE — the pencil is on the field, not behind two buttons.** My first attempt was the
   wrong shape: correcting a wrong hospital name meant *open claim → open Gist → find the line →
   Change → type → Save*. Five steps to fix one word that was already on the screen. Now the facts
@@ -122,11 +132,14 @@ does not parse.
   flags have passed, **the claim does not move on its own**. 19 passed, 0 failed, 1 skipped.
 
 **Still open from the ten-item list:**
-- 🟡 **#6** — the case report in the PDF's format, built up bucket by bucket.
-- 🟡 **Page 10** — Live Bucket field names and order as the PDF lists them; **Assign To** (#15) is
-  missing from `CSR_GIST` entirely.
-- 🟡 **Page 5** — a Telegram message to the **assigned staffer** at every stage up to escalation.
-  Today `_notify_move` tells the receiving bucket's duty roster, which is not the same person.
+- 🔴 **#6 and Page 10 — BLOCKED, need the PDF again.** The document is no longer in this
+  session, and both items are specified entirely by it: the **case report format** (#6) and the
+  **Live Bucket field names in the founder's order** with **Assign To** as #15. Guessing either
+  is exactly the kind of wrong-understanding that costs a rebuild. What the Gist asks for today,
+  in its current order, is: Patient Name · Complainant name · On Behalf of · Claim Type · Claim
+  Amount · Policy Number · Claim Number · Date of Policy Inception · Company Name · Hospital Name ·
+  Date of Admission · Date of Discharge · Diagnosis · Patient complain · Rejection Reason ·
+  Rejection date · Comments · Email ID · Email Password — **19 fields, and no Assign To.**
 
 ### ✅ SHIPPED 2026-09-19 — messages that say less, alarms that mean more
 - ✅ **The ₹588 leak closed at one choke point.** A branch paid us ₹588 and charged the complainant ₹1,200; our confirmation showed the complainant **₹588**. Founder's ruling was wider than the bug — *"only welcome message should go to all parties, not containing the amount or plan or whatever… whosoever is doing payment they will get payment message from their bank."* `_strip_money()` in the WhatsApp orchestrator, `thank_you_payment` rewritten money-free, money out of the funnel notifications. **Price nudges suppressed when a branch or CP is the payer** (`_paid_for_by_an_intermediary()` — 71 branch claims protected from being asked for a fee somebody else owes). **Subscription email names the plan, not the amount.**

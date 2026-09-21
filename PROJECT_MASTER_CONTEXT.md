@@ -7531,6 +7531,18 @@ there, an error into a console nobody has open:
 `loadDMLeadList`), `microsite.html` (a script block that does not parse). Sarathi side, lower
 risk, worth a pass before the project closes.
 
+**Page 5 (21 Sep).** `_notify_move()` told the duty roster of the bucket a claim ARRIVED in. The
+assignee now gets a separate, personal notice carrying the receiving bucket's `guide_do` line,
+and is removed from the roster list so nobody is told twice. Same `bucket.move` event key
+(Telegram + bell, no email). A failed assignee lookup is logged and ignored - a claim must never
+fail to move because a notification could not decide who to tell.
+
+**#6 and page 10 are blocked on the document.** Both are specified entirely by the PDF, which is
+not in this session. The Gist currently asks 19 fields (Patient Name, Complainant name, On Behalf
+of, Claim Type, Claim Amount, Policy Number, Claim Number, Date of Policy Inception, Company
+Name, Hospital Name, Date of Admission, Date of Discharge, Diagnosis, Patient complain, Rejection
+Reason, Rejection date, Comments, Email ID, Email Password) and has no **Assign To**.
+
 **Open:** #6 (case report format), page 10 (Live
 Bucket field order; **Assign To** missing from `CSR_GIST`), page 5 (Telegram to the *assignee* at
 every stage).

@@ -34,6 +34,16 @@ do it and must give a reason.
 case and you will find **With — who is working on this** just under the case details. Pick a name
 and it saves straight away.
 
+• **Correct a detail where you see it.** On the claim, the details at the top — Complainant,
+Patient, Insurance Co., Disputed, Policy No. — each have a small **✏️** next to them. If one is
+wrong, press the pencil, correct it, press **Save**. That is all. Every correction is written into
+**Remarks** with your name, what it was and what it is now. A detail that is already finished work
+shows a **🔒** instead; ask a super admin to change those.
+
+• **You will be told when a case you hold moves.** If a claim is assigned to you, you now get a
+message on Telegram every time it moves to another bucket, saying where it is and what that step
+needs. Before, only the people on duty for that bucket were told.
+
 • **Moving a claim works again — please read this one.** Since Friday, pressing **Move** or the
 **→ Pending Draft** button did nothing at all: no window, no message. That was our mistake in the
 code, not yours. It is fixed. If you have been unable to move cases forward since Friday, please
@@ -71,6 +81,16 @@ React 👍 once read; ask the office IT SPOC if anything is unclear.
 
 • **"With" की जगह बदली।** केस पर कौन काम कर रहा है — यह अब बोर्ड का कॉलम नहीं। केस खोलिए,
 विवरण के नीचे **With — who is working on this** मिलेगा। नाम चुनते ही सेव हो जाता है।
+
+• **जहाँ गलती दिखे, वहीं ठीक कीजिए।** केस के ऊपर दिख रहे विवरण — Complainant, Patient,
+Insurance Co., Disputed, Policy No. — हर एक के बगल में छोटा **✏️** है। कुछ गलत हो तो पेंसिल दबाइए,
+सुधारिए, **Save** दबाइए। बस इतना ही। हर सुधार आपके नाम के साथ **Remarks** में दर्ज होता है — पहले
+क्या था और अब क्या है। जो विवरण पूरा हो चुका काम है, उस पर **🔒** दिखेगा; उसे बदलवाने के लिए सुपर
+एडमिन से कहिए।
+
+• **आपके केस के मूव होने पर आपको सूचना मिलेगी।** अगर कोई केस आपको सौंपा गया है, तो अब हर बार वह
+दूसरे बकेट में जाने पर आपको Telegram पर संदेश मिलेगा — केस कहाँ पहुँचा और उस चरण में क्या करना है।
+पहले सिर्फ़ उस बकेट की ड्यूटी वालों को पता चलता था।
 
 • **केस मूव करना फिर से काम कर रहा है — यह ज़रूर पढ़ें।** शुक्रवार से **Move** या
 **→ Pending Draft** दबाने पर कुछ नहीं हो रहा था: न कोई विंडो, न कोई संदेश। यह हमारी कोड की गलती
