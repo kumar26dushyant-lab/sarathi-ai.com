@@ -74,6 +74,13 @@ for (const file of files) {
     // one - the fastest way to teach somebody to ignore this check.
     const type = (m[1].match(/\btype\s*=\s*["']([^"']+)["']/) || [])[1] || "";
     if (type && !/^(text\/javascript|application\/javascript|module)$/i.test(type)) continue;
+    // A server-side template is not JavaScript until it has been rendered: `bio: {{BIO_JSON}}`
+    // is a syntax error here and correct in the file. Reporting it teaches people to ignore
+    // this check, which is the one thing it must never do.
+    if (/\{\{[A-Z0-9_]+\}\}/.test(m[2])) {
+      console.log(`  (skipping a templated script block in ${file} - {{...}} placeholders)`);
+      continue;
+    }
     blocks.push({ code: m[2], htmlLine: src.slice(0, m.index).split("\n").length });
   }
   if (!blocks.length) {

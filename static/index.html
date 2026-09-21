@@ -3207,9 +3207,9 @@ const _T = {
   cta_desc: {en:'Join advisors across India who finally have peace of mind. Your AI assistant never sleeps, never forgets, and costs less than a chai per day.', hi:'पूरे भारत के उन सलाहकारों से जुड़ें जिन्हें अब मन की शांति मिल गई है। AI असिस्टेंट कभी नहीं सोता, कभी नहीं भूलता।'},
   cta_btn1: {en:'Start Free Trial →', hi:'फ्री ट्रायल शुरू करें →'},
   cta_btn2: {en:'Open Dashboard', hi:'डैशबोर्ड खोलें'},
-  fc_title: {en:'First <span class="amber">500 Founding</span> Customers', hi:'पहले <span class="amber">500 फ़ाउंडिंग</span> कस्टमर'},
+  fc_title_founding: {en:'First <span class="amber">500 Founding</span> Customers', hi:'पहले <span class="amber">500 फ़ाउंडिंग</span> कस्टमर'},
   fc_sub: {en:'Use your own referral code → get 20% off for an entire year', hi:'अपना रेफ़रल कोड इस्तेमाल करें → पूरे साल 20% छूट पाएं'},
-  fc_desc: {en:'First 500 partners get 20% off for the entire first year when they use their own referral code. Earn commissions AND save on your own subscription.', hi:'पहले 500 पार्टनर को अपने रेफ़रल कोड से पहले साल 20% छूट मिलेगी। कमीशन कमाएं और अपनी सब्सक्रिप्शन पर भी बचत करें।'},
+  fc_desc_founding: {en:'First 500 partners get 20% off for the entire first year when they use their own referral code. Earn commissions AND save on your own subscription.', hi:'पहले 500 पार्टनर को अपने रेफ़रल कोड से पहले साल 20% छूट मिलेगी। कमीशन कमाएं और अपनी सब्सक्रिप्शन पर भी बचत करें।'},
   fc_btn: {en:'Claim Your Founding Spot →', hi:'अपनी फ़ाउंडिंग जगह बुक करें →'},
   fc_timer: {en:'⏳ Spots are filling fast — don\'t miss out', hi:'⏳ जगहें तेज़ी से भर रही हैं — मौका न गंवाएं'},
   earn_pill: {en:'💰 Partner & Earn Program', hi:'💰 पार्टनर और कमाओ प्रोग्राम'},
@@ -3298,6 +3298,11 @@ const _T = {
   fv_title: {en:'\u201cJust Talk\u201d AI Mode', hi:'\u201cJust Talk\u201d AI मोड'},
   fv_desc: {en:'No commands needed. Just type or speak naturally \u2014 <i>\"naya client Sharma ji, Jaipur, health insurance\"</i> \u2014 and AI creates the lead, extracts details, sets reminders. <b>Hindi, English, or mix \u2014 sab samjhega!</b>', hi:'कोई command नहीं। बस टाइप करो या बोलो \u2014 <i>\"naya client Sharma ji, Jaipur, health insurance\"</i> \u2014 AI lead बनाएगा, details निकालेगा, reminder set करेगा। <b>Hindi, English, या mix \u2014 सब समझेगा!</b>'},
   fv_badge: {en:'🏆 India\'s 1st \u2014 No other CRM understands your voice like this', hi:'🏆 India में पहला \u2014 कोई और CRM आपकी आवाज़ ऐसे नहीं समझता'},
+  // NOTE: fc_title_founding / fc_desc_founding above hold the other version of this
+  // section's copy ("First 500 Founding Customers"). Both keys used to be called
+  // fc_title/fc_desc, so this pair silently won and the markup's own wording never
+  // appeared. These two are what the page shows today; nothing was changed for the
+  // reader, only the collision removed.
   fc_title: {en:'Partner & Earn Program', hi:'पार्टनर और कमाओ प्रोग्राम'},
   fc_desc: {en:'Refer fellow advisors and earn recurring commissions. Share your unique link, track referrals in real-time, and get paid every month. <b>Turn your network into income!</b>', hi:'साथी एडवाइज़र रेफर करें और हर महीने कमीशन कमाएं। अपना यूनिक लिंक शेयर करें, रियल-टाइम रेफरल ट्रैक करें। <b>अपने नेटवर्क को इनकम बनाओ!</b>'},
   fc_badge: {en:'🏆 Earn 20% recurring commission per referral', hi:'🏆 हर रेफरल पर 20% रिकरिंग कमीशन कमाओ'},

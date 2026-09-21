@@ -3332,7 +3332,7 @@ const _DT = {
   no_leads:{en:'No leads found. Add your first lead!',hi:'कोई लीड नहीं मिली। अपनी पहली लीड जोड़ें!'},
   showing:{en:'Showing {0} of {1} leads',hi:'{1} में से {0} लीड्स दिखा रहे हैं'},
   prev:{en:'← Prev',hi:'← पिछला'},
-  next:{en:'Next →',hi:'अगला →'},
+  next_page:{en:'Next →',hi:'अगला →'},
   // Policies
   all_status:{en:'All Status',hi:'सभी स्थिति'},
   status_active:{en:'Active',hi:'सक्रिय'},
@@ -3490,7 +3490,7 @@ const _DT = {
   no_tickets:{en:'No tickets yet',hi:'अभी कोई टिकट नहीं'},
   reply_placeholder:{en:'Type a reply...',hi:'उत्तर लिखें...'},
   send:{en:'Send',hi:'भेजें'},
-  description:{en:'Description:',hi:'विवरण:'},
+  description:{en:'Description',hi:'विवरण'},
   // Add Lead Modal
   add_new_lead:{en:'Add New Lead',hi:'नई लीड जोड़ें'},
   edit_lead:{en:'Edit Lead',hi:'लीड संपादित करें'},
@@ -3616,7 +3616,7 @@ const _DT = {
   change_lead_stage:{en:'Change Lead Stage',hi:'लीड चरण बदलें'},
   import_leads_csv:{en:'📥 Import Leads from CSV',hi:'📥 CSV से लीड्स आयात करें'},
   premium:{en:'Premium (₹) *',hi:'प्रीमियम (₹) *'},
-  description:{en:'Description *',hi:'विवरण *'},
+  description_required:{en:'Description *',hi:'विवरण *'},
   // switchDashLang
   lang_changed:{en:'Language changed to English',hi:'भाषा हिंदी में बदली गई'},
   // AI Tools
@@ -3745,7 +3745,7 @@ const _DT = {
   broadcast_send:{en:'📢 Send to All Advisors',hi:'📢 सभी सलाहकारों को भेजें'},
   nudge_history:{en:'📋 History',hi:'📋 इतिहास'},
   nudge_history_title:{en:'📋 Recent Nudge History',hi:'📋 हाल की नज हिस्ट्री'},
-  refresh:{en:'🔄 Refresh',hi:'🔄 रिफ्रेश'},
+  refresh_btn:{en:'🔄 Refresh',hi:'🔄 रिफ्रेश'},
   // Action button labels
   btn_nudge:{en:'Nudge',hi:'नज'},
   btn_edit:{en:'Edit',hi:'संपादन'},
@@ -4512,7 +4512,7 @@ async function loadLeads() {
         <div style="display:flex;gap:6px">
             ${_leadsPage>0?`<button class="btn btn-sm btn-outline" onclick="_leadsPage--;loadLeads()">${_dt('prev')||'Prev'}</button>`:''}
             <span style="padding:5px 10px;font-size:.82em">Page ${_leadsPage+1}/${Math.max(pages,1)}</span>
-            ${_leadsPage<pages-1?`<button class="btn btn-sm btn-outline" onclick="_leadsPage++;loadLeads()">${_dt('next')||'Next'}</button>`:''}
+            ${_leadsPage<pages-1?`<button class="btn btn-sm btn-outline" onclick="_leadsPage++;loadLeads()">${_dt('next_page')||'Next →'}</button>`:''}
         </div>`;
 }
 
@@ -4749,17 +4749,22 @@ async function togglePortfolio(customerId) {
 async function shareCustomer(customerId, ev){
     if (ev) ev.stopPropagation();
     const res = await api(`/api/admin/customers/${customerId}/share`, {method:'POST'});
-    if (!res||!res.ok){ toast && toast('Could not create link'); return; }
+    // showToast is this page's helper; `toast` has never existed here. And `toast && toast(...)`
+    // guards nothing - reading an undeclared name throws - so this line killed the function and
+    // the person was told nothing at all.
+    if (!res||!res.ok){ showToast('Could not create link', 'error'); return; }
     const d = await res.json();
-    try { await navigator.clipboard.writeText(d.url); toast && toast('Portfolio link copied — share it with your customer'); }
+    try { await navigator.clipboard.writeText(d.url); showToast('Portfolio link copied — share it with your customer', 'success'); }
     catch(e){ prompt('Customer portfolio link (copy & share):', d.url); }
 }
 
 async function convertLead(leadId, name){
     if (!confirm(`Move "${name}" to Customers? They'll appear in the Customers tab with their own portfolio.`)) return;
     const res = await api(`/api/admin/leads/${leadId}/convert`, {method:'POST'});
-    if (!res||!res.ok){ toast && toast('Could not convert'); return; }
-    toast && toast(`${name} moved to Customers ✅`);
+    if (!res||!res.ok){ showToast('Could not convert', 'error'); return; }
+    // This threw before loadLeads() ran, so the lead stayed on screen and the move looked as
+    // though it had failed - which is how somebody ends up doing it twice.
+    showToast(`${name} moved to Customers ✅`, 'success');
     loadLeads();
     if (typeof loadOverview==='function') loadOverview();
 }
@@ -4806,7 +4811,9 @@ async function submitAddCustomer(){
     const d=res?await res.json().catch(()=>({})):{};
     if(!res||!res.ok){ err.textContent=(d&&d.error)||'Could not add customer.'; err.style.display='block'; btn.disabled=false; btn.textContent='Add Customer'; return; }
     closeAddCust();
-    toast && toast(`${name} added to Customers ✅`);
+    // Same again: this threw before the list reloaded, so the customer who had just been added
+    // was nowhere to be seen.
+    showToast(`${name} added to Customers ✅`, 'success');
     _custPage=0; loadCustomers();
     if (typeof loadOverview==='function') loadOverview();
 }
@@ -7145,15 +7152,10 @@ async function schedulePlanChange(newPlan) {
             if (!sRes.ok) {
                 const e = await sRes.json().catch(()=>({}));
                 if (sRes.status === 409 && e.blocked_by_bundle) {
-                    if (typeof showSignupConflict === 'function') {
-                        showSignupConflict({
-                            title: 'You already get this plan free',
-                            message: _extractErr(e, 'Your Nidaan subscription includes Sarathi-AI.'),
-                            primary_action: {label: 'Open Sarathi', deeplink: '/dashboard'}
-                        });
-                    } else {
-                        alert(_extractErr(e, 'Already included in your Nidaan bundle.'));
-                    }
+                    // There was a branch here for a showSignupConflict() dialog that has never
+                    // existed on this page, so only the fallback ever ran. Saying what actually
+                    // happens beats implying a nicer dialog is somewhere.
+                    alert(_extractErr(e, 'Already included in your Nidaan bundle.'));
                     return;
                 }
                 alert(_extractErr(e, 'Failed to start subscription'));
@@ -10305,8 +10307,9 @@ function segSend(segId, segName) {
   // Store segment id for send
   modal.dataset.segmentId = segId;
   modal.style.display = 'flex';
-  // Load library for content selection
-  loadDMLeadList();
+  // Fill the lead list, or the window sits on "Loading leads..." for ever. loadDMLeadList has
+  // never existed anywhere on this page; mktLoadLeads is what fills #mktLeadList.
+  mktLoadLeads();
 }
 
 </script>
