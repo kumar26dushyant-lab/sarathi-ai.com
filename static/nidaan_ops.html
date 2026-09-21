@@ -14201,7 +14201,6 @@ function l2CaseRender(rem){
         ? '<div class="l2ban amber">Before this can move on: <b>'
           + miss.map(function(x){ return esc(x.label); }).join(', ') + '</b></div>' : '')
     + '<div class="l2kv" id="l2kv">' + _l2KvHtml() + '</div>'
-    + _csrInsurerList()
     + _l2AssignPanel(id, c.assigned_to_staff_id)
     // The ClaimShield case record. Every bucket can reach all four; the one that is THIS
     // bucket's job is the strong button.
@@ -14332,8 +14331,11 @@ function _l2KvHtml(){
       const raw = key === 'disputed_amount'
         ? (c.disputed_amount == null ? '' : String(c.disputed_amount))
         : (c[key] == null ? '' : String(c[key]));
+      // The company is the one shared picker (nidaan_insurers.js), mounted after this HTML is
+      // in the page. Typing it free-hand here was the last place on the screen that could
+      // invent a fourth spelling of the same insurer.
       const ctl = (kind === 'insurer')
-        ? '<input id="l2kvIn" list="csrIns" value="' + esc(raw) + '">'
+        ? '<div id="l2kvIns"></div>'
         : '<input id="l2kvIn" type="' + (kind === 'number' ? 'number' : 'text') + '"'
           + (kind === 'number' ? ' step="1" min="0"' : '') + ' value="' + esc(raw) + '">';
       out += '<div class="ed"><div class="k">' + esc(lab) + '</div>' + ctl
@@ -14368,18 +14370,40 @@ function _l2KvPaint(){
 function l2KvEdit(i){
   _l2KvEdit = i;
   _l2KvPaint();
+  if (L2_KV[i][2] === 'insurer'){
+    const cur = ((_l2Case && _l2Case.claim) || {}).insurer_name || '';
+    try{
+      window.NidaanInsurers.mount('l2kvIns', {value: cur,
+        style: 'width:100%;box-sizing:border-box;background:var(--nd-bg-surface-2);'
+             + 'border:1px solid var(--nd-brand-cyan);color:var(--nd-text-primary);'
+             + 'padding:.35rem .45rem;border-radius:7px'});
+    }catch(e){
+      const box = document.getElementById('l2kvIns');
+      if (box) box.innerHTML = '<div class="l2warn">The company list did not load. '
+        + 'Reload the page and try again.</div>';
+    }
+    return;
+  }
   const el = document.getElementById('l2kvIn');
   if (el){ el.focus(); try{ el.select(); }catch(e){} }
 }
 function l2KvCancel(){ _l2KvEdit = null; _l2KvPaint(); }
 
 async function l2KvSave(i){
-  const [label, key] = L2_KV[i];
-  const el = document.getElementById('l2kvIn');
+  const [label, key, kind] = L2_KV[i];
   const msg = document.getElementById('l2kvMsg');
-  if (!el) return;
-  const val = (el.value || '').trim();
-  el.disabled = true;
+  let val, el = null;
+  if (kind === 'insurer'){
+    // Read through the component, which knows whether the answer came from its list or its own
+    // "Other" box.
+    try{ val = (window.NidaanInsurers.value('l2kvIns') || '').trim(); }
+    catch(e){ val = ''; }
+  } else {
+    el = document.getElementById('l2kvIn');
+    if (!el) return;
+    val = (el.value || '').trim();
+    el.disabled = true;
+  }
   try{
     // The same endpoint the Gist form uses, so the same rules apply and the same remark is
     // written: what changed, what it was before, and whose name is on it.
@@ -14387,7 +14411,7 @@ async function l2KvSave(i){
       {method:'POST', body: JSON.stringify({core: {[key]: val}, fields: {}})});
     const d = await r.json().catch(function(){ return {}; });
     if (!r.ok){
-      el.disabled = false;
+      if (el) el.disabled = false;
       if (msg) msg.textContent = _l2Err(d, 'Could not save that.');
       return;
     }
@@ -14398,7 +14422,7 @@ async function l2KvSave(i){
     // The remarks list on this very screen is now one line out of date.
     if (typeof l2Open === 'function') l2Open(_l2Case.claim_id);
   }catch(e){
-    el.disabled = false;
+    if (el) el.disabled = false;
     if (msg) msg.textContent = 'Could not save that.';
   }
 }
@@ -15819,21 +15843,7 @@ function csrFieldEdit(idx){
   _csrDirty = false;
   _csrPaint();
   const f = CSR_GIST[idx];
-  if (f[3] === 'insurer'){
-    // A component, not markup: it has to be mounted after its box is in the page.
-    try{
-      window.NidaanInsurers.mount('csr_' + f[1] + '_' + f[2] + '_box', {
-        value: _csrVal(f[1], f[2]) || '',
-        style: 'width:100%;box-sizing:border-box;background:var(--nd-bg-surface-2);'
-             + 'border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);'
-             + 'padding:.5rem;border-radius:8px'});
-    }catch(e){
-      const box = document.getElementById('csr_' + f[1] + '_' + f[2] + '_box');
-      if (box) box.innerHTML = '<div class="l2warn">The company list did not load. '
-        + 'Reload the page and try again.</div>';
-    }
-    return;
-  }
+  if (f[3] === 'insurer'){ _csrMountInsurers([f]); return; }
   const el = document.getElementById('csr_' + f[1] + '_' + f[2]);
   if (el){ el.focus(); if (el.select) try{ el.select(); }catch(e){} }
 }
@@ -15875,6 +15885,28 @@ function _csrPaint(){
 window.csrFieldEdit = csrFieldEdit;
 window.csrFieldCancel = csrFieldCancel;
 window.csrFieldSave = csrFieldSave;
+
+// The insurance-company control is a COMPONENT, not markup: _csrInput leaves an empty box and
+// this fills it, once the HTML is in the page. Any form that draws an 'insurer' field calls this
+// straight after setting its innerHTML - forget it and the field is a blank space.
+function _csrMountInsurers(fields){
+  (fields || []).forEach(function(f){
+    if (f[3] !== 'insurer') return;
+    const id = 'csr_' + f[1] + '_' + f[2] + '_box';
+    if (!document.getElementById(id)) return;
+    try{
+      window.NidaanInsurers.mount(id, {
+        value: _csrVal(f[1], f[2]) || '',
+        style: 'width:100%;box-sizing:border-box;background:var(--nd-bg-surface-2);'
+             + 'border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);'
+             + 'padding:.5rem;border-radius:8px'});
+    }catch(e){
+      const box = document.getElementById(id);
+      if (box) box.innerHTML = '<div class="l2warn">The company list did not load. '
+        + 'Reload the page and try again.</div>';
+    }
+  });
+}
 
 function _csrInput(f){
   const [label, kind, key, type] = f;
@@ -16164,12 +16196,6 @@ async function escQuery(claimId){
 }
 window.escQuery = escQuery; window.csrFocus = csrFocus;
 
-function _csrInsurerList(){
-  const list = (window.NidaanInsurers && window.NidaanInsurers.list) || [];
-  return '<datalist id="csrIns">' + list.map(function(n){
-    return '<option value="' + esc(n) + '">'; }).join('') + '</datalist>';
-}
-
 function _csrCollect(fields){
   const core = {}, flds = {};
   fields.forEach(function(f){
@@ -16246,7 +16272,6 @@ async function csrGist(claimId){
   catch(e){ document.getElementById('modalBody').innerHTML = '<div class="empty"><p>Could not open the gist.</p></div>'; return; }
   document.getElementById('modalBody').innerHTML =
       _csrLockBanner(CSR_GIST)
-    + _csrInsurerList()
     + '<div class="hint" style="margin-bottom:.4rem">Press <b>\u270f\ufe0f Change</b> on a line to '
     + 'correct it. Each change is saved on its own and written into <b>Remarks</b>, so the case '
     + 'file shows who changed what.</div>'
@@ -16287,7 +16312,7 @@ async function csrDraft(claimId){
   catch(e){ document.getElementById('modalBody').innerHTML = '<div class="empty"><p>Could not open the draft.</p></div>'; return; }
   document.getElementById('modalBody').innerHTML =
       _csrLockBanner(CSR_DRAFT_FACTS.concat([['', 'field', 'draft_en'], ['', 'field', 'draft_hi']]))
-    + _csrInsurerList()
+
     + '<div class="csrg c4">' + CSR_DRAFT_FACTS.map(_csrInput).join('') + '</div>'
     + '<div class="csrpair">'
     +   _csrEditor('csrDraftEn', 'Draft', _csrVal('field', 'draft_en'), _csrLocked('draft_en'))
@@ -16299,6 +16324,8 @@ async function csrDraft(claimId){
     +   '<button class="l2mv g" onclick="csrReport(' + claimId + ')">📋 Case report</button>'
     + '</div>'
     + '<div id="csrMsg" style="font-size:.84rem;text-align:center"></div>';
+  // Company Name is the shared picker. Drawn above as an empty box; filled here.
+  _csrMountInsurers(CSR_DRAFT_FACTS);
 }
 async function csrDraftSave(){
   const p = _csrCollect(CSR_DRAFT_FACTS);
