@@ -2495,7 +2495,21 @@ async def hand_over(claim_id: int, *, note: str = "", checks: Optional[dict] = N
                                                    (" (%d gap(s) acknowledged)" % gaps) if gaps else "",
                                                    (note or "").strip()),
                actor)
-    return {"ok": True, "handed_by": actor, "acknowledged_gaps": gaps}
+    # AND THE WORK BEGINS (founder, 21 Sep: "as soon as any claim is moving from L2 claims, that
+    # should be moving to Live cases, we can cut down 'To start' step"). Handing over and starting
+    # were two acts with one meaning, and between them the claim belonged to nobody.
+    #
+    # If this fails the handover still stands - the claim is exactly where it used to sit before
+    # somebody pressed Start, and the workspace still shows that list when it is not empty. A
+    # half-done handover must never be a silent one.
+    started = await start_l2(claim_id, actor=actor)
+    if not started.get("ok"):
+        logger.warning("handover started but start_l2 refused for %s: %s",
+                       claim_id, started.get("error"))
+    return {"ok": True, "handed_by": actor, "acknowledged_gaps": gaps,
+            "started": bool(started.get("ok")),
+            "bucket": started.get("bucket") or "", "bucket_name": started.get("name") or "",
+            "start_error": "" if started.get("ok") else (started.get("error") or "")}
 
 
 async def undo_handover(claim_id: int, *, reason: str = "", actor: str = "") -> dict:
@@ -2505,7 +2519,29 @@ async def undo_handover(claim_id: int, *, reason: str = "", actor: str = "") -> 
         return {"ok": False, "error": "That case does not exist."}
     if not row.get("l2_handover_at"):
         return {"ok": False, "error": "This claim has not been handed over."}
-    if (row.get("pipeline_stage") or "").strip():
+    # The handover now puts the claim straight into the entry bucket, so "it has a bucket" can no
+    # longer mean "work has started". What means that is work: a move out of the entry bucket, or
+    # anything recorded against the claim. Untouched in the entry bucket is still undoable, which
+    # is the whole point of this function - an accidental handover must not be permanent.
+    stage = (row.get("pipeline_stage") or "").strip()
+    entry_key = ""
+    for b in await buckets():
+        if b.get("is_entry"):
+            entry_key = b["bucket_key"]
+            break
+    # "Work has started" means the claim has been MOVED since it started. start_l2() leaves
+    # pipeline_from empty; move() fills it with wherever the claim came from, so a non-empty one
+    # is proof a person moved this claim. Deliberately not "has any field filled": the WhatsApp
+    # document collection fills fields on the claim before Level-2 ever sees it, and counting
+    # those would refuse to undo a handover nobody had touched.
+    touched = True
+    if stage and stage == entry_key:
+        async with aiosqlite.connect(DB_PATH) as c:
+            n = await (await c.execute(
+                "SELECT COALESCE(pipeline_from,'') FROM nidaan_claims WHERE claim_id=?",
+                (int(claim_id),))).fetchone()
+        touched = bool((n[0] if n else "").strip())
+    if stage and (stage != entry_key or touched):
         return {"ok": False,
                 "error": "Level-2 work has already started on this claim - move it in the "
                          "workspace instead."}
@@ -2514,7 +2550,9 @@ async def undo_handover(claim_id: int, *, reason: str = "", actor: str = "") -> 
     async with aiosqlite.connect(DB_PATH) as c:
         await c.execute(
             "UPDATE nidaan_claims SET l2_handover_at=NULL, l2_handover_by='', "
-            "l2_handover_note='', l2_handover_checks='' WHERE claim_id=?", (int(claim_id),))
+            "l2_handover_note='', l2_handover_checks='', pipeline_stage='', pipeline_sub='', "
+            "pipeline_entered_at=NULL, pipeline_stage_at=NULL, pipeline_by='', pipeline_from='' "
+            "WHERE claim_id=?", (int(claim_id),))
         await c.commit()
     await _log(claim_id, "Pulled back out of the Level-2 waiting list - %s" % reason.strip(), actor)
     return {"ok": True}

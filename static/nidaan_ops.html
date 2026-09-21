@@ -13345,11 +13345,16 @@ function l2Shell(){
     +       '<span>🗂️</span><span class="nm">All open claims</span>'
     +       '<span class="ct">' + (ln.open_total || 0) + '</span></button>'
     +     (preRail ? '<div class="l2rh">Before Level-2</div>' + preRail : '')
-    +     '<div class="l2rh">Start here</div>'
-    +     '<button class="l2b" aria-pressed="' + (_l2Sel === 'start') + '" onclick="l2Pick(\'start\')">'
-    +       '<span>📥</span><span class="nm">To start</span>'
-    +       (_l2Cfg.waiting ? '<span class="rd">' + _l2Cfg.waiting + '</span>' : '')
-    +     '</button>'
+    // "To start" is gone (founder, 21 Sep): handing a claim over now puts it straight into Live
+    // Cases. This entry appears ONLY if something is genuinely stuck between the two - a start
+    // that failed, or a claim already waiting when that changed. In normal running nobody sees
+    // it, and a stuck claim is never invisible.
+    +     (_l2Cfg.waiting
+        ? '<div class="l2rh">Needs a look</div>'
+          + '<button class="l2b" aria-pressed="' + (_l2Sel === 'start') + '" onclick="l2Pick(\'start\')">'
+          + '<span>⚠️</span><span class="nm">Handed over, not started</span>'
+          + '<span class="rd">' + _l2Cfg.waiting + '</span></button>'
+        : '')
     +     '<div class="l2rh">The buckets</div>' + rail
     +     (held ? '<button class="l2b" aria-pressed="' + (_l2Sel === 'pre:hold') + '" onclick="l2Pick(\'pre:hold\')">'
     +       '<span>⏸️</span><span class="nm">' + esc(lab.hold || 'Paused') + '</span>'
@@ -13482,13 +13487,13 @@ async function l2Load(){
 function l2RenderStart(){
   const m = document.getElementById('l2Main');
   const head =
-      '<div class="l2hd"><div class="l2ttl">📥 To start · ' + _l2Wait.length + '</div></div>'
+      '<div class="l2hd"><div class="l2ttl">⚠️ Handed over, not started · ' + _l2Wait.length + '</div></div>'
     + '<div class="l2ban ' + (_l2Wait.length ? 'amber' : 'info') + '">'
     +   (_l2Wait.length
-        ? 'Reviewed as winnable and the Level-2 fee is paid — but nobody has started the work. '
-          + 'The days counted here are days since the handover.'
-        : 'Nothing waiting. Claims arrive here once somebody on intake duty hands them over '
-          + 'from the Hand to Level-2 screen.')
+        ? 'Handing a claim over now puts it straight into <b>Live Cases</b>. These ones did not '
+          + 'get there — either they were already waiting here before that changed, or starting '
+          + 'them failed. Press <b>Start</b> and they join Live Cases.'
+        : 'Nothing stuck. Claims handed over from L2 Claims go straight into Live Cases.')
     + '</div>';
   if (!_l2Wait.length){ m.innerHTML = head; return; }
   const rows = _l2Wait.map(function(x){
@@ -13734,9 +13739,6 @@ function l2Table(b){
       + '<td style="text-align:right">' + (i.amount ? '₹' + Number(i.amount).toLocaleString('en-IN') : '—') + '</td>'
       + '<td>' + docs + '</td>'
       + (b.substates && b.substates.length ? '<td style="font-size:.78rem">' + esc(i.sub_name || '—') + '</td>' : '')
-      // WHO HAS IT. A bucket tells you what stage a claim is at; it does not tell you whose desk
-      // it is on, and "somebody in Drafting will pick it up" is how a claim goes quiet.
-      + '<td>' + _l2AssignCell(i) + '</td>'
       + '<td><span class="l2age ' + i.age_state + '">' + (i.days == null ? '—' : i.days + 'd') + '</span></td>'
       // The column the office opens this screen to read. It replaced Origin, which is on
       // the claim itself and which nobody triages by.
@@ -13757,7 +13759,7 @@ function l2Table(b){
     + '<th>Ref</th><th>Complainant</th><th>Type</th><th>Insurance Co.</th>'
     + '<th style="text-align:right">Disputed</th>'
     + '<th>Docs</th>' + (b.substates && b.substates.length ? '<th>Step</th>' : '')
-    + '<th>With</th><th>In bucket</th><th>Why it is waiting</th><th></th>'
+    + '<th>In bucket</th><th>Why it is waiting</th><th></th>'
     + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
 }
 
@@ -13777,14 +13779,19 @@ function _l2TypeCell(i){
     + (cur ? '' : '<option value="" selected>— not set —</option>') + opts + '</select>';
 }
 
-function _l2AssignCell(i){
-  const cur = i.assigned_to == null ? '' : String(i.assigned_to);
+// WHO HAS IT, on the claim itself. A bucket says what stage a claim is at; it does not say whose
+// desk it is on, and "somebody in Drafting will pick it up" is how a claim goes quiet. Same save
+// and same list of people as the board cell it replaces.
+function _l2AssignPanel(id, cur){
+  const c = cur == null ? '' : String(cur);
   const people = (_l2Handlers || []).map(function(s){
-    return '<option value="' + s.staff_id + '"' + (String(s.staff_id) === cur ? ' selected' : '')
+    return '<option value="' + s.staff_id + '"' + (String(s.staff_id) === c ? ' selected' : '')
          + '>' + esc(s.name) + '</option>'; }).join('');
-  return '<select class="l2cell" onclick="event.stopPropagation()" '
-    + 'onchange="l2SetOwner(' + i.claim_id + ',this.value,this)">'
-    + '<option value=""' + (cur ? '' : ' selected') + '>— nobody —</option>' + people + '</select>';
+  return '<div class="l2fld"><label>With \u2014 who is working on this</label>'
+    + '<select onchange="l2SetOwner(' + id + ',this.value,this)">'
+    + '<option value=""' + (c ? '' : ' selected') + '>\u2014 nobody yet \u2014</option>'
+    + people + '</select>'
+    + '<div class="hint">Saved as soon as you pick a name, with your name against it.</div></div>';
 }
 
 // Loaded once, reused by every row. Only the people who actually work claims are offered: a claim
@@ -14032,6 +14039,7 @@ async function l2Open(claimId){
   // Anything opened from inside this sheet can come back to it.
   modalReturn(function(){ l2Open(claimId); });
   let st = null, claim = null, rem = [];
+  if (typeof _l2LoadHandlers === 'function') { try{ await _l2LoadHandlers(); }catch(e){} }
   try{
     const [a, b] = await Promise.all([
       API('/cases/' + claimId + '/bucket').then(function(r){ return r.ok ? r.json() : null; }),
@@ -14179,6 +14187,7 @@ function l2CaseRender(rem){
     +   '<div><div class="k">Policy No.</div><div class="v">' + esc(c.policy_no || '—') + '</div></div>'
     +   '<div><div class="k">Last moved by</div><div class="v">' + esc(st.moved_by || '—') + '</div></div>'
     + '</div>'
+    + _l2AssignPanel(id, c.assigned_to_staff_id)
     // The ClaimShield case record. Every bucket can reach all four; the one that is THIS
     // bucket's job is the strong button.
     + '<div class="csrtools" style="margin:.1rem 0 .2rem">'
@@ -14810,7 +14819,7 @@ async function hoSend(force){
     const d = await r.json().catch(function(){ return {}; });
     if (r.ok){
       closeModal();
-      ndUI.toast('NP-' + id + ' moved to Level-2 — it is now in To start', 'success');
+      ndUI.toast('NP-' + id + ' is now in Live Cases — Level-2 work has started', 'success');
       // Refresh whichever screen the person is actually looking at.
       if (document.getElementById('oc_l2claims_wrap')){ _reloadL2(); _l2LoadReadiness(); }
       if (typeof loadL2 === 'function' && document.getElementById('panel-l2')

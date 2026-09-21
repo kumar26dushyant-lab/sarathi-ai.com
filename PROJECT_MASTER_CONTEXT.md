@@ -7451,7 +7451,28 @@ arithmetic anyone can check against the date on the claim, and that with all thr
 the claim still does **not** move by itself. That last assertion is there to stop a future
 well-meaning auto-Lokpal. 19 passed, 0 failed, 1 skipped.
 
-**Open:** #1 (With → into the Draft section), #3 (the Pending Draft button — waiting on the
-founder for what he sees on click), #4 (drop START HERE), #6 (case report format), page 10 (Live
+**The board loses a column, the claim gains a picker (#1).** *With (assign staff)* was a tenth
+column on a list people scan; it is now a field on the claim panel, under the facts of the case,
+in every bucket. Same endpoint, same list of people. `_l2LoadHandlers()` is now awaited in
+`l2Open()` as well as on the board draw — a claim opened from a deep link had never drawn a
+board, so the picker would have been empty.
+
+**Handing over IS starting (#4).** `hand_over()` now calls `start_l2()`, so a claim leaving L2
+Claims lands in **Live Cases**. The gap between the two acts was a window in which the claim
+belonged to nobody. `waiting_to_start()` is kept and still queried: the rail entry shows only when
+that list is non-empty, and says *"Handed over, not started"* — so a start that fails, or a claim
+already waiting when this shipped, is loud rather than lost. `undo_handover()` had to change with
+it: "has a bucket" no longer means "work has started", so it now allows the undo while the claim
+is untouched in the entry bucket and refuses once it has been moved on. *Untouched* is
+`pipeline_from` still empty — not "no fields filled", because the WhatsApp document collection
+fills fields on a claim before Level-2 ever sees it.
+
+**What the test caught.** The first version of that check counted rows in `nidaan_bucket_moves`
+— which is the route *configuration* (from_key → to_key), not a per-claim history, and has no
+`claim_id` column at all. It would have raised on every undo. 20 assertions on a copy of the live
+DB.
+
+**Open:** #3 (the Pending Draft button — waiting on the
+founder for what he sees on click), #6 (case report format), page 10 (Live
 Bucket field order; **Assign To** missing from `CSR_GIST`), page 5 (Telegram to the *assignee* at
 every stage).

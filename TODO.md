@@ -39,6 +39,21 @@ software and give them back to the person.**
   before, so the insurer list, the date pickers and the admission-before-discharge check all still
   apply. **Each change writes its own remark**, naming the field and both values:
   *"✏️ Hospital name: “Apollo” → “Fortis”"*. Re-submitting an unchanged box writes nothing.
+- ✅ **#1 — *With (assign staff)* is off the board and on the claim.** The board is a list you
+  scan, and ten columns is more than anyone reads across on a phone. The picker now sits on the
+  claim panel, under the facts of the case, labelled **With — who is working on this**. It is on
+  the claim in **every** bucket, not only Pending Draft: a claim has to be assignable wherever it
+  is sitting, and the panel is one click from every row, so nothing is lost. *Claim type* stays a
+  column, as asked. (Also fixed on the way: the list of people was only loaded when the board
+  drew, so a claim opened from a link or a search would have shown an empty picker.)
+- ✅ **#4 — there is no *To start* step.** Handing a claim over from L2 Claims now puts it straight
+  into **Live Cases**. Two acts did one job, and between them the claim belonged to nobody. The
+  waiting list is **not deleted**, deliberately: if starting ever fails, or a claim was already
+  waiting when this shipped, it must not become invisible. The rail entry appears **only when
+  something is stuck**, reads *"Handed over, not started"*, and in normal running nobody sees it.
+  Pulling back an accidental handover still works while the claim is untouched in Live Cases, and
+  is refused once it has been moved on — 20 assertions on a copy of the live DB, including that
+  the documents tick and the handover note are still the real gates.
 - 🔒 **Found while building #9: a row of dots could overwrite the case email password.** Anyone
   without credential rights reads that field as `••••••••`; nothing stopped the form sending the dots
   back as the new value, which would have locked the team out of the case mailbox with nothing in
@@ -52,13 +67,10 @@ software and give them back to the person.**
   flags have passed, **the claim does not move on its own**. 19 passed, 0 failed, 1 skipped.
 
 **Still open from the ten-item list:**
-- 🟡 **#1** — move *With (assign staff)* off the board as a column and into the **Draft** section.
-  *Claim type* stays a column.
 - 🔴 **#3** — *"pending draft button is not working"*. **Awaiting the founder:** what happens on
   the click — nothing at all, a window that then fails, or a red message? Three theories checked
   and all three were wrong; `missing_required(NP-65)` returns `[]`, so the required-fields gate is
   not it. Also still to do: the sweep of every other button on that screen.
-- 🟡 **#4** — drop **START HERE / To start**; a claim leaving L2 Claims lands in **Live Cases**.
 - 🟡 **#6** — the case report in the PDF's format, built up bucket by bucket.
 - 🟡 **Page 10** — Live Bucket field names and order as the PDF lists them; **Assign To** (#15) is
   missing from `CSR_GIST` entirely.
