@@ -1516,6 +1516,15 @@ ESC_REPLIES = {
     "query": ("", "query", "\u2753 Insurer raised a query"),
 }
 
+# THESE TWO NO LONGER MOVE ANYTHING (founder, 21 Sep). They were a dropdown that closed a case or
+# sent it to Lokpal - the software deciding the outcome from a menu choice. The buttons came off
+# the screen with the rest of #8; this is the endpoint behind them, refused so that an old page
+# still open in somebody's browser cannot move a claim either.
+#
+# The entries stay in ESC_REPLIES on purpose: their labels are what the existing remarks on real
+# claims were written from, and deleting them would make that history unreadable.
+DECIDED_BY_A_PERSON = ("accepted", "refused")
+
 
 async def escalation_reply(claim_id: int, outcome: str, *, note: str = "", actor: str = "",
                            actor_role: str = "") -> dict:
@@ -1525,8 +1534,13 @@ async def escalation_reply(claim_id: int, outcome: str, *, note: str = "", actor
     here is automatic - it runs because somebody read a letter and pressed a button.
     """
     outcome = (outcome or "").strip().lower()
+    if outcome in DECIDED_BY_A_PERSON:
+        return {"ok": False, "error":
+                "Where the case goes next is not recorded here any more. Write down what the "
+                "insurer said, then use Move \u2014 to Completed if they have settled, to Lokpal if "
+                "they have refused. A person decides, not the form."}
     if outcome not in ESC_REPLIES:
-        return {"ok": False, "error": "Say whether they accepted, refused, or asked a question."}
+        return {"ok": False, "error": "Say what the insurer asked."}
     note = (note or "").strip()
     if len(note) < 3:
         return {"ok": False, "error": "Say what they wrote \u2014 the next person starts from it."}

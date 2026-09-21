@@ -8875,16 +8875,21 @@ async def ops_doc_window_send(claim_id: int, body: _DocSendReq, request: Request
 
 class _EscReplyReq(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    outcome: str = Field(..., max_length=16)      # accepted | refused | query
+    outcome: str = Field(..., max_length=16)      # query (the only one that is acted on)
     note: str = Field(..., min_length=3, max_length=1000)
 
 
 @app.post("/nidaan/ops/api/claims/{claim_id}/escalation/reply")
 @limiter.limit("30/minute")
 async def ops_escalation_reply(claim_id: int, body: _EscReplyReq, request: Request):
-    """Record what the insurer said. Their answer decides where the case goes next.
+    """Record that the insurer has asked US something. It moves nothing.
 
-    accepted -> Completed (settled at escalation) · refused -> Lokpal · query -> stays here,
+    Only `query` is accepted now (founder, 21 Sep). "accepted" and "refused" used to move the
+    claim - to Completed and to Lokpal - and that was the software deciding the outcome of a case
+    from a menu choice. Both are refused here, so an old page left open in a browser cannot move
+    a claim either. A person reads the letter and presses Move.
+
+    query -> stays here,
     marked Escalation Query, because from that point they are waiting on us.
     """
     if not _is_nidaan_host(request):
