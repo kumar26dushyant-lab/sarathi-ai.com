@@ -6,6 +6,71 @@ _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned ·
 
 **Last updated:** 2026-09-22 — 🟢 **CUTOVER COMPLETE. NidaanPartner.com and Sarathi-AI.com are LIVE on Oracle Mumbai (161.118.186.201, aarch64).** Contabo parked as rollback, untouched.
 
+### ✅ SHIPPED 2026-09-22 (2) — the bucket screen on real devices, and the Sarathi cleanup
+
+- ✅ **The bucket screen works on a phone, a tablet and a laptop.** Measured first, on the real
+  screen at the sizes people hold:
+
+  | | sideways drag | tap targets under 44px |
+  |---|---|---|
+  | Android 360 | **638px** | 31 |
+  | iPhone 390 | 609px | 31 |
+  | iPhone landscape 844 | 154px | 31 |
+  | iPad portrait 768 | 231px | 31 |
+  | iPad landscape 1024 | — | 31 |
+  | Laptop 1440 | — | 31 |
+
+  Ten columns do not fit a phone. Below 900px — and on **any touch screen up to 1200px** — each
+  row is now a **card**: claim and person at the top, then the company, then the pairs that belong
+  together (amount with age, type with step), then why it is waiting, then full-width buttons.
+  **ONE MARKUP:** it is still a table; the cells carry their column name in `data-label` and CSS
+  does the rest, so rotating a tablet or dragging a window narrow just works, and a phone can
+  never drift away from what the desk shows.
+  - **The pointer decides, not the width.** Touch needs 44px controls and 44px controls need
+    room, so an iPad in landscape gets cards while a 1024px *desktop* window keeps the table. I
+    first tried shaving padding to make the table fit an iPad: 24px of overflow became **117px**.
+    I was shaving pixels off a wall.
+  - **The 12px floor is set where the sizes are set**, not shouted over from a media query —
+    `.l2why .nt` is two classes deep and beat my one-class override, which is why the note was
+    still 11.8px after I had "fixed" it.
+  - **Now 0 problems across all six devices, in both themes.**
+- ✅ **`uitest/device-audit.js`** — the measurement, kept. Six sizes, both themes, screenshots on
+  demand (`SHOTS=1`), each device measured against **its** standard (44px for a finger, 24px for
+  a mouse — measuring a laptop against a fingertip is measuring the wrong thing). It also checks
+  every piece of text against the colour actually behind it, because *works in both themes* is a
+  ground rule here and dark-on-dark is how it gets broken.
+  - ⚠️ **It caught two faults in itself before it caught any in the product:** it reported
+    *"0 problems across 6 devices"* while rendering **nothing** (a SyntaxError — it now proves
+    claims are on screen before measuring), and a fixture claiming 1 claim late and 2 red, which
+    is impossible, which made the summary render **"-1 need looking at"**. I nearly went and
+    "fixed" correct code.
+- ✅ **One real fault it surfaced:** a bucket with no guidance text rendered an **empty coloured
+  banner** — a bar of screen spent on silence.
+
+- ✅ **Sarathi cockpit: every page now passes `no-undef`.** Four faults of the shape that cost two
+  days on the Nidaan side. `toast && toast(...)` reads like a guard and is not one — reading an
+  undeclared name **throws**; this page's helper is `showToast`. **Two of them threw before the
+  line that refreshes the list:**
+  - *Move a lead to Customers* → threw before `loadLeads()`, so the lead stayed on screen and the
+    move looked as though it had failed.
+  - *Add a customer* → threw before `loadCustomers()`, so the new customer was nowhere to be seen.
+
+  Which is exactly the double-tap cause the founder described: a person told nothing, who sees
+  nothing change, does it again. Also `loadDMLeadList()` never existed, so the Send-DM-to-segment
+  window sat on *"Loading leads…"* for ever (it is `mktLoadLeads`); and three i18n keys were
+  defined twice with the second silently winning — the WhatsApp wizard's **Next** showed as
+  *"Next →"*, and the ticket window read *"Description *:"*.
+  - 🟡 **One left for the founder to decide:** `index.html` defines `fc_title`/`fc_desc` twice with
+    **different copy**, so the homepage heading that says *"First 500 Founding Customers"* in the
+    markup renders as *"Partner & Earn Program"*. Which he wants is a content decision, not a bug
+    with one right answer — **nothing visible was changed**; the pair that renders today is
+    untouched, the pair that never rendered is renamed and kept.
+  - `microsite.html` is a server-side **template** (`bio: {{BIO_JSON}}`), so the checker skips a
+    templated block and says so. A check that reports a non-problem is one people learn to ignore.
+
+**Not yet audited for devices:** the claim panel, the gist window and the documents window. The
+bucket board was the founder's "especially", and it is done; those three are the next pass.
+
 ### ✅ SHIPPED 2026-09-22 — the case email, and the ten items closed
 - ✅ **One tap, one action (founder, 22 Sep: *"most are impatient they tap/click multiple times,
   so we dont want any glitch"*).** The cause is worth naming: people tap again because **nothing

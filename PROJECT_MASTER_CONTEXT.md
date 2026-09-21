@@ -7617,3 +7617,43 @@ refuses a second open query, `start_l2()` refuses a claim already in the pipelin
 
 Test: `uitest/one-tap.js` (Playwright, 18 assertions) - run it after touching the guard or
 `openModal`.
+
+
+---
+
+## 📱 A103 THE BUCKET SCREEN ON REAL DEVICES (Sep 22 2026)
+
+Measured before anything was changed, with the page's OWN renderer and stylesheet at the sizes
+people hold: 638px of sideways drag on a 360px Android, 609 on an iPhone, 231 on an iPad in
+portrait, 31 tap targets at 19-22px on every device, text down to 10.6px.
+
+**Cards below 900px, and on any touch screen to 1200px.** Still one markup - the table's cells
+carry `data-label` and CSS turns each row into a card, ordered the way a person triages: claim
+and person, company, amount with age, type with step, why it is waiting, buttons. Two renderers
+would have drifted, and a phone would have started showing something the desk does not.
+
+**The pointer decides, not the width** (`@media (max-width:900px), (pointer:coarse) and
+(max-width:1200px)`). Touch needs 44px controls, 44px controls need room, so an iPad in landscape
+gets cards while a 1024px desktop window keeps the table. Shaving padding to make the table fit
+an iPad turned 24px of overflow into 117px.
+
+**Sizes fixed at source**, not overridden from a media query: `.l2why .nt` is two classes deep and
+beat a one-class override. `.75rem` is exactly 12px and that floor now holds everywhere.
+`@media (pointer:coarse)` gives 44px controls; `@media (pointer:fine)` lifts the base to 28px,
+because 19px is below the mouse minimum too (WCAG 2.5.8 asks 24).
+
+**`uitest/device-audit.js`** is the measurement, kept and re-runnable: six sizes, both themes,
+`SHOTS=1` for screenshots, each device measured against its own standard, plus a contrast pass
+that walks each piece of text and the colour actually behind it.
+
+**What the tooling caught in itself, which is the part worth remembering.** Its first run
+reported "0 problems across 6 devices" while rendering NOTHING - the harness redeclared a const
+the slice already declared, the SyntaxError left the screen empty, and an empty screen passes
+every check ever written. It now proves claims are on screen before it measures. Its fixture then
+claimed 1 claim "late" and 2 "red", which the server can never produce (late counts red AND
+amber), and the summary dutifully rendered "-1 need looking at" - correct code, wrong data, and
+I nearly went and changed the code.
+
+One real fault surfaced: a bucket with no guidance text rendered an empty coloured banner.
+
+**Not yet audited:** the claim panel, the gist window, the documents window.
