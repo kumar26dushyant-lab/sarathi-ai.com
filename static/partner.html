@@ -804,7 +804,7 @@ async function startRegistration() {
   if (!email || !email.includes('@')) { showAlert('register-alert', _at('err_email'), 'error'); return; }
   if (!document.getElementById('reg-terms').checked) { showAlert('register-alert', _at('err_terms'), 'error'); return; }
 
-  _regEmail = email;
+  window._regEmail = email;
   const btn = document.getElementById('regBtn');
   btn.disabled = true; btn.textContent = _at('sending_otp');
 
@@ -841,7 +841,7 @@ async function verifyEmailOTP() {
     const r = await fetch(API + '/api/affiliate/verify', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ email: _regEmail, otp })
+      body: JSON.stringify({ email: window._regEmail, otp })
     });
     const data = await r.json();
     if (!r.ok) throw new Error(_extractErr(data, 'Verification failed'));
@@ -886,7 +886,7 @@ function showRegSuccess(code) {
 async function sendDashOTP() {
   const email = document.getElementById('dash-email').value.trim().toLowerCase();
   if (!email || !email.includes('@')) { showAlert('dash-alert', _at('err_email') || 'Enter valid email', 'error'); return; }
-  _regEmail = email;
+  window._regEmail = email;
 
   try {
     const r = await fetch(API + '/api/affiliate/login', {
@@ -912,7 +912,7 @@ async function verifyDashOTP() {
     const r = await fetch(API + '/api/affiliate/login/verify', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ email: _regEmail, otp })
+      body: JSON.stringify({ email: window._regEmail, otp })
     });
     const data = await r.json();
     if (!r.ok) throw new Error(_extractErr(data, 'Login failed'));
@@ -929,6 +929,10 @@ async function verifyDashOTP() {
 }
 
 async function loadDashboardData() {
+  // The affiliate, kept where the whole function can see it. `a` is declared inside the
+  // try below, and the cross-signup block at the end of this function is OUTSIDE it -
+  // so reading a.name there threw, and the cross-signup CTA has never been shown.
+  let _aff = null;
   try {
     const r = await fetch(API + '/api/affiliate/me', {
       headers: _affToken ? {'Authorization': 'Bearer ' + _affToken} : {}
@@ -946,6 +950,7 @@ async function loadDashboardData() {
     if (!r.ok) throw new Error(_extractErr(data, 'Failed to load'));
 
     const a = data.affiliate;
+    _aff = a;
     _affCode = a.referral_code;
     document.getElementById('dash-name').textContent = a.name;
     document.getElementById('dash-code').textContent = a.referral_code;
@@ -990,9 +995,9 @@ async function loadDashboardData() {
 
   // Show cross-signup CTA (check if they already have a customer account)
   const crossEl = document.getElementById('cross-signup-cta');
-  if (crossEl) {
+  if (crossEl && _aff) {
     // Store affiliate data globally for cross-signup
-    window._affData = {name: a.name, email: a.email, phone: a.phone || ''};
+    window._affData = {name: _aff.name, email: _aff.email, phone: _aff.phone || ''};
     crossEl.style.display = 'block';
   }
 }

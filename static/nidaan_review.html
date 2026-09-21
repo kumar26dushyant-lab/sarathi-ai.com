@@ -8,6 +8,7 @@
 <link rel="icon" href="/static/nidaan_logo.png" type="image/png">
 <script src="/static/_err.js?v=1"></script>
 <link rel="stylesheet" href="/static/nidaan_design.css?v=5">
+<script src="/static/nidaan_track.js?v=2"></script>
 <script src="/static/nidaan_theme.js?v=2"></script>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
@@ -261,7 +262,10 @@ async function submitReview(e) {
     intermediary_name: (document.getElementById('intermediaryName')?.value || '').trim(),
     // Carry the referral code (from ?ref= or persisted first-touch attribution) so the ₹499
     // review is credited to the referrer instead of showing as a "Direct lead".
-    ref_code: (typeof _ref !== 'undefined' && _ref) ? _ref : '',
+    // `_ref` was never defined on this page, and the typeof guard meant it failed silently:
+    // every review started here was recorded with no referrer at all. Read the same way
+    // nidaan_start.html reads it, because it is the same thing.
+    ref_code: _reviewRef(),
   };
 
   await sendVerifyOTP(false);
@@ -412,6 +416,19 @@ function setLang(l) {
 }
 const saved = localStorage.getItem('nidaan_lang') || 'hi';
 setLang(saved);
+</script>
+<script>
+// WHO SENT THEM. ?ref=CODE or ?branch=CODE on the link, falling back to the first-touch code
+// NidaanTrack persisted - so the credit survives somebody wandering a few pages before they
+// start. Identical to nidaan_start.html; if that changes, change both.
+function _reviewRef(){
+  try{
+    const q = new URLSearchParams(location.search);
+    const url = (q.get('ref') || q.get('branch') || '').trim().toUpperCase();
+    const kept = (window.NidaanTrack ? (NidaanTrack.attr().ref || '') : '').trim().toUpperCase();
+    return url || kept || '';
+  }catch(e){ return ''; }
+}
 </script>
 </body>
 </html>

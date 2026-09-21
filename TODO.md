@@ -72,13 +72,50 @@ software and give them back to the person.**
   ⚠️ **It does not catch the `to`/`toKey` kind** — that needs a real JavaScript linter with scope
   analysis (eslint `no-undef`). A regex version reported 2,000 false names and was thrown away; a
   check people learn to skip is worse than none. **Worth deciding on: adding eslint.**
+- ✅ **#9 REDONE — the pencil is on the field, not behind two buttons.** My first attempt was the
+  wrong shape: correcting a wrong hospital name meant *open claim → open Gist → find the line →
+  Change → type → Save*. Five steps to fix one word that was already on the screen. Now the facts
+  at the top of a claim — **Complainant, Patient, Insurance Co., Disputed, Policy No.** — each
+  carry their own ✏️. See it wrong, press it, type, **Save**. Two steps. Same endpoint, same
+  rules, same remark. **Phone has no pencil on purpose** (it is the number our messages go to and
+  stays with the admin-only claim edit), and a field locked as finished work shows 🔒 instead.
+  Locks come from `for_claim`'s own `locked` map — the same function the Gist uses, not a second
+  copy of the rule. 15 assertions rendering the real function under node.
+- ✅ **eslint added — and it found four more of the same bug.** One rule, `no-undef`: *does every
+  name this code uses actually exist?* Style is deliberately left alone, because a linter that
+  also complains about spacing is one people switch off. `deploy/verify-page-js.mjs` joins a
+  page's inline scripts (they share one scope in the browser, so they must be checked together),
+  discovers what the page's own script files put on `window` rather than keeping a list that
+  rots, and maps line numbers back to the HTML. **Run it with `npm run check:pages`.**
+  Proof it works: run against Friday's file it reports `'to' is not defined` at line 13918 — the
+  two-day outage, found in under a second.
+  - 🐞 **nidaan_start.html** — `setLang(saved || sys)`. `sys` never existed. A **first-time
+    visitor** (nothing saved) arriving after the DOM was parsed hit a ReferenceError and the
+    language was never applied, so they saw whichever language the markup starts in rather than
+    Hindi. On the signup page.
+  - 🐞 **nidaan_review.html** — the ₹499 review page sent `ref_code: (typeof _ref !== 'undefined'
+    && _ref) ? _ref : ''`, and **`_ref` was never defined on that page**. The `typeof` guard meant
+    it failed silently: **every ₹499 review started at `/nidaan/get-reviewed` was recorded with no
+    referrer**, showing as a Direct lead instead of crediting the branch or staff member. It now
+    reads the code exactly as `nidaan_start.html` does (`?ref=` / `?branch=`, falling back to
+    NidaanTrack's first-touch), and the page now loads `nidaan_track.js` so that fallback exists.
+  - 🐞 **partner.html** — the cross-signup CTA read `a.name` where `a` is declared **inside** a
+    try block and the CTA sits outside it. ReferenceError every time, so that CTA has never been
+    shown to a partner.
+  - 🐞 **partner.html** — `_regEmail` was never declared. It works by accident (sloppy-mode
+    implicit global) and is one `'use strict'` away from breaking OTP verification. Now explicit.
+- ✅ **The password check you allowed.** 3 case-email passwords stored, **0 overwritten with
+  dots**, 0 blank. Nothing was damaged; the `set_field` guard is preventive only.
+
+**Still on the lint list, NOT yet fixed** (Sarathi side, and lower risk — worth a pass before the
+project closes): `dashboard.html` calls a bare `toast(` in 5 places, plus `showSignupConflict`
+and `loadDMLeadList` which are not defined anywhere; `microsite.html` has a script block that
+does not parse.
 - 🔒 **Found while building #9: a row of dots could overwrite the case email password.** Anyone
   without credential rights reads that field as `••••••••`; nothing stopped the form sending the dots
   back as the new value, which would have locked the team out of the case mailbox with nothing in
   the log to say why. Guard added in **`set_field`** — the one door every field write passes
   through — so it holds at every endpoint, not just the gist form. 8/8 on a copy of the live DB.
-  **⚠️ Still to check: whether any live claim already has dots stored as its password.** Needs a
-  read of the production DB, which I could not run.
 - ✅ **Two journeys stopped crying wolf** at ordinary staff work (a real query raised, a real
   reminder recorded), and the escalation journey was **rewritten to the new model** rather than
   deleted — it now proves the day count is arithmetic anyone can check, and that however many

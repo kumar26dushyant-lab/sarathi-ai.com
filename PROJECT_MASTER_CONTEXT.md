@@ -7497,6 +7497,40 @@ kind. That needs real scope analysis (eslint `no-undef`). A regex attempt report
 names and was deleted: a check that cries wolf is a check people stop running, which is the same
 lesson as the alarm policy.
 
+**#9, corrected (21 Sep, same day).** The founder sent back a screenshot of the claim header with
+an arrow on each of Complainant / Patient / Insurance Co. / Disputed: *"at that point we need
+pencil icon to edit fields to avoid steps like first click on gist button then get inside and
+then click on change button and then do edit."* He was right and my first shape was wrong. The
+facts at the top of a claim now each carry a ✏️; pressing it opens that one field in place.
+`L2_KV` lists them, every entry a column `_GIST_CORE` already allows, so nothing changed about
+what may be corrected or by whom - only the walk from five steps to two. Locks are read from
+`for_claim()`'s own `locked` map, the same function the Gist uses. Phone is deliberately absent:
+it is the number our messages go to and stays with the admin-only claim edit.
+
+**eslint (21 Sep).** One rule, `no-undef`. `deploy/verify-page-js.mjs` joins a page's inline
+script blocks - they share one scope in the browser, so checking them separately would report
+every cross-block call as undefined - discovers globals from the page's own `<script src>` files
+instead of a hand-kept list, skips `<script>` tags that are not JavaScript, and maps line numbers
+back to the HTML. `npm run check:pages`. Run against Friday's file it names `'to' is not defined`
+at line 13918.
+
+Four real faults on its first run, each the same shape as the Move button - a name that is not
+there, an error into a console nobody has open:
+
+  - `nidaan_start.html`: `setLang(saved || sys)`. A first-time visitor arriving after the DOM was
+    parsed never got a language applied.
+  - `nidaan_review.html`: `_ref` was never defined, and a `typeof` guard hid it, so **every ₹499
+    review started at `/nidaan/get-reviewed` lost its referral attribution**. Now reads the code
+    the same way `nidaan_start.html` does, and loads `nidaan_track.js` so the first-touch fallback
+    exists.
+  - `partner.html`: the cross-signup CTA read `a.name` from outside the try block where `a` is
+    declared - it has never been shown.
+  - `partner.html`: `_regEmail` undeclared; works only because sloppy mode allows it.
+
+**Open on the lint list:** `dashboard.html` (bare `toast(`, `showSignupConflict`,
+`loadDMLeadList`), `microsite.html` (a script block that does not parse). Sarathi side, lower
+risk, worth a pass before the project closes.
+
 **Open:** #6 (case report format), page 10 (Live
 Bucket field order; **Assign To** missing from `CSR_GIST`), page 5 (Telegram to the *assignee* at
 every stage).

@@ -13230,6 +13230,22 @@ function _l2Styles(){
   .l2kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(11rem,1fr));gap:.3rem .8rem}
   .l2kv .k{font-size:.64rem;letter-spacing:.06em;text-transform:uppercase;color:var(--nd-text-faint)}
   .l2kv .v{font-size:.86rem;font-weight:600;color:var(--nd-text-primary);word-break:break-word}
+  /* The pencil lives with the value it changes. Big enough to hit with a thumb, quiet enough
+     not to compete with the fact itself. */
+  .l2kv .vrow{display:flex;align-items:center;gap:.3rem}
+  .l2kv .pen{flex:0 0 auto;background:none;border:1px solid transparent;border-radius:6px;
+    cursor:pointer;font-size:.8rem;line-height:1;padding:.3rem;min-width:1.85rem;
+    min-height:1.85rem;color:var(--nd-text-faint)}
+  .l2kv .pen:hover{border-color:var(--nd-border-strong);color:var(--nd-text-primary);
+    background:var(--nd-bg-surface-2)}
+  .l2kv .lk{font-size:.7rem;color:var(--nd-text-faint);white-space:nowrap}
+  .l2kv .ed input,.l2kv .ed select{width:100%;background:var(--nd-bg-surface-2);
+    color:var(--nd-text-primary);border:1px solid var(--nd-brand-cyan);border-radius:7px;
+    padding:.35rem .45rem;font-size:.86rem;font-family:inherit}
+  .l2kv .edb{display:flex;gap:.3rem;margin-top:.3rem}
+  .l2kv .edb button{min-height:2rem;padding:0 .7rem;border-radius:7px;cursor:pointer;
+    font-family:inherit;font-size:.78rem;font-weight:600}
+  .l2kv .edm{font-size:.74rem;margin-top:.25rem;color:var(--nd-danger-text)}
   .l2sec{font-size:.68rem;font-weight:800;letter-spacing:.07em;text-transform:uppercase;
     color:var(--nd-text-faint);margin:.3rem 0 .1rem}
   .l2fld{display:flex;flex-direction:column;gap:.12rem;margin-bottom:.5rem}
@@ -14183,17 +14199,8 @@ function l2CaseRender(rem){
     + (miss.length
         ? '<div class="l2ban amber">Before this can move on: <b>'
           + miss.map(function(x){ return esc(x.label); }).join(', ') + '</b></div>' : '')
-    + '<div class="l2kv">'
-    +   '<div><div class="k">Complainant</div><div class="v">' + esc(who) + '</div></div>'
-    +   '<div><div class="k">' + _insuredLabel(c.claim_type) + '</div><div class="v">'
-    +     esc(c.insured_name || '—') + '</div></div>'
-    +   '<div><div class="k">Insurance Co.</div><div class="v">' + esc(c.insurer_name || '—') + '</div></div>'
-    +   '<div><div class="k">Disputed</div><div class="v">'
-    +     (c.disputed_amount ? '₹' + Number(c.disputed_amount).toLocaleString('en-IN') : '—') + '</div></div>'
-    +   '<div><div class="k">Phone</div><div class="v">' + esc(c.complainant_phone || c.insured_phone || '—') + '</div></div>'
-    +   '<div><div class="k">Policy No.</div><div class="v">' + esc(c.policy_no || '—') + '</div></div>'
-    +   '<div><div class="k">Last moved by</div><div class="v">' + esc(st.moved_by || '—') + '</div></div>'
-    + '</div>'
+    + '<div class="l2kv" id="l2kv">' + _l2KvHtml() + '</div>'
+    + _csrInsurerList()
     + _l2AssignPanel(id, c.assigned_to_staff_id)
     // The ClaimShield case record. Every bucket can reach all four; the one that is THIS
     // bucket's job is the strong button.
@@ -14285,6 +14292,116 @@ function l2CaseRender(rem){
     + '<div id="l2cMsg" style="font-size:.82rem"></div>'
     + '</div>';
 }
+
+// THE FACTS AT THE TOP OF A CLAIM, each one correctable where it is read.
+//
+// [label, claim column, kind]. Every one of these is a column the gist form already edits, so
+// this changes nothing about WHAT may be corrected or WHO may correct it - only how far you have
+// to walk to do it. Phone is not here on purpose: it is the number our messages go to, and it
+// stays with the admin-only claim edit.
+const L2_KV = [
+  ['Complainant', 'complainant_name', 'text'],
+  ['Patient',     'insured_name',     'text'],
+  ['Insurance Co.', 'insurer_name',   'insurer'],
+  ['Disputed',    'disputed_amount',  'number'],
+  ['Policy No.',  'policy_no',        'text'],
+];
+let _l2KvEdit = null;        // which field is open; one at a time, like the Gist
+
+function _l2KvShow(key){
+  const c = (_l2Case && _l2Case.claim) || {};
+  if (key === 'disputed_amount'){
+    return c.disputed_amount ? '\u20b9' + Number(c.disputed_amount).toLocaleString('en-IN') : '';
+  }
+  return (c[key] == null ? '' : String(c[key])).trim();
+}
+
+function _l2KvHtml(){
+  const c = (_l2Case && _l2Case.claim) || {};
+  const st = (_l2Case && _l2Case.st) || {};
+  const locks = st.locked || {};
+  const who = (c.complainant_name || c.insured_name || '').trim();
+  let out = '';
+  L2_KV.forEach(function(f, i){
+    const [label, key, kind] = f;
+    // "Patient" reads differently on a motor or life claim; that label was already worked out.
+    const lab = (key === 'insured_name' && typeof _insuredLabel === 'function')
+      ? _insuredLabel(c.claim_type) : label;
+    if (_l2KvEdit === i){
+      const raw = key === 'disputed_amount'
+        ? (c.disputed_amount == null ? '' : String(c.disputed_amount))
+        : (c[key] == null ? '' : String(c[key]));
+      const ctl = (kind === 'insurer')
+        ? '<input id="l2kvIn" list="csrIns" value="' + esc(raw) + '">'
+        : '<input id="l2kvIn" type="' + (kind === 'number' ? 'number' : 'text') + '"'
+          + (kind === 'number' ? ' step="1" min="0"' : '') + ' value="' + esc(raw) + '">';
+      out += '<div class="ed"><div class="k">' + esc(lab) + '</div>' + ctl
+           + '<div class="edb">'
+           +   '<button class="btn btn-primary" onclick="l2KvSave(' + i + ')">Save</button>'
+           +   '<button class="btn btn-ghost" onclick="l2KvCancel()">Cancel</button>'
+           + '</div><div class="edm" id="l2kvMsg"></div></div>';
+      return;
+    }
+    const shown = (key === 'complainant_name' ? who : _l2KvShow(key));
+    const locked = !!locks[key];
+    out += '<div><div class="k">' + esc(lab) + '</div>'
+         + '<div class="vrow"><div class="v">' + esc(shown || '\u2014') + '</div>'
+         + (locked
+             ? '<span class="lk" title="Finished work \u2014 only a super admin can change it">\ud83d\udd12</span>'
+             : '<button class="pen" title="Change ' + esc(lab) + '" '
+               + 'aria-label="Change ' + esc(lab) + '" onclick="l2KvEdit(' + i + ')">\u270f\ufe0f</button>')
+         + '</div></div>';
+  });
+  // Read-only, and staying that way.
+  out += '<div><div class="k">Phone</div><div class="v">'
+       + esc(c.complainant_phone || c.insured_phone || '\u2014') + '</div></div>';
+  out += '<div><div class="k">Last moved by</div><div class="v">'
+       + esc(st.moved_by || '\u2014') + '</div></div>';
+  return out;
+}
+
+function _l2KvPaint(){
+  const box = document.getElementById('l2kv');
+  if (box) box.innerHTML = _l2KvHtml();
+}
+function l2KvEdit(i){
+  _l2KvEdit = i;
+  _l2KvPaint();
+  const el = document.getElementById('l2kvIn');
+  if (el){ el.focus(); try{ el.select(); }catch(e){} }
+}
+function l2KvCancel(){ _l2KvEdit = null; _l2KvPaint(); }
+
+async function l2KvSave(i){
+  const [label, key] = L2_KV[i];
+  const el = document.getElementById('l2kvIn');
+  const msg = document.getElementById('l2kvMsg');
+  if (!el) return;
+  const val = (el.value || '').trim();
+  el.disabled = true;
+  try{
+    // The same endpoint the Gist form uses, so the same rules apply and the same remark is
+    // written: what changed, what it was before, and whose name is on it.
+    const r = await API('/cases/' + _l2Case.claim_id + '/gist',
+      {method:'POST', body: JSON.stringify({core: {[key]: val}, fields: {}})});
+    const d = await r.json().catch(function(){ return {}; });
+    if (!r.ok){
+      el.disabled = false;
+      if (msg) msg.textContent = _l2Err(d, 'Could not save that.');
+      return;
+    }
+    _l2Case.claim[key] = (key === 'disputed_amount') ? (val === '' ? null : Number(val)) : val;
+    _l2KvEdit = null;
+    _l2KvPaint();
+    ndUI.toast(label + ' saved \u2014 the change is in Remarks', 'success');
+    // The remarks list on this very screen is now one line out of date.
+    if (typeof l2Open === 'function') l2Open(_l2Case.claim_id);
+  }catch(e){
+    el.disabled = false;
+    if (msg) msg.textContent = 'Could not save that.';
+  }
+}
+window.l2KvEdit = l2KvEdit; window.l2KvCancel = l2KvCancel; window.l2KvSave = l2KvSave;
 
 // From a case sheet the claim's OWN bucket decides the moves - not whichever list it was opened
 // from (All open claims, a stage before Level-2, another bucket).

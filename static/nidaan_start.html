@@ -183,7 +183,11 @@ function setLang(l){
   let saved = null; try { saved = localStorage.getItem('nidaan_lang'); } catch(e){}
   document.addEventListener('DOMContentLoaded', () => setLang(saved || 'hi'));   // default HINDI
   // also apply ASAP for placeholders already in the DOM
-  if (document.readyState !== 'loading') setLang(saved || sys);
+  // `sys` never existed. For a FIRST-TIME visitor (nothing saved) arriving when the DOM
+  // was already parsed, this threw and the language was never applied - so the page a
+  // new visitor sees is whichever one the markup happens to start in, not Hindi. The
+  // line above already says what the default is; this one now agrees with it.
+  if (document.readyState !== 'loading') setLang(saved || 'hi');
 })();
 </script>
 
