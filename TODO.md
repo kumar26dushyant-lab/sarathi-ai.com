@@ -54,6 +54,24 @@ software and give them back to the person.**
   Pulling back an accidental handover still works while the claim is untouched in Live Cases, and
   is refused once it has been moved on — 20 assertions on a copy of the live DB, including that
   the documents tick and the handover note are still the real gates.
+- ✅ **#3 — the Pending Draft button, and why NOTHING happened.** `l2Move()` tested
+  `to !== 'escalation'` when its parameter is called **`toKey`**. There is no `to` in that
+  function — it exists in four *other* functions, which is why nothing page-wide noticed. The
+  ReferenceError was thrown while building the move window, so the call died **before** anything
+  appeared: no window, no error on the page, nothing to say why. And because `&&` stops at the
+  first false, it only threw when the destination had **more than one step** — which is every
+  bucket except Live Cases. **So since 19 Sep no claim could be moved forward from the ops screen
+  at all**, by the row shortcut or by the *Move…* menu. Proven both ways: the deployed file
+  throws `to is not defined`, the fixed one opens the window with all four Pending Draft steps.
+  **I introduced this on 19 Sep** in the escalation-screen commit (`3caeaac`).
+- ✅ **And the rest of "check all buttons".** Every one of the **418** handlers the page names is
+  now reachable from a click; **one was not** — *Open* on the **Reviewed · fee due** list called
+  `viewClaim`, which has never existed anywhere in the page, so that button has always done
+  nothing. It now calls `openClaimDrawer`, like every other Open on the screen. No duplicate
+  top-level function names. New `deploy/verify-ops-buttons.py` keeps it that way.
+  ⚠️ **It does not catch the `to`/`toKey` kind** — that needs a real JavaScript linter with scope
+  analysis (eslint `no-undef`). A regex version reported 2,000 false names and was thrown away; a
+  check people learn to skip is worse than none. **Worth deciding on: adding eslint.**
 - 🔒 **Found while building #9: a row of dots could overwrite the case email password.** Anyone
   without credential rights reads that field as `••••••••`; nothing stopped the form sending the dots
   back as the new value, which would have locked the team out of the case mailbox with nothing in
@@ -67,10 +85,6 @@ software and give them back to the person.**
   flags have passed, **the claim does not move on its own**. 19 passed, 0 failed, 1 skipped.
 
 **Still open from the ten-item list:**
-- 🔴 **#3** — *"pending draft button is not working"*. **Awaiting the founder:** what happens on
-  the click — nothing at all, a window that then fails, or a red message? Three theories checked
-  and all three were wrong; `missing_required(NP-65)` returns `[]`, so the required-fields gate is
-  not it. Also still to do: the sweep of every other button on that screen.
 - 🟡 **#6** — the case report in the PDF's format, built up bucket by bucket.
 - 🟡 **Page 10** — Live Bucket field names and order as the PDF lists them; **Assign To** (#15) is
   missing from `CSR_GIST` entirely.

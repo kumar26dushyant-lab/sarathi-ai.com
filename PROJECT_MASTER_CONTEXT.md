@@ -7472,7 +7472,31 @@ fills fields on a claim before Level-2 ever sees it.
 `claim_id` column at all. It would have raised on every undo. 20 assertions on a copy of the live
 DB.
 
-**Open:** #3 (the Pending Draft button — waiting on the
-founder for what he sees on click), #6 (case report format), page 10 (Live
+**#3, and it was mine.** *"Pending draft button is not working."* `l2Move()` tested
+`to !== 'escalation'` when its parameter is `toKey`. `to` is declared in four other functions, so
+every page-wide search for it succeeds — it is simply not in scope there. The ReferenceError was
+thrown while the move window's HTML was being built, so the whole call died before `openModal()`
+ran: no window, no message, nothing. And `&&` stops at the first false, so it only threw when the
+destination had **more than one step** — every bucket except Live Cases. **From 19 to 21 Sep no
+claim could be moved forward from the ops screen**, by the row shortcut or the Move… menu.
+Introduced by `3caeaac`, the escalation-screen commit.
+
+Proven rather than reasoned: `l2Move` is lifted out of the page by brace matching and run under
+node with the rest of the screen stubbed. The deployed file throws `to is not defined`; the fixed
+one opens the window with all four Pending Draft steps, and correctly offers **no** step picker
+for Escalation.
+
+**The rest of "check all buttons".** All **418** handlers the page names are reachable from a
+click. One was not: *Open* on **Reviewed · fee due** called `viewClaim`, which has never existed
+in this page — that button has always done nothing. Now `openClaimDrawer`. No duplicate top-level
+names. `deploy/verify-ops-buttons.py` is the guard.
+
+**What that guard cannot do, stated plainly.** It finds handlers that are not reachable. It cannot
+find a handler that IS reachable and dies on a name that is not in its scope — the `to`/`toKey`
+kind. That needs real scope analysis (eslint `no-undef`). A regex attempt reported 2,143 false
+names and was deleted: a check that cries wolf is a check people stop running, which is the same
+lesson as the alarm policy.
+
+**Open:** #6 (case report format), page 10 (Live
 Bucket field order; **Assign To** missing from `CSR_GIST`), page 5 (Telegram to the *assignee* at
 every stage).
