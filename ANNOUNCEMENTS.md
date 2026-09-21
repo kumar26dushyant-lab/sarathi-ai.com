@@ -34,6 +34,11 @@ do it and must give a reason.
 case and you will find **With — who is working on this** just under the case details. Pick a name
 and it saves straight away.
 
+• **Moving a claim works again — please read this one.** Since Friday, pressing **Move** or the
+**→ Pending Draft** button did nothing at all: no window, no message. That was our mistake in the
+code, not yours. It is fixed. If you have been unable to move cases forward since Friday, please
+move them now.
+
 • **Downloaded documents keep their proper name**, and the question box in Escalation that was
 showing *"could not record"* is fixed.
 
@@ -66,6 +71,10 @@ React 👍 once read; ask the office IT SPOC if anything is unclear.
 
 • **"With" की जगह बदली।** केस पर कौन काम कर रहा है — यह अब बोर्ड का कॉलम नहीं। केस खोलिए,
 विवरण के नीचे **With — who is working on this** मिलेगा। नाम चुनते ही सेव हो जाता है।
+
+• **केस मूव करना फिर से काम कर रहा है — यह ज़रूर पढ़ें।** शुक्रवार से **Move** या
+**→ Pending Draft** दबाने पर कुछ नहीं हो रहा था: न कोई विंडो, न कोई संदेश। यह हमारी कोड की गलती
+थी, आपकी नहीं। अब ठीक है। अगर शुक्रवार से कोई केस आगे नहीं बढ़ा पाए, तो कृपया अभी बढ़ा दीजिए।
 
 • **डाउनलोड किए दस्तावेज़ों का नाम अब सही आता है**, और Escalation का सवाल वाला बॉक्स जो
 *"could not record"* दिखा रहा था, वह ठीक हो गया है।
