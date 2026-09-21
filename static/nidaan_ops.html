@@ -16331,6 +16331,8 @@ function _csrPrint(title, bodyHtml){
     + '.two div{margin:0 0 6px}.two b{font-weight:700}'
     + '.bar{background:#e8f5e9;padding:8px 10px;font-size:12px;margin:6px 0 10px}'
     + '.rm{font-size:12px;margin:4px 0 12px}.rm ul{margin:4px 0 0 18px;padding:0}'
+    + '.sec{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;'
+    +   'color:#444;border-bottom:1px solid #bbb;margin:14px 0 6px;padding-bottom:2px}'
     + '.dr{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px}'
     + '.dr>div{border:1px solid #ccc;min-height:420px;padding:12px;font-size:12.5px;line-height:1.55;overflow-wrap:anywhere}'
     + '.dl{display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12.5px;font-weight:700;margin-top:10px}'
@@ -16350,8 +16352,11 @@ async function csrSheet(claimId){
       '<div class="hd"><img src="%%LOGO%%" alt="Nidaan"><h1>INITIAL CLAIM ASSESSMENT SHEET</h1></div>'
     + L('NAME OF PATIENT', d.insured_name)
     + L('NAME OF COMPLAINANT', d.complainant_name)
-    + L('RELATIONSHIP', f.relationship)
-    + L('Type of Claim / Rejection / Deduction', f.rejection_type)
+    // "Relationship" and "Type of Claim / Rejection / Deduction" are no longer collected - they
+    // are not on the founder's list of fifteen - so they would print as empty lines on every new
+    // claim. The policy type takes their place, which is #2 on his list and the thing that
+    // decides the whole document list.
+    + L('TYPE OF POLICY', (d.claim_kind || '').replace(/_/g, ' '))
     + '<p class="ln"><b>Claim Amount:</b>' + esc(_csrMoney(d.disputed_amount)) + '</p>'
     + L('POLICY NUMBER', d.policy_no)
     + L('CLAIM NUMBER', f.insurer_claim_no)
@@ -16382,22 +16387,37 @@ async function csrReport(claimId){
     +   C('Initial Case Date', _csrDate(d.created_at)) + C('Patient Name', d.insured_name)
     +   C('Patient Contact', d.insured_phone) + C('Complainant Name', d.complainant_name)
     +   C('Complainant Contact', d.complainant_phone) + C('Manager', d.manager)
-    +   C('Channel Partner', d.channel_partner) + C('Insurance company', d.insurer_name)
-    +   C('Claim Number', f.insurer_claim_no) + C('Claim Amount', _csrMoney(d.disputed_amount))
-    +   C('Case Rejection Reason', f.rejection_reason) + C('Handed to Level-2 by', d.handed_over_by)
+    +   C('Channel Partner', d.channel_partner) + C('Handed to Level-2 by', d.handed_over_by)
     + '</div>'
     + '<div class="rm"><b>Remarks :</b>' + (remarks ? '<ul>' + remarks + '</ul>' : ' —') + '</div>'
+    // THE CASE, IN THE ORDER OF PAGE 10. Same fifteen, same words, same sequence as the form
+    // that collects them - so a person reading the report and a person filling the gist are
+    // looking at the same list in the same order.
+    + '<div class="sec">Case details</div>'
+    + '<div class="two">'
+    +   C('Company Name', d.insurer_name)
+    +   C('Policy type', (d.claim_kind || '').replace(/_/g, ' '))
+    +   C('Policy No.', d.policy_no)
+    +   C('Policy inception Date', _csrDate(d.policy_inception_date))
+    +   C('Disputed Amount', _csrMoney(d.disputed_amount))
+    +   C('Name Of Hospital', f.hospital_name)
+    +   C('Date of Admission', _csrDate(f.admission_date))
+    +   C('Date Of Discharge', _csrDate(f.discharge_date))
+    +   C('Diagnosis', f.diagnosis)
+    +   C('Patient Complaint', f.patient_complaint)
+    +   C('Claim No.', f.insurer_claim_no)
+    +   C('Rejection Date', _csrDate(f.rejection_date))
+    +   C('Rejection Reason', f.rejection_reason)
+    +   C('Comment', f.gist_comments)
+    +   C('Assign To', d.handler)
+    + '</div>'
+    // What the payment stage records, kept apart from the case itself.
+    + '<div class="sec">Money</div>'
     + '<div class="two">'
     +   C('Consultation Charge', f.consultation_pct) + C('Processing Fees', d.processing_fee)
     +   C('Cheque Amount', f.cheque_amount) + C('Cheque Number', f.cheque_no)
     +   C('Bank Name', f.bank_name) + C('CF Amount', f.cf_amount)
     +   C('PF Transaction Number', f.pf_txn || f.review_pf_txn) + C('CF Transaction Number', f.cf_txn)
-    +   C('Medical Officer', f.approved_by) + C('Approved On', _csrDate(f.approved_on))
-    +   C('Claim Type', f.rejection_type) + C('Policy Number', d.policy_no)
-    +   C('Policy Inception', _csrDate(d.policy_inception_date)) + C('Hospital Name', f.hospital_name)
-    +   C('Admission Date', _csrDate(f.admission_date)) + C('Discharge Date', _csrDate(f.discharge_date))
-    +   C('Diagnosis', f.diagnosis) + C('Patient Complain', f.patient_complaint)
-    +   C('Rejection Reason', f.rejection_reason) + C('Rejection Date', _csrDate(f.rejection_date))
     + '</div>'
     + '<div class="dl"><div>Draft :</div><div>Lokpal Draft :</div></div>'
     + '<div class="dr"><div>' + _csrRichHTML(f.draft_en) + '</div><div>' + _csrRichHTML(f.draft_hi) + '</div></div>'
