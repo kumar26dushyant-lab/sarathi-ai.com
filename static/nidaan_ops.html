@@ -7708,8 +7708,19 @@ async function editClaimInfoModal(claimId){
   const typeOpts=opts.map(t=>'<option value="'+esc(t)+'"'+((c.claim_type||'')===t?' selected':'')+'>'+esc(t)+'</option>').join('');
   _editOverlay('Edit Claim #'+fmtClaimNum(claimId),
     _efInput(_insuredLabel(c.claim_type)+' name','ecName',c.insured_name)
-    +_efInput('Phone','ecPhone',c.insured_phone)
-    +_efInput('Email','ecEmail',c.insured_email)
+    +_efInput(_insuredLabel(c.claim_type)+' phone','ecPhone',c.insured_phone)
+    +_efInput(_insuredLabel(c.claim_type)+' email','ecEmail',c.insured_email)
+    // The complainant is often NOT the insured - a son handling his mother's claim - and theirs
+    // is the number we ring and the address the dashboard link goes to. None of it was editable
+    // anywhere (founder, 22 Sep).
+    +'<div style="border-top:1px solid var(--nd-border);margin:.7rem 0 .6rem;padding-top:.6rem;'
+    +'font-size:.72rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;'
+    +'color:var(--nd-text-faint)">The complainant \u2014 who we actually deal with</div>'
+    +_efInput('Complainant name','ecCName',c.complainant_name)
+    +_efInput('Complainant phone','ecCPhone',c.complainant_phone)
+    +_efInput('Complainant email','ecCEmail',c.complainant_email)
+    +'<div style="font-size:.72rem;color:var(--nd-text-faint);margin:-.35rem 0 .7rem">'
+    +'Putting an email here sends them their claim-page link straight away.</div>'
     +'<label style="display:block;margin-bottom:.6rem;font-size:.8rem;color:var(--nd-text-secondary)">Claim type<select id="ecType" style="width:100%;box-sizing:border-box;margin-top:.2rem;background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);padding:.5rem;border-radius:8px">'+typeOpts+'</select></label>'
     // The insurance company is picked from the one shared list (NidaanInsurers), not typed - the
     // same list the branch, dashboard and intake forms use. Typing it free-hand is how one company
@@ -7740,7 +7751,10 @@ async function saveClaimInfo(claimId){
   const g=id=>document.getElementById(id); const msg=g('ecMsg');
   const body={ insured_name:(g('ecName').value||'').trim(), insured_phone:(g('ecPhone').value||'').trim(),
     insured_email:(g('ecEmail').value||'').trim(), claim_type:g('ecType').value,
-    policy_no:(g('ecPolicy').value||'').trim() };
+    policy_no:(g('ecPolicy').value||'').trim(),
+    complainant_name:(g('ecCName').value||'').trim(),
+    complainant_phone:(g('ecCPhone').value||'').trim(),
+    complainant_email:(g('ecCEmail').value||'').trim() };
   // The company: from the picker, or the fallback box if the shared list could not load. If the
   // picker comes back empty while the claim already HAS a company, we send nothing rather than an
   // empty string - opening this form to fix a policy number must never quietly erase the insurer.
@@ -7753,7 +7767,17 @@ async function saveClaimInfo(claimId){
   const amt=(g('ecAmount').value||'').trim(); if(amt!=='') body.disputed_amount=parseInt(amt,10);
   if(msg){msg.style.color='#94a3b8';msg.textContent='Saving…';}
   const r=await API('/claims/'+claimId+'/info',{method:'PATCH',body:JSON.stringify(body)});
-  if(r.ok){ const ov=g('editEntityOv'); if(ov)ov.remove(); openClaimDrawer(claimId); try{ndUI.toast('Claim updated','success');}catch(e){} }
+  if(r.ok){
+    const d=await r.json().catch(()=>({}));
+    const ov=g('editEntityOv'); if(ov)ov.remove(); openClaimDrawer(claimId);
+    // If an email went out because of this edit, say so - and say so just as plainly if it did
+    // not, because "saved" and "they were told" are different things.
+    try{
+      if (d.emailed === true) ndUI.toast('Claim updated \u2014 their claim-page link has been emailed', 'success');
+      else if (d.emailed === false) ndUI.toast('Claim updated, but the link email did not go \u2014 use Re-issue on the claim', 'error');
+      else ndUI.toast('Claim updated','success');
+    }catch(e){}
+  }
   else { const d=await r.json().catch(()=>({})); if(msg){msg.style.color='#f87171';msg.textContent='✕ '+(d.detail||'Failed');} }
 }
 async function editAdvisorModal(claimId){

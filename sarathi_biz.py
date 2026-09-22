@@ -1792,16 +1792,30 @@ async def ops_claim_portal_preview(claim_id: int, request: Request):
 
 @app.post("/nidaan/ops/api/claims/{claim_id}/portal/ensure")
 async def ops_claim_portal_ensure(claim_id: int, request: Request):
-    """Create the complainant portal + magic-link for this claim (idempotent) and return the link so a
-    staffer can send/re-send it. Does NOT itself email yet (send wiring lands with the L2 trigger)."""
+    """Create the complainant portal link AND email it to them. Returns the link either way.
+
+    This used to create the link, call mark_link_sent(), and email nobody - so the screen
+    reported "sent 2x" for two emails that were never written (founder, 22 Sep: "reissuing a
+    dashboard link ... currently failing"). A counter that says sent when nothing went is worse
+    than no counter.
+
+    The link is still returned when there is no email on file, because copying it into WhatsApp
+    is a real thing staff do - but that case now says so instead of claiming it was sent.
+    """
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     staff = _require_staff(request, "sub_super_admin")
     p = await claimant.ensure_portal(claim_id, with_token=True)
-    await claimant.mark_link_sent(claim_id)
-    await _ops_audit(request, "claimant_portal.link", "claim", str(claim_id), "portal link issued")
     url = f"{_nidaan_origin(request)}/nidaan/claim/magic?token={p.get('access_token')}"
-    return {"ok": True, "link": url, "state": await claimant.portal_state(claim_id)}
+    # send_greeting_email marks the link sent ITSELF, and only when the send succeeded. Nothing
+    # here may mark it sent, or we are back where we started.
+    res = await claimant.send_greeting_email(claim_id, force=True)
+    emailed = bool(res.get("ok"))
+    why = "" if emailed else (res.get("reason") or "send_failed")
+    await _ops_audit(request, "claimant_portal.link", "claim", str(claim_id),
+                     f"portal link issued; emailed={emailed}" + (f" ({why})" if why else ""))
+    return {"ok": True, "link": url, "emailed": emailed, "reason": why,
+            "state": await claimant.portal_state(claim_id)}
 
 
 @app.get("/nidaan/ops/api/claims/{claim_id}/consent-proof")
@@ -11065,6 +11079,11 @@ class OpsClaimInfoUpdate(BaseModel):
     insurer_name: Optional[str] = Field(None, max_length=120)
     policy_no: Optional[str] = Field(None, max_length=80)
     disputed_amount: Optional[int] = Field(None, ge=0, le=100000000)
+    # The complainant is often not the insured - a son handling his mother's claim - and theirs
+    # is the number we ring and the address the dashboard link goes to (founder, 22 Sep).
+    complainant_name: Optional[str] = Field(None, max_length=120)
+    complainant_phone: Optional[str] = Field(None, max_length=15)
+    complainant_email: Optional[str] = Field(None, max_length=120)
 
 
 @app.patch("/nidaan/ops/api/claims/{claim_id}/info")
@@ -11090,11 +11109,40 @@ async def ops_update_claim_info(claim_id: int, body: OpsClaimInfoUpdate, request
         for k, old in zip(hit, cur or [None] * len(hit)):
             if str(old if old is not None else "").strip().lower() != str(data[k]).strip().lower():
                 raise HTTPException(400, _bk.lock_message(locks[k]))
+    # What the claim could be reached on BEFORE the edit, so we can tell whether this is the
+    # moment it became reachable at all.
+    had_email = ""
+    try:
+        import aiosqlite as _aioc
+        async with _aioc.connect(nidaan.DB_PATH) as c:
+            r0 = await (await c.execute(
+                "SELECT COALESCE(complainant_email, insured_email, '') FROM nidaan_claims "
+                "WHERE claim_id=?", (claim_id,))).fetchone()
+        had_email = ((r0[0] if r0 else "") or "").strip().lower()
+    except Exception:
+        had_email = ""
+
     if not await nidaan.update_claim_info(claim_id, **data):
         raise HTTPException(404, "Claim not found or nothing changed")
     await _ops_audit(request, "claim.info_edit", "claim", str(claim_id),
                      ", ".join(f"{k}" for k in data))
-    return {"ok": True}
+
+    # PUTTING AN EMAIL ON A CLAIM IS THE MOMENT IT BECOMES REACHABLE, and it is exactly when
+    # somebody expects the dashboard link to arrive (founder, 22 Sep). Sent only when the address
+    # actually changed, so correcting a policy number does not re-send it; and never allowed to
+    # fail the edit, because a saved correction must not be undone by a mail server.
+    emailed = None
+    new_email = ((data.get("complainant_email") or data.get("insured_email") or "")).strip().lower()
+    if new_email and new_email != had_email:
+        try:
+            res = await claimant.send_greeting_email(claim_id, force=True)
+            emailed = bool(res.get("ok"))
+            await _ops_audit(request, "claimant_portal.email", "claim", str(claim_id),
+                             f"link sent to the new address; sent={emailed}")
+        except Exception as e:  # noqa: BLE001
+            logger.warning("portal email after info edit failed claim=%s: %s", claim_id, e)
+            emailed = False
+    return {"ok": True, "emailed": emailed}
 
 
 class OpsAdvisorUpdate(BaseModel):

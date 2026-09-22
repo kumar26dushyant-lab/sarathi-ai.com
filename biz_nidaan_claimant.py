@@ -296,12 +296,26 @@ def _greeting_email_html(name: str, link: str) -> str:
 
 
 async def _claim_contact(claim_id: int) -> Optional[dict]:
+    """Who to write to about this claim, and what to call them.
+
+    The COMPLAINANT first. They are the one who opens the dashboard, sends the documents and
+    accepts the fee terms - often a different person from the insured, and on some claims the
+    only one with an email address at all. Falling back to the insured covers the common case
+    where they are the same person.
+    """
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         row = await (await conn.execute(
-            "SELECT claim_id, insured_name, insured_email, account_id FROM nidaan_claims "
-            "WHERE claim_id=?", (claim_id,))).fetchone()
-    return dict(row) if row else None
+            "SELECT claim_id, insured_name, insured_email, complainant_name, complainant_email, "
+            "       account_id FROM nidaan_claims WHERE claim_id=?", (claim_id,))).fetchone()
+    if not row:
+        return None
+    d = dict(row)
+    d["to_email"] = ((d.get("complainant_email") or "").strip()
+                     or (d.get("insured_email") or "").strip())
+    d["to_name"] = ((d.get("complainant_name") or "").strip()
+                    or (d.get("insured_name") or "").strip())
+    return d
 
 
 async def send_greeting_email(claim_id: int, force: bool = False) -> dict:
@@ -313,7 +327,8 @@ async def send_greeting_email(claim_id: int, force: bool = False) -> dict:
     c = await _claim_contact(claim_id)
     if not c:
         return {"ok": False, "reason": "claim_not_found"}
-    email = (c.get("insured_email") or "").strip()
+    # The complainant's address if there is one, the insured's otherwise - see _claim_contact.
+    email = (c.get("to_email") or "").strip()
     if not email:
         return {"ok": False, "reason": "no_claimant_email"}
     p = await ensure_portal(claim_id, with_token=True)
@@ -321,7 +336,11 @@ async def send_greeting_email(claim_id: int, force: bool = False) -> dict:
     sent = False
     try:
         import biz_email as _mail
-        html = _mail._wrap_nidaan_template("Your claim dashboard", _greeting_email_html(c.get("insured_name") or "", link))
+        # Addressed to whoever we are writing TO. A letter addressed to the patient but sent to
+        # their son reads as a letter about somebody else.
+        html = _mail._wrap_nidaan_template(
+            "Your claim dashboard",
+            _greeting_email_html(c.get("to_name") or c.get("insured_name") or "", link))
         sent = await _mail.send_email(
             email, "आपका दावा डैशबोर्ड · Your claim dashboard — NidaanPartner", html,
             from_name="Nidaan Partner")
@@ -336,7 +355,7 @@ async def send_greeting_email(claim_id: int, force: bool = False) -> dict:
         await _notif.notify_claim_watchers(
             claim_id,
             "Complainant portal link sent",
-            f"The complainant dashboard link was sent to {c.get('insured_name') or 'the policyholder'} "
+            f"The complainant dashboard link was sent to {c.get('to_name') or 'the policyholder'} "
             f"({email}) for claim #{claim_id}.",
             event_key="claim.watch")
     except Exception as e:  # noqa: BLE001

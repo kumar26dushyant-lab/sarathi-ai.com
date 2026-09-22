@@ -6014,10 +6014,24 @@ async def update_account_profile(account_id: int, owner_name: str = None,
 
 async def update_claim_info(claim_id: int, *, insured_name=None, insured_phone=None,
                             insured_email=None, claim_type=None, insurer_name=None,
-                            policy_no=None, disputed_amount=None) -> bool:
-    """Super-admin/admin edit of a claim's core details (name/phone/email/type/insurer/policy/
-    disputed amount). Only the provided fields are changed. Names are stored uppercase."""
+                            policy_no=None, disputed_amount=None,
+                            complainant_name=None, complainant_phone=None,
+                            complainant_email=None) -> bool:
+    """Super-admin/admin edit of a claim's core details. Only the provided fields are changed.
+    Names are stored uppercase.
+
+    The COMPLAINANT's own name, phone and email are here too (founder, 22 Sep). They are often a
+    different person from the insured - a son handling his mother's claim - and theirs is the
+    number we actually ring and the address the dashboard link goes to. They were editable
+    nowhere.
+    """
     fields, vals = [], []
+    if complainant_name is not None:
+        fields.append("complainant_name=?"); vals.append(_capname(complainant_name))
+    if complainant_phone is not None:
+        fields.append("complainant_phone=?"); vals.append((complainant_phone or "").strip())
+    if complainant_email is not None:
+        fields.append("complainant_email=?"); vals.append((complainant_email or "").strip().lower())
     if insured_name is not None:
         fields.append("insured_name=?"); vals.append(_capname(insured_name))
     if insured_phone is not None:

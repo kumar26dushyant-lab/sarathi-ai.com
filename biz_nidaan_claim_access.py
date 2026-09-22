@@ -51,6 +51,12 @@ DB_PATH = db.DB_PATH
 
 CODE_DIGITS = 6
 CODE_TTL_MIN = 10          # long enough to switch apps and read a message
+
+
+def _claim_page_url() -> str:
+    """Where somebody types the code. One place, so the email and the site cannot disagree."""
+    import os as _os
+    return _os.getenv("NIDAAN_PUBLIC_BASE", "https://nidaanpartner.com").rstrip("/") + "/nidaan/claim"
 MAX_ATTEMPTS = 5           # then the challenge is dead and they ask for a new code
 MAX_CODES_PER_HOUR = 5     # so the link cannot be used to spam somebody's phone
 SESSION_MIN = 720          # 12 hours - one sitting, not a standing key
@@ -286,10 +292,20 @@ async def _send(kind: str, dest: str, code: str, claim: dict, lang: str) -> dict
             '<p style="font-size:30px;font-weight:700;letter-spacing:.18em;margin:.4rem 0">%s</p>'
             '<p>It expires in %d minutes. <b>We will never ask you for this code</b> — not on '
             'the phone, not on WhatsApp.</p>'
+            # A code with nowhere to type it is six digits somebody has to remember while they go
+            # looking for the site - and it expires in ten minutes. The page is named here.
+            # Deliberately NOT a link that signs them in: the code is the security, and a link
+            # that skipped it would make the code decoration.
+            '<p style="margin:18px 0">'
+            '<a href="%s" style="background:#0891b2;color:#fff;text-decoration:none;'
+            'padding:11px 20px;border-radius:8px;font-weight:700;display:inline-block">'
+            'अपना क्लेम पेज खोलें · Open my claim page</a></p>'
+            '<p style="color:#555;font-size:13px">If the button does not work, open this address '
+            'and type the code above: <br><span style="color:#0891b2">%s</span></p>'
             '<p style="color:#555;font-size:13px">If you did not try to open your claim page, you '
             'can ignore this email.</p>'
             '<p>— Team NidaanPartner</p></div>'
-        ) % (name or "ji", code, CODE_TTL_MIN)
+        ) % (name or "ji", code, CODE_TTL_MIN, _claim_page_url(), _claim_page_url())
         # delivery_critical, like every other code we send: somebody is on a screen waiting for
         # it. This was the one code path without it — the last-resort retry never ran here.
         _t: dict = {}
