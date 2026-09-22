@@ -12631,7 +12631,19 @@ async def ops_health(request: Request):
     # Brevo's balance is checked in _subsystem_checks (so the watchdog sees it too) — here we
     # only say whether it is wired up at all.
     _chk("Email (Brevo)", bool(os.getenv("BREVO_API_KEY", "").strip()), "API key configured")
-    _chk("Payments (Razorpay)", bool(os.getenv("RAZORPAY_KEY_ID", "").strip()), "Keys configured")
+    # NIDAAN's own Razorpay account, not Sarathi's. This line used to read RAZORPAY_KEY_ID on
+    # Nidaan's own health page, so it went green on the strength of the other product's keys.
+    _nrz = os.getenv("NIDAAN_RAZORPAY_KEY_ID", "").strip()
+    _srz = os.getenv("RAZORPAY_KEY_ID", "").strip()
+    if _nrz and _nrz != _srz:
+        _chk("Payments (Razorpay)", True,
+             "Nidaan's own account · %s" % ("TEST MODE" if _nrz.startswith("rzp_test_") else "live"))
+    elif _nrz or _srz:
+        # Falling back to the shared keys. Payments work; the money lands in the wrong account.
+        _chk("Payments (Razorpay)", False,
+             "Running on Sarathi's Razorpay account — set NIDAAN_RAZORPAY_KEY_ID/SECRET")
+    else:
+        _chk("Payments (Razorpay)", False, "Not configured — no keys")
     # Telegram (@NidaanOpsBot) — internal-ops notification channel. Reachable via getMe
     # (same Bot API the send path uses), delivery enabled, and staff actually linked.
     try:
@@ -28648,6 +28660,19 @@ async def main():
         logger.info("✅ Razorpay ready (plans created)")
     else:
         logger.warning("⚠️ Razorpay not configured — payments disabled")
+    # Which account is NidaanPartner taking money into? The fallback to the shared keys keeps
+    # payments alive when the Nidaan keys are missing, which is right - but paying into the other
+    # product's account is not a thing that should ever happen quietly.
+    _nrz_id = os.getenv("NIDAAN_RAZORPAY_KEY_ID", "").strip()
+    _srz_id = os.getenv("RAZORPAY_KEY_ID", "").strip()
+    if _nrz_id and _nrz_id != _srz_id:
+        logger.info("💳 Nidaan Razorpay: its own account (%s...)", _nrz_id[:12])
+    elif _nrz_id or _srz_id:
+        logger.error("🚨 Nidaan Razorpay is FALLING BACK to Sarathi's account — "
+                     "Nidaan payments will settle to the wrong bank. "
+                     "Set NIDAAN_RAZORPAY_KEY_ID and NIDAAN_RAZORPAY_KEY_SECRET in biz.env.")
+    else:
+        logger.warning("⚠️ Nidaan Razorpay: no keys at all — Nidaan payments disabled")
 
     # Step 4: Start Telegram bots (master + per-tenant) — SINGLETONS.
     #   Use webhook mode in production (HTTPS), polling in local dev.

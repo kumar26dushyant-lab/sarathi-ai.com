@@ -1,5 +1,47 @@
 # Staff Announcement Drafts
 
+## 2026-09-22 (2) — Buttons that did nothing are working again
+
+**Title (EN):**
+🔧 Some buttons were broken — they work now · 📨 Asking the complainant now asks you first
+
+**Details (EN):**
+• **If a button did nothing when you pressed it, it was us, not you.** A fault in the page
+stopped several parts of the ops screen from working at all. It is fixed. These work again:
+  – **📨 Ask the complainant for what is missing** (in the Documents window)
+  – the **Case Board**
+  – the **WhatsApp inbox**
+  If you gave up on any of these in the last few days, please try again.
+
+• **Asking the complainant now asks you first.** Pressing 📨 opens a question: *"Nothing
+reaches the complainant yet."* Press **Open the request** to see the message and change it, or
+**Go back** to return to the documents window. **Nothing has ever gone out on one press** — you
+still read the message back and press *"Yes — send it"* before anything leaves. Your name is
+recorded on whatever goes.
+
+• **NP-84 is back in L2 Claims.** It had gone into Live Cases by mistake and has been pulled
+back. Nothing on the claim was lost.
+
+**Title (HI):**
+🔧 कुछ बटन काम नहीं कर रहे थे — अब ठीक हैं · 📨 शिकायतकर्ता से माँगने से पहले अब पूछा जाएगा
+
+**Details (HI):**
+• **अगर कोई बटन दबाने पर कुछ नहीं हो रहा था, तो गलती आपकी नहीं थी — हमारी थी।** पेज की एक खराबी
+से ops स्क्रीन के कई हिस्से बिल्कुल काम नहीं कर रहे थे। अब ठीक हो गया है। ये फिर से चल रहे हैं:
+  – **📨 Ask the complainant for what is missing** (Documents विंडो में)
+  – **Case Board**
+  – **WhatsApp inbox**
+  पिछले कुछ दिनों में अगर आपने इनमें से कोई छोड़ दिया था, तो कृपया दोबारा कोशिश कीजिए।
+
+• **अब 📨 दबाने पर पहले एक सवाल आएगा:** *"शिकायतकर्ता तक अभी कुछ नहीं जा रहा।"* संदेश देखने
+और बदलने के लिए **Open the request** दबाइए, या **Go back** दबाकर documents विंडो पर लौट जाइए।
+**एक दबाने से कभी कुछ नहीं गया है** — भेजने से पहले आप संदेश पढ़ते हैं और *"Yes — send it"*
+दबाते हैं। जो भी जाता है, उस पर आपका नाम दर्ज होता है।
+
+• **NP-84 वापस L2 Claims में है।** वह गलती से Live Cases में चला गया था, वापस ले लिया गया है।
+क्लेम का कोई डेटा नहीं गया।
+
+
 ## 2026-09-22 — The Live Cases form, and where things are corrected
 
 **Title (EN):**

@@ -2237,6 +2237,28 @@ function _gstConfirm(gst, planLabel){
     document.getElementById('gstcxProceed').onclick=function(){ ov.remove(); resolve(true); };
   });
 }
+// A way through, for somebody the checkout sheet has failed. Razorpay's own hosted page for
+// this exact subscription: it opens without our JavaScript, it survives being copied into
+// another browser, and it can be finished on a different phone.
+//
+// It is NOT a way around account settings - the hosted page offers the same payment methods the
+// sheet does, because it is the same Razorpay account. It is for a screen that will not work.
+function _subPayFallback(el, url, isHi){
+  if (!el || !url) return;
+  const safe = String(url).replace(/"/g, '&quot;');
+  el.insertAdjacentHTML('beforeend',
+    '<div style="margin-top:.6rem;padding:.6rem .7rem;border:1px solid var(--nd-border);'
+  + 'border-radius:9px;background:var(--nd-bg-surface);color:var(--nd-text-secondary);'
+  + 'font-size:.83rem;line-height:1.5">'
+  + (isHi ? '<b>पेमेंट पेज नहीं खुला?</b><br>इस लिंक से सीधे पेमेंट कीजिए \u2014 किसी भी फ़ोन या '
+          + 'ब्राउज़र पर चलेगा:'
+          : '<b>Payment page did not open?</b><br>Pay straight from this link \u2014 it works on '
+          + 'any phone or browser:')
+  + '<br><a href="' + safe + '" target="_blank" rel="noopener" '
+  + 'style="color:var(--nd-cyan-text,#0891b2);font-weight:700;word-break:break-all">' + safe
+  + '</a></div>');
+}
+
 async function doSubscribe() {
   if (!_selectedPlan) return;
   // All subscription plans are RECURRING (auto-renew) — quarterly or yearly.
@@ -2267,6 +2289,7 @@ async function doSubscribe() {
 
       const _isAnnual = _selectedPlan.endsWith('_annual');
       const planLabel = _selectedPlan.replace('_annual', '').charAt(0).toUpperCase() + _selectedPlan.replace('_annual', '').slice(1);
+      const _payUrl = data.short_url || '';   // the way through if the sheet fails them
       closeSubscribeModal();
       const rzpSub = new Razorpay({
         key: data.razorpay_key_id,
@@ -2280,7 +2303,18 @@ async function doSubscribe() {
           contact: _meCache ? _meCache.phone : '',
           name: _meCache ? _meCache.owner_name : '',
         },
-        modal: { backdropclose: false, escape: false, ondismiss: function() { btn.disabled = false; try { if (window.NidaanTrack) NidaanTrack.abandon(); } catch(e){} } },
+        modal: { backdropclose: false, escape: false, ondismiss: function() {
+          btn.disabled = false;
+          try { if (window.NidaanTrack) NidaanTrack.abandon(); } catch(e){}
+          // Closing the sheet and changing your mind look identical from here, so this offers
+          // the way through rather than assuming which one it was.
+          if (_payUrl){
+            msg.className = 'msg'; msg.style.color = 'var(--nd-text-secondary)';
+            msg.textContent = isHi ? 'भुगतान पूरा नहीं हुआ \u2014 आपसे कोई राशि नहीं ली गई।'
+                                   : 'Payment was not completed \u2014 you were NOT charged.';
+            _subPayFallback(msg, _payUrl, isHi);
+          }
+        } },
         handler: async function(response) {
           try { if (window.NidaanTrack) NidaanTrack.completeFlow(); } catch(e){}
           msg.className = 'msg ok';
@@ -2321,9 +2355,20 @@ async function doSubscribe() {
         msg.className = 'msg err';
         msg.textContent = isHi ? 'भुगतान पूरा नहीं हुआ — आपसे कोई राशि नहीं ली गई। कृपया दोबारा कोशिश करें।'
                                : 'Payment could not be completed — you were NOT charged. Please try again.';
+        _subPayFallback(msg, _payUrl, isHi);
         btn.disabled = false;
       });
-      rzpSub.open();
+      // If the sheet cannot even open - a blocked script, an in-app browser - "try again" would
+      // do the same nothing. The link is the only thing left that works.
+      try {
+        rzpSub.open();
+      } catch(_e) {
+        msg.className = 'msg err';
+        msg.textContent = isHi ? 'पेमेंट विंडो नहीं खुल पाई।'
+                               : 'The payment window could not open.';
+        _subPayFallback(msg, _payUrl, isHi);
+        btn.disabled = false;
+      }
     } else {
       // ── One-time Order flow (existing, also used for annual plans) ─────────
       const res = await api('/nidaan/api/subscribe', {

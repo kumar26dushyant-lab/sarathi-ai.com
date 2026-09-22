@@ -5300,7 +5300,7 @@ async def create_nidaan_recurring_subscription(
     Create a Razorpay recurring subscription for any Nidaan plan — quarterly
     (period=monthly interval=3) OR annual (period=yearly interval=1). Every
     subscription is recurring; only the ₹499 single review is a one-time order.
-    Returns {subscription_id, razorpay_key_id, plan, amount_display, ...}
+    Returns {subscription_id, short_url, razorpay_key_id, plan, amount_display, ...}
     """
     import httpx, time
     info = NIDAAN_RAZORPAY_PLANS.get(plan)
@@ -5399,6 +5399,9 @@ async def create_nidaan_recurring_subscription(
                         account_id, plan, result["id"])
             return {
                 "subscription_id": result["id"],
+                # Razorpay's own hosted page for THIS subscription. The fallback for anybody the
+                # checkout sheet fails - a blocked script, an in-app browser, another device.
+                "short_url": result.get("short_url", ""),
                 "plan": plan,
                 "amount_display": (f"₹{_amt_paise // 100:,} (incl. {int(_gcfg['rate'])}% GST)" if _gsuf else f"₹{_base_paise // 100:,}"),
                 "razorpay_key_id": rzp_key_id,

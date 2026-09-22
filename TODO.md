@@ -87,6 +87,78 @@ its bucket.
     and the code email now names the page, so somebody who removed two of four files can return,
     sign in with a code, and add more.
 
+### ✅ SHIPPED 2026-09-22 (4) — one dead name, and several features that came back
+
+**🚨 The big one: the ops page threw a ReferenceError on EVERY load, and had been doing it
+for days.** `csrFocus()` was deleted on 22 Sep - it jumped to a Live Cases field that is not on
+the escalation screen, so it had never worked - but the line that handed it to window stayed:
+
+    window.escQuery = escQuery; window.csrFocus = csrFocus;
+
+Script evaluation reaches that line, throws, and **everything below it in the block never runs**.
+`function` declarations are hoisted; `let` and `const` are not. So these stayed in the temporal
+dead zone for the life of every page load:
+
+  - `_dwClaim` and friends → **"Ask the complainant for what is missing" did nothing.** That is
+    the button in the founder's screenshot. Its first line is `_dwClaim = claimId`, which threw
+    `Cannot access '_dwClaim' before initialization` before anything could open.
+  - `_cbState`, `_cbBusy`, `_cbLast`, `_cbSheet`, `CB_BUCKETS` → the **Case Board**
+  - `_waiSel`, `_WAI_SENDER`, `_waiOnDuty`, `_waiMayReply` → the **WhatsApp inbox**
+  - `_lineStatsAt`, `_lineStatsData`, `_qrPollTimer`
+
+**🚨 And the check that exists to catch exactly this had been blind for months.**
+`npm run check:pages` missed it twice over:
+  1. it skips any inline block containing a `{{NAME}}` placeholder, because an unrendered
+     server-side template is not JavaScript. But the pattern also matches **`{{1}}`**, and
+     nidaan_ops.html describes a WhatsApp template - *"a single {{1}}=name variable"* - inside an
+     HTML title attribute. On that one word it skipped the page's **entire 18,500-line script
+     block** while printing *"nothing reported"*.
+  2. it harvests `window.foo = ...` as a global, so `window.csrFocus = csrFocus;` **registered
+     the broken name as valid and then declared its own line fine.**
+
+  Both closed. A placeholder now only counts if the block also fails to COMPILE, and inside the
+  page's own code `window.foo = foo;` is treated as an export, not a declaration - it is a
+  separate `.js` file where that line is real evidence. Re-run proves it: the checker now reports
+  `line 16614 no-undef 'csrFocus' is not defined` on the old file, and nothing on the new one.
+
+  **`uitest/ask-complainant.js`** is the regression guard: it loads the real page over a real
+  HTTP origin and fails if **anything at all** is thrown while loading, then walks the journey.
+
+**✅ A confirmation before the complainant is asked** (founder, 22 Sep: *"if accidently anyone
+clicked it then it goes to customer unnecessary"*). Nothing ever went out on one tap - the
+request window has its own read-back gate and the server refuses a send without the checksum that
+screen was issued. But nobody on the team had seen it work, so the button now asks, and the
+asking is where the reassurance goes: *"Nothing reaches the complainant yet."* **Go back** returns
+to the documents window, so a stray tap costs one tap and not your place.
+
+**✅ Razorpay: the two products can no longer share an account in silence (A, B, C).**
+  - Checked first, and the answer is good: `NIDAAN_RAZORPAY_KEY_ID` **is** set on the server and
+    is **not** the same as `RAZORPAY_KEY_ID`. NidaanPartner and Sarathi are on separate accounts.
+  - **A.** But the fallback that would hide it was silent, and the check for it was pointed at
+    the wrong product: Nidaan's own ops health page read **`RAZORPAY_KEY_ID`** - Sarathi's key -
+    so Nidaan's payments could be entirely unconfigured and the light would still be green. It
+    now reads Nidaan's, and says *"Running on Sarathi's Razorpay account"* if the fallback is
+    ever live. Startup logs the same.
+  - **B.** Razorpay returns a `short_url` with every subscription - its own hosted page for that
+    subscription. Sarathi's code has always kept it; Nidaan's **threw it away**.
+  - **C.** So somebody whose checkout sheet fails - a blocked script, an in-app WhatsApp or
+    Instagram browser, a UPI app-switch that kills the tab - now gets that link, in Hindi or
+    English, when they close the sheet, when the payment fails, and if the sheet cannot open at
+    all. **Not** a way around account settings: the hosted page is the same account and offers
+    the same methods. It is a way through a broken screen.
+  - **`deploy/verify-razorpay-split.py`** is re-runnable and fails the moment a Nidaan route
+    starts reading Sarathi's keys.
+
+**✅ NP-84 pulled back out of Level-2** (founder: moved to Live Cases in error). Done through
+`undo_handover()`, not with SQL - it checks that no Level-2 work has started, demands a reason,
+and writes the reason on the claim's own log. Rehearsed on a copy of the live database first.
+State now: `pipeline_stage` empty, `l2_handover_at` null, back on the **L2 Claims** list. The
+documents tick (22 Sep 07:57) was deliberately left alone - "every paper is in" is a separate
+fact, untickable by hand if it was also premature.
+
+  ⚠️ **There is no button for this.** `POST /cases/{id}/handover/undo` exists and is
+  super-admin only, but nothing in the ops page calls it. Worth adding if this happens again.
+
 ### ✅ THE 16-ITEM LIST IS CLOSED (22 Sep)
 #1 · #2 · #3 · #4 · #5 · #6 · #7 · #8 · #9 · #10 · #11 · #12 · #13 · #14 · #15 · #16, and the Live
 bucket sequencing. Four batches, each shipped and verified against a copy of the live database

@@ -15642,7 +15642,7 @@ async function docsRender(msg, ok){
     +   '</div>'
     +   '<div class="dcbox"><div class="dch">The checklist · ' + got.length + ' of ' + list.length + '</div>'
     +     checkRows
-    +     '<button class="l2mv g" style="margin-top:.5rem" onclick="closeModal();dwOpen(' + _dcClaim + ')">'
+    +     '<button class="l2mv g" style="margin-top:.5rem" onclick="dwAsk(' + _dcClaim + ')">'
     +       '📨 Ask the complainant for what is missing</button>'
     +     '<button class="l2mv g" style="margin-top:.35rem" onclick="schOpen(' + _dcClaim + ')">'
     +       '⏰ Remind them at a better time…</button>'
@@ -16611,7 +16611,9 @@ async function escQuery(claimId){
         }
      }}], true);
 }
-window.escQuery = escQuery; window.csrFocus = csrFocus;
+// csrFocus() was removed with the jump-to-field button above; exporting a name that no
+// longer exists threw on load and killed every declaration below this line.
+window.escQuery = escQuery;
 
 function _csrCollect(fields){
   const core = {}, flds = {};
@@ -16959,6 +16961,21 @@ function _dwStyles(){
     font-size:.82rem;color:var(--nd-text-secondary);margin:.3rem 0}
   @media (max-width:900px){ .dwcols{grid-template-columns:1fr} }`;
   document.head.appendChild(st);
+}
+
+// Nothing leaves this building on one tap. The request window this opens has its own read-back
+// gate before anything is sent, but the person tapping cannot see that yet - so it is said here.
+// Go back returns to the documents window: a stray tap costs one tap, not your place.
+function dwAsk(claimId){
+  openModal('Ask the complainant for the missing documents?',
+      '<div style="font-size:.88rem;color:var(--nd-text-secondary);line-height:1.55">'
+    + 'This opens the request for <b>NP-' + claimId + '</b> so you can see exactly what will be '
+    + 'asked for, change the wording, and choose WhatsApp, email or both.'
+    + '<br><br><b>Nothing reaches the complainant yet.</b> After this you still read the message '
+    + 'back and press \u201cYes \u2014 send it\u201d. Your name is recorded on whatever goes.'
+    + '</div>',
+    [{label:'Go back', cls:'btn-ghost', fn:function(){ docsOpen(claimId); }},
+     {label:'Open the request', cls:'btn-primary', fn:function(){ dwOpen(claimId); }}], false);
 }
 
 async function dwOpen(claimId){

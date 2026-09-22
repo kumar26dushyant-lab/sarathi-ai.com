@@ -30,7 +30,18 @@ function externalGlobals(html) {
   const harvest = (code, alsoFunctions) => {
     // `window.foo = ...` really does create a global called foo. no-undef does not know that -
     // it only tracks declarations - so every page using that pattern would report itself broken.
-    for (const g of code.matchAll(/\b(?:window|root|globalThis|self)\.([A-Za-z_$][\w$]*)\s*=/g)) {
+    //
+    // With one exception, and it is the exception that matters: `window.foo = foo;` does not
+    // CREATE a name, it EXPORTS one. Registering it as a global made the checker declare the
+    // read on that very line to be fine - which is how `window.csrFocus = csrFocus;` sat in
+    // nidaan_ops.html throwing a ReferenceError on every page load while this check reported
+    // nothing. A bare identifier on the right therefore registers nothing, and no-undef is left
+    // to say whether that name exists.
+    for (const g of code.matchAll(
+      /\b(?:window|root|globalThis|self)\.([A-Za-z_$][\w$]*)\s*=\s*([^=;\n]*)/g)) {
+      // Only inside the page's own blocks. A separate .js file declares the name in a scope
+      // this linter never sees, so there `window.ndUI = ndUI;` IS the evidence it exists.
+      if (!alsoFunctions && /^[A-Za-z_$][\w$]*\s*$/.test(g[2])) continue;
       found[g[1]] = "readonly";
     }
     // A script file wrapped in an IIFE hands its helpers out under whatever name the wrapper's
@@ -57,6 +68,17 @@ function externalGlobals(html) {
   return found;
 }
 
+// Does this block parse as JavaScript? new Function compiles the body and runs none of it.
+// Used only to tell an unrendered template apart from real code that happens to mention one.
+function compiles(code) {
+  try {
+    new Function(code);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
 for (const file of files) {
   const src = readFileSync(file, "utf8");
   const eslint = new ESLint({
@@ -77,7 +99,14 @@ for (const file of files) {
     // A server-side template is not JavaScript until it has been rendered: `bio: {{BIO_JSON}}`
     // is a syntax error here and correct in the file. Reporting it teaches people to ignore
     // this check, which is the one thing it must never do.
-    if (/\{\{[A-Z0-9_]+\}\}/.test(m[2])) {
+    //
+    // But MENTIONING a placeholder is not being one. nidaan_ops.html describes a WhatsApp
+    // template - "a single {{1}}=name variable" - inside an HTML title attribute, and on that
+    // word alone this check used to skip the page's entire 18,500-line script block while
+    // printing "nothing reported". It then missed a real ReferenceError that killed every
+    // feature below it. So the placeholder alone decides nothing: the block is skipped only if
+    // it ALSO fails to compile, which is what an unrendered template actually does.
+    if (/\{\{[A-Z0-9_]+\}\}/.test(m[2]) && !compiles(m[2])) {
       console.log(`  (skipping a templated script block in ${file} - {{...}} placeholders)`);
       continue;
     }

@@ -7712,3 +7712,29 @@ The migration is the part to remember: `ensure_claim_documents_table()` runs on 
 the backfill had to be guarded to the moment the column is added. Unguarded, saving one file
 stamped every file somebody was still choosing - the feature would have looked like it worked
 and done nothing.
+
+
+**The dead name, 22 Sep.** `window.csrFocus = csrFocus;` outlived the function it exported. A
+top-level ReferenceError during script evaluation kills everything BELOW it in the block, and
+`let`/`const` are not hoisted - so `_dwClaim`, `_cbState`, `CB_BUCKETS`, `_waiSel` and the rest
+sat in the temporal dead zone on every page load. Symptom: buttons that do nothing. This is the
+second outage in a week whose whole signature was "pressed it, nothing happened", and the first
+one (`to` vs `toKey` in l2Move) had the same shape.
+
+The lesson is about the CHECK, not the line. `npm run check:pages` missed it twice: it skipped
+the page's entire main block because a tooltip mentions `{{1}}`, and it harvests `window.foo = ...`
+as a global so the broken line vouched for itself. A placeholder now only counts if the block
+also fails to compile, and inside the page's own code an export is not a declaration.
+`uitest/ask-complainant.js` now fails on ANY throw during page load - that assertion is worth
+more than everything else in the file.
+
+**Razorpay, 22 Sep.** Confirmed on the server: `NIDAAN_RAZORPAY_KEY_ID` is set and differs from
+`RAZORPAY_KEY_ID`, so the two products are on separate accounts. The `or`-fallback in
+`_nidaan_rzp_id()` stays - without it a rotated key stops Nidaan taking money at all - but it is
+no longer silent: the ops health page reads Nidaan's key (it read Sarathi's, on Nidaan's own
+page) and startup logs which account is in use. `deploy/verify-razorpay-split.py` keeps the two
+sides apart in code.
+
+A subscription's `short_url` is now kept and handed to the browser, and offered to anybody the
+checkout sheet fails. It is the same Razorpay account, so it does not add payment methods - it is
+a way through a broken screen, not around account settings.
