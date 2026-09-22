@@ -1300,6 +1300,90 @@ def _nidaan_retry_email_html(kind: str, rupees: int, url: str, why_html: str) ->
             f'<p style="font-size:13px;color:#6b7280">— Team Nidaan Partner</p></div>')
 
 
+async def _retry_contact(pe: dict, notes: dict, kind: str = "") -> tuple:
+    """Who do we write to about a payment that just failed? Returns (email, name).
+
+    THIS HAD NEVER FOUND ANYBODY. 27 failures since 17 Aug 2026, zero retry links sent. The old
+    version looked for `account_id` / `acct_id` in the order's notes, and not one of our five
+    products writes either key - while two carry an address outright and three carry an id that
+    leads to one. A UPI payment carries no email on the Razorpay entity, so the notes were the
+    only route, and the only route was looking in the wrong place.
+
+    What each product actually writes:
+        nidaan_claim_499    claim_id
+        nidaan_branch_l2    claim_id, branch
+        nidaan_review_999   purchase_id
+        nidaan_review       advisor_email, insured_name, claim_type
+        subscription        nidaan_account_id, nidaan_plan, notify_email
+
+    Tried most direct first. Every step is wrapped: a lookup that fails must leave the next one
+    to try, never abort the chain.
+    """
+    pe = pe or {}
+    notes = notes or {}
+    email = (pe.get("email") or "").strip()
+    name = ""
+    if email:
+        return email, name
+
+    # 1. An address written straight into the notes.
+    email = (str(notes.get("notify_email") or "") or str(notes.get("advisor_email") or "")).strip()
+    if email:
+        return email, name
+
+    # 2. The account behind a subscription. `nidaan_account_id` is the key the subscription
+    #    really writes; the other two are kept for anything older.
+    _aid = (notes.get("nidaan_account_id") or notes.get("account_id") or notes.get("acct_id") or "")
+    if str(_aid).strip().isdigit():
+        try:
+            acct = await nidaan.get_account_by_id(int(_aid)) or {}
+            email = (acct.get("email") or "").strip()
+            name = acct.get("owner_name", "") or ""
+            if email:
+                return email, name
+        except Exception:  # noqa: BLE001
+            pass
+
+    # 3. A claim payment - the ₹499 review, the branch Level-2 fee. The COMPLAINANT is who this
+    #    is, and contact_for_claim knows that; reading the claim row here would be a second copy
+    #    of a rule with real consequences.
+    _cid = str(notes.get("claim_id") or "").strip()
+    if _cid.isdigit():
+        try:
+            import biz_nidaan_claimant as _clc
+            who = await _clc.contact_for_claim(int(_cid)) or {}
+            email = (who.get("to_email") or "").strip()
+            name = (who.get("to_name") or "") or ""
+            if email:
+                return email, name
+        except Exception:  # noqa: BLE001
+            pass
+
+    # 4. A D2C review purchase, which holds its own buyer.
+    _pid = str(notes.get("purchase_id") or "").strip()
+    if _pid.isdigit():
+        try:
+            async with aiosqlite.connect(nidaan.DB_PATH) as c:
+                c.row_factory = aiosqlite.Row
+                row = await (await c.execute(
+                    "SELECT insured_email, advisor_email, insured_name "
+                    "FROM nidaan_per_claim_purchase WHERE purchase_id=?", (int(_pid),))).fetchone()
+            if row:
+                row = dict(row)
+                email = ((row.get("insured_email") or "") or (row.get("advisor_email") or "")).strip()
+                name = row.get("insured_name", "") or ""
+                if email:
+                    return email, name
+        except Exception:  # noqa: BLE001
+            pass
+
+    # Worth a line in the log: a failure we cannot follow up is a sale we do not get back, and
+    # the count of these is the measure of what that is costing.
+    logger.warning("payment.failed: no address anywhere for %s (%s) - no retry link sent. "
+                   "notes=%s", pe.get("id", ""), kind, sorted(notes.keys()))
+    return "", ""
+
+
 async def _send_customer_retry_link(*, email: str, phone: str, name: str,
                                     amount_paise: int, kind: str, notes: dict, reason: str) -> None:
     """On a failed payment, email the customer a fresh Razorpay link to try again (all types)."""
@@ -5811,18 +5895,15 @@ async def nidaan_razorpay_webhook(request: Request):
         except Exception as _ve:
             logger.warning("record_event(payment_failed) dispatch failed: %s", _ve)
         # ── Customer retry link — email the customer a fresh link to try again (all types).
+        #
+        # THIS HAD NEVER SENT ONE. 27 failures since 17 Aug, zero retry links. It looked for the
+        # address under `account_id` / `acct_id`, and not one of our five products writes either
+        # of those keys into an order's notes - while two of them carry an address outright and
+        # three carry an id that leads to one. A UPI payment carries no email on the Razorpay
+        # entity, so the notes were the only route and the only route was looking in the wrong
+        # place. Every route each product actually provides is tried here, most direct first.
         try:
-            _cust_email = (_pe.get("email") or "").strip()
-            _cust_name = ""
-            if not _cust_email:
-                _aid = _notes.get("account_id") or _notes.get("acct_id") or ""
-                if _aid:
-                    try:
-                        _acct = await nidaan.get_account_by_id(int(_aid))
-                        _cust_email = ((_acct or {}).get("email") or "").strip()
-                        _cust_name = (_acct or {}).get("owner_name", "") or ""
-                    except Exception:
-                        pass
+            _cust_email, _cust_name = await _retry_contact(_pe, _notes, _kind)
             if _cust_email:
                 _asyncio.create_task(_send_customer_retry_link(
                     email=_cust_email, phone=(_pe.get("contact") or ""), name=_cust_name,

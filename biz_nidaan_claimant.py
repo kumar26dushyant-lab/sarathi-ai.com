@@ -297,6 +297,16 @@ def _greeting_email_html(name: str, link: str) -> str:
         f"<span style='color:#22d3ee'>{link}</span></p>")
 
 
+async def contact_for_claim(claim_id: int) -> Optional[dict]:
+    """Who to write to about this claim - for callers outside this module.
+
+    A thin wrapper on purpose. "The complainant first, the insured second" is a rule with real
+    consequences (it is whose dashboard, whose documents and whose fee authorisation this is),
+    and a second copy of it somewhere else would drift away from this one.
+    """
+    return await _claim_contact(claim_id)
+
+
 async def _claim_contact(claim_id: int) -> Optional[dict]:
     """Who to write to about this claim, and what to call them.
 
