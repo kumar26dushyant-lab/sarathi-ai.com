@@ -7779,76 +7779,139 @@ async def mark_overdue_followups() -> int:
 REVENUE_SPLIT = {"ashwin": 80, "dushyant": 20}  # percentage
 
 
+# The ledger is the money. One row per payment, whatever channel it arrived through, deduped by
+# dedup_key. Refunded and duplicate rows are the only ones excluded - a manually marked payment is
+# still money in the bank, it just cannot be proved from Razorpay.
+REVENUE_LEDGER_WHERE = "COALESCE(status,'') NOT IN ('refunded','duplicate','failed')"
+
+# Who shares the money, and on what. Editable from ops settings so it can be corrected without a
+# deploy (founder, 23 Sep). `basis` is deliberately "collected" by default - exactly what the
+# screen did before - so shipping this changes no number on its own.
+REVENUE_SPLIT_SETTING = "revenue_split_config"
+REVENUE_SPLIT_DEFAULT = {
+    "basis": "collected",          # "collected" = incl. GST  |  "net_of_gst" = ours alone
+    "shares": [{"key": "ashwin", "name": "Ashwin", "pct": 80},
+               {"key": "dushyant", "name": "Dushyant", "pct": 20}],
+}
+
+
+async def get_revenue_split_config() -> dict:
+    """The configured split, or the default. Never raises - a bad setting must not hide revenue."""
+    import json as _json
+    try:
+        raw = (await get_ops_setting(REVENUE_SPLIT_SETTING, "") or "").strip()
+        if not raw:
+            return dict(REVENUE_SPLIT_DEFAULT)
+        cfg = _json.loads(raw)
+        shares = [x for x in (cfg.get("shares") or []) if str(x.get("name", "")).strip()]
+        if not shares:
+            return dict(REVENUE_SPLIT_DEFAULT)
+        return {"basis": cfg.get("basis") or "collected", "shares": shares}
+    except Exception as e:  # noqa: BLE001
+        logger.warning("revenue split config unreadable (%s) - using the default", e)
+        return dict(REVENUE_SPLIT_DEFAULT)
+
+
 async def get_revenue_stats() -> dict:
-    """Full revenue breakdown for super admin."""
+    """Everything collected to date, read from the payment ledger.
+
+    Until 23 Sep this added up three older tables and showed 36% of the money. See
+    deploy/verify-revenue.py, which compares the two and itemises the difference - it is the
+    thing to run before believing any number here.
+    """
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
+        W = REVENUE_LEDGER_WHERE
 
-        # Total collected from subscriptions
-        cur = await conn.execute(
-            "SELECT COALESCE(SUM(amount_paid),0) FROM nidaan_subscriptions "
-            "WHERE status IN ('active','cancelled')"
-        )
-        total_sub = (await cur.fetchone())[0]
+        # ── the money, by where it came from ────────────────────────────────
+        # EVERYTHING STAYS IN PAISE until the last moment. Dividing each source by 100 and then
+        # adding them up lost a rupee on the first run of _tools/test_revenue_ledger.py - five
+        # sources, five roundings. A rupee today is a visible drift at ten times the volume, and
+        # a money screen that is nearly right is a money screen nobody trusts.
+        paise = {}
+        for r in await (await conn.execute(
+                "SELECT COALESCE(NULLIF(source,''),'other') AS src, COUNT(*) AS n, "
+                "COALESCE(SUM(base_paise),0) AS base, COALESCE(SUM(gst_paise),0) AS gst, "
+                "COALESCE(SUM(total_paise),0) AS total "
+                "FROM nidaan_payments WHERE %s GROUP BY 1" % W)).fetchall():
+            paise[r["src"]] = {"count": r["n"], "base": r["base"],
+                               "gst": r["gst"], "total": r["total"]}
 
-        # Per-plan breakdown
-        cur = await conn.execute(
-            "SELECT plan, COUNT(*) as count, COALESCE(SUM(amount_paid),0) as revenue "
-            "FROM nidaan_subscriptions WHERE status IN ('active','cancelled') "
-            "GROUP BY plan"
-        )
-        by_plan = {r["plan"]: {"count": r["count"], "revenue": r["revenue"]}
-                   for r in await cur.fetchall()}
+        def _sum(*srcs, field="total"):
+            """Added in paise, converted once."""
+            return sum(paise.get(x, {}).get(field, 0) for x in srcs) // 100
 
-        # Monthly trend (last 12 months)
-        cur = await conn.execute(
-            """SELECT strftime('%Y-%m', started_at) as month,
-                      COUNT(*) as new_subs,
-                      COALESCE(SUM(amount_paid),0) as revenue
-               FROM nidaan_subscriptions
-               WHERE started_at >= DATE('now','-12 months')
-               GROUP BY month ORDER BY month ASC"""
-        )
-        monthly = [dict(r) for r in await cur.fetchall()]
+        by_source = {k: {"count": v["count"], "base": v["base"] // 100,
+                         "gst": v["gst"] // 100, "revenue": v["total"] // 100}
+                     for k, v in paise.items()}
 
-        # Per-claim ₹499 revenue
-        cur = await conn.execute(
-            "SELECT COALESCE(SUM(amount_paid),0) FROM nidaan_per_claim_purchase "
-            "WHERE status NOT IN ('failed','refunded','pending_payment')"
-        )
-        total_d2c = (await cur.fetchone())[0]
+        total_paise_exact = sum(v["total"] for v in paise.values())
+        total_all = total_paise_exact // 100
+        gst_all = sum(v["gst"] for v in paise.values()) // 100
+        net_all = sum(v["base"] for v in paise.values()) // 100
 
-        # Custom-amount payment links (super-admin generated; not tied to a sub/per-claim row).
-        # review499 links create a per_claim_purchase (in d2c above) and subscription links
-        # create a subscription row (in total_sub above), so ONLY 'custom' is added here — no
-        # double counting.
-        cur = await conn.execute(
-            "SELECT COALESCE(SUM(amount_paise),0) FROM nidaan_payment_links "
-            "WHERE status='paid' AND purpose='custom'"
-        )
-        total_custom_link = (await cur.fetchone())[0] // 100
+        # ── per plan, from the ledger's own plan column ─────────────────────
+        by_plan = {}
+        for r in await (await conn.execute(
+                "SELECT COALESCE(NULLIF(plan,''),'(none)') AS plan, COUNT(*) AS n, "
+                "COALESCE(SUM(total_paise),0) AS total FROM nidaan_payments "
+                "WHERE %s AND source IN ('subscription','subscription_renewal') "
+                "GROUP BY 1 ORDER BY total DESC" % W)).fetchall():
+            by_plan[r["plan"]] = {"count": r["n"], "revenue": r["total"] // 100}
 
-        # Active vs churned
-        cur = await conn.execute(
-            "SELECT status, COUNT(*) as cnt FROM nidaan_subscriptions GROUP BY status"
-        )
-        sub_by_status = {r["status"]: r["cnt"] for r in await cur.fetchall()}
+        # ── month by month, on the date the money arrived ───────────────────
+        monthly = [{"month": r["month"], "new_subs": r["n"], "revenue": r["total"] // 100}
+                   for r in await (await conn.execute(
+                       "SELECT strftime('%%Y-%%m', created_at) AS month, COUNT(*) AS n, "
+                       "COALESCE(SUM(total_paise),0) AS total FROM nidaan_payments "
+                       "WHERE %s AND created_at >= DATE('now','-12 months') "
+                       "GROUP BY month ORDER BY month ASC" % W)).fetchall()]
 
-        total_all = total_sub + total_d2c + total_custom_link
-        return {
-            "total_subscription_revenue": total_sub,
-            "total_d2c_revenue": total_d2c,
-            "total_custom_link_revenue": total_custom_link,
-            "total_revenue": total_all,
-            "by_plan": by_plan,
-            "monthly_trend": monthly,
-            "subscriptions_by_status": sub_by_status,
-            "revenue_split": {
-                "ashwin": {"pct": 80, "amount": round(total_all * 0.80)},
-                "dushyant": {"pct": 20, "amount": round(total_all * 0.20)},
-            },
-        }
+        # ── how many subscriptions are in each state (a COUNT, not money) ───
+        sub_by_status = {r["status"]: r["cnt"] for r in await (await conn.execute(
+            "SELECT status, COUNT(*) AS cnt FROM nidaan_subscriptions GROUP BY status"
+        )).fetchall()}
 
+    # ── the split ───────────────────────────────────────────────────────────
+    cfg = await get_revenue_split_config()
+    basis_amount = net_all if cfg.get("basis") == "net_of_gst" else total_all
+    shares = []
+    for sh in cfg["shares"]:
+        try:
+            pct = float(sh.get("pct") or 0)
+        except (TypeError, ValueError):
+            pct = 0.0
+        shares.append({"key": sh.get("key") or sh.get("name", "").lower(),
+                       "name": sh.get("name", ""), "pct": pct,
+                       "amount": round(basis_amount * pct / 100.0)})
+
+    return {
+        # Collected to date - the founder's definition, 23 Sep. Never falls.
+        "total_revenue": total_all,
+        # The exact figure, in paise. The rupee numbers above and the four slices below are each
+        # rounded on their own, so the slices can add up to a rupee less than the total - GST
+        # makes fractional rupees. Reconciliation compares THIS, never the rounded one.
+        "total_revenue_paise": total_paise_exact,
+        "gst_collected": gst_all,
+        "net_of_gst": net_all,
+
+        "total_subscription_revenue": _sum("subscription", "subscription_renewal"),
+        "total_d2c_revenue": _sum("per_claim_review"),
+        "total_l2_revenue": _sum("branch_l2"),
+        "total_custom_link_revenue": _sum("payment_link"),
+
+        "by_source": by_source,
+        "by_plan": by_plan,
+        "monthly_trend": monthly,
+        "subscriptions_by_status": sub_by_status,
+
+        "revenue_split": {"basis": cfg.get("basis", "collected"),
+                          "basis_amount": basis_amount, "shares": shares},
+        # What the numbers mean, said on the screen rather than in somebody's head.
+        "source_note": ("Collected to date, from the payment ledger (one row per payment). "
+                        "Includes subscriptions that have since expired \u2014 money already "
+                        "collected does not stop having been collected."),
+    }
 
 # =============================================================================
 #  OPS: APP HEALTH (super_admin only)

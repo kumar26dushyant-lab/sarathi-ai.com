@@ -8545,35 +8545,55 @@ async function loadRevenue() {
   const subStatus = Object.entries(d.subscriptions_by_status||{}).map(([s,c])=>
     `<span class="pill-status s-${s}" style="margin-right:.35rem">${s}: ${c}</span>`).join('');
 
+  const _rsplit = (d.revenue_split && d.revenue_split.shares)
+    ? d.revenue_split
+    : {basis: 'collected', basis_amount: d.total_revenue || 0, shares: []};
   el.innerHTML = `
     <div class="section-hdr">
-      <div><div class="section-title">Revenue Dashboard</div><div class="section-sub">All time • Confidential</div></div>
+      <div><div class="section-title">Revenue Dashboard</div>
+        <div class="section-sub">Collected to date • from the payment ledger • Confidential</div></div>
     </div>
 
     <div class="stats-row">
-      <div class="stat-card ok"><div class="sv">₹${fmt(d.total_revenue)}</div><div class="sl">Total Revenue</div></div>
-      <div class="stat-card"><div class="sv">₹${fmt(d.total_subscription_revenue)}</div><div class="sl">Subscription Revenue</div></div>
-      <div class="stat-card"><div class="sv">₹${fmt(d.total_d2c_revenue)}</div><div class="sl">D2C ₹499 Revenue</div></div>
+      <div class="stat-card ok"><div class="sv">₹${fmt(d.total_revenue)}</div><div class="sl">Collected to date</div></div>
+      <div class="stat-card"><div class="sv">₹${fmt(d.total_subscription_revenue)}</div><div class="sl">Subscriptions + renewals</div></div>
+      <div class="stat-card"><div class="sv">₹${fmt(d.total_l2_revenue)}</div><div class="sl">Branch Level-2 fees</div></div>
+      <div class="stat-card"><div class="sv">₹${fmt(d.total_d2c_revenue)}</div><div class="sl">₹499 reviews</div></div>
+    </div>
+
+    <!-- GST is collected for the government, not earned. Saying so here is cheaper than
+         explaining it every time somebody reads the top number. -->
+    <div class="split-card" style="margin-bottom:1.25rem;display:flex;flex-wrap:wrap;gap:1.2rem;
+         align-items:baseline;font-size:.86rem">
+      <div><b style="color:var(--nd-text-primary)">₹${fmt(d.net_of_gst)}</b>
+           <span style="color:var(--nd-text-muted)"> ours, before GST</span></div>
+      <div><b style="color:var(--nd-text-primary)">₹${fmt(d.gst_collected)}</b>
+           <span style="color:var(--nd-text-muted)"> GST collected for the government</span></div>
+      <div style="flex:1;min-width:14rem;color:var(--nd-text-faint);font-size:.78rem">
+        ${esc(d.source_note||'')}</div>
     </div>
 
     ${healthHTML}
     ${ledgerHTML}
 
-    <!-- Revenue Split -->
+    <!-- Revenue Split. Drawn from the data: "80:20" used to be typed into this HTML in four
+         places, which is what made it not flexible. Two shares or five, it renders the same. -->
     <div style="margin-bottom:1.25rem">
-      <div class="section-hdr" style="margin-bottom:.85rem"><div class="section-title" style="font-size:1rem">Revenue Split (80:20)</div></div>
-      <div class="split-card">
-        <div class="split-row">
-          <div class="split-name" style="color:var(--nd-cyan-text)">Ashwin</div>
-          <div class="split-bar-bg"><div class="split-bar-fill" style="width:80%"></div></div>
-          <div class="split-amount">₹${fmt(d.revenue_split.ashwin.amount)} <span style="font-size:.72rem;color:var(--nd-text-faint)">(80%)</span></div>
-        </div>
-        <div class="split-row">
-          <div class="split-name" style="color:var(--nd-purple-text)">Dushyant</div>
-          <div class="split-bar-bg"><div class="split-bar-fill" style="width:20%;background:linear-gradient(90deg,#7c3aed,#a78bfa)"></div></div>
-          <div class="split-amount" style="color:var(--nd-purple-text)">₹${fmt(d.revenue_split.dushyant.amount)} <span style="font-size:.72rem;color:var(--nd-text-faint)">(20%)</span></div>
-        </div>
+      <div class="section-hdr" style="margin-bottom:.85rem">
+        <div class="section-title" style="font-size:1rem">Revenue Split</div>
+        <div class="section-sub">on ₹${fmt(_rsplit.basis_amount)} ·
+          ${_rsplit.basis === 'net_of_gst' ? 'before GST' : 'including GST'}</div>
       </div>
+      <div class="split-card">${(_rsplit.shares||[]).map(function(sh, i){
+        const col = i % 2 ? 'var(--nd-purple-text)' : 'var(--nd-cyan-text)';
+        const bar = i % 2 ? 'background:linear-gradient(90deg,#7c3aed,#a78bfa)' : '';
+        return `<div class="split-row">
+          <div class="split-name" style="color:${col}">${esc(sh.name)}</div>
+          <div class="split-bar-bg"><div class="split-bar-fill"
+               style="width:${Math.max(0,Math.min(100,sh.pct))}%;${bar}"></div></div>
+          <div class="split-amount" style="color:${col}">₹${fmt(sh.amount)}
+            <span style="font-size:.72rem;color:var(--nd-text-faint)">(${sh.pct}%)</span></div>
+        </div>`; }).join('') || '<div class="bdsub">No split configured.</div>'}</div>
     </div>
 
     <!-- Subscription Status -->
