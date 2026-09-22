@@ -34,6 +34,7 @@ from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, PlainTex
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional, List
+from email.utils import formatdate
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.middleware import SlowAPIMiddleware
 from slowapi.util import get_remote_address
@@ -626,11 +627,23 @@ def _nidaan_page(filename: str, request: Optional[Request] = None):
     # `no-cache` is NOT `no-store`: the browser still asks us every single time, so a deploy is
     # picked up on the next load exactly as it was under no-store. What changes is that an
     # unchanged page costs a 304 instead of 320 KB. The ops page is 1.25 MB of one file.
+    #
+    # BOTH validators go out, and that is not belt-and-braces. Checked live on 22 Sep: Cloudflare
+    # re-compresses this page with Brotli and STRIPS the ETag when it does, so on its own the
+    # ETag never reaches a browser and every load is the full page again. Last-Modified survives
+    # the transform. A browser answers with whichever one it was given.
     etag = _page_etag(f)
+    lastmod = formatdate(f.stat().st_mtime, usegmt=True)
     headers = {"Cache-Control": "no-cache, must-revalidate", "ETag": etag,
-               "Vary": "Accept-Encoding"}
-    if request is not None and _etag_matches(request.headers.get("if-none-match", ""), etag):
-        return Response(status_code=304, headers=headers)
+               "Last-Modified": lastmod, "Vary": "Accept-Encoding"}
+    if request is not None:
+        inm = request.headers.get("if-none-match", "")
+        ims = (request.headers.get("if-modified-since", "") or "").strip()
+        # If-None-Match wins when it is present at all: it is the more precise of the two, and a
+        # browser that sends it has the exact version in hand.
+        fresh = _etag_matches(inm, etag) if inm else (bool(ims) and ims == lastmod)
+        if fresh:
+            return Response(status_code=304, headers=headers)
     return HTMLResponse(f.read_text(encoding="utf-8"), headers=headers)
 
 
