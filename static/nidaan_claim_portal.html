@@ -106,6 +106,8 @@ var T = {
     submittedNote:"Thank you — our team can see them now. You can close this page. If you need to add more later, open this page again from the link in your email.",
     submitFailed:"Could not send them. Please try once more.",
     nothingToSubmit:"There is nothing new to send.",
+    doneBtn:"\u2714 Done \u2014 close this page",
+    closeYourself:"You can close this tab now. Everything is saved, and you can come back any time from the link in your email.",
     remove:"Remove", removing:"Removing…",
     confirmRemove:"Remove this document from your claim?",
     removeFailed:"Could not remove that. Please try again.",
@@ -146,6 +148,8 @@ var T = {
     submittedNote:"धन्यवाद — हमारी टीम अब इन्हें देख सकती है। आप यह पेज बंद कर सकते हैं। बाद में और जोड़ने हों तो ईमेल के लिंक से यह पेज फिर खोलिए।",
     submitFailed:"भेजा नहीं जा सका। कृपया एक बार फिर कोशिश कीजिए।",
     nothingToSubmit:"भेजने के लिए कुछ नया नहीं है।",
+    doneBtn:"\u2714 हो गया — पेज बंद करें",
+    closeYourself:"अब आप यह टैब बंद कर सकते हैं। सब कुछ सेव हो चुका है, और ईमेल के लिंक से आप कभी भी वापस आ सकते हैं।",
     remove:"हटाएं", removing:"हटाया जा रहा है…",
     confirmRemove:"क्या यह दस्तावेज़ आपके क्लेम से हटा दें?",
     removeFailed:"हटाया नहीं जा सका। कृपया दोबारा कोशिश करें।",
@@ -392,7 +396,9 @@ function render(){
     (pending
       ? '<div class="pendbox">'+esc(t("pendingNote"))+'</div>'
       : (docs.length ? '<div class="donebox"><b>'+esc(t("submittedTitle"))+'</b><br>'
-                       + esc(t("submittedNote"))+'</div>' : ''))+
+                       + esc(t("submittedNote"))
+                       + '<div style="margin-top:.6rem"><button class="btn btn-primary" '
+                       + 'onclick="doneHere()">'+esc(t("doneBtn"))+'</button></div></div>' : ''))+
     '<input type="file" id="docFiles" multiple accept=".pdf,.jpg,.jpeg,.png,.webp" style="display:none" onchange="uploadDocs(this)">'+
     '<div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.2rem">'+
     '<button class="btn" id="uploadBtn" onclick="document.getElementById(\'docFiles\').click()">'+esc(t("upload"))+'</button>'+
@@ -422,6 +428,16 @@ async function removeDoc(docId, btn){
   }catch(e){}
   btn.disabled = false; btn.textContent = old;
   alert(t("removeFailed"));
+}
+
+// Finished. A tab opened from a link usually cannot be closed by script, so this tries and then
+// says so plainly rather than looking like a button that does nothing - which is the whole
+// complaint this screen started from.
+function doneHere(){
+  try{ window.close(); }catch(e){}
+  setTimeout(function(){
+    if(!document.hidden){ alert(t("closeYourself")); }
+  }, 250);
 }
 
 // "These are the ones." Asks first, because the whole point is to give somebody the moment to
