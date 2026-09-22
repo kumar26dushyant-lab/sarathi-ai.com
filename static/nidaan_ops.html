@@ -14425,8 +14425,8 @@ function l2CaseRender(rem){
   // were being asked for twice on the same screen with no way to tell which box counted
   // (founder, 22 Sep). The block owns them; this list leaves them alone.
   const OWNED_ELSEWHERE = ['case_email', 'case_email_password'];
-  // ── LIVE CASES ASKS FOR THE FIFTEEN, IN HIS ORDER, DOWN THE PAGE ──────────
-  // CSR_GIST already holds the founder's fifteen in his sequence, so this screen is built from
+  // ── LIVE CASES ASKS FOR THE SEVENTEEN, IN HIS ORDER, DOWN THE PAGE ────────
+  // CSR_GIST already holds the founder's seventeen in his sequence, so this screen is built from
   // it rather than from a second list that would drift away from it. Five of the fifteen are
   // columns on the claim, not bucket fields, which is why they were never in this list and the
   // order never matched - they were scattered around the screen instead.
@@ -16035,8 +16035,13 @@ let _csrClaim = 0;
 // Not here, deliberately: Patient and Complainant (they sit at the top of the claim with their
 // own pencils), On behalf of and the old ClaimShield "Claim Type" (not on his list), and the
 // case email and password (pages 7-8 put those on the Escalation screen).
+// The founder's SEVENTEEN, in his order (22 Sep, second pass - "On Behalf of" at 2 and
+// "Claim Type" at 12 were added back after the first list of fifteen). Five of them are columns
+// on the claim rather than bucket fields, which is why the order never matched until this list
+// became the one the screen is built from.
 const CSR_GIST = [
   ['Company Name',          'core',  'insurer_name',          'insurer'],
+  ['On Behalf of',          'field', 'relationship',          'choice'],
   ['Policy type',           'claim', 'claim_type',            'policytype'],
   ['Policy No.',            'core',  'policy_no'],
   ['Policy inception Date', 'core',  'policy_inception_date', 'date'],
@@ -16046,6 +16051,7 @@ const CSR_GIST = [
   ['Date Of Discharge',     'field', 'discharge_date',        'date'],
   ['Diagnosis',             'field', 'diagnosis'],
   ['Patient Complaint',     'field', 'patient_complaint'],
+  ['Claim Type',            'field', 'rejection_type',        'choice'],
   ['Claim No.',             'field', 'insurer_claim_no'],
   ['Rejection Date',        'field', 'rejection_date',        'date'],
   ['Rejection Reason',      'field', 'rejection_reason'],
@@ -16070,9 +16076,15 @@ const CSR_DRAFT_FACTS = [
   ['Rejection date', 'field', 'rejection_date', 'date'],
   ['Comments', 'field', 'gist_comments'],
 ];
+// His lists, from the two screenshots. Named relations, not generic ones - this line ends up in
+// a legal letter, where nobody writes "spouse". "Consumer" was on the old system's list and he
+// asked for it to go. A value already on a claim that is NOT here is still shown and still
+// selected (csrField appends it), so the two claims holding Spouse and Sibling keep their word
+// until somebody chooses to change it.
 const CSR_CHOICES = {
-  relationship: ['None', 'Self', 'Spouse', 'Children', 'Parent', 'Sibling', 'Other'],
-  rejection_type: ['None', 'Rejection', 'Deduction', 'Delay in process', 'Part settlement', 'Other'],
+  relationship: ['None', 'Self', 'Father', 'Mother', 'Wife', 'Husband', 'Children',
+                 'Brother', 'Sister', 'Friend'],
+  rejection_type: ['None', 'Reimbursement', 'Deduction', 'Rejection', 'Query', 'Delay in process'],
 };
 
 function _csrStyles(){

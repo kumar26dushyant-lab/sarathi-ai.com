@@ -87,6 +87,42 @@ its bucket.
     and the code email now names the page, so somebody who removed two of four files can return,
     sign in with a code, and add more.
 
+### ✅ SHIPPED 2026-09-22 (6) — the Live bucket asks SEVENTEEN, not fifteen
+
+The founder corrected the sequence he gave this morning: **On Behalf of at 2** and **Claim Type
+at 12**. Both had been switched OFF that same morning when his list ran to fifteen — and
+switching off rather than deleting is exactly why putting them back was a config change and not
+a rebuild. Three claims already held a relationship, three a claim type; all of it was still
+there.
+
+**The order, as it now reads down the page:**
+`1 Company Name · 2 On Behalf of · 3 Policy type · 4 Policy No. · 5 Policy inception Date ·
+6 Disputed Amount · 7 Name Of Hospital · 8 Date of Admission · 9 Date Of Discharge ·
+10 Diagnosis · 11 Patient Complaint · 12 Claim Type · 13 Claim No. · 14 Rejection Date ·
+15 Rejection Reason · 16 Comment · 17 Assign To`
+
+  - **His dropdowns, not the seeded ones.** On Behalf of goes from generic to named — Self,
+    Father, Mother, Wife, Husband, Children, Brother, Sister, Friend — replacing
+    Spouse/Parent/Sibling. Which matters: this line ends up in a legal letter, where nobody
+    writes "spouse". Claim Type becomes Reimbursement, Deduction, Rejection, Query, Delay in
+    process; **Consumer** removed as he asked.
+  - **Two live claims hold Spouse and Sibling**, which are not on the new list. Neither is lost:
+    the field already renders an unrecognised value as the selected option, so the staffer sees
+    the old word and can change it. Nothing is rewritten behind anybody's back.
+  - **sort_order was moved as well as the form.** The form reads `CSR_GIST`, but the case report,
+    the assessment sheet and the bucket designer all read `sort_order` — the two disagreeing is
+    how the report stopped matching the screen the first time. `relationship`→**10**,
+    `rejection_type`→**105**; both slots were free.
+  - Verified on a copy of the live database and run **twice**: `fixed: 2`, then `fixed: 0`.
+    A correction that keeps matching would report "fixed" on every worker start for ever.
+  - ⚠️ **One thing worth watching:** the form now carries both **"Policy type"** (health /
+    motor / life, 3rd) and **"Claim Type"** (the kind of dispute, 12th). Those two names are one
+    word apart. The hint under Claim Type says *"What KIND of dispute this is — not the policy
+    type above"*, but if staff mix them up, the answer is to rename one of them.
+  - 🐞 **Three tests asserted the OLD spec** and failed — correctly. `gist-fields.js`
+    asserted the two fields were ABSENT; it and `live-sequence.js` and `verify-22sep-list.py`
+    were rewritten to the new spec, by **name and index**, not loosened until they passed.
+
 ### ✅ SHIPPED 2026-09-22 (5) — the code screen, latency, statuses, test claims
 
 **✅ OTP: one tap is one code.** The complainant taps, nothing visibly happens, they tap again.

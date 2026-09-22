@@ -7765,3 +7765,22 @@ missing one, so anything orange was pale-on-pale in light mode at 1.37:1. Fixed 
 nidaan_design.css, which fixes every other user of it. uitest/status-pills.js now measures real
 contrast for every status in both themes, and deploy/verify-claim-statuses.py keeps the four
 copies of the list from drifting apart again.
+
+
+**The Live bucket is SEVENTEEN fields, 22 Sep (second pass).** On Behalf of at 2 and Claim Type
+at 12 came back the same day they were switched off. That they were switched OFF and not deleted
+is the whole reason this was a config change: three claims held a relationship and three a claim
+type, and none of it had to be rebuilt.
+
+The dropdowns are the founder's own, from his screenshots, and are NOT what was seeded:
+relationship becomes named rather than generic (Wife/Husband, Brother/Sister, Father/Mother
+instead of Spouse/Sibling/Parent) because this line ends up in a legal letter; rejection_type
+loses Consumer. Two live claims hold Spouse and Sibling, which are no longer on the list -
+csrField renders an unrecognised value as the selected option, so nothing is lost or rewritten.
+
+Two orders have to move together, and this is the trap: the FORM reads CSR_GIST, while the case
+report, the assessment sheet and the bucket designer read sort_order. Changing one and not the
+other is how the report stopped matching the screen the first time round.
+
+Watch: the form now shows "Policy type" (health/motor/life) at 3 and "Claim Type" (the kind of
+dispute) at 12. One word apart, on one form. Hinted for now; rename one if staff confuse them.

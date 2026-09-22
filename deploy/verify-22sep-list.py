@@ -62,8 +62,18 @@ CHECKS = [
      lambda: "query_state='', query_text='', query_by=''" in BUCKETS),
     ("16", "an escalation query can be answered",
      lambda: "escalation_answered" in BUCKETS and "escAnswered" in OPS),
-    ("seq", "Live Cases asks for the fifteen, in order",
-     lambda: "LIVE CASES ASKS FOR THE FIFTEEN" in OPS and "CSR_GIST.map" in OPS),
+    ("seq", "Live Cases asks for the seventeen, in order",
+     lambda: "LIVE CASES ASKS FOR THE SEVENTEEN" in OPS and "CSR_GIST.map" in OPS),
+    ("seq2", "and the two he added back are on, at 2nd and 12th",
+     lambda: "['On Behalf of',          'field', 'relationship',          'choice']" in OPS
+             and "['Claim Type',            'field', 'rejection_type',        'choice']" in OPS
+             and "sort_order=10" in BUCKETS and "sort_order=105" in BUCKETS),
+    ("seq3", "with his dropdowns, and no Consumer",
+     lambda: "'Wife', 'Husband'" in OPS and "'Brother', 'Sister', 'Friend'" in OPS
+             # As a LIST ENTRY, not anywhere in the file - the comment next to the list explains
+             # why Consumer was dropped, and a blunter test fails on its own explanation.
+             and "'Consumer'" not in OPS
+             and "Reimbursement\\nDeduction\\nRejection\\nQuery\\nDelay in process" in BUCKETS),
 ]
 
 print("\nEach item, checked in the deployed code\n")

@@ -1,8 +1,12 @@
-// The Live Cases screen asks for the founder's fifteen, in his order, down the page.
+// The Live Cases screen asks for the founder's SEVENTEEN, in his order, down the page.
 //
 // Five of them are columns on the claim, not bucket fields, which is why the list used to have
 // ten and the order never matched. This renders the real l2CaseRender and reads the labels back
 // in the order they appear.
+//
+// Was fifteen until 22 Sep, when he put "On Behalf of" back at 2 and "Claim Type" back at 12.
+// Both had been switched OFF that morning rather than deleted, which is the only reason putting
+// them back was a config change and not a rebuild.
 const fs = require('fs');
 const path = require('path');
 const { chromium } = require('playwright');
@@ -20,13 +24,17 @@ function cut(from, to, label) {
 const gist = cut('const CSR_GIST = [', 'const CSR_DRAFT_FACTS', 'CSR_GIST');
 const render = cut('function l2CaseRender(rem){', 'function l2MoveFromCase(', 'l2CaseRender');
 
-const WANT = ['Company Name', 'Policy type', 'Policy No.', 'Policy inception Date',
-  'Disputed Amount', 'Name Of Hospital', 'Date of Admission', 'Date Of Discharge',
-  'Diagnosis', 'Patient Complaint', 'Claim No.', 'Rejection Date', 'Rejection Reason',
-  'Comment', 'Assign To'];
+const WANT = ['Company Name', 'On Behalf of', 'Policy type', 'Policy No.',
+  'Policy inception Date', 'Disputed Amount', 'Name Of Hospital', 'Date of Admission',
+  'Date Of Discharge', 'Diagnosis', 'Patient Complaint', 'Claim Type', 'Claim No.',
+  'Rejection Date', 'Rejection Reason', 'Comment', 'Assign To'];
 
 // The bucket's own fields, as the server sends them.
 const FIELDS = [
+  // The two that came back. A `choice` renders as a dropdown, and the screen only shows a
+  // bucket field the SERVER sent - so if either is ever switched off again, this test fails
+  // rather than quietly rendering fifteen.
+  ['relationship', 'On Behalf of', 'choice'], ['rejection_type', 'Claim Type', 'choice'],
   ['hospital_name', 'Name Of Hospital', 'text'], ['admission_date', 'Date of Admission', 'date'],
   ['discharge_date', 'Date Of Discharge', 'date'], ['diagnosis', 'Diagnosis', 'textarea'],
   ['patient_complaint', 'Patient Complaint', 'textarea'],

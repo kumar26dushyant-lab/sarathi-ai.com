@@ -172,13 +172,13 @@ _FIELDS = {
         ("insurer_claim_no", "Claim number", "क्लेम नंबर", "text", 0,
          "The insurance company's own claim number, e.g. CIR/2026/201112/1282847"),
         # ClaimShield's "Claim Type" is the kind of DISPUTE, not health/motor/life.
-        ("rejection_type", "Claim type", "क्लेम का प्रकार", "choice", 0,
-         "Rejection, deduction or delay in process"),
+        ("rejection_type", "Claim Type", "क्लेम का प्रकार", "choice", 0,
+         "What KIND of dispute this is \u2014 not the policy type above"),
         ("gist_comments", "Comments", "टिप्पणी", "textarea", 0, ""),
         # The complainant's relationship to the PATIENT. Not complainant_role, which records who
         # raised the claim and is read by attribution and routing.
-        ("relationship", "On behalf of", "किसकी ओर से", "choice", 0,
-         "The complainant's relationship to the patient"),
+        ("relationship", "On Behalf of", "किसकी ओर से", "choice", 0,
+         "Who the complainant is to the patient"),
     ],
     "pending_docs": [
         ("originals_received", "Originals received by post", "ओरिजिनल डाक से मिले", "yesno", 0, ""),
@@ -250,8 +250,11 @@ _FIELDS = {
 }
 
 _CHOICES = {
-    "rejection_type": "Rejection\nDeduction\nDelay in process\nPart settlement\nOther",
-    "relationship": "Self\nSpouse\nChildren\nParent\nSibling\nOther",
+    # The founder's own lists (22 Sep, from his two screenshots). Named relations rather than
+    # generic ones - this line ends up in a legal letter, where nobody writes "spouse". "Consumer"
+    # was on his old system's list and he asked for it to go.
+    "rejection_type": "Reimbursement\nDeduction\nRejection\nQuery\nDelay in process",
+    "relationship": "Self\nFather\nMother\nWife\nHusband\nChildren\nBrother\nSister\nFriend",
     "review_fee_status": "Paid\nUnpaid",
     "pf_status": "Paid\nUnpaid",
     "completion_type": "Hearing\nEscalation Settlement\nConsent",
@@ -394,10 +397,26 @@ _CONFIG_FIXES = (
     ("UPDATE nidaan_bucket_fields SET label_en='Comment', sort_order=140 "
      "WHERE bucket_key='live_cases' AND field_key='gist_comments' "
      "AND (label_en <> 'Comment' OR sort_order <> 140)", ()),
-    # Not on his list of fifteen. Deactivated rather than deleted: what is already recorded on
-    # real claims stays readable on the case report, it is simply no longer asked for.
-    ("UPDATE nidaan_bucket_fields SET active=0, required_exit=0 WHERE bucket_key='live_cases' "
-     "AND field_key IN ('relationship','rejection_type') AND active=1", ()),
+    # BACK ON, 22 Sep (second pass). They were switched off that morning when his list ran to
+    # fifteen; he has since asked for both, at 2nd and 12th. Switched off rather than deleted was
+    # the point - three claims already held a relationship and three a claim type, and all of it
+    # is still there to be switched back on.
+    #
+    # Ordered by sort_order as well as on the form: the form reads CSR_GIST, but the case report,
+    # the assessment sheet and the designer all read sort_order, and the two disagreeing is how
+    # the report stopped matching the screen last time. 10 and 105 were free.
+    ("UPDATE nidaan_bucket_fields SET active=1, required_exit=0, label_en='On Behalf of', "
+     "sort_order=10, choices='Self\nFather\nMother\nWife\nHusband\nChildren\nBrother\n"
+     "Sister\nFriend', hint='Who the complainant is to the patient' "
+     "WHERE bucket_key='live_cases' AND field_key='relationship' "
+     "AND (active<>1 OR label_en<>'On Behalf of' OR sort_order<>10 "
+     "     OR choices<>'Self\nFather\nMother\nWife\nHusband\nChildren\nBrother\nSister\nFriend')", ()),
+    ("UPDATE nidaan_bucket_fields SET active=1, required_exit=0, label_en='Claim Type', "
+     "sort_order=105, choices='Reimbursement\nDeduction\nRejection\nQuery\nDelay in process', "
+     "hint='What KIND of dispute this is \u2014 not the policy type above' "
+     "WHERE bucket_key='live_cases' AND field_key='rejection_type' "
+     "AND (active<>1 OR label_en<>'Claim Type' OR sort_order<>105 "
+     "     OR choices<>'Reimbursement\nDeduction\nRejection\nQuery\nDelay in process')", ()),
     # The case email and its password sit at the end, after the fifteen, and the email is no
     # longer REQUIRED to leave Live Cases. Pages 7-8 put both on the Escalation screen, filled
     # from what the complainant gave us during document collection. A required field that is not

@@ -1,5 +1,45 @@
 # Staff Announcement Drafts
 
+## 2026-09-22 (4) — Two questions are back on the Live Cases form
+
+**Title (EN):**
+📋 Live Cases now asks 17 things — "On Behalf of" and "Claim Type" are back
+
+**Details (EN):**
+• **Two questions have returned to the Live Cases form**, in these places:
+  – **On Behalf of** — 2nd, right after Company Name
+  – **Claim Type** — 12th, right after Patient Complaint
+
+• **On Behalf of** now names the relation instead of a general word: **Self, Father, Mother,
+Wife, Husband, Children, Brother, Sister, Friend.** Please pick the exact one — this line is
+used in the letter we send.
+
+• **Claim Type** is the kind of dispute: **Reimbursement, Deduction, Rejection, Query, Delay in
+process.** Careful — this is **not** the same as **Policy type** higher up the form, which is
+health / motor / life.
+
+• **A few older claims still show "Spouse" or "Sibling".** Nothing is lost. Please change it to
+the exact relation the next time you open that claim.
+
+**Title (HI):**
+📋 Live Cases में अब 17 जानकारियाँ — "On Behalf of" और "Claim Type" वापस
+
+**Details (HI):**
+• **Live Cases फ़ॉर्म में दो सवाल वापस आ गए हैं**, इन जगहों पर:
+  – **On Behalf of** — दूसरे नंबर पर, Company Name के ठीक बाद
+  – **Claim Type** — 12वें नंबर पर, Patient Complaint के ठीक बाद
+
+• **On Behalf of** में अब सीधा रिश्ता चुनना है: **Self, Father, Mother, Wife, Husband, Children,
+Brother, Sister, Friend.** सही वाला चुनिए — यही लाइन हमारे पत्र में जाती है।
+
+• **Claim Type** यानी विवाद किस तरह का है: **Reimbursement, Deduction, Rejection, Query,
+Delay in process.** ध्यान दीजिए — यह ऊपर वाले **Policy type** (health / motor / life) से
+**अलग** है।
+
+• **कुछ पुराने क्लेम पर अभी "Spouse" या "Sibling" दिखेगा।** कुछ खोया नहीं है। अगली बार वह
+क्लेम खोलें तो कृपया सही रिश्ता चुन दीजिए।
+
+
 ## 2026-09-22 (3) — The code screen, and the status list
 
 **Title (EN):**
