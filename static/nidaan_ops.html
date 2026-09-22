@@ -13921,8 +13921,11 @@ function l2Table(b){
       + (menu.length ? '<button class="l2mv g" onclick="l2MoveMenu(' + i.claim_id + ')">Move…</button>' : '')
       + (b.bucket_key === 'pending_draft'
           ? '<button class="l2mv d" onclick="l2QueryRaise(' + i.claim_id + ')">\u2753 Query</button>' : '')
-      + (b.bucket_key === 'live_cases' && i.query && i.query.state === 'open'
-          ? '<button class="l2mv p" onclick="l2QueryResolve(' + i.claim_id + ',' + (i.query.by_id || 0) + ')">\u2705 Resolved</button>' : '')
+      // A draft query is answered FROM Pending Draft - that is what the server accepts. This
+      // said live_cases, so the button was never anywhere it would have worked and a query
+      // could be raised and never answered (founder, 22 Sep).
+      + (b.bucket_key === 'pending_draft' && i.query && i.query.state === 'open'
+          ? '<button class="l2mv p" onclick="l2QueryResolve(' + i.claim_id + ',' + (i.query.by_id || 0) + ')">\u2705 Answer it</button>' : '')
       + '<button class="l2mv g" onclick="l2Open(' + i.claim_id + ')">Open</button>';
     const lok = (i.lokpal_days_left != null && i.lokpal_days_left <= 90)
       ? '<div class="l2lok">⏳ Lokpal window ' + i.lokpal_days_left + 'd</div>' : '';
@@ -14426,9 +14429,9 @@ function l2CaseRender(rem){
         ? ' · <span class="l2lok">⏳ Lokpal window ' + st.lokpal_days_left + ' days</span>' : '')
     + '</div>'
     + (st.query && st.query.state ? _qBadge(st.query)
-        + (st.query.state === 'open' && st.bucket === 'live_cases'
+        + (st.query.state === 'open' && st.bucket === 'pending_draft'
             ? '<button class="l2mv p" style="align-self:flex-start" onclick="l2QueryResolve(' + id + ','
-              + (st.query.by_id || 0) + ')">\u2705 Query resolved \u2014 send back to Pending Draft</button>' : '')
+              + (st.query.by_id || 0) + ')">\u2705 Answer this query</button>' : '')
         : '')
     + (!(st.query && st.query.state) && st.back && st.back.at
         ? '<div class="l2ban ' + (st.back.super ? 'red' : 'amber') + '">\u21a9 '
@@ -16250,9 +16253,17 @@ function _escPanel(st, id){
     + (escalated ? _escFlags(st) : '')
     + (escalated
         ? '<div style="margin-top:.55rem">'
-          + '<button class="l2mv d" onclick="escQuery(' + id + ')">\u2753 Escalation query</button>'
-          + '<div class="hint">Use this when the insurer has come back asking us for something. '
-          + 'The claim stays here and the day count stops meaning silence.</div></div>'
+          + (sub === 'query'
+              // The other half of the query button. Without it a claim sits on "Escalation
+              // Query" for ever and the day count below means nothing (founder, 22 Sep).
+              ? '<button class="l2mv p" onclick="escAnswered(' + id + ')">'
+                + '\u2705 We have answered them</button>'
+                + '<div class="hint">Records what you sent and puts the wait back on the '
+                + 'insurance company.</div>'
+              : '<button class="l2mv d" onclick="escQuery(' + id + ')">\u2753 Escalation query</button>'
+                + '<div class="hint">Use this when the insurer has come back asking us for '
+                + 'something. The claim stays here and the day count stops meaning silence.</div>')
+          + '</div>'
         : '')
     + '</div>';
 }
@@ -16403,6 +16414,46 @@ async function escCredSave(key){
 }
 window.escCredEdit = escCredEdit; window.escCredCancel = escCredCancel;
 window.escCredSave = escCredSave;
+
+// We answered the insurer. Nothing moves; the wait simply goes back to being theirs.
+async function escAnswered(claimId){
+  openModal('\u2705 We have answered them \u2014 NP-' + claimId,
+      '<div class="l2ban info">The claim stays in <b>Escalation</b>. It goes back to '
+    + '<b>Escalated</b>, so the day count is a silence from them again.</div>'
+    + '<div class="l2fld"><label>What did you send them? <span style="color:var(--nd-danger-text)">*</span></label>'
+    + '<textarea id="escAnsNote" rows="4" placeholder="e.g. Sent the investigation report and the '
+    + 'original discharge summary by email on 22 Sep."></textarea>'
+    + '<div class="hint">The next person needs to know what has already gone.</div></div>'
+    + '<div id="escAnsMsg" style="font-size:.84rem"></div>',
+    [{label:'Cancel', cls:'btn-ghost', fn:function(){ modalBack(); }},
+     {label:'Record it', cls:'btn-primary', fn:async function(){
+        const el = document.getElementById('escAnsNote');
+        const msg = document.getElementById('escAnsMsg');
+        const note = ((el && el.value) || '').trim();
+        if (note.length < 3){
+          if (msg){ msg.style.color = 'var(--nd-danger-text)';
+                    msg.textContent = 'Say what you sent them.'; }
+          return;
+        }
+        try{
+          const r = await API('/claims/' + claimId + '/escalation/answered',
+            {method:'POST', body: JSON.stringify({outcome:'answered', note: note})});
+          const d = await r.json().catch(function(){ return {}; });
+          if (!r.ok){
+            if (msg){ msg.style.color = 'var(--nd-danger-text)';
+                      msg.textContent = _l2Err(d, 'Could not record that.'); }
+            return;
+          }
+          closeModal();
+          ndUI.toast('NP-' + claimId + ' is back to Escalated', 'success');
+          if (typeof loadL2 === 'function') loadL2();
+        }catch(e){
+          if (msg){ msg.style.color = 'var(--nd-danger-text)';
+                    msg.textContent = 'Could not record that.'; }
+        }
+     }}], true);
+}
+window.escAnswered = escAnswered;
 
 async function escQuery(claimId){
   // The insurer has asked US something. The claim stays put; the only thing that changes is that

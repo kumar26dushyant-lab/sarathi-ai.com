@@ -8882,6 +8882,21 @@ class _EscReplyReq(BaseModel):
     note: str = Field(..., min_length=3, max_length=1000)
 
 
+@app.post("/nidaan/ops/api/claims/{claim_id}/escalation/answered")
+@limiter.limit("60/minute")
+async def ops_escalation_answered(claim_id: int, body: _EscReplyReq, request: Request):
+    """We answered the insurer's question. The claim goes back to Escalated - nothing moves."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(404)
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_buckets as _bk
+    res = await _bk.escalation_answered(claim_id, note=body.note, actor=_actor_label(caller))
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("error") or "Could not record that.")
+    await _ops_audit(request, "claim.escalation_answered", "claim", str(claim_id), body.note[:160])
+    return res
+
+
 @app.post("/nidaan/ops/api/claims/{claim_id}/escalation/reply")
 @limiter.limit("30/minute")
 async def ops_escalation_reply(claim_id: int, body: _EscReplyReq, request: Request):

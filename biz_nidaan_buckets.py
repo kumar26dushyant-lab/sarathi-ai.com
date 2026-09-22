@@ -340,6 +340,15 @@ _CONFIG_FIXES = (
     # judgement.
     ("UPDATE nidaan_bucket_fields SET active=0, required_exit=0 WHERE bucket_key='pending_draft' "
      "AND field_key IN ('approved_by','approved_on') AND active=1", ()),
+    # A draft query belongs to Pending Draft and ends when the claim leaves it (founder,
+    # 22 Sep: a claim in Escalation showing "Draft query resolved" for a query raised three
+    # buckets ago, and going on showing it). move() clears it now; these are the claims that
+    # moved before it did. A claim still IN Pending Draft is left alone - that is where a query
+    # lives and where it can still be answered.
+    ("UPDATE nidaan_claims SET query_state='', query_text='', query_by='', query_by_id=NULL, "
+     "query_at=NULL, query_resolved_by='', query_resolved_at=NULL, query_resolved_note='', "
+     "query_mo_id=NULL, query_mo_name='' "
+     "WHERE COALESCE(query_state,'') <> '' AND COALESCE(pipeline_stage,'') <> 'pending_draft'", ()),
     # PAGE 10 - the Live bucket's fields, in the founder's names and his order. His list runs
     # Company Name, Policy type, Policy No., Policy inception Date, Disputed Amount (all five
     # columns on the claim), then these ten. Reordered here as well as on the form so that the
@@ -1158,6 +1167,7 @@ async def move(claim_id: int, to_key: str, *, sub: str = "", reason: str = "",
     else:
         came_from = row.get("pipeline_from") or ""
 
+    _left_open = False
     try:
         async with aiosqlite.connect(DB_PATH) as c:
             await c.execute(
@@ -1182,19 +1192,35 @@ async def move(claim_id: int, to_key: str, *, sub: str = "", reason: str = "",
                 # forwards, the query goes with it: still open means somebody moved on without
                 # formally answering, and their move note becomes the answer; already resolved
                 # means it is simply finished.
+                # A DRAFT QUERY ENDS WHERE IT LIVED. It belongs to Pending Draft, so when the
+                # claim leaves, the query is over - whether it was answered or not.
+                #
+                # It used to be marked "resolved" on the way out, with the move note as its
+                # answer. That made Escalation show a green "Draft query resolved" for a query
+                # nobody had answered, and go on showing it for the rest of the claim's life
+                # (founder, 22 Sep). A badge saying a thing was done when it was not is worse
+                # than no badge at all. What was open is now said plainly in the remarks instead.
                 _qs = (row.get("query_state") or "")
-                if cur_key == QUERY_FROM and _qs == "open":
+                if cur_key == QUERY_FROM and _qs:
                     await c.execute(
-                        "UPDATE nidaan_claims SET query_state='resolved', query_resolved_by=?, "
-                        "query_resolved_at=CURRENT_TIMESTAMP, query_resolved_note=? WHERE claim_id=?",
-                        ((actor or "")[:80], (reason or "").strip()[:400], int(claim_id)))
-                elif cur_key == QUERY_FROM and _qs == "resolved":
-                    await c.execute("UPDATE nidaan_claims SET query_state='' WHERE claim_id=?",
-                                    (int(claim_id),))
+                        "UPDATE nidaan_claims SET query_state='', query_text='', query_by='', "
+                        "query_by_id=NULL, query_at=NULL, query_resolved_by='', "
+                        "query_resolved_at=NULL, query_resolved_note='', query_mo_id=NULL, "
+                        "query_mo_name='' WHERE claim_id=?", (int(claim_id),))
+                    _left_open = (_qs == "open")
             await c.commit()
     except Exception as e:  # noqa: BLE001
         logger.warning("bucket move failed for %s: %s", claim_id, e)
         return {"ok": False, "error": "Could not save that. Try again."}
+
+    # Said plainly, because nobody will see a badge for it any more.
+    try:
+        if _left_open:
+            await _log(claim_id,
+                       "\u2753 The draft query was still open when this claim moved on. Nobody "
+                       "answered it; the move note above is what stands.", actor)
+    except NameError:
+        pass
 
     verb = {"back": ("pulled back by a super admin to" if (actor_role or "") == SUPER
                      else "sent back to"),
@@ -1654,6 +1680,30 @@ async def escalation_reply(claim_id: int, outcome: str, *, note: str = "", actor
     if not res.get("ok"):
         return res
     return {"ok": True, "outcome": outcome, "moved_to": to_key}
+
+
+async def escalation_answered(claim_id: int, *, note: str = "", actor: str = "") -> dict:
+    """We have answered the insurer's question, so the wait is theirs again.
+
+    A query could be raised and never closed: the claim sat on "Escalation Query" with no way
+    back to "Escalated", and the day count stayed meaningless for ever (founder, 22 Sep). This is
+    the other half of that button. It moves nothing - it only says who is waiting on whom.
+    """
+    note = (note or "").strip()
+    if len(note) < 3:
+        return {"ok": False, "error": "Say what you sent them - the next person starts from it."}
+    row = await _claim_row(claim_id)
+    if not row:
+        return {"ok": False, "error": "That case does not exist."}
+    if (row.get("pipeline_stage") or "") != "escalation":
+        return {"ok": False, "error": "This case is not in Escalation."}
+    if (row.get("pipeline_sub") or "") != "query":
+        return {"ok": False, "error": "There is no open query from the insurer on this case."}
+    res = await set_substate(claim_id, "escalated", actor=actor)
+    if not res.get("ok"):
+        return res
+    await _log(claim_id, "\u2705 Answered the insurer's query \u2014 %s" % note[:300], actor)
+    return {"ok": True, "sub": "escalated"}
 
 
 async def escalation_due() -> dict:
