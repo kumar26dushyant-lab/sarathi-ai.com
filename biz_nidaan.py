@@ -485,10 +485,30 @@ async def public_plans() -> list[dict]:
 
 
 CLAIM_STATUSES = (
-    "intimated", "assigned", "in_review", "in_negotiation",
-    "review_delivered",  # legal assessment delivered to customer (can_fight | no_scope)
-    "resolved_won", "resolved_lost", "closed", "withdrawn",
+    "intimated", "assigned", "in_review",
+    "review_query",            # we have asked the customer something and are waiting
+    "review_query_resolved",   # they answered; it is back with us
+    "review_delivered",        # legal assessment delivered to customer (can_fight | no_scope)
+    "withdrawn",
+    # Still ACCEPTED, deliberately not OFFERED (founder, 22 Sep). `resolved_won` is what moves a
+    # case to pending_payment in biz_nidaan_case_state, and one live claim is in_negotiation, so
+    # deleting them would change what happens to those cases rather than tidying a menu.
+    "in_negotiation", "resolved_won", "resolved_lost", "closed",
 )
+
+# WHAT STAFF MAY PICK, in the order they see it. The single source: every screen builds its list
+# from this order, and deploy/verify-claim-statuses.py fails the moment a copy disagrees - which
+# is how `review_delivered` came to be missing from all three copies in one HTML file.
+CLAIM_STATUS_PICKLIST = (
+    ("intimated", "Intimated"),
+    ("assigned", "Assigned"),
+    ("in_review", "In Review"),
+    ("review_query", "Review Query"),
+    ("review_query_resolved", "Review Query Resolved"),
+    ("review_delivered", "Review Delivered"),
+    ("withdrawn", "Withdrawn"),
+)
+CLAIM_STATUS_RETIRED = ("in_negotiation", "resolved_won", "resolved_lost", "closed")
 REVIEW_OUTCOMES = ("can_fight", "no_scope")
 
 
@@ -7238,7 +7258,10 @@ async def is_claim_assignee(claim_id: int, staff_id: int) -> bool:
 
 
 # ── Claim auto-assignment (least-loaded), super-admin toggle ──────────────────
-CLAIM_OPEN_STATUSES = ("intimated", "assigned", "in_review", "in_negotiation")
+CLAIM_OPEN_STATUSES = ("intimated", "assigned", "in_review",
+                       # A case with a question out, or an answer waiting to be read, is
+                       # plainly still open work and counts towards a handler's load.
+                       "review_query", "review_query_resolved", "in_negotiation")
 
 
 async def is_claim_auto_assign() -> bool:

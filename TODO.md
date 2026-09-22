@@ -87,6 +87,79 @@ its bucket.
     and the code email now names the page, so somebody who removed two of four files can return,
     sign in with a code, and add more.
 
+### ✅ SHIPPED 2026-09-22 (5) — the code screen, latency, statuses, test claims
+
+**✅ OTP: one tap is one code.** The complainant taps, nothing visibly happens, they tap again.
+`sendCode()` disabled nothing — five taps in five seconds sent five codes, spent the whole hour's
+allowance and locked somebody out of their own claim page. The only reply was a red line telling
+them they had asked for too many, for a limit no screen had ever mentioned.
+  - **The limit is 5 per claim per rolling hour** (`MAX_CODES_PER_HOUR`). It stays: it stops a
+    leaked link ringing somebody's phone all day, and with a freeze in place five is plenty.
+  - Both buttons freeze the moment one is pressed, **before the request goes out** — the gap
+    between the tap and the reply is exactly where the extra taps land.
+  - The wait counts down. The allowance is shown: *"Send it again (3 left)"*.
+  - When the wait ends with no code, the screen says what to do — spam folder, signal — and gives
+    **+91-98260 11116**, the number already published in the site footer.
+  - The server now sends what the page cannot know: `left`, `cooldown_sec`, and the **real**
+    `retry_after_sec`. The window ROLLS, so the wait is usually minutes; *"about 22 minutes"*
+    replaces *"please wait a little"*, which is not an instruction anybody can follow.
+  - A send that FAILS unfreezes at once — the server deletes that row, so it costs them nothing
+    and a wait would punish them for our outage.
+  - **App Health now reads login_health's outcomes**, so the watchdog tells staff when codes stop
+    arriving instead of waiting for a complainant to ring up. Checked live the same day:
+    **portal 23 sent, 0 failed** — delivery was never the problem, the taps were.
+  - `uitest/claim-code.js`: six taps produce one code, in both languages.
+
+**✅ Latency — measured, and it is not the server.** Origin answers `/nidaan/ops` in **24 ms**,
+the box sits at **load 0.29** on two cores, the database is **21 MB**, 9.4 GB RAM free.
+  - **The ops page is ONE 1.25 MB file sent with `no-store`** — re-downloaded in full on every
+    open and every refresh. Now `no-cache` + `ETag` + `Last-Modified`: the browser still asks us
+    every single time, so a deploy is picked up exactly as before, but an unchanged page costs a
+    **304 with no body** instead of 320 KB. Verified live: `code=304 wire=0B`.
+  - 🐞 **The ETag alone was worth nothing.** Cloudflare re-compresses with Brotli and
+    STRIPS the ETag when it does, so the browser got no validator at all. `Last-Modified`
+    survives the transform; both go out now. Only caught by checking through Cloudflare rather
+    than at the origin.
+  - **nginx had gzip ON with its defaults, and the default `gzip_types` is `text/html` ALONE** —
+    so every `.js` and `.css` went out raw. Now compressed: page assets **70 KB → 21 KB**, ops
+    page **410 KB → 336 KB** at `comp_level 5`.
+  - The access log had **no timings at all**, so "is it us or the network" was unanswerable. It
+    now records `rt=` and `urt=`.
+  - ⚠️ **My own measurement was misleading and is corrected here.** The per-request numbers
+    I first quoted came through a **Boston** Cloudflare edge (`CF-RAY: ...-BOS`), not Mumbai.
+    Staff in India see materially better figures; do not quote those numbers to them.
+  - Polling was **not** the problem, contrary to first impressions: `/changes` answers in 13
+    bytes, and the panel actually reloads about once a minute, not every ten seconds.
+
+**✅ Statuses — and the colour complaint was two different bugs.** Counting the live database
+first changed the whole job: `review_delivered` holds **115 claims, the majority**, and appeared
+in **no dropdown, no pill stylesheet and no board column list**. It rendered as a bare lowercase
+word. That was never a colour bug; it was four hand-kept copies of one list.
+  - The offered list is now **Intimated · Assigned · In Review · Review Query · Review Query
+    Resolved · Review Delivered · Withdrawn** (founder's six, plus `review_delivered`, which he
+    agreed to keep rather than migrate 115 claims).
+  - `in_negotiation`, `resolved_won`, `resolved_lost`, `closed` leave the **dropdowns** and stay
+    in the **code** (his decision). `resolved_won` is what moves a case to `pending_payment` in
+    `biz_nidaan_case_state`; deleting it would change what happens to such a case rather than
+    tidy a menu. One live claim is `in_negotiation` and still works.
+  - A raised query now waits on the **customer**, not on us; an answered one comes back to us.
+    Without that, a new status fell through to `intake`/`none`.
+  - 🐞 **The colour bug was in the design system, not the pill.** `--nd-orange-text`
+    (`#fdba74`) is defined for dark and **never redefined for light** — the one `*-text`
+    variable missing its light pair. Measured **1.37:1** against a 3:1 floor. Fixed at source
+    (`#c2410c`), which fixes everything else using orange too.
+  - `uitest/status-pills.js` renders **every** status in **both** themes and computes the real
+    contrast ratio. All 22 pass; the worst is now 3.15:1.
+  - `deploy/verify-claim-statuses.py` fails if the server list, the page list, the pill rules or
+    either language's labels ever drift apart again.
+
+**✅ NP-118, NP-112, NP-44, NP-119, NP-39 archived** (founder: testing claims). Checked first:
+**zero payment rows** across all five, so Revenue is untouched. NP-44 carried
+`l2_payment_status='paid'` with no ledger row behind it — itself the mark of a hand-set test.
+Three of them sit on **LAKSHYA PARDESHI's own staff account**, which was deliberately NOT
+touched. Archived = hidden from every working view, never deleted, restorable. Contacts left
+alone (his answer): a claim's phone/email carry no uniqueness, so they were always reusable.
+
 ### ✅ SHIPPED 2026-09-22 (4) — one dead name, and several features that came back
 
 **🚨 The big one: the ops page threw a ReferenceError on EVERY load, and had been doing it

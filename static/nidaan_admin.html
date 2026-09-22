@@ -41,6 +41,9 @@ tr:hover td{background:#1a2744}
 .badge.intimated{background:#1e3a5f;color:#93c5fd}
 .badge.assigned{background:#1a3640;color:#67e8f9}
 .badge.in_review{background:#1e3a1e;color:#86efac}
+.badge.review_query{background:#3b2400;color:#fdba74}
+.badge.review_query_resolved{background:#083344;color:#67e8f9}
+.badge.review_delivered{background:#14532d;color:#86efac}
 .badge.in_negotiation{background:#3b2e00;color:#fbbf24}
 .badge.resolved_won{background:#14532d;color:#4ade80}
 .badge.resolved_lost{background:#450a0a;color:#fca5a5}
@@ -103,7 +106,10 @@ tr:hover td{background:#1a2744}
 <div id="toast"></div>
 
 <script>
-const CLAIM_STATUSES = ['intimated','assigned','in_review','in_negotiation','resolved_won','resolved_lost','closed','withdrawn'];
+const CLAIM_STATUSES = ['intimated','assigned','in_review','review_query',
+                        'review_query_resolved','review_delivered','withdrawn',
+                        // retired, kept so an existing claim still reads correctly
+                        'in_negotiation','resolved_won','resolved_lost','closed'];
 let _token = '';
 const API = (path) => `/nidaan/api/admin${path}`;
 

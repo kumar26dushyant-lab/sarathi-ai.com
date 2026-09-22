@@ -1,5 +1,55 @@
 # Staff Announcement Drafts
 
+## 2026-09-22 (3) — The code screen, and the status list
+
+**Title (EN):**
+🔑 Complainants: one tap now sends one code · 🏷️ New status list · ⚡ Pages load faster
+
+**Details (EN):**
+• **If a complainant says "I am not getting the code" — the screen was the problem, not them.**
+Pressing the button several times used to send several codes, and 5 codes in an hour is the
+limit, so they locked themselves out. Now the button freezes for a minute after one press, counts
+down, and shows how many codes are left. If the code still does not arrive it tells them to check
+spam and gives our number. **Delivery itself is working** — 23 codes went out in 24 hours and
+none failed.
+
+• **The status list has changed.** You will now see: **Intimated, Assigned, In Review, Review
+Query, Review Query Resolved, Review Delivered, Withdrawn.** *In Negotiation, Resolved Won,
+Resolved Lost* and *Closed* are no longer offered — old claims that already have one still show
+it correctly, nothing is lost.
+
+• **Status colours now work in light mode too.** Some of them were pale-on-pale and could not be
+read. Every status has been checked in both dark and light.
+
+• **Pages should feel quicker**, especially the ops screen on a phone.
+
+• **Five testing claims have been put away** — NP-118, NP-112, NP-44, NP-119, NP-39. They are
+hidden, not deleted.
+
+**Title (HI):**
+🔑 शिकायतकर्ता: एक बार दबाने पर एक कोड · 🏷️ नई स्टेटस सूची · ⚡ पेज तेज़
+
+**Details (HI):**
+• **अगर कोई शिकायतकर्ता कहे "मुझे कोड नहीं मिल रहा" — गलती उनकी नहीं, स्क्रीन की थी।**
+बटन कई बार दबाने से कई कोड चले जाते थे, और एक घंटे में 5 की सीमा है — इसलिए वे खुद ही
+बाहर हो जाते थे। अब एक बार दबाने पर बटन एक मिनट के लिए बंद हो जाता है, उलटी गिनती दिखाता है,
+और बताता है कि कितने कोड बचे हैं। **कोड भेजना खुद ठीक चल रहा है** — 24 घंटे में 23 कोड गए,
+एक भी फेल नहीं।
+
+• **स्टेटस की सूची बदल गई है।** अब दिखेंगे: **Intimated, Assigned, In Review, Review Query,
+Review Query Resolved, Review Delivered, Withdrawn.** *In Negotiation, Resolved Won, Resolved
+Lost* और *Closed* अब नहीं चुने जा सकते — पुराने क्लेम जिन पर ये लगे हैं, वे ठीक दिखते
+रहेंगे। कुछ नहीं खोया।
+
+• **स्टेटस के रंग अब light mode में भी साफ़ दिखते हैं।** कुछ फीके पड़ जाते थे और पढ़े नहीं जाते थे।
+हर स्टेटस को दोनों मोड में जाँचा गया है।
+
+• **पेज तेज़ खुलने चाहिए**, खासकर फ़ोन पर ops स्क्रीन।
+
+• **पाँच testing क्लेम हटा दिए गए हैं** — NP-118, NP-112, NP-44, NP-119, NP-39। वे छिपाए गए हैं,
+मिटाए नहीं।
+
+
 ## 2026-09-22 (2) — Buttons that did nothing are working again
 
 **Title (EN):**

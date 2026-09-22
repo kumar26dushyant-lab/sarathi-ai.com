@@ -117,7 +117,13 @@ tr:hover td{background:var(--nd-bg-surface)}
 .s-intimated{background:rgba(251,191,36,.12);color:var(--nd-warning-text);border:1px solid rgba(251,191,36,.25)}
 .s-assigned{background:rgba(59,130,246,.12);color:var(--nd-info-text);border:1px solid rgba(59,130,246,.25)}
 .s-in_review{background:rgba(139,92,246,.12);color:var(--nd-purple-text);border:1px solid rgba(139,92,246,.25)}
-.s-in_negotiation{background:rgba(234,179,8,.12);color:#fde047;border:1px solid rgba(234,179,8,.25)}
+/* Added 22 Sep. review_delivered held 115 claims - the majority - with no rule here at all, so
+   it rendered as an unstyled lowercase word. in_negotiation carried a hardcoded #fde047: pale
+   yellow on pale yellow, fine on dark and near-invisible on light. No literal colours here. */
+.s-review_query{background:rgba(249,115,22,.12);color:var(--nd-orange-text);border:1px solid rgba(249,115,22,.25)}
+.s-review_query_resolved{background:rgba(6,182,212,.12);color:var(--nd-cyan-text);border:1px solid rgba(6,182,212,.25)}
+.s-review_delivered{background:rgba(34,197,94,.12);color:var(--nd-success-text);border:1px solid rgba(34,197,94,.25)}
+.s-in_negotiation{background:rgba(234,179,8,.12);color:var(--nd-warning-text);border:1px solid rgba(234,179,8,.25)}
 .s-resolved_won{background:rgba(34,197,94,.12);color:var(--nd-success-text);border:1px solid rgba(34,197,94,.25)}
 .s-resolved_lost{background:rgba(239,68,68,.12);color:var(--nd-danger-text);border:1px solid rgba(239,68,68,.25)}
 .s-closed,.s-withdrawn{background:var(--nd-bg-surface-2);color:var(--nd-text-faint);border:1px solid var(--nd-border-strong)}
@@ -1447,13 +1453,6 @@ async function loadOverview() {
           <select id="ovClaimStatus" onchange="renderActiveClaimsWidget(this.value, document.getElementById('ovClaimSearch').value)"
                   style="background:var(--nd-bg-surface);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);padding:.35rem .55rem;border-radius:6px;font-size:.82rem">
             <option value="">All statuses</option>
-            <option value="intimated">Intimated</option>
-            <option value="assigned">Assigned</option>
-            <option value="in_review">In Review</option>
-            <option value="in_negotiation">In Negotiation</option>
-            <option value="resolved_won">Resolved Won</option>
-            <option value="resolved_lost">Resolved Lost</option>
-            <option value="closed">Closed</option>
           </select>
         </div>
       </div>
@@ -3673,6 +3672,7 @@ function setOpsPayFilter(ps) {
 }
 
 async function renderActiveClaimsWidget(statusFilter, search) {
+  fillStatusFilter('ovClaimStatus');
   window._ovStatusFilter = statusFilter; window._ovSearch = search;  // remember for filter toggles
   const body = document.getElementById('ovClaimsBody');
   if (!body) return;
@@ -3847,11 +3847,51 @@ function _renderL2Views(activeId){
     : `<span style="font-size:.75rem;color:var(--nd-text-faint)">${_guideLang==='hi'?'अभी कोई सेव्ड व्यू नहीं':'none yet'}</span>`;
   bar.innerHTML = `<span style="font-size:.75rem;color:var(--nd-text-muted)">${_guideLang==='hi'?'सेव्ड व्यू:':'Saved views:'}</span>${chips}<button class="btn-sm btn-ghost" style="font-size:.72rem;padding:.2rem .6rem" onclick="_l2SaveView()">★ ${_guideLang==='hi'?'वर्तमान सेव करें':'Save current'}</button>`;
 }
-// Canonical L2 pipeline (board columns), in order, with friendly labels.
-const _L2_STAGES = [
-  ['intimated','Intimated'],['assigned','Assigned'],['in_review','In review'],
-  ['in_negotiation','In negotiation'],['resolved_won','Won'],['resolved_lost','Lost'],
-  ['closed','Closed'],['withdrawn','Withdrawn']];
+// THE statuses, once, in the order staff see them. Must match biz_nidaan.CLAIM_STATUS_PICKLIST;
+// deploy/verify-claim-statuses.py fails if they disagree. Three hand-kept copies in this one
+// file is how review_delivered - 115 claims, the majority - came to be in none of them.
+const CLAIM_STATUS_LIST = [
+  ['intimated','Intimated'],
+  ['assigned','Assigned'],
+  ['in_review','In Review'],
+  ['review_query','Review Query'],
+  ['review_query_resolved','Review Query Resolved'],
+  ['review_delivered','Review Delivered'],
+  ['withdrawn','Withdrawn'],
+];
+// Retired (founder, 22 Sep): never offered, but still labelled and coloured wherever a claim
+// already carries one - a case does not stop existing because a word left a menu.
+const CLAIM_STATUS_RETIRED = [
+  ['in_negotiation','In Negotiation'],['resolved_won','Resolved Won'],
+  ['resolved_lost','Resolved Lost'],['closed','Closed'],
+];
+const CLAIM_STATUS_ALL = CLAIM_STATUS_LIST.concat(CLAIM_STATUS_RETIRED);
+
+// The editable dropdown on a claim: what may be chosen, plus this claim's own status when it is
+// one of the retired ones - otherwise opening such a claim would silently re-label it.
+function claimStatusOptions(sel){
+  return CLAIM_STATUS_LIST
+    .concat(CLAIM_STATUS_RETIRED.filter(function(x){ return x[0] === sel; }))
+    .map(function(x){
+      return '<option value="' + x[0] + '"' + (x[0] === sel ? ' selected' : '')
+        + '>' + esc(x[1]) + '</option>'; }).join('');
+}
+
+// A filter dropdown keeps its "all" line and takes the rest from the same list. Called wherever
+// the bar is drawn, and safe to call twice.
+function fillStatusFilter(id){
+  var el = document.getElementById(id);
+  if (!el || el.dataset.filled === '1') return;
+  var keep = el.value;
+  el.insertAdjacentHTML('beforeend', CLAIM_STATUS_ALL.map(function(x){
+    return '<option value="' + x[0] + '">' + esc(x[1]) + '</option>'; }).join(''));
+  el.dataset.filled = '1';
+  if (keep) el.value = keep;
+}
+
+// Board columns, in the same order, with the retired ones after so a claim carrying one still
+// has a labelled column instead of an unlabelled heap.
+const _L2_STAGES = CLAIM_STATUS_ALL;
 // Where a claim stands in Consolidation, and the last thing that actually happened on it.
 // A status word alone never answered "is anyone doing anything with this?" (founder, 16 Sep).
 function _whereAndWhat(c){
@@ -4467,14 +4507,6 @@ async function loadClaims(statusFilter='', search='', branch='', plan='', assign
       <input id="claimSearch" placeholder="🔍 Search name / phone / policy…" value="${esc(search)}" oninput="_claimSearchDebounced()" style="flex:1;min-width:160px">
       <select id="claimStatusFilter" onchange="applyClaimFilters()">
         <option value="">All Statuses</option>
-        <option value="intimated">Intimated</option>
-        <option value="assigned">Assigned</option>
-        <option value="in_review">In Review</option>
-        <option value="in_negotiation">In Negotiation</option>
-        <option value="resolved_won">Resolved Won</option>
-        <option value="resolved_lost">Resolved Lost</option>
-        <option value="closed">Closed</option>
-        <option value="withdrawn">Withdrawn</option>
       </select>
       <select id="claimPlanFilter" onchange="applyClaimFilters()">
         <option value="">All Plans</option>
@@ -4505,6 +4537,7 @@ async function loadClaims(statusFilter='', search='', branch='', plan='', assign
     <div id="claimTableWrap"><div class="empty"><div class="ei">⏳</div><p>Loading claims…</p></div></div>`;
 
   // Re-apply the active filter values (the panel re-renders its controls each call).
+  fillStatusFilter('claimStatusFilter');
   if (statusFilter) document.getElementById('claimStatusFilter').value = statusFilter;
   if (plan)   document.getElementById('claimPlanFilter').value = plan;
   if (branch) document.getElementById('claimBranchFilter').value = branch;
@@ -5926,8 +5959,9 @@ async function openClaimDrawer(claimId) {
   const canAssign = true;  // claim (re)assignment open to ALL staff (audited); was admin/SA only
   const canStatus = _role!=='team_member' || c.assigned_to_staff_id===_staffId;
 
-  const statusOptions = ['intimated','assigned','in_review','in_negotiation','resolved_won','resolved_lost','closed','withdrawn']
-    .map(s=>`<option value="${s}" ${c.status===s?'selected':''}>${s.replace(/_/g,' ')}</option>`).join('');
+  // Was a fourth copy of the list, printing raw keys ("in_review", "review_delivered") at staff
+  // as if those were words people say.
+  const statusOptions = claimStatusOptions(c.status);
 
   const notesHtml = _renderClaimNotesThread(c.notes||[], c.claim_id);
 

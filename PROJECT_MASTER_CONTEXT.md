@@ -7738,3 +7738,30 @@ sides apart in code.
 A subscription's `short_url` is now kept and handed to the browser, and offered to anybody the
 checkout sheet fails. It is the same Razorpay account, so it does not add payment methods - it is
 a way through a broken screen, not around account settings.
+
+
+**The code screen, 22 Sep.** MAX_CODES_PER_HOUR is 5 per claim on a ROLLING hour, and the portal
+never disabled the button - five impatient taps spent the lot in five seconds. The freeze now
+goes on BEFORE the request leaves, because the gap between the tap and the reply is where the
+extra taps land. The server sends `left`, `cooldown_sec` and a real `retry_after_sec`; the page
+cannot compute any of the three. Live evidence the same day: portal 23 codes sent, 0 failed -
+delivery was never broken. App Health now reads biz_nidaan_login_health so the watchdog notices
+before a complainant does.
+
+**Latency, 22 Sep - measured.** Origin 24 ms, load 0.29, DB 21 MB. Not the server. The ops page
+is one 1.25 MB file that went out `no-store`, so it was re-sent in full on every load; it is now
+`no-cache` + ETag + Last-Modified, which keeps the "never run a stale build" guarantee and costs
+a 304 instead of 320 KB. BOTH validators are needed: Cloudflare strips the ETag when it
+re-compresses with Brotli, which only shows up if you test THROUGH Cloudflare rather than at the
+origin. nginx also had gzip on with default gzip_types - text/html alone - so every .js and .css
+went out raw. And a warning about my own numbers: the first per-request figures came through a
+Boston CF edge, not Mumbai.
+
+**Statuses, 22 Sep.** Count before designing. `review_delivered` held 115 of the claims - the
+majority - and was in the server tuple and nowhere else: no dropdown, no pill rule, no board
+column. It rendered as a bare word and read as a colour bug. The actual colour bug was one level
+deeper: `--nd-orange-text` is defined for dark and has no light pair, the only `*-text` variable
+missing one, so anything orange was pale-on-pale in light mode at 1.37:1. Fixed in
+nidaan_design.css, which fixes every other user of it. uitest/status-pills.js now measures real
+contrast for every status in both themes, and deploy/verify-claim-statuses.py keeps the four
+copies of the list from drifting apart again.

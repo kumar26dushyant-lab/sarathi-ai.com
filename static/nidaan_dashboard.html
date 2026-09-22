@@ -113,10 +113,16 @@
   .s-intimated{background:rgba(234,179,8,.15);color:var(--nd-warning-text)}
   .s-assigned{background:rgba(59,130,246,.15);color:var(--nd-info-text)}
   .s-in_review{background:rgba(139,92,246,.15);color:var(--nd-purple-text)}
-  .s-in_negotiation{background:rgba(249,115,22,.15);color:#fdba74}
+  /* 22 Sep: review_delivered is the status MOST of our claims are in and had no rule here at
+     all, so it rendered unstyled. #fdba74 and #9ca3af were literals - they read on dark and
+     wash out on light. Theme variables only from here on. */
+  .s-review_query{background:rgba(249,115,22,.15);color:var(--nd-orange-text)}
+  .s-review_query_resolved{background:rgba(6,182,212,.15);color:var(--nd-cyan-text)}
+  .s-review_delivered{background:rgba(34,197,94,.15);color:var(--nd-success-text)}
+  .s-in_negotiation{background:rgba(234,179,8,.15);color:var(--nd-warning-text)}
   .s-resolved_won{background:rgba(34,197,94,.15);color:var(--nd-success-text)}
   .s-resolved_lost{background:rgba(239,68,68,.15);color:var(--nd-danger-text)}
-  .s-closed,.s-withdrawn{background:rgba(107,114,128,.15);color:#9ca3af}
+  .s-closed,.s-withdrawn{background:rgba(107,114,128,.15);color:var(--nd-text-muted)}
   .empty{text-align:center;padding:2.5rem;color:var(--nd-text-faint);font-size:.9rem}
 
   /* MODAL */
@@ -1084,11 +1090,13 @@ function _scheduleDashRefresh(){
 // ── Status pill ───────────────────────────────────────────────────────────────
 const STATUS_LABELS = {
   intimated:'Intimated', assigned:'Assigned', in_review:'In Review',
+  review_query:'Review Query', review_query_resolved:'Review Query Resolved',
   in_negotiation:'Negotiating', review_delivered:'Review Delivered ✓',
   resolved_won:'Won ✓', resolved_lost:'Lost',
   closed:'Closed', withdrawn:'Withdrawn'
 };
 const STATUS_LABELS_HI = {
+  review_query:'सवाल पूछा गया', review_query_resolved:'जवाब मिल गया',
   intimated:'अधिसूचित', assigned:'सौंपा गया', in_review:'समीक्षा में',
   in_negotiation:'वार्ता में', review_delivered:'समीक्षा दी गई ✓',
   resolved_won:'जीता ✓', resolved_lost:'हारा',
@@ -1751,6 +1759,8 @@ async function uploadRvDocs(id, type) {
 
 // ── Claim Detail Drawer ───────────────────────────────────────────────────────
 const STATUS_LABELS_FULL = {
+  review_query:'Review Query — waiting for your answer',
+  review_query_resolved:'Review Query Resolved — back with our team',
   intimated:'Intimated', assigned:'Assigned to Legal Team', in_review:'Under Review',
   in_negotiation:'In Negotiation', review_delivered:'Review Delivered',
   resolved_won:'Resolved — Won', resolved_lost:'Resolved — Lost',

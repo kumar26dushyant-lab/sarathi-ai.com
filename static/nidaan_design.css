@@ -172,6 +172,11 @@
   --nd-info-text:      #1d4ed8;
   --nd-purple-text:    #6d28d9;
   --nd-cyan-text:      #0e7490;
+  /* Was never redefined for light at all, so it stayed #fdba74 - a pale orange meant to sit on
+     a dark ground - and rendered pale-on-pale wherever it was used. Measured 1.37:1 on the
+     Review Query pill, against a 3:1 floor. Every other *-text variable has a light pair; this
+     one was simply missed. (22 Sep 2026) */
+  --nd-orange-text:    #c2410c;
 
   --nd-shadow-inset:   inset 0 1px 0 rgba(255,255,255,.6);
 }

@@ -308,7 +308,12 @@ def derive(claim: dict, *, docs_done: int = 0, docs_total: int = 0,
             flags.append("awaiting_l2_start")
             if docs_total and docs_done < docs_total:
                 flags.append("docs_short")
-    elif status in ("intimated", "assigned", "in_review", "review_delivered"):
+    elif status == "review_query":
+        # We asked the customer something during the review. Nothing moves until they answer, and
+        # calling that "internal" would put it on our own queue as work we were sitting on.
+        stage, blocker = "review", "complainant"
+    elif status in ("intimated", "assigned", "in_review", "review_query_resolved",
+                    "review_delivered"):
         stage, blocker = "review", "internal"
         flags.append("unreviewed")
     else:
