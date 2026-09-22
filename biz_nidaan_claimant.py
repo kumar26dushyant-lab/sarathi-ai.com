@@ -255,7 +255,9 @@ async def list_claimant_docs(claim_id: int) -> list[dict]:
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         rows = await (await conn.execute(
-            "SELECT doc_id, stored_name, original_name, file_size, uploaded_at "
+            # submitted_at is NULL while they are still choosing - the page marks those
+            # "Not sent yet". Leaving it out of this SELECT would make every file look unsent.
+            "SELECT doc_id, stored_name, original_name, file_size, uploaded_at, submitted_at "
             "FROM nidaan_claim_documents WHERE claim_id=? AND source='claimant' "
             "ORDER BY doc_id DESC", (claim_id,))).fetchall()
     return [dict(r) for r in rows]

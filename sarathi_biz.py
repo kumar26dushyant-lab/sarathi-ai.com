@@ -1550,6 +1550,8 @@ async def nidaan_claim_me(request: Request):
         "documents": [
             {"doc_id": d["doc_id"], "name": d["original_name"],
              "size": d.get("file_size") or 0, "uploaded_at": d.get("uploaded_at"),
+             # NULL until they press Save and submit. The page marks those "Not sent yet".
+             "submitted_at": d.get("submitted_at"),
              "url": _nidaan_doc_url(d["stored_name"])}
             for d in await claimant.list_claimant_docs(ctx["claim_id"])
         ],
@@ -1621,12 +1623,55 @@ async def nidaan_claim_upload_doc(request: Request, files: list[UploadFile] = Fi
         content, ext = _as_viewable(content, ext)
         stored = f"{uuid.uuid4().hex}{ext}"
         (_NIDAAN_DOCS_DIR / stored).write_bytes(content)
+        # HELD, NOT HANDED OVER. Picking a file is not the same as saying "these are the ones":
+        # the founder's own report is somebody uploading four and removing two (22 Sep). It is
+        # stored - a browser cannot hold it and re-sending everything on submit would punish a
+        # slow connection - but the claim does not count it until they press the button.
         doc_id = await nidaan.save_claim_document(
             account_id=account_id, stored_name=stored, original_name=f.filename or stored,
             file_size=len(content), mime_type=f.content_type or "", claim_id=claim_id,
-            source="claimant")
+            source="claimant", submitted=False)
         saved.append({"doc_id": doc_id, "name": f.filename or stored})
-    return {"ok": True, "saved": saved}
+    return {"ok": True, "saved": saved,
+            "pending": await nidaan.count_unsubmitted_documents(claim_id)}
+
+
+@app.post("/nidaan/claim/api/documents/submit")
+@limiter.limit("20/minute")
+async def nidaan_claim_submit_docs(request: Request):
+    """The complainant says these are the ones. This is the moment the claim counts them.
+
+    Idempotent: the button is on a phone and a first tap that looked like nothing is exactly why
+    people press twice, so a second press hands over nothing and still says it worked.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    ctx = await _claimant_ctx(request)
+    if not ctx:
+        raise HTTPException(status_code=401, detail="This link is invalid or has expired")
+    claim_id = ctx["claim_id"]
+    n = await nidaan.submit_claim_documents(claim_id)
+    total = len(await nidaan.get_claim_documents(claim_id=claim_id))
+    if n:
+        try:
+            await nidaan.record_claim_activity(
+                claim_id, "documents", actor="complainant",
+                summary="\U0001f4ce The complainant submitted %d document%s (%d on the claim now)"
+                        % (n, "" if n == 1 else "s", total))
+        except Exception as e:  # noqa: BLE001
+            logger.warning("document submit remark failed claim=%s: %s", claim_id, e)
+        # Told ONCE, when there is something to act on - not on every file as it is picked.
+        try:
+            import biz_nidaan_notifications as _nnot
+            await _nnot.notify_claim_watchers(
+                claim_id,
+                "\U0001f4ce Documents submitted \u2014 NP-%s" % claim_id,
+                "The complainant has submitted %d document%s. The claim now holds %d."
+                % (n, "" if n == 1 else "s", total),
+                event_key="claim.watch")
+        except Exception as e:  # noqa: BLE001
+            logger.info("document submit notify skipped claim=%s: %s", claim_id, e)
+    return {"ok": True, "submitted": n, "total": total}
 
 
 async def _file_consent_pdf(claim_id: int) -> Optional[int]:

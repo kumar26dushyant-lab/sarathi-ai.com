@@ -56,6 +56,15 @@
   .tl-lbl{ font-weight:700; font-size:.92rem; }
   .tl-at{ font-size:.76rem; color:var(--muted); }
   .doc{ display:block; background:#f8fbfa; border:1px solid var(--line); border-radius:9px; padding:.55rem .7rem; margin-bottom:.4rem; text-decoration:none; color:var(--brand); font-weight:600; font-size:.88rem; }
+  /* A file picked but not yet handed over, and the two boxes that say which state you are in.
+     Colour is not the only signal - each one carries words - because these are read on a cheap
+     phone in bad light. */
+  .pendtag{font-size:.72rem;font-weight:700;color:#92400e;background:#fef3c7;
+    border:1px solid #f59e0b;border-radius:999px;padding:.1rem .5rem;margin-left:.4rem}
+  .pendbox{background:#fffbeb;border:1px solid #f59e0b;color:#7c2d12;border-radius:10px;
+    padding:.6rem .7rem;font-size:.9rem;line-height:1.5;margin:.2rem 0 .6rem}
+  .donebox{background:#ecfdf5;border:1px solid #10b981;color:#065f46;border-radius:10px;
+    padding:.6rem .7rem;font-size:.9rem;line-height:1.5;margin:.2rem 0 .6rem}
 </style>
 </head>
 <body>
@@ -89,6 +98,14 @@ var T = {
     terms:"Terms", agree:"I have read and I agree to the fee terms above.", accept:"Accept & Continue",
     accepted:"✅ You accepted the fee terms", on:"on", docsTitle:"Your documents", docsHint:"Upload documents related to your claim (PDF, photo). Up to 20 files, 25 MB each.",
     upload:"📎 Upload documents", uploading:"Uploading…", noDocs:"No documents uploaded yet.",
+    submitDocs:"✅ Save and submit documents", submitting:"Sending…",
+    notSentYet:"Not sent yet",
+    pendingNote:"These are on your page but we have NOT received them yet. Check the list, remove anything wrong, then press “Save and submit documents”.",
+    confirmSubmit:"Send these documents to NidaanPartner?\n\nCheck the list first — you can still remove anything that is wrong. You can come back and add more later.",
+    submittedTitle:"✅ We have your documents",
+    submittedNote:"Thank you — our team can see them now. You can close this page. If you need to add more later, open this page again from the link in your email.",
+    submitFailed:"Could not send them. Please try once more.",
+    nothingToSubmit:"There is nothing new to send.",
     remove:"Remove", removing:"Removing…",
     confirmRemove:"Remove this document from your claim?",
     removeFailed:"Could not remove that. Please try again.",
@@ -121,6 +138,14 @@ var T = {
     terms:"नियम व शर्तें", agree:"मैंने ऊपर दी गई फीस शर्तें पढ़ ली हैं और मैं सहमत हूँ।", accept:"स्वीकार करें और आगे बढ़ें",
     accepted:"✅ आपने फीस शर्तें स्वीकार कर लीं", on:"दिनांक", docsTitle:"आपके दस्तावेज़", docsHint:"अपने दावे से जुड़े दस्तावेज़ अपलोड करें (PDF, फ़ोटो)। अधिकतम 20 फ़ाइलें, हर एक 25 MB तक।",
     upload:"📎 दस्तावेज़ अपलोड करें", uploading:"अपलोड हो रहा है…", noDocs:"अभी तक कोई दस्तावेज़ अपलोड नहीं हुआ।",
+    submitDocs:"✅ दस्तावेज़ सेव करके भेजें", submitting:"भेजा जा रहा है…",
+    notSentYet:"अभी भेजा नहीं",
+    pendingNote:"ये आपके पेज पर हैं, लेकिन हमें अभी नहीं मिले हैं। सूची देखिए, गलत फ़ाइल हटाइए, फिर “दस्तावेज़ सेव करके भेजें” दबाइए।",
+    confirmSubmit:"ये दस्तावेज़ NidaanPartner को भेजने हैं?\n\nपहले सूची देख लीजिए — गलत फ़ाइल अभी भी हटा सकते हैं। बाद में लौटकर और भी जोड़ सकते हैं।",
+    submittedTitle:"✅ आपके दस्तावेज़ मिल गए",
+    submittedNote:"धन्यवाद — हमारी टीम अब इन्हें देख सकती है। आप यह पेज बंद कर सकते हैं। बाद में और जोड़ने हों तो ईमेल के लिंक से यह पेज फिर खोलिए।",
+    submitFailed:"भेजा नहीं जा सका। कृपया एक बार फिर कोशिश कीजिए।",
+    nothingToSubmit:"भेजने के लिए कुछ नया नहीं है।",
     remove:"हटाएं", removing:"हटाया जा रहा है…",
     confirmRemove:"क्या यह दस्तावेज़ आपके क्लेम से हटा दें?",
     removeFailed:"हटाया नहीं जा सका। कृपया दोबारा कोशिश करें।",
@@ -347,10 +372,16 @@ function render(){
 
   // Documents (complainant's own uploads) + upload
   var docs = DATA.documents || [];
+  // A file that has been picked but not yet handed over says so, right on its own row. Without
+  // that, "did it work?" has no answer on the screen and people press things again.
+  var pending = 0;
   var docList = docs.length
     ? docs.map(function(d){
+        var waiting = !d.submitted_at;
+        if (waiting) pending++;
         return '<div class="docrow">'
           + '<a class="doc" href="'+esc(d.url)+'" target="_blank" rel="noopener">📄 '+esc(d.name)+'</a>'
+          + (waiting ? '<span class="pendtag">'+esc(t("notSentYet"))+'</span>' : '')
           + '<button type="button" class="docx" onclick="removeDoc('+Number(d.doc_id)+',this)">'
           + esc(t("remove"))+'</button></div>';
       }).join('')
@@ -358,8 +389,16 @@ function render(){
   var docsCard = '<div class="card"><h2>'+esc(t("docsTitle"))+'</h2>'+
     '<p class="note">'+esc(t("docsHint"))+'</p>'+
     '<div id="docList" style="margin:.6rem 0">'+docList+'</div>'+
+    (pending
+      ? '<div class="pendbox">'+esc(t("pendingNote"))+'</div>'
+      : (docs.length ? '<div class="donebox"><b>'+esc(t("submittedTitle"))+'</b><br>'
+                       + esc(t("submittedNote"))+'</div>' : ''))+
     '<input type="file" id="docFiles" multiple accept=".pdf,.jpg,.jpeg,.png,.webp" style="display:none" onchange="uploadDocs(this)">'+
-    '<button class="btn btn-primary" id="uploadBtn" onclick="document.getElementById(\'docFiles\').click()">'+esc(t("upload"))+'</button></div>';
+    '<div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.2rem">'+
+    '<button class="btn" id="uploadBtn" onclick="document.getElementById(\'docFiles\').click()">'+esc(t("upload"))+'</button>'+
+    (pending ? '<button class="btn btn-primary" id="submitBtn" onclick="submitDocs()">'
+               + esc(t("submitDocs"))+'</button>' : '')+
+    '</div></div>';
 
   document.getElementById("content").innerHTML = profileCard + statusCard + feeCard + tlCard + docsCard;
   document.getElementById("reassure").textContent = t("reassure");
@@ -383,6 +422,29 @@ async function removeDoc(docId, btn){
   }catch(e){}
   btn.disabled = false; btn.textContent = old;
   alert(t("removeFailed"));
+}
+
+// "These are the ones." Asks first, because the whole point is to give somebody the moment to
+// check before their papers reach us.
+async function submitDocs(){
+  var btn = document.getElementById("submitBtn");
+  if(!confirm(t("confirmSubmit"))) return;
+  var old = btn ? btn.textContent : "";
+  if(btn){ btn.disabled = true; btn.textContent = t("submitting"); }
+  try{
+    var r = await fetch("/nidaan/claim/api/documents/submit", { method:"POST", headers: auth() });
+    if(r.ok){
+      var d = await r.json().catch(function(){ return {}; });
+      var me = await fetch("/nidaan/claim/api/me",{headers: auth()});
+      DATA = await me.json(); render();
+      // Said out loud as well as shown, because the screen has just scrolled.
+      alert(d.submitted ? t("submittedTitle") + "\n\n" + t("submittedNote")
+                        : t("nothingToSubmit"));
+      return;
+    }
+  }catch(e){}
+  if(btn){ btn.disabled = false; btn.textContent = old; }
+  alert(t("submitFailed"));
 }
 
 async function uploadDocs(input){

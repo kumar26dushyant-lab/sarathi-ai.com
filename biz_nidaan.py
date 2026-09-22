@@ -7992,6 +7992,27 @@ async def ensure_claim_documents_table() -> None:
             await conn.execute("ALTER TABLE nidaan_claim_documents ADD COLUMN source TEXT DEFAULT ''")
         except Exception:
             pass
+        # WHEN THE COMPLAINANT SAID THEY WERE READY. A file has to be uploaded to be held at all,
+        # but picking it is not the same as handing it over: the founder's own report is somebody
+        # uploading four and removing two before they are done (22 Sep). NULL while they are
+        # still choosing; stamped when they press Save and submit.
+        _added = False
+        try:
+            await conn.execute(
+                "ALTER TABLE nidaan_claim_documents ADD COLUMN submitted_at TEXT")
+            _added = True
+        except Exception:
+            pass
+        # Everything already on a claim was handed over under the old rules; stamping it keeps
+        # that true rather than re-opening decisions people have acted on.
+        #
+        # ONLY WHEN THE COLUMN IS FIRST ADDED. This function runs on every save, so an
+        # unguarded backfill stamped every file somebody was still choosing the moment they
+        # picked the next one - which would have quietly undone the whole point of holding them.
+        if _added:
+            await conn.execute(
+                "UPDATE nidaan_claim_documents SET submitted_at=COALESCE(uploaded_at, "
+                "CURRENT_TIMESTAMP) WHERE submitted_at IS NULL")
         await conn.commit()
 
 
@@ -8027,19 +8048,53 @@ async def save_claim_document(
     purchase_id: Optional[int] = None,
     claim_id: Optional[int] = None,
     source: str = "",
+    submitted: bool = True,
 ) -> int:
     """Record a newly uploaded document. Returns doc_id. `source`='claimant' marks a policyholder
-    upload (via the complainant portal); default '' = legacy/staff/subscriber."""
+    upload (via the complainant portal); default '' = legacy/staff/subscriber.
+
+    `submitted=False` means the complainant is still choosing: the file is held, but the claim
+    does not count it as handed over until they press Save and submit. Everything a staffer
+    attaches is submitted by definition - they are the ones it was handed to.
+    """
     await ensure_claim_documents_table()
     async with aiosqlite.connect(DB_PATH) as conn:
         cur = await conn.execute(
             """INSERT INTO nidaan_claim_documents
-               (account_id, purchase_id, claim_id, stored_name, original_name, file_size, mime_type, source)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (account_id, purchase_id, claim_id, stored_name, original_name, file_size, mime_type, source or ""),
+               (account_id, purchase_id, claim_id, stored_name, original_name, file_size,
+                mime_type, source, submitted_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?,
+                       CASE WHEN ? THEN CURRENT_TIMESTAMP ELSE NULL END)""",
+            (account_id, purchase_id, claim_id, stored_name, original_name, file_size,
+             mime_type, source or "", 1 if submitted else 0),
         )
         await conn.commit()
         return cur.lastrowid
+
+
+async def submit_claim_documents(claim_id: int) -> int:
+    """The complainant has said these are the ones. Returns how many were handed over.
+
+    Idempotent: pressing it twice hands over nothing the second time, which matters because the
+    button is on a phone and the first tap may not have looked like it did anything.
+    """
+    await ensure_claim_documents_table()
+    async with aiosqlite.connect(DB_PATH) as conn:
+        cur = await conn.execute(
+            "UPDATE nidaan_claim_documents SET submitted_at=CURRENT_TIMESTAMP "
+            "WHERE claim_id=? AND submitted_at IS NULL", (int(claim_id),))
+        await conn.commit()
+        return cur.rowcount or 0
+
+
+async def count_unsubmitted_documents(claim_id: int) -> int:
+    """How many files the complainant is still choosing between."""
+    await ensure_claim_documents_table()
+    async with aiosqlite.connect(DB_PATH) as conn:
+        r = await (await conn.execute(
+            "SELECT COUNT(*) FROM nidaan_claim_documents WHERE claim_id=? AND submitted_at IS NULL",
+            (int(claim_id),))).fetchone()
+    return int(r[0]) if r else 0
 
 
 async def rename_claim_document(doc_id: int, claim_id: int, new_name: str) -> Optional[dict]:

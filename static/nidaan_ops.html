@@ -13382,6 +13382,10 @@ function _l2Styles(){
     padding:.5rem .65rem;max-height:15rem;overflow-y:auto;font-size:.8rem}
   .l2rem .r{margin-bottom:.28rem;color:var(--nd-text-secondary);line-height:1.45}
   .l2rem .w{color:var(--nd-cyan-text);font-weight:700}
+  /* A document the complainant is still choosing. The words carry it, not the colour alone. */
+  .l2mv.waiting{border-style:dashed;opacity:.85}
+  .wtag{font-size:.68rem;font-weight:700;color:var(--nd-warning-text);
+    border:1px solid var(--nd-warning-text);border-radius:999px;padding:0 .35rem;margin-left:.25rem}
   @media (max-width:820px){
     .l2wrap{flex-direction:column}
     .l2rail{flex:1 1 auto;width:100%;position:static;display:grid;
@@ -14563,13 +14567,19 @@ function l2CaseRender(rem){
           ? '<div style="display:flex;gap:.3rem;flex-wrap:wrap">'
             + (_l2Case.files || []).map(function(f){
                 // Opens IN the page, above this sheet - no download, and the gist below stays.
-                return '<a class="l2mv g" href="#" '
+                // A file the complainant has picked but not yet submitted. Shown, not hidden:
+                // a staffer on the phone needs to see what is happening at the moment somebody
+                // rings up - which is exactly when four are uploaded and two removed.
+                const waiting = !f.submitted_at;
+                return '<a class="l2mv g' + (waiting ? ' waiting' : '') + '" href="#" '
                   + 'onclick="event.preventDefault();docView(\'' + esc(f.url).replace(/'/g, "\\'")
                   + '\',\'' + esc(f.original_name || 'document').replace(/'/g, "\\'") + '\',\''
                   + esc(f.mime_type || '') + '\',' + id + ',' + (f.doc_id || 0) + ')" '
-                  + 'title="' + esc(f.original_name || '') + '">'
+                  + 'title="' + esc(f.original_name || '')
+                  + (waiting ? ' \u2014 the complainant has not submitted this yet' : '') + '">'
                   + (/pdf/i.test(f.mime_type || '') ? '\ud83d\udcc4 ' : '\ud83d\uddbc\ufe0f ')
-                  + esc((f.original_name || 'document').slice(0, 34)) + '</a>';
+                  + esc((f.original_name || 'document').slice(0, 34))
+                  + (waiting ? ' <span class="wtag">not submitted</span>' : '') + '</a>';
               }).join('')
             + '</div>'
           : '<div class="bdsub">Nothing attached. Documents are normally complete before a claim '
