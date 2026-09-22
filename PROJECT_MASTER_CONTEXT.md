@@ -7793,3 +7793,23 @@ The image is unreproduced. The Copy button removes the question either way - it 
 flavours explicitly via ClipboardItem, falling back to a copy-event listener that sets both, and
 sends the draft's own markup with no classes, colours or widths, so Gmail renders it in its own
 font with the formatting intact.
+
+
+**Two undefined names, 23 Sep, and the lesson is the checker.** `datetime.utcnow()` in the
+Razorpay webhook handler and `_asyncio` in ops_update_claim_status - both inside `try: ... except
+Exception: pass`, both raising NameError on every call, both silent. The first froze the webhook
+arrival stamp so the payment guardian emailed a false "webhook is dead" 44 times a day for three
+days; the second means the claim.status fan-out has never once run, which is why that event has
+zero rows.
+
+deploy/verify-python-names.py is the answer, and the thing to remember about it is that SCOPE is
+the whole point. Two earlier versions asked "is this name bound anywhere in this file" - which
+answers YES for `datetime`, because eight other functions import it inside themselves - and both
+would have passed the bug they were written for. It is run against the broken file before being
+trusted. `npm run check:py`.
+
+**Email, 23 Sep.** 550/day, and NOT through Brevo - all of it over SMTP, so the 200/day Brevo
+ceiling was never the real constraint. 139 of the 550 were two alarms repeating every 10-15
+minutes; the rest was every event copied to all 16 admins because dispatch() decided email by
+"did WhatsApp work?" and staff WhatsApp is never up. The notify policy had the right answer all
+along and dispatch never asked it.

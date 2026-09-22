@@ -87,6 +87,48 @@ its bucket.
     and the code email now names the page, so somebody who removed two of four files can return,
     sign in with a code, and add more.
 
+### ✅ SHIPPED 2026-09-23 — the retry link, notification routing, and two names that did not exist
+
+**✅ The payment retry link had NEVER been sent.** 27 failures since 17 Aug, zero retry rows.
+It looked for the address under `account_id`/`acct_id` and **not one of our five products writes
+either key**; a UPI payment carries no email on the Razorpay entity, so the notes were the only
+route and the only route looked in the wrong place. `_retry_contact()` now tries every route each
+product really provides. `_tools/test_retry_contact.py` — 13 checks, every product shape resolves.
+  - On the timing question: **we set no timeout anywhere.** No `timeout` on checkout, no
+    `expire_by` on any order. The "could not complete it in time" is the UPI collect window
+    between the customer and their bank app, and it cannot be extended from here.
+  - Of 20 people who failed, **10 later paid** — including the one in his screenshot.
+  - ⚠️ `payment_failed` events carry a phone and no account_id; `payment_success` carries an
+    account_id and no phone. **They cannot be joined**, and my first answer to "did they pay
+    later" was wrong because of it. Worth fixing in the events spine.
+
+**✅ Internal notices go to Telegram + bell, not email.** Measured first: **550 emails in 24h**,
+and **not through Brevo at all** — every one over SMTP, so the 200/day Brevo ceiling was never
+today's constraint; a Gmail limit is. `dispatch()` decided email by "did WhatsApp work?", and for
+staff WhatsApp is never up, so everything became email to all 16 admins. The policy module had
+classed this as chatter since the day it was written and `dispatch` **never consulted it**. Now it
+does, for staff only, and the chatter rule sits above the super-admin rule.
+`deploy/verify-notify-routing.py` — 29 checks.
+
+**🚨 Two names that did not exist, both swallowed by a bare `except`.**
+  - `datetime.utcnow()` in the webhook handler — `datetime` is not a name in that file. The
+    arrival stamp was **never written once**, so the guardian read a frozen timestamp and emailed
+    **"No Razorpay webhook in 24 hours" 44×/day for three days** while webhooks were arriving and
+    working normally.
+  - `_asyncio` in `ops_update_claim_status` — so the **status-change fan-out has never run**,
+    which is exactly why `nidaan_notifications` holds **zero** rows for `claim.status`.
+
+**✅ `deploy/verify-python-names.py`** — eslint's `no-undef`, for Python. **Scope is the whole
+point:** the first two versions asked "is this name bound anywhere in the file", answered yes
+because eight other functions import `datetime` inside themselves, and would have passed the very
+bug they were written for. Run against the broken file before being trusted: 2 problems then, 0
+now. `npm run check:py`.
+
+**✅ An alarm that is still true says it once, then holds 6 hours.** Word for word is the test —
+any change in the text goes straight through, so a worsening situation is never held behind a
+copy of the better one. Tunable from ops settings; 0 disables. Held repeats are counted. A broken
+table delivers. `_tools/test_alarm_repeat.py` — 8 checks.
+
 ### ✅ SHIPPED 2026-09-22 (7) — a draft can be copied into an email as TEXT
 
 Founder: copying a draft and pasting it into Gmail produced a non-editable **image** instead of
