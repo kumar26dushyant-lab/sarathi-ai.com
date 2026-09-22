@@ -14891,6 +14891,97 @@ document.addEventListener('paste', function(e){
   document.execCommand('insertHTML', false, clean);
 });
 
+// ── Copying a draft OUT, into an email ────────────────────────────────────────
+// Founder, 22 Sep: pasting a copied draft into Gmail gave a non-editable picture. Gmail falls
+// back to an image when the clipboard offers one and no usable text/html - so both flavours are
+// written here rather than left to whatever a hand-made selection happens to produce.
+//
+// Nothing is re-styled on the way out. The editor only ever holds b/i/u/p/div/ul/ol/li/br
+// (_csrCleanPaste strips the rest on the way IN), so what goes over is plain structural markup
+// with no classes, colours or widths for Gmail's sanitiser to argue with. It arrives in Gmail's
+// own font, aligned with the rest of the message, bold and underlines intact.
+function _draftPlainText(html){
+  // Blocks become real line breaks before the tags are dropped - otherwise every paragraph runs
+  // into the next one and the plain flavour is a wall of words.
+  const prepared = String(html || '')
+    .replace(/<\/(p|div|li|h[1-6])>/gi, '\n')
+    .replace(/<br\s*\/?>/gi, '\n');
+  const doc = new DOMParser().parseFromString(prepared, 'text/html');
+  return (doc.body.textContent || '')
+    .replace(/\u00a0/g, ' ')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+// The older way, for a browser without the async clipboard or a page not served over https.
+// A listener on the copy event can set BOTH flavours, which is exactly what is missing.
+function _copyBothFlavours(html, text){
+  let wrote = false;
+  const on = function(e){
+    if (!e.clipboardData) return;
+    e.clipboardData.setData('text/html', html);
+    e.clipboardData.setData('text/plain', text);
+    e.preventDefault();
+    wrote = true;
+  };
+  // execCommand('copy') does nothing without a selection, so one is made and put back.
+  const sel = window.getSelection();
+  const had = sel && sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null;
+  const holder = document.createElement('div');
+  holder.textContent = text;
+  holder.setAttribute('style', 'position:fixed;left:-9999px;top:0;white-space:pre-wrap');
+  document.body.appendChild(holder);
+  try{
+    const r = document.createRange(); r.selectNodeContents(holder);
+    sel.removeAllRanges(); sel.addRange(r);
+    document.addEventListener('copy', on);
+    document.execCommand('copy');
+  }catch(e){ wrote = false; }
+  finally{
+    document.removeEventListener('copy', on);
+    holder.remove();
+    try{ sel.removeAllRanges(); if (had) sel.addRange(had); }catch(e){}
+  }
+  return wrote;
+}
+
+async function l2CopyDraft(key, btn){
+  const ed = document.getElementById('lf_' + key) || document.getElementById(key);
+  if (!ed) return;
+  const html = (ed.innerHTML || '').trim();
+  const text = _draftPlainText(html);
+  if (!text){
+    if (typeof ndUI !== 'undefined') ndUI.toast('There is nothing in this draft yet.', 'error');
+    return;
+  }
+  // The charset line matters: without it Gmail reads the Hindi draft as mojibake.
+  const doc = '<meta charset="utf-8">' + html;
+  let ok = false;
+  try{
+    if (navigator.clipboard && window.ClipboardItem){
+      await navigator.clipboard.write([new ClipboardItem({
+        'text/html': new Blob([doc], {type: 'text/html'}),
+        'text/plain': new Blob([text], {type: 'text/plain'}),
+      })]);
+      ok = true;
+    }
+  }catch(e){ ok = false; }
+  if (!ok) ok = _copyBothFlavours(doc, text);
+  if (btn){
+    // Said on the button itself. A toast on a long draft appears somewhere the person is not
+    // looking, and "did that work?" is what makes somebody press it four more times.
+    const was = btn.innerHTML;
+    btn.innerHTML = ok ? '\u2714 Copied' : '\u26a0 Could not copy';
+    setTimeout(function(){ btn.innerHTML = was; }, 1800);
+  }
+  if (typeof ndUI !== 'undefined'){
+    ndUI.toast(ok ? 'Draft copied \u2014 paste it straight into the email.'
+                  : 'Could not copy. Select the text and press Ctrl+C.', ok ? 'success' : 'error');
+  }
+}
+window.l2CopyDraft = l2CopyDraft;
+
 // ── The drafts save while you type ────────────────────────────────────────────
 // 1.5 seconds after the typing (or a paste) stops, and again when the cursor leaves the box. A
 // version number stops an older save from marking newer typing as saved.
@@ -14929,7 +15020,12 @@ function _l2RichEditor(f, value, from, lockedIn){
     return '<div class="csrrt">' + head
       + '<div class="csrbar csrlock">\ud83d\udd12 Locked \u2014 finished in ' + esc(lockedIn)
       +   '. Only a super admin can change it.'
-      +   '<button type="button" class="l2mv g" style="margin-left:auto" '
+      // A finished draft is the one most likely to be sent, so it is the one that most needs
+      // copying - locking it for editing must not lock it for reading out.
+      +   '<button type="button" class="csrcopy" style="margin-left:auto" '
+      +   'title="Copy this draft to paste into an email" '
+      +   'onclick="l2CopyDraft(\'' + f.field_key + '\',this)">\ud83d\udccb Copy text</button>'
+      +   '<button type="button" class="l2mv g" '
       +   'onclick="l2RequestChange(\'' + esc(f.label_en).replace(/'/g, "\\'") + '\')">\u270b Request a change</button></div>'
       + '<div class="csred locked" id="lf_' + f.field_key + '" data-label="' + esc(f.label_en) + '">'
       +   _csrRichHTML(value || '') + '</div></div>';
@@ -14939,6 +15035,8 @@ function _l2RichEditor(f, value, from, lockedIn){
     +   '<button type="button" title="Bold" onmousedown="event.preventDefault();document.execCommand(\'bold\')"><b>B</b></button>'
     +   '<button type="button" title="Italic" onmousedown="event.preventDefault();document.execCommand(\'italic\')"><i>I</i></button>'
     +   '<button type="button" title="Underline" onmousedown="event.preventDefault();document.execCommand(\'underline\')"><u>U</u></button>'
+    +   '<button type="button" class="csrcopy" title="Copy this draft to paste into an email" '
+    +   'onclick="l2CopyDraft(\'' + f.field_key + '\',this)">\ud83d\udccb Copy text</button>'
     +   (lockedIn ? '<span class="csrsu">\ud83d\udd13 Locked for others \u2014 your changes are recorded</span>' : '')
     +   '<span class="csrsaved" id="lfs_' + f.field_key + '"></span>'
     + '</div>'
@@ -16139,6 +16237,12 @@ function _csrStyles(){
   .csrbar button{background:none;border:1px solid transparent;border-radius:5px;cursor:pointer;
     color:var(--nd-text-primary);font-family:inherit;font-size:.86rem;width:1.9rem;height:1.7rem}
   .csrbar button:hover{border-color:var(--nd-border-strong)}
+  /* Wider than B/I/U because it carries words, not a letter - the founder's standing rule is
+     words over an icon anybody has to guess at. */
+  .csrcopy{width:auto!important;height:1.7rem;padding:0 .5rem;font-size:.75rem;font-weight:700;
+    white-space:nowrap;background:var(--nd-bg-surface-2);color:var(--nd-text-primary);
+    border:1px solid var(--nd-border-strong);border-radius:6px;cursor:pointer}
+  .csrcopy:hover{border-color:var(--nd-brand-cyan)}
   .csred{min-height:9rem;max-height:22rem;overflow-y:auto;background:#fff;color:#111;
     border:1px solid var(--nd-border-strong);border-radius:0 0 8px 8px;padding:.6rem .75rem;
     font-size:.88rem;line-height:1.55}

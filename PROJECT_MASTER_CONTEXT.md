@@ -7784,3 +7784,12 @@ other is how the report stopped matching the screen the first time round.
 
 Watch: the form now shows "Policy type" (health/motor/life) at 3 and "Claim Type" (the kind of
 dispute) at 12. One word apart, on one form. Hinted for now; rename one if staff confuse them.
+
+
+**Copying a draft out, 22 Sep.** The report was "pastes into Gmail as a non-editable image".
+Measured before building: uitest/draft-copy.js reads the clipboard back after a hand copy and
+finds text/plain + text/html and NO image flavour, and the stored drafts are clean p/b/u markup.
+The image is unreproduced. The Copy button removes the question either way - it writes both
+flavours explicitly via ClipboardItem, falling back to a copy-event listener that sets both, and
+sends the draft's own markup with no classes, colours or widths, so Gmail renders it in its own
+font with the formatting intact.

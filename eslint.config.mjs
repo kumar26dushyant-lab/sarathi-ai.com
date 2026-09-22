@@ -34,6 +34,10 @@ export default [
         crypto: "readonly", scrollTo: "readonly", requestIdleCallback: "readonly",
         Node: "readonly", Element: "readonly", HTMLElement: "readonly", NodeList: "readonly",
         NodeFilter: "readonly", XMLHttpRequest: "readonly", WebSocket: "readonly",
+        // Used to hand Gmail a draft as text/html AND text/plain at once, which is the whole
+        // point of the Copy button. A real browser global; the code guards on window.ClipboardItem
+        // before touching it, because it is missing on an http:// page.
+        ClipboardItem: "readonly",
 
         // Third-party scripts loaded from somebody else's CDN, which this machine cannot read to
         // discover what they define. Each one is here because the page really does load it.

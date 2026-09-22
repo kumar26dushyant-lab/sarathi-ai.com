@@ -87,6 +87,34 @@ its bucket.
     and the code email now names the page, so somebody who removed two of four files can return,
     sign in with a code, and add more.
 
+### ✅ SHIPPED 2026-09-22 (7) — a draft can be copied into an email as TEXT
+
+Founder: copying a draft and pasting it into Gmail produced a non-editable **image** instead of
+text. Gmail falls back to a picture when the clipboard offers it one and no usable `text/html`.
+
+  - **Checked first, and the page is not the culprit.** `uitest/draft-copy.js` renders the real
+    editor with a real stored draft, copies it by hand, and reads the clipboard back:
+    `text/plain, text/html`, **no image flavour**. The stored drafts are clean too — `<p>`,
+    `<b>`, `<u>` only, because `_csrCleanPaste` strips everything else on the way IN.
+    So I could not reproduce the image; what I could do is remove the variable.
+  - **📋 Copy text**, in the toolbar beside B / I / U, on the editable draft AND on a
+    locked one — a finished draft is the one most likely to be sent. It writes BOTH flavours
+    explicitly with the async Clipboard API, with a copy-event fallback for any browser without
+    it. No more depending on what a hand-drag through a scrolling box happens to produce.
+  - **Nothing is re-styled on the way out**: no classes, no colours, no widths for Gmail's
+    sanitiser to argue with, so it lands in Gmail's own font, aligned with the rest of the
+    message, bold and underlines intact. `<meta charset="utf-8">` leads, or the Hindi draft
+    arrives as mojibake.
+  - The plain flavour keeps real line breaks (blocks → `
+` before the tags are dropped),
+    so anywhere that takes no formatting still gets readable prose rather than a wall.
+  - The button says **✔ Copied** on itself for a moment. A toast on a long draft appears
+    where nobody is looking, and "did that work?" is what makes somebody press four more times.
+  - `ClipboardItem` added to the eslint browser globals — a real global the checker did not know.
+
+  ⚠️ **Still open:** the image behaviour is unreproduced. If it happens again WITH the
+  button, the next thing to ask is which browser and whether an extension is in the way.
+
 ### ✅ SHIPPED 2026-09-22 (6) — the Live bucket asks SEVENTEEN, not fifteen
 
 The founder corrected the sequence he gave this morning: **On Behalf of at 2** and **Claim Type
