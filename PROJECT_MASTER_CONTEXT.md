@@ -7657,3 +7657,36 @@ I nearly went and changed the code.
 One real fault surfaced: a bucket with no guidance text rendered an empty coloured banner.
 
 **Not yet audited:** the claim panel, the gist window, the documents window.
+
+
+---
+
+## 🧪 A104 THE 16-ITEM SCREENSHOT LIST (Sep 22 2026)
+
+Grouped by root cause, not by screenshot - several reports were one fault seen twice.
+
+**Dates (#6, #7, #13).** An `<input type="date">` fires `change` as EACH SEGMENT completes.
+Proven with a real keyboard in `uitest/date-typing.js`: typing 28 into the day of 2026-05-25
+fires change with 2026-05-02 first; typing the year 2026 fires with 0002. The app saved and
+VALIDATED those. `_l2DateEdit`/`_l2DateCommit` now send a date only when the person has finished
+(blur, or 900ms idle) and never send one whose year is below 1900; `set_field` refuses anything
+outside 1900-2100 whatever the route. A rejection may not predate its admission - checked against
+live data first: 1 of 4 claims breaks it, and it is NP-39, the claim in the screenshot.
+
+**Queries (#10, #11, #12, #15, #16).** `resolve_query` only accepts a resolution while the claim
+is in `pending_draft`; the screen offered the button only on `live_cases` rows - one rule written
+twice and disagreeing, so it was never reachable. `move()` used to mark an OPEN query "resolved"
+on the way out of Pending Draft; it now clears the query entirely and logs that nobody answered
+it. New `escalation_answered()` returns a claim from Escalation Query to Escalated. A one-time
+correction cleared the two live claims already carrying a stale badge (worker log: fixed=2).
+
+**The Live bucket (#5, #8, #9, #14, sequencing).** The sequencing never matched because five of
+the fifteen are CLAIM COLUMNS, not bucket fields; `l2CaseRender` now builds the Live Cases list
+from `CSR_GIST` so there is one source of order across the form, the screen, the sheet and the
+report. The case email is rendered once (the block owns it, the generic list skips it). Pending
+Draft arrives on Drafting. Pending Docs is deactivated, guarded on being empty. The three
+reminder dates are back, active and not required (worker log: fixed=4).
+
+**Open: the complainant's side (#1-#4)** - the phone editable from Claim Info, a claim-page link
+in the code email, immediate sending on re-issue or a new email, and a Save-and-submit step for
+documents with a way back in afterwards.

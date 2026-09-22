@@ -6,6 +6,62 @@ _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned ·
 
 **Last updated:** 2026-09-22 — 🟢 **CUTOVER COMPLETE. NidaanPartner.com and Sarathi-AI.com are LIVE on Oracle Mumbai (161.118.186.201, aarch64).** Contabo parked as rollback, untouched.
 
+### 🟡 IN PROGRESS 2026-09-22 (3) — the founder's 16-item screenshot list
+Grouped by ROOT CAUSE rather than by screenshot, because several were the same fault twice.
+
+**✅ Batch 1 — dates (#6, #7, #13).** Two reports, one bug, and it is not obvious: an
+`<input type="date">` fires `change` as **each segment** is completed. Proven with a real
+keyboard (`uitest/date-typing.js`) — typing `28` into the day of 2026-05-25 fires change twice,
+first with **2026-05-02**, then 2026-05-28; typing the year 2026 fires with **0002**, 0020, 0202.
+So the app was saving, and validating, what somebody was still typing:
+  - **#6** a correct discharge of 28-05-2026 reported itself as before the admission;
+  - **#13** NP-39 recorded its escalation as **"0002-09-22"** — the year 2.
+
+  Fixed at both ends: the screen sends a date when the person has FINISHED (on leaving the field,
+  or when they stop), and `set_field` refuses anything outside 1900-2100 whatever the route —
+  because a rule that lives only in a browser holds until somebody writes a second one.
+  **#7** added in the same place: a rejection cannot predate the admission it rejects. Checked
+  first — of 4 live claims holding both dates, exactly **one** breaks it: NP-39, the claim in his
+  screenshot. No claim is holding an impossible date, so nothing needed repairing.
+
+**✅ Batch 2 — queries (#10, #11, #12, #15, #16).** Three faults, all about a query outliving
+its bucket.
+  - **#10** the server accepts a draft query being answered only from **Pending Draft**; the
+    screen only offered the button on **Live Cases**. One rule written twice, disagreeing — so
+    the button was never anywhere it worked and a query could be raised and never answered.
+  - **#11, #12, #15** leaving Pending Draft marked an **open** query "resolved", using the move
+    note as its answer — so Escalation showed a green *Draft query resolved* for a query nobody
+    answered, for the rest of the claim's life. The query now **ends** with the bucket, and if it
+    was still open the remarks say so in those words.
+  - **#16** an escalation query had no way back to Escalated. There is now the other half of the
+    button.
+  - **⚠️ Two live claims were already wearing the badge** — NP-39 and NP-118. Cleared by a
+    one-time correction; **live worker log confirms `'fixed': 2`**.
+
+**✅ Batch 3 — the Live bucket (#5, #8, #9, #14, and the sequencing).**
+  - **The sequencing**, his headline: **five of his fifteen are not bucket fields at all** —
+    Company Name, Policy type, Disputed Amount and Assign To are columns on the claim, so they
+    were never in the list the bucket renders. The screen is now built **from `CSR_GIST`**, which
+    already holds his fifteen in his order, so the form, this screen, the assessment sheet and the
+    case report all read the same way round. Proven by `uitest/live-sequence.js`.
+  - **#5** the case email was asked for **twice** on a Live Cases claim — once in the block that
+    owns it, once in the generic field list, because it IS a Live Cases field.
+  - **#8** moving into Pending Draft always arrives on **Drafting**.
+  - **#9** Pending Docs off the rail — guarded on being **empty**, so it can never strand a claim.
+  - **#14** the three reminder dates **back**, as dates a person types, not required to move on.
+  - **Live worker log confirms `'fixed': 4`.**
+  - The six page suites moved out of a scratch folder into `uitest/` — **nine browser suites**
+    now, runnable by anyone.
+
+**🔴 Batch 4 — still to do: the complainant's side.**
+  - **#1** the phone number editable from the Claim Info **Edit** button.
+  - **#2** a link to open the claim page in the same email as the code.
+  - **#3** re-issuing a dashboard link, or entering an email on a new case, must send the email
+    **immediately** — he reports this failing now.
+  - **#4** documents: a **Save and submit** step with confirmation, so uploads do not reach us the
+    instant they are picked; an **exit** button; and a way back in from a link in their email
+    (with the code) so somebody who removed two of four files can return and fix it.
+
 ### ✅ SHIPPED 2026-09-22 (2) — the bucket screen on real devices, and the Sarathi cleanup
 
 - ✅ **The bucket screen works on a phone, a tablet and a laptop.** Measured first, on the real
