@@ -126,7 +126,13 @@ var T = {
     vAgain:"Send it again",
     vNever:"⚠️ We will never ask you for this code — not on a call, not on WhatsApp.",
     vNoWay:"We do not have a phone or email on your claim. Please call us and we will help you.",
-    vWaShut:"WhatsApp can carry the code only after you have written to us. Use email, or send us any WhatsApp message and come back."
+    vWaShut:"WhatsApp can carry the code only after you have written to us. Use email, or send us any WhatsApp message and come back.",
+    vWait:"Please wait",
+    vLeftWord:"left",
+    vOnWay:"Code sent. It can take a minute or two to arrive \u2014 please do not press again.",
+    vHelpTitle:"Not received it?",
+    vHelpBody:"Check your spam or junk folder, and that your phone has signal. If it still has not arrived, call us on +91-98260 11116 and we will open your claim page with you.",
+    vOther:"Try the other way instead"
   },
   hi: {
     greet:"नमस्ते", sub:"यहाँ आपके बीमा दावे की स्थिति है। हम इसे आपके लिए संभाल रहे हैं।",
@@ -168,7 +174,13 @@ var T = {
     vAgain:"दोबारा भेजें",
     vNever:"⚠️ हम आपसे यह कोड कभी नहीं पूछेंगे — न कॉल पर, न WhatsApp पर।",
     vNoWay:"आपके क्लेम पर कोई फ़ोन या ईमेल दर्ज नहीं है। कृपया हमें कॉल कीजिए, हम मदद करेंगे।",
-    vWaShut:"WhatsApp पर कोड तभी जा सकता है जब आप हमें लिख चुके हों। ईमेल चुनिए, या हमें WhatsApp पर कोई संदेश भेजकर वापस आइए।"
+    vWaShut:"WhatsApp पर कोड तभी जा सकता है जब आप हमें लिख चुके हों। ईमेल चुनिए, या हमें WhatsApp पर कोई संदेश भेजकर वापस आइए।",
+    vWait:"कृपया रुकिए",
+    vLeftWord:"बचे",
+    vOnWay:"कोड भेज दिया गया है। पहुँचने में एक-दो मिनट लग सकते हैं — कृपया दोबारा न दबाएँ।",
+    vHelpTitle:"कोड नहीं मिला?",
+    vHelpBody:"अपना spam या junk folder देखिए, और यह भी कि फ़ोन में signal है। फिर भी न मिले तो हमें +91-98260 11116 पर कॉल कीजिए, हम साथ में आपका क्लेम पेज खोल देंगे।",
+    vOther:"दूसरा तरीका आज़माइए"
   }
 };
 function t(k){ return (T[LANG]||T.en)[k] || T.en[k] || k; }
@@ -244,13 +256,17 @@ async function askWhoYouAre(){
   // An option that cannot deliver is worse than no option: WhatsApp only carries a code once the
   // person has written to us, so when it cannot, say so instead of letting them press it and
   // spend one of their codes on a message that never arrives.
+  V_LABEL = {};
   var btns = ch.map(function(c){
     var ready = (c.ready !== false);
+    var label = esc(c.kind === "whatsapp" ? t("vWhats") : t("vEmail"))
+              + ' <span style="opacity:.75">' + esc(c.masked) + '</span>';
+    V_LABEL[c.kind] = label;
     return '<button class="btn" style="width:100%;margin-bottom:.5rem'
       + (ready ? '' : ';opacity:.55') + '"'
+      + ' data-vch="' + esc(c.kind) + '"' + (ready ? '' : ' data-vdead="1"')
       + (ready ? ' onclick="sendCode(\'' + c.kind + '\')"' : ' disabled')
-      + '>' + esc(c.kind === "whatsapp" ? t("vWhats") : t("vEmail"))
-      + ' <span style="opacity:.75">' + esc(c.masked) + '</span></button>'
+      + '><span class="vlbl">' + label + '</span></button>'
       + (ready ? '' : '<div style="font-size:.8rem;color:#64748b;margin:-.3rem 0 .6rem">'
           + esc(t("vWaShut")) + '</div>');
   }).join("");
@@ -266,29 +282,122 @@ async function askWhoYouAre(){
     +       'style="width:100%;font-size:1.5rem;letter-spacing:.35em;text-align:center;padding:.6rem;'
     +       'border-radius:10px;border:1px solid #cbd5e1;margin:.3rem 0 .6rem">'
     +     '<button class="btn" style="width:100%" onclick="checkCode()">' + esc(t("vOpen")) + '</button>'
-    +     '<button class="btn ghost" style="width:100%;margin-top:.4rem" onclick="askWhoYouAre()">'
-    +       esc(t("vAgain")) + '</button>'
+    +     '<button class="btn ghost" id="vAgainBtn" style="width:100%;margin-top:.4rem" '
+    +       'onclick="sendAgain()"><span class="vlbl">' + esc(t("vAgain")) + '</span></button>'
+    +     '<button class="btn ghost" style="width:100%;margin-top:.4rem;font-size:.85rem" '
+    +       'onclick="askWhoYouAre()">' + esc(t("vOther")) + '</button>'
+    // Said only once the wait is over: shown while they are still waiting, "it has not arrived"
+    // is what makes somebody press again.
+    +     '<div id="vHelp" style="display:none;margin-top:.7rem;padding:.6rem .7rem;'
+    +       'border:1px solid #e2e8f0;border-radius:9px;background:rgba(148,163,184,.10);'
+    +       'font-size:.85rem;line-height:1.5"><b>' + esc(t("vHelpTitle")) + '</b><br>'
+    +       esc(t("vHelpBody")) + '</div>'
     +   '</div>'
     +   '<p id="vMsg" style="font-size:.88rem;color:#b91c1c;min-height:1.2em"></p>'
     +   '<p style="font-size:.82rem;color:#64748b">' + esc(t("vNever")) + '</p>'
     + '</div>';
+  // Redrawing the card must not hand back a button the wait has not finished with.
+  vPaint();
 }
 
+// ── One tap is one code ─────────────────────────────────────────────────────
+// The state lives outside the card because the card is redrawn - by "try the other way", by a
+// language switch - and a wait that a redraw clears is not a wait.
+var V_UNTIL = 0;      // no code may be asked for until this moment
+var V_LEFT = null;    // codes left this hour, as the server last counted them
+var V_KIND = "";      // the way the last code went, so "send it again" means the same way
+var V_TIMER = null;
+var V_LABEL = {};     // each channel button's real label, to put back when the wait ends
+
+function vSecs(){ return Math.max(0, Math.ceil((V_UNTIL - Date.now()) / 1000)); }
+
+function vClock(s){
+  return s >= 60 ? (Math.floor(s / 60) + ":" + ("0" + (s % 60)).slice(-2)) : (s + "s");
+}
+
+// Freeze BEFORE the request goes out. The gap between the tap and the reply is exactly where the
+// second, third and fourth taps land.
+function vFreeze(sec){
+  V_UNTIL = Date.now() + Math.max(1, parseInt(sec, 10) || 0) * 1000;
+  if(V_TIMER) clearInterval(V_TIMER);
+  V_TIMER = setInterval(vPaint, 500);
+  vPaint();
+}
+
+function vThaw(){
+  V_UNTIL = 0;
+  if(V_TIMER){ clearInterval(V_TIMER); V_TIMER = null; }
+  vPaint();
+}
+
+function vPaint(){
+  var s = vSecs();
+  if(!s && V_TIMER){ clearInterval(V_TIMER); V_TIMER = null; }
+  var picks = document.querySelectorAll('#vPick button[data-vch]');
+  for(var i = 0; i < picks.length; i++){
+    var b = picks[i];
+    if(b.getAttribute("data-vdead") === "1") continue;   // a channel that cannot deliver stays off
+    var lbl = b.querySelector(".vlbl");
+    b.disabled = !!s;
+    b.style.opacity = s ? ".55" : "";
+    if(lbl) lbl.innerHTML = s ? (esc(t("vWait")) + " " + esc(vClock(s)))
+                              : (V_LABEL[b.getAttribute("data-vch")] || lbl.innerHTML);
+  }
+  var again = document.getElementById("vAgainBtn");
+  if(again){
+    var al = again.querySelector(".vlbl");
+    again.disabled = !!s;
+    again.style.opacity = s ? ".55" : "";
+    if(al) al.textContent = s
+      ? (t("vWait") + " " + vClock(s))
+      : (t("vAgain") + (V_LEFT === null ? "" : " (" + V_LEFT + " " + t("vLeftWord") + ")"));
+  }
+  // Only once the wait is over. Telling somebody it has not arrived while it is still on its way
+  // is what makes them press again.
+  var help = document.getElementById("vHelp");
+  if(help) help.style.display = s ? "none" : "";
+}
+
+function sendAgain(){ if(!vSecs() && V_KIND) sendCode(V_KIND); }
+
 async function sendCode(kind){
+  if(vSecs()) return;                 // the wait is not over; this tap does nothing
   var msg = document.getElementById("vMsg");
   msg.style.color = "#64748b"; msg.textContent = t("vSending");
+  V_KIND = kind;
+  vFreeze(60);                        // the server's own number replaces this on the reply
   try{
     var r = await fetch("/nidaan/claim/api/verify/start", { method:"POST",
       headers:{ "Authorization":"Bearer "+TOKEN, "Content-Type":"application/json" },
       body: JSON.stringify({ channel: kind, lang: LANG }) });
     var d = await r.json().catch(function(){ return {}; });
-    if(!r.ok){ msg.style.color = "#b91c1c"; msg.textContent = d.detail || "Could not send the code."; return; }
-    msg.textContent = "";
+    if(!r.ok){
+      // The server sends a sentence AND the seconds behind it. Older shapes sent only the
+      // sentence, so both are handled.
+      var det = d.detail, why = "", wait = 0;
+      if(det && typeof det === "object"){
+        why = det.error || ""; wait = parseInt(det.retry_after_sec, 10) || 0;
+        if(det.left !== undefined) V_LEFT = det.left;
+      } else { why = det || ""; }
+      msg.style.color = "#b91c1c";
+      msg.textContent = why || "Could not send the code.";
+      // A code that never left costs them nothing, so it must not cost them a wait either.
+      // A refusal that DOES carry a wait (they are out of codes) keeps the buttons shut.
+      if(wait > 0) vFreeze(wait); else vThaw();
+      return;
+    }
+    if(d.left !== undefined) V_LEFT = d.left;
+    if(d.cooldown_sec) vFreeze(d.cooldown_sec);
+    msg.style.color = "#64748b"; msg.textContent = t("vOnWay");
     document.getElementById("vPick").style.display = "none";
     document.getElementById("vCode").style.display = "";
     document.getElementById("vSentTo").textContent = t("vSent") + " " + (d.masked||"");
+    vPaint();
     var i = document.getElementById("vInput"); if(i) i.focus();
-  }catch(e){ msg.style.color = "#b91c1c"; msg.textContent = "Could not send the code."; }
+  }catch(e){
+    msg.style.color = "#b91c1c"; msg.textContent = "Could not send the code.";
+    vThaw();
+  }
 }
 
 async function checkCode(){

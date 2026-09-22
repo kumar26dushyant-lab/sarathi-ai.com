@@ -1463,7 +1463,14 @@ async def nidaan_claim_verify_start(body: _ClaimVerifyStartReq, request: Request
     import biz_nidaan_claim_access as _acc
     res = await _acc.start(ctx["claim_id"], body.channel, lang=body.lang)
     if not res.get("ok"):
-        raise HTTPException(400, res.get("message") or "Could not send the code")
+        # A dict, not a sentence: the page needs the seconds to run a countdown on, and "please
+        # wait a little" was the message that made somebody tap five times in five seconds.
+        raise HTTPException(400, {
+            "error": res.get("message") or "Could not send the code",
+            "reason": res.get("reason") or "",
+            "retry_after_sec": int(res.get("retry_after_sec") or 0),
+            "left": int(res.get("left") or 0),
+        })
     try:
         await nidaan.record_claim_activity(
             ctx["claim_id"], "portal_code", channel="system", actor="complainant",
@@ -12250,6 +12257,33 @@ async def _subsystem_checks() -> list:
              + f" · {_tmpl}/{len(_orch.JOURNEY_TEMPLATES)} templates wired")
     except Exception as _e:
         _chk("WA journey", False, f"check failed: {str(_e)[:70]}")
+    # DID THE LOGIN CODES ACTUALLY REACH ANYBODY? On 17 Sep every branch was locked out while
+    # every screen said fine: the endpoint answered "otp_sent", Brevo returned 201, and Google
+    # discarded the lot. biz_nidaan_login_health has recorded the OUTCOME of every code since.
+    # Reading it here puts it in front of the watchdog too, so staff are told before a
+    # complainant rings up saying the code never came — which is what the founder asked for.
+    try:
+        _lh = await _login_health.summary()
+        _bad, _sent_all, _fail_all = [], 0, 0
+        for _sys, _row in (_lh or {}).items():
+            _sent = int(_row.get("sent") or 0)
+            _fail = int(_row.get("failed") or 0)
+            _sent_all += _sent
+            _fail_all += _fail
+            # One failure is a phone off the network. Half of them failing is us.
+            if _sent >= 3 and _fail * 2 >= _sent:
+                _why = (_row.get("last_error") or "").strip()
+                _bad.append("%s %d of %d failed%s" % (
+                    _login_health.SYSTEMS.get(_sys, _sys), _fail, _sent,
+                    (" — " + _why[:70]) if _why else ""))
+        if _bad:
+            _chk("Login codes", False, " · ".join(_bad))
+        else:
+            _chk("Login codes", True,
+                 ("%d sent in 24h, %d failed" % (_sent_all, _fail_all)) if _sent_all
+                 else "none sent in the last 24h")
+    except Exception as _e:
+        _chk("Login codes", False, f"check failed: {str(_e)[:70]}")
     # Email Radar — the two collection inboxes must be connected AND polling.
     #
     # ONE MAILBOX, ONE OPINION ON WHETHER IT IS DOWN. Radar polls every 15 minutes over IMAP, and

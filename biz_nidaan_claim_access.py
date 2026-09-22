@@ -59,6 +59,10 @@ def _claim_page_url() -> str:
     return _os.getenv("NIDAAN_PUBLIC_BASE", "https://nidaanpartner.com").rstrip("/") + "/nidaan/claim"
 MAX_ATTEMPTS = 5           # then the challenge is dead and they ask for a new code
 MAX_CODES_PER_HOUR = 5     # so the link cannot be used to spam somebody's phone
+# How long the page must keep the button frozen after a code goes out. Decided HERE, not in the
+# browser: a code takes a moment to arrive, and the tap that happens in that moment is the one
+# that burns the allowance. Sent to the page with every successful send.
+COOLDOWN_SEC = 60
 SESSION_MIN = 720          # 12 hours - one sitting, not a standing key
 PREVIEW_MIN = 20           # a staffer looking at what the complainant sees
 
@@ -136,6 +140,33 @@ async def _codes_this_hour(claim_id: int) -> int:
     return int(r[0]) if r else 0
 
 
+async def _code_budget(claim_id: int) -> dict:
+    """How many codes are left in this rolling hour, and how long until the next one frees up.
+
+    The window rolls, so the wait is not "an hour" - it is until the OLDEST code in the window
+    ages out, which is usually far less. Telling somebody to wait an hour when the real answer is
+    eleven minutes is how a person gives up on their own claim.
+    """
+    since = (datetime.utcnow() - timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S")
+    async with aiosqlite.connect(DB_PATH) as c:
+        rows = await (await c.execute(
+            "SELECT created_at FROM nidaan_claim_verify WHERE claim_id=? AND created_at>=? "
+            "ORDER BY created_at ASC", (int(claim_id), since))).fetchall()
+    used = len(rows)
+    left = max(0, MAX_CODES_PER_HOUR - used)
+    retry = 0
+    if left == 0 and rows:
+        try:
+            oldest = datetime.strptime(str(rows[0][0])[:19], "%Y-%m-%d %H:%M:%S")
+            retry = int((oldest + timedelta(hours=1) - datetime.utcnow()).total_seconds())
+        except (TypeError, ValueError):
+            retry = 0
+        # Never negative, and never zero while the gate is shut - a countdown that says 0 but
+        # still refuses is worse than no countdown.
+        retry = max(30, min(retry, 3600))
+    return {"used": used, "left": left, "retry_after_sec": retry}
+
+
 async def start(claim_id: int, kind: str, *, lang: str = "hinglish") -> dict:
     """Send a code to the contact we already hold. Returns {ok, masked, kind}."""
     kind = (kind or "").strip().lower()
@@ -150,8 +181,12 @@ async def start(claim_id: int, kind: str, *, lang: str = "hinglish") -> dict:
         return {"ok": False, "reason": "no_channel",
                 "message": "We do not have that on file for this claim. Try the other one, "
                            "or call us and we will help."}
-    if await _codes_this_hour(claim_id) >= MAX_CODES_PER_HOUR:
-        return {"ok": False, "reason": "rate_limited", "message": _T("rate_limited", lang)}
+    budget = await _code_budget(claim_id)
+    if budget["left"] <= 0:
+        mins = max(1, (budget["retry_after_sec"] + 59) // 60)
+        return {"ok": False, "reason": "rate_limited",
+                "message": _T("rate_limited", lang).replace("{mins}", str(mins)),
+                "retry_after_sec": budget["retry_after_sec"], "left": 0}
 
     # The 24-hour gate that used to sit here is gone: np_login_code is approved at Meta, so a
     # code now reaches a complainant COLD. Asking someone locked out of their own claim page to
@@ -193,7 +228,11 @@ async def start(claim_id: int, kind: str, *, lang: str = "hinglish") -> dict:
         except Exception:  # noqa: BLE001
             pass
         return {"ok": False, "reason": "send_failed", "message": _T("send_failed", lang)}
-    return {"ok": True, "kind": kind, "masked": masked, "ttl_min": CODE_TTL_MIN}
+    # What the page needs to keep somebody from burning their own allowance: how long to stay
+    # frozen, and how many codes are left after this one.
+    after = await _code_budget(claim_id)
+    return {"ok": True, "kind": kind, "masked": masked, "ttl_min": CODE_TTL_MIN,
+            "cooldown_sec": COOLDOWN_SEC, "left": after["left"]}
 
 
 async def _wa_opted_out(phone: str) -> bool:
@@ -214,12 +253,19 @@ async def _wa_opted_out(phone: str) -> bool:
 
 # The page is bilingual; these were not. A complainant reading Hindi met an English error.
 _MSG = {
+    # "Please wait a little" is not an instruction anybody can follow. The window rolls, so the
+    # real answer is usually a few minutes - and a person who knows it is 11 minutes waits,
+    # while a person told "a little" closes the page.
     "rate_limited": {
-        "en": "That is a lot of codes in one hour. Please wait a little, or call us.",
-        "hi": "एक घंटे में काफ़ी "
-              "कोड माँगे जा चुके "
-              "हैं। थोड़ी देर रुकिए, "
-              "या हमें कॉल कीजिए।",
+        "en": "5 codes have already been sent for this claim in the last hour. Please try again "
+              "in about {mins} minute(s) — or call us and we will open it with you.",
+        "hi": "पिछले एक घंटे में "
+              "इस क्लेम पर 5 कोड भेजे "
+              "जा चुके हैं। कृपया "
+              "{mins} मिनट बाद दोबारा "
+              "कोशिश कीजिए — या हमें "
+              "कॉल कीजिए, हम साथ में "
+              "खोल देंगे।",
     },
     "wa_stopped": {
         "en": "You asked us to stop messaging you on WhatsApp, so we cannot send the code there. "
