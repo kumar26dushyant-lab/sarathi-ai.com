@@ -583,14 +583,55 @@ async def onboarding_page():
 #  NIDAAN PHASE 2 — PAGES + API
 # =============================================================================
 
-def _nidaan_page(filename: str) -> HTMLResponse:
+# One validator per file, recomputed only when the file on disk changes. Hashing 1.25 MB on
+# every page load would trade network time for CPU time, which is not a trade worth making.
+_PAGE_ETAG: dict = {}
+
+
+def _page_etag(f) -> str:
+    st = f.stat()
+    hit = _PAGE_ETAG.get(str(f))
+    if hit and hit[0] == st.st_mtime and hit[1] == st.st_size:
+        return hit[2]
+    import hashlib
+    tag = '"%s"' % hashlib.sha256(f.read_bytes()).hexdigest()[:24]
+    _PAGE_ETAG[str(f)] = (st.st_mtime, st.st_size, tag)
+    return tag
+
+
+def _etag_matches(header: str, etag: str) -> bool:
+    """Does the browser already hold this exact version?
+
+    nginx and Cloudflare both WEAKEN an ETag when they compress the body, so what comes back is
+    `W/"abc"` for the `"abc"` we sent. Comparing those as strings never matches, and a validator
+    nobody can match is a validator that does nothing - the page would be re-sent in full for
+    ever while looking correct.
+    """
+    want = etag.strip()
+    if want.startswith("W/"):
+        want = want[2:]
+    for part in (header or "").split(","):
+        got = part.strip()
+        if got.startswith("W/"):
+            got = got[2:]
+        if got and (got == want or got == "*"):
+            return True
+    return False
+
+
+def _nidaan_page(filename: str, request: Optional[Request] = None):
     f = static_dir / filename
-    if f.exists():
-        return HTMLResponse(
-            f.read_text(encoding="utf-8"),
-            headers={"Cache-Control": "no-cache, no-store, must-revalidate",
-                     "Pragma": "no-cache", "Expires": "0"})
-    return HTMLResponse(f"<h1>{filename} not found</h1>", status_code=404)
+    if not f.exists():
+        return HTMLResponse(f"<h1>{filename} not found</h1>", status_code=404)
+    # `no-cache` is NOT `no-store`: the browser still asks us every single time, so a deploy is
+    # picked up on the next load exactly as it was under no-store. What changes is that an
+    # unchanged page costs a 304 instead of 320 KB. The ops page is 1.25 MB of one file.
+    etag = _page_etag(f)
+    headers = {"Cache-Control": "no-cache, must-revalidate", "ETag": etag,
+               "Vary": "Accept-Encoding"}
+    if request is not None and _etag_matches(request.headers.get("if-none-match", ""), etag):
+        return Response(status_code=304, headers=headers)
+    return HTMLResponse(f.read_text(encoding="utf-8"), headers=headers)
 
 
 def _nidaan_ops_page_with_role(role: str) -> HTMLResponse:
@@ -690,14 +731,14 @@ async def google_search_console_verify(request: Request):
 async def nidaan_start_page(request: Request):
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    return _nidaan_page("nidaan_start.html")
+    return _nidaan_page("nidaan_start.html", request)
 
 
 @app.get("/nidaan/about", response_class=HTMLResponse)
 async def nidaan_about_page(request: Request):
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    return _nidaan_page("nidaan_about.html")
+    return _nidaan_page("nidaan_about.html", request)
 
 
 @app.get("/nidaan/privacy", response_class=HTMLResponse)
@@ -707,7 +748,7 @@ async def nidaan_privacy_page(request: Request):
     entity for a legal-services LLP handling medical records."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    return _nidaan_page("nidaan_privacy.html")
+    return _nidaan_page("nidaan_privacy.html", request)
 
 
 @app.get("/nidaan/terms", response_class=HTMLResponse)
@@ -715,7 +756,7 @@ async def nidaan_terms_page(request: Request):
     """NidaanPartner's own terms of service (see the note on /nidaan/privacy)."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    return _nidaan_page("nidaan_terms.html")
+    return _nidaan_page("nidaan_terms.html", request)
 
 
 @app.get("/nidaan/success", response_class=HTMLResponse)
@@ -723,7 +764,7 @@ async def nidaan_success_page(request: Request):
     """Post-payment thank-you page (all payment flows land here, then continue to the dashboard)."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    return _nidaan_page("nidaan_success.html")
+    return _nidaan_page("nidaan_success.html", request)
 
 
 @app.get("/nidaan/branch", response_class=HTMLResponse)
@@ -731,7 +772,7 @@ async def nidaan_branch_page(request: Request):
     """Affiliate branch self-service portal (login via their @nidaanpartner.com email OTP)."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    return _nidaan_page("nidaan_branch.html")
+    return _nidaan_page("nidaan_branch.html", request)
 
 
 # ── Branch portal API (affiliate self-service; email-OTP auth, scoped to one branch) ──
@@ -1359,7 +1400,7 @@ async def nidaan_claim_portal_page(request: Request):
     the URL fragment (never sent to the server) — same pattern as the branch portal."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    return _nidaan_page("nidaan_claim_portal.html")
+    return _nidaan_page("nidaan_claim_portal.html", request)
 
 
 @app.get("/nidaan/claim/manifest.webmanifest")
@@ -2467,14 +2508,14 @@ async def nidaan_login_page(request: Request):
 async def nidaan_dashboard_page(request: Request):
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    return _nidaan_page("nidaan_dashboard.html")
+    return _nidaan_page("nidaan_dashboard.html", request)
 
 
 @app.get("/nidaan/get-reviewed", response_class=HTMLResponse)
 async def nidaan_review_page(request: Request):
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    return _nidaan_page("nidaan_review.html")
+    return _nidaan_page("nidaan_review.html", request)
 
 
 @app.get("/nidaan/logout")
@@ -6754,7 +6795,7 @@ async def nidaan_admin_short(request: Request):
     (which is scoped to /nidaan/). Ops still also lives at /nidaan/ops."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    return _nidaan_page("nidaan_ops.html")
+    return _nidaan_page("nidaan_ops.html", request)
 
 
 @app.get("/nidaan/api/admin/stats")
@@ -9481,7 +9522,7 @@ async def _ops_audit(request: Request, action: str, target_type: str = "",
 async def nidaan_ops_page(request: Request):
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    return _nidaan_page("nidaan_ops.html")
+    return _nidaan_page("nidaan_ops.html", request)
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
