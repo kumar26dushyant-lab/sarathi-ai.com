@@ -843,6 +843,35 @@ async def set_field(claim_id: int, field_key: str, value: str, actor: str = "",
             return {"ok": False,
                     "error": "That is too long to save (%d characters; the limit is %d)."
                              % (len(val), limit)}
+        # A DATE NOBODY COULD HAVE MEANT. A date input reports each segment as it is typed, so
+        # a browser saving on every change sends the year 2 on the way to 2026 - and NP-39 has
+        # an escalation recorded as "0002-09-22" to show for it. The screen now waits until the
+        # person has finished; this is why no other route can store one either.
+        if val and ftype == "date":
+            import re as _re_d
+            if not _re_d.match(r"^\d{4}-\d{2}-\d{2}$", val):
+                return {"ok": False, "error": "That is not a whole date yet."}
+            if not ("1900-01-01" <= val <= "2100-12-31"):
+                return {"ok": False, "error":
+                        "%s is not a date anybody meant - check the year and try again." % val}
+
+        # A rejection cannot be dated before the admission it rejects (founder, 22 Sep). Same
+        # shape and the same wording as the discharge rule below, because it is the same kind of
+        # mistake and a person should not have to learn two ways of being told.
+        if val and field_key in ("rejection_date", "admission_date"):
+            other_key = "admission_date" if field_key == "rejection_date" else "rejection_date"
+            other = await (await c.execute(
+                "SELECT value FROM nidaan_claim_fields WHERE claim_id=? AND field_key=?",
+                (int(claim_id), other_key))).fetchone()
+            other_val = ((other[0] if other else "") or "").strip()
+            if other_val and len(other_val) == 10 and len(val) == 10:
+                adm = val if field_key == "admission_date" else other_val
+                rej = val if field_key == "rejection_date" else other_val
+                if rej < adm:
+                    return {"ok": False, "error":
+                            "The rejection date (%s) is before the admission date (%s). "
+                            "Check the letter and correct whichever is wrong." % (rej, adm)}
+
         # A discharge before the admission is not a typo we can live with: those two dates decide
         # the treatment period the whole case argues about, and a reversed pair reads as a
         # fabricated claim to an insurer. Checked HERE as well as in the browser, so it cannot be

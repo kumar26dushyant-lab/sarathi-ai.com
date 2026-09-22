@@ -14240,6 +14240,39 @@ let _l2Case = null;
 
 // Save one of the claim's own columns from the case sheet, through the gist endpoint - the same
 // short, audited list the gist form uses.
+// ── A DATE IS NOT FINISHED UNTIL THE PERSON IS ──────────────────────────────
+// An <input type="date"> fires `change` as each SEGMENT is completed, not when the date is done.
+// Typing 28 into the day of 2026-05-25 fires change with 2026-05-02 first; typing the year 2026
+// fires with 0002, 0020, 0202, then 2026. Saving on every one of those stored half-typed dates -
+// and, worse, validated them, which is how a correct discharge date reported itself as being
+// before the admission, and how an escalation was recorded in the year 2.
+//
+// So: nothing is sent while they are still typing. It goes when they leave the field, or when
+// they have stopped for a moment - and a value that is plainly mid-type never goes at all.
+let _l2DateTimer = null, _l2DatePending = null;
+
+function _l2DateEdit(el, key, kind){
+  clearTimeout(_l2DateTimer);
+  _l2DatePending = {el: el, key: key, kind: kind};
+  _l2DateTimer = setTimeout(_l2DateCommit, 900);
+}
+
+function _l2DateCommit(){
+  clearTimeout(_l2DateTimer);
+  const p = _l2DatePending;
+  _l2DatePending = null;
+  if (!p || !p.el) return;
+  const v = (p.el.value || '').trim();
+  // Empty is a real answer - somebody clearing a date - so it is allowed through.
+  if (v){
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return;         // not a whole date yet
+    if (v < '1900-01-01' || v > '2100-12-31') return;     // a year still being typed
+  }
+  if (p.kind === 'core') l2Core(p.key, v, p.el);
+  else l2Field(p.key, v, p.el);
+}
+window._l2DateEdit = _l2DateEdit; window._l2DateCommit = _l2DateCommit;
+
 async function l2Core(key, value, el){
   const id = _l2Case && _l2Case.claim_id;
   if (!id) return;
@@ -14325,7 +14358,8 @@ function l2CaseRender(rem){
       + esc(c.policy_no || '') + '" onchange="l2Core(\'policy_no\',this.value,this)"></div>'
       + '<div class="l2fld"><label>Policy Inception Date</label><input type="date" '
       + 'id="lf_core_policy_inception_date" value="' + esc(String(c.policy_inception_date || '').slice(0, 10))
-      + '" onchange="l2Core(\'policy_inception_date\',this.value,this)"></div>'
+      + '" onchange="_l2DateEdit(this,\'policy_inception_date\',\'core\')" '
+      + 'onblur="_l2DateCommit()"></div>'
     : '';
   const flds = coreHtml + (st.fields || []).filter(function(f){ return f.field_type !== 'richtext'; }).map(function(f){
     const v = (st.values || {})[f.field_key] || '';
@@ -14345,10 +14379,15 @@ function l2CaseRender(rem){
         + '<option value="">—</option><option' + (v === 'yes' ? ' selected' : '') + '>yes</option>'
         + '<option' + (v === 'no' ? ' selected' : '') + '>no</option></select>';
     else
-      input = '<input type="' + (f.field_type === 'date' ? 'date'
-             : (f.field_type === 'number' || f.field_type === 'money' ? 'number' : 'text'))
-        + '" id="lf_' + f.field_key + '" value="' + esc(v) + '" '
-        + 'onchange="l2Field(\'' + f.field_key + '\',this.value,this)">';
+      // A date is committed when the person has FINISHED it - see _l2DateEdit. Everything else
+      // still saves on change, which for a text box is exactly when they leave it.
+      input = (f.field_type === 'date')
+        ? '<input type="date" id="lf_' + f.field_key + '" value="' + esc(v) + '" '
+          + 'onchange="_l2DateEdit(this,\'' + f.field_key + '\',\'field\')" '
+          + 'onblur="_l2DateCommit()">'
+        : '<input type="' + (f.field_type === 'number' || f.field_type === 'money' ? 'number' : 'text')
+          + '" id="lf_' + f.field_key + '" value="' + esc(v) + '" '
+          + 'onchange="l2Field(\'' + f.field_key + '\',this.value,this)">';
     // The case email password is the one field that is a credential rather than a fact. The
     // server sends dots to anyone whose role does not include it - so there is nothing to reveal
     // in the page - and a Show button asks for the real one, which is recorded against your name.

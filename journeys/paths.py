@@ -281,9 +281,40 @@ async def _dt1(ctx):
 
 @dates.step("an admission date saves normally")
 async def _dt2(ctx):
+    # One rule at a time. A rejection date on this claim would answer for the admission - NP-39
+    # carries one dated three days BEFORE its admission - and then this step would be reporting
+    # on a rule it is not about.
+    async with aiosqlite.connect(ctx["db"]) as c:
+        await c.execute("DELETE FROM nidaan_claim_fields WHERE claim_id=? AND "
+                        "field_key IN ('rejection_date','discharge_date')", (ctx["dt_claim"],))
+        await c.commit()
     res = await ctx["buckets"].set_field(ctx["dt_claim"], "admission_date", "2026-08-08",
                                          actor="journey-test", role="super_admin")
     assert res.get("ok"), res.get("error") or "a normal admission date was refused"
+
+
+@dates.step("a rejection cannot be dated before the admission it rejects")
+async def _dt2b(ctx):
+    # Founder, 22 Sep. A claim is rejected because of a hospitalisation, so a rejection letter
+    # dated before the patient was admitted is somebody reading the wrong line.
+    res = await ctx["buckets"].set_field(ctx["dt_claim"], "rejection_date", "2026-08-01",
+                                         actor="journey-test", role="super_admin")
+    assert not res.get("ok"), "a rejection dated a week before the admission was accepted"
+    assert "before the admission" in (res.get("error") or ""), \
+        "the refusal does not explain itself: %s" % res.get("error")
+    res = await ctx["buckets"].set_field(ctx["dt_claim"], "rejection_date", "2026-09-14",
+                                         actor="journey-test", role="super_admin")
+    assert res.get("ok"), "a rejection AFTER the admission was refused: %s" % res.get("error")
+
+
+@dates.step("a date nobody could have meant is refused")
+async def _dt2c(ctx):
+    # A date input reports each segment as it is typed, so a browser saving on every change
+    # sends the year 2 on the way to 2026. NP-39 has an escalation recorded as "0002-09-22".
+    for bad in ("0002-09-22", "2026-05", "20260525"):
+        res = await ctx["buckets"].set_field(ctx["dt_claim"], "escalation_date", bad,
+                                             actor="journey-test", role="super_admin")
+        assert not res.get("ok"), "%r was accepted as a date" % bad
 
 
 @dates.step("a discharge BEFORE it is refused")
