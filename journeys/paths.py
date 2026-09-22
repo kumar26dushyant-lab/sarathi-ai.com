@@ -632,29 +632,33 @@ async def _e4(ctx):
         "the claim is still '%s' after its escalation date was recorded" % sub
 
 
-@esc.step("the three reminder fields are gone from the screen")
+@esc.step("the three reminder dates are there to be filled in by hand")
 async def _e5(ctx):
-    # Replaced by day flags (founder, 21 Sep: "we no need option 1st reminder, second reminder,
-    # third reminder... make it simple and manual"). Deactivated rather than deleted, so anything
-    # already recorded stays readable on the claims that hold it.
-    import aiosqlite as _sq
-    async with _sq.connect(ctx["db"]) as c:
-        c.row_factory = _sq.Row
-        rows = [dict(r) for r in await (await c.execute(
-            "SELECT field_key, active FROM nidaan_bucket_fields WHERE bucket_key='escalation' "
-            "AND field_key IN ('esc_reminder_1','esc_reminder_2','esc_reminder_3')")).fetchall()]
-    assert rows, "the reminder fields vanished entirely - they should be deactivated, not deleted"
-    live = [r["field_key"] for r in rows if r["active"]]
-    assert not live, "still asking staff to log reminders: %s" % ", ".join(live)
+    # Removed on 21 Sep with the reminder ledger, asked for again on 22 Sep: "date option should
+    # be there only for tracking purpose and manual enter". They are dates a person types, not a
+    # ledger the software keeps - nothing reads them to decide anything.
+    fields = await ctx["buckets"].fields("escalation")
+    live = {f["field_key"]: f for f in fields if f.get("active")}
+    for k in ("esc_reminder_1", "esc_reminder_2", "esc_reminder_3"):
+        assert k in live, "%s is not on the escalation screen" % k
+        assert live[k]["field_type"] == "date", \
+            "%s should be a date somebody types, not a %s" % (k, live[k]["field_type"])
+        assert not live[k].get("required_exit"), \
+            "%s is required to leave Escalation - a reminder nobody sent must not block a claim" % k
 
 
-@esc.step("escalation records exactly one thing: the date")
+@esc.step("escalation asks for the date, and for what we did about it")
 async def _e6(ctx):
-    # Everything else on that screen is now either a fact about time or a button a person presses.
+    # Two different questions, deliberately: the escalation date is what STARTED the wait and is
+    # the one thing required; the reminder dates record what we sent while waiting.
     fields = await ctx["buckets"].fields("escalation")
     active = sorted(f["field_key"] for f in fields if f.get("active"))
-    assert active == ["escalation_date"], \
-        "Escalation should record only the escalation date, but asks for: %s" % ", ".join(active)
+    assert active == ["esc_reminder_1", "esc_reminder_2", "esc_reminder_3",
+                      "escalation_date"], \
+        "Escalation asks for: %s" % ", ".join(active)
+    req = sorted(f["field_key"] for f in fields if f.get("active") and f.get("required_exit"))
+    assert req == ["escalation_date"], \
+        "only the escalation date should be required, but these are: %s" % ", ".join(req)
 
 
 @esc.step("the day count is arithmetic a person can check")

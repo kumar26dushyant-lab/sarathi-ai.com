@@ -14145,7 +14145,10 @@ async function l2Move(claimId, toKey, presetReason, fromKey){
     // every bucket except Live Cases. The ReferenceError killed the whole call before the window
     // opened, so the button did nothing at all and said nothing at all. (founder, 21 Sep:
     // "pending draft button is not working".)
-    + ((subs.length > 1 && toKey !== 'escalation')
+    // Entering Pending Draft always lands on Drafting, and Escalation on Escalation Pending.
+    // The other steps are things that happen AFTER arriving; offering them here invites somebody
+    // to record a step before it has happened (founder, 22 Sep, and 19 Sep for escalation).
+    + ((subs.length > 1 && toKey !== 'escalation' && toKey !== 'pending_draft')
         ? '<div class="l2fld"><label>Which step?</label><select id="l2mSub">' + subOpts + '</select></div>'
         : '')
     + (isPark
@@ -14354,17 +14357,67 @@ function l2CaseRender(rem){
   // Rich-text fields - the two drafts - are drawn separately below as two big boxes side by
   // side, the ClaimShield way. Everything else is the ordinary list.
   const richF = (st.fields || []).filter(function(f){ return f.field_type === 'richtext'; });
-  // Live Cases is where the case's facts are pinned down, and Policy No. and Policy Inception are
-  // two of them - columns on the claim itself, so they save through the gist.
-  const coreHtml = (st.bucket === 'live_cases')
-    ? '<div class="l2fld"><label>Policy No.</label><input id="lf_core_policy_no" value="'
-      + esc(c.policy_no || '') + '" onchange="l2Core(\'policy_no\',this.value,this)"></div>'
-      + '<div class="l2fld"><label>Policy Inception Date</label><input type="date" '
-      + 'id="lf_core_policy_inception_date" value="' + esc(String(c.policy_inception_date || '').slice(0, 10))
-      + '" onchange="_l2DateEdit(this,\'policy_inception_date\',\'core\')" '
-      + 'onblur="_l2DateCommit()"></div>'
-    : '';
-  const flds = coreHtml + (st.fields || []).filter(function(f){ return f.field_type !== 'richtext'; }).map(function(f){
+  const coreHtml = '';
+  // The case email and its password have their own block above, in every bucket, so that they
+  // can be corrected wherever they are read. They are also Live Cases FIELDS, which is why they
+  // were being asked for twice on the same screen with no way to tell which box counted
+  // (founder, 22 Sep). The block owns them; this list leaves them alone.
+  const OWNED_ELSEWHERE = ['case_email', 'case_email_password'];
+  // ── LIVE CASES ASKS FOR THE FIFTEEN, IN HIS ORDER, DOWN THE PAGE ──────────
+  // CSR_GIST already holds the founder's fifteen in his sequence, so this screen is built from
+  // it rather than from a second list that would drift away from it. Five of the fifteen are
+  // columns on the claim, not bucket fields, which is why they were never in this list and the
+  // order never matched - they were scattered around the screen instead.
+  const byKey = {};
+  (st.fields || []).forEach(function(f){ byKey[f.field_key] = f; });
+  const ordered = (st.bucket === 'live_cases' && typeof CSR_GIST !== 'undefined')
+    ? CSR_GIST.map(function(g){
+        const key = g[2];
+        if (g[1] === 'field') return byKey[key] || null;          // a bucket field
+        return {field_key: key, label_en: g[0], field_type: g[3] || 'text',
+                _core: g[1], _how: g[3] || 'text'};               // a column on the claim
+      }).filter(Boolean)
+    : (st.fields || []);
+  const flds = coreHtml + ordered.filter(function(f){
+      return f.field_type !== 'richtext' && OWNED_ELSEWHERE.indexOf(f.field_key) < 0;
+    }).map(function(f){
+    // The five that live on the claim rather than in the bucket. Each keeps the control that
+    // suits it and saves through the endpoint that already owns it.
+    if (f._core){
+      const lab = '<label>' + esc(f.label_en) + '</label>';
+      if (f._how === 'insurer')
+        return '<div class="l2fld">' + lab + '<div id="lfins_box"></div></div>';
+      if (f._how === 'policytype'){
+        const cur = (c.claim_type || '').trim();
+        return '<div class="l2fld">' + lab + '<select id="lf_claim_type" '
+          + 'onchange="l2SetType(' + id + ',this.value,this)">'
+          + (cur ? '' : '<option value="">\u2014 not set \u2014</option>')
+          + (typeof L2_TYPES !== 'undefined' ? L2_TYPES : []).map(function(t){
+              return '<option value="' + t + '"' + (t === cur ? ' selected' : '') + '>'
+                   + t.replace(/_/g, ' ') + '</option>'; }).join('')
+          + '</select></div>';
+      }
+      if (f._how === 'assignto'){
+        const cur = c.assigned_to_staff_id == null ? '' : String(c.assigned_to_staff_id);
+        return '<div class="l2fld">' + lab + '<select id="lf_assigned_to" '
+          + 'onchange="l2SetOwner(' + id + ',this.value,this)">'
+          + '<option value=""' + (cur ? '' : ' selected') + '>\u2014 nobody yet \u2014</option>'
+          + (_l2Handlers || []).map(function(p){
+              return '<option value="' + p.staff_id + '"'
+                   + (String(p.staff_id) === cur ? ' selected' : '') + '>' + esc(p.name)
+                   + '</option>'; }).join('')
+          + '</select><div class="hint">Who will prepare the draft.</div></div>';
+      }
+      if (f._how === 'date')
+        return '<div class="l2fld">' + lab + '<input type="date" id="lf_core_' + f.field_key
+          + '" value="' + esc(String(c[f.field_key] || '').slice(0, 10))
+          + '" onchange="_l2DateEdit(this,\'' + f.field_key + '\',\'core\')" '
+          + 'onblur="_l2DateCommit()"></div>';
+      return '<div class="l2fld">' + lab + '<input'
+        + (f._how === 'number' ? ' type="number" step="any"' : '')
+        + ' id="lf_core_' + f.field_key + '" value="' + esc(c[f.field_key] == null ? '' : c[f.field_key])
+        + '" onchange="l2Core(\'' + f.field_key + '\',this.value,this)"></div>';
+    }
     const v = (st.values || {})[f.field_key] || '';
     const req = f.required_exit ? ' <span class="req">*</span>' : '';
     let input;
@@ -14542,6 +14595,36 @@ function l2CaseRender(rem){
     + '</div>'
     + '<div id="l2cMsg" style="font-size:.82rem"></div>'
     + '</div>';
+
+  // Company Name is the ONE shared picker (nidaan_insurers.js), the same control the gist, the
+  // draft form and the claim-edit screen use. It is a component: the box above is empty until it
+  // is mounted, which can only happen once the panel is in the page.
+  if (st.bucket === 'live_cases' && document.getElementById('lfins_box')){
+    try{
+      window.NidaanInsurers.mount('lfins_box', {value: c.insurer_name || '',
+        style: 'width:100%;box-sizing:border-box;background:var(--nd-bg-surface-2);'
+             + 'border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);'
+             + 'padding:.38rem .55rem;border-radius:8px;font-size:.85rem'});
+      const pick = document.getElementById('lfins_box_pick');
+      if (pick) pick.addEventListener('change', function(){
+        // The component owns the answer - it knows whether it came from the list or its own
+        // "Other" box - so it is always read through the component, never off the select.
+        let v = '';
+        try{ v = (window.NidaanInsurers.value('lfins_box') || '').trim(); }catch(e){ v = ''; }
+        if (v) l2Core('insurer_name', v, pick);
+      });
+      const other = document.getElementById('lfins_box_other');
+      if (other) other.addEventListener('blur', function(){
+        let v = '';
+        try{ v = (window.NidaanInsurers.value('lfins_box') || '').trim(); }catch(e){ v = ''; }
+        if (v) l2Core('insurer_name', v, other);
+      });
+    }catch(e){
+      const box = document.getElementById('lfins_box');
+      if (box) box.innerHTML = '<div class="l2warn">The company list did not load. Reload the '
+        + 'page and try again.</div>';
+    }
+  }
 }
 
 // THE FACTS AT THE TOP OF A CLAIM, each one correctable where it is read.

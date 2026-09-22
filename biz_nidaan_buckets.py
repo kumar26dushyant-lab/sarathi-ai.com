@@ -340,6 +340,20 @@ _CONFIG_FIXES = (
     # judgement.
     ("UPDATE nidaan_bucket_fields SET active=0, required_exit=0 WHERE bucket_key='pending_draft' "
      "AND field_key IN ('approved_by','approved_on') AND active=1", ()),
+    # PENDING DOCS COMES OFF THE RAIL (founder, 22 Sep). Documents are gathered in L2 Claims
+    # before the handover, so this bucket has had nothing to do since that changed. Guarded on
+    # being EMPTY: switching off a bucket that still holds a claim would strand it somewhere
+    # nobody can see, which is the one thing a bucket must never do. If a claim ever lands there
+    # again the correction simply stops matching, and the bucket comes back.
+    ("UPDATE nidaan_buckets SET active=0 WHERE bucket_key='pending_docs' AND active=1 "
+     "AND NOT EXISTS (SELECT 1 FROM nidaan_claims WHERE pipeline_stage='pending_docs' "
+     "                AND COALESCE(archived,0)=0)", ()),
+    # THE THREE REMINDER DATES COME BACK (founder, 22 Sep: "date option should be there only for
+    # tracking purpose and manual enter"). They were switched off on 21 Sep along with the
+    # reminder ledger. The day flags stay as well, because the two answer different questions:
+    # the flags say how long it has been, these say what we did about it. Neither sends anything.
+    ("UPDATE nidaan_bucket_fields SET active=1 WHERE bucket_key='escalation' "
+     "AND field_key IN ('esc_reminder_1','esc_reminder_2','esc_reminder_3') AND active=0", ()),
     # A draft query belongs to Pending Draft and ends when the claim leaves it (founder,
     # 22 Sep: a claim in Escalation showing "Draft query resolved" for a query raised three
     # buckets ago, and going on showing it). move() clears it now; these are the claims that
@@ -399,8 +413,12 @@ _CONFIG_FIXES = (
     # and manual"). A reminder ledger asked staff to maintain a record; what they actually need on
     # opening the claim is how long the insurer has been silent, which the flags show directly.
     # Deactivated, not deleted: the dates already recorded on live claims stay readable.
-    ("UPDATE nidaan_bucket_fields SET active=0, required_exit=0 WHERE bucket_key='escalation' "
-     "AND field_key IN ('esc_reminder_1','esc_reminder_2','esc_reminder_3') AND active=1", ()),
+    # (Superseded 22 Sep - the founder asked for the dates back for manual tracking, and the
+    # correction that restores them runs above. Left here, disarmed, because deleting it would
+    # hide why they were ever switched off.)
+    ("UPDATE nidaan_bucket_fields SET required_exit=0 WHERE bucket_key='escalation' "
+     "AND field_key IN ('esc_reminder_1','esc_reminder_2','esc_reminder_3') "
+     "AND required_exit<>0", ()),
     # "Past Medical Records / Doctor's Certificate" off the health list — optional, never once
     # received on any claim, and one more line on a list people already find long.
     ("UPDATE nidaan_claim_doc_checklist SET required=0 WHERE doc_key='prior_medical' "
