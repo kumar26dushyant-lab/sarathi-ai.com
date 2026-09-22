@@ -1535,6 +1535,33 @@ async def _send_wa_failover(*, jid: str, message: str,
     return (False, "", last_err, last_slot)
 
 
+# Roles change rarely and this is asked once per notification per recipient, so a short-lived
+# cache keeps a fan-out to sixteen admins from being sixteen queries.
+_ROLE_CACHE: dict = {}
+_ROLE_CACHE_AT: float = 0.0
+
+
+async def _staff_role(staff_id) -> str:
+    """This staffer's role, for the email policy. Unknown returns "" - which the policy treats
+    as an ordinary member, i.e. the quieter answer, never the louder one."""
+    global _ROLE_CACHE, _ROLE_CACHE_AT
+    import time as _t
+    try:
+        sid = int(staff_id)
+    except (TypeError, ValueError):
+        return ""
+    if _t.time() - _ROLE_CACHE_AT > 300:
+        try:
+            async with aiosqlite.connect(db.DB_PATH) as conn:
+                rows = await (await conn.execute(
+                    "SELECT staff_id, COALESCE(role,'') FROM nidaan_staff")).fetchall()
+            _ROLE_CACHE = {int(r[0]): r[1] for r in rows}
+            _ROLE_CACHE_AT = _t.time()
+        except Exception:
+            return ""
+    return _ROLE_CACHE.get(sid, "")
+
+
 async def _send_email(*, to_email: str, subject: str, html_body: str,
                       text_body: str = "") -> tuple[bool, str]:
     try:
@@ -1655,6 +1682,28 @@ async def dispatch(*, event_key: str, priority: str = PRIORITY_P1,
         # succeed — OR if the caller forced email (e.g. task assignee should get
         # both the WhatsApp nudge AND an email record).
         should_email = (priority == PRIORITY_P0) or force_email or (not wa_sent_ok)
+        # ASK THE POLICY. dispatch() decided email by "did WhatsApp work?", and for staff
+        # WhatsApp is effectively never up - so `not wa_sent_ok` was always true and every
+        # internal notice became an email to all sixteen admins. biz_nidaan_notify_policy has
+        # classed this chatter as Telegram-and-bell since it was written; it was wired into
+        # notify_staff_inapp and never into here, which is the path the task and note chatter
+        # actually takes.
+        #
+        # STAFF ONLY. A subscriber or a complainant is never narrowed by this - their email is
+        # the point, and the whole reason for doing this is to keep the sending allowance for
+        # them (founder, 22 Sep).
+        if should_email and recipient_type == RECIPIENT_STAFF and recipient_id:
+            try:
+                import biz_nidaan_notify_policy as _pol
+                _pok, _pwhy = _pol.should_email(event_key, role=await _staff_role(recipient_id))
+                if not _pok:
+                    should_email = False
+                    email_status = "skipped_by_policy"
+                    logger.debug("email suppressed for staff %s (%s): %s",
+                                 recipient_id, event_key, _pwhy)
+            except Exception as _pe:
+                # The policy must never be able to silence a real alert. Noisy is recoverable.
+                logger.warning("notify policy failed for %s (%s) - sending", event_key, _pe)
         if should_email:
             subj = subject if subject.startswith("[Nidaan]") else f"[Nidaan] {subject}"
             ok, err = await _send_email(

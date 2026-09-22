@@ -53,13 +53,37 @@ NARROW_EMAIL_PREFIXES = (
 )
 
 # Internal chatter: Telegram + bell are enough. These are the volume drivers.
+#
+# Extended 22 Sep on the founder's instruction - "claims movement, assignment, tagging, assign
+# and comments, comments updated, status changes ... should also be going in telegram and web
+# notifications, not email. email ... we can save for customer/complainant facing".
+#
+# None of these goes quiet. The dashboard bell and the Telegram mirror always fire; this list
+# only decides that they do not ALSO land in sixteen inboxes. A staffer who needs a permanent
+# record has the claim's own timeline, which is where that record belongs anyway.
 TELEGRAM_ONLY_EVENTS = {
+    # tasks
     "quick_task.comment",
     "quick_task.comment_ack",
     "quick_task.status",
     "quick_task.created",
     "quick_task.mention",
+    "quick_task.assigned",
+    "quick_task.request",
+    "task.assigned",
+    "task.status_changed",
+    # claims - tagging, comments, movement, assignment, status
     "claim_note.mention",
+    "claim.watch",          # a note or a document landing on a claim somebody is on
+    "claim.involved",
+    "claim.assigned",
+    "claim.status",
+    "claim.stage_changed",
+    "case.assigned",
+    "crm.assigned",
+    "bucket.move",
+    "bucket.sent_back",
+    "bucket.stale",
 }
 
 # Roles that keep email on almost everything (founder's instruction).
@@ -91,19 +115,24 @@ def should_email(event_key: str, *, role: str = "", involved: bool = True,
                 return True, f"money ({p.rstrip('.')}) — owns this item"
             return False, f"money ({p.rstrip('.')}) — Telegram + bell for everyone else"
 
-    # 3. Super-admins keep the full picture.
-    if role in _BROAD_EMAIL_ROLES:
-        return True, "super-admin keeps email"
-
-    # 3. Someone with no stake in this claim doesn't need it in their inbox.
-    if not involved:
-        return False, "not involved in this item"
-
-    # 4. Internal chatter → Telegram + bell.
+    # 3. Internal chatter → Telegram + bell, FOR EVERYONE INCLUDING SUPER-ADMINS.
+    #
+    # This used to sit below the super-admin rule, so a super-admin was emailed about every task
+    # comment in the building - and "keeps the full picture" was doing the opposite, because a
+    # picture arriving 550 times a day is not read. They keep the full picture on Telegram and
+    # the bell, where it is instant and costs no sending allowance.
     if ek in TELEGRAM_ONLY_EVENTS:
         return False, "internal chatter — Telegram + bell"
 
-    # 5. Anything unrecognised still emails. A new event must not go quiet by accident.
+    # 4. Super-admins keep email on everything else.
+    if role in _BROAD_EMAIL_ROLES:
+        return True, "super-admin keeps email"
+
+    # 5. Someone with no stake in this claim doesn't need it in their inbox.
+    if not involved:
+        return False, "not involved in this item"
+
+    # 6. Anything unrecognised still emails. A new event must not go quiet by accident.
     return True, "default (unclassified event)"
 
 
