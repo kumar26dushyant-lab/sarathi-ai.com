@@ -7813,3 +7813,21 @@ ceiling was never the real constraint. 139 of the 550 were two alarms repeating 
 minutes; the rest was every event copied to all 16 admins because dispatch() decided email by
 "did WhatsApp work?" and staff WhatsApp is never up. The notify policy had the right answer all
 along and dispatch never asked it.
+
+
+**Revenue, 23 Sep.** The screen showed Rs 29,257 against a ledger of Rs 80,488 - 36% - because it
+added up three legacy tables instead of reading nidaan_payments. Branch L2 fees were in none of
+them; `status IN ('active','cancelled')` dropped EXPIRED subscriptions, which made total revenue
+FALL over time. Revenue now reads the ledger. Total = collected to date (founder's definition).
+GST is shown separately - it is not ours. The split is configurable and rendered from data;
+"80:20" had been typed into the HTML in four places. Everything sums in paise and converts once:
+rounding five sources separately lost a rupee, which the test caught.
+
+The rule this leaves behind: ONE account of the money, and a test that re-derives it from the
+ledger on real data (_tools/test_revenue_ledger.py). Two accounts of anything means both get
+doubted.
+
+**Churn is next, and it is smaller than it looks.** We already handle subscription.cancelled,
+halted, pending, charged and payment.failed. nidaan_subscriptions has `cancelled_at` and no
+reason column at all, and there is no churn table - so the signals arrive and the reasons are
+discarded. Recording them is the work.

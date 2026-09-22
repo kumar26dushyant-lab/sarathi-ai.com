@@ -87,6 +87,44 @@ its bucket.
     and the code email now names the page, so somebody who removed two of four files can return,
     sign in with a code, and add more.
 
+### ✅ SHIPPED 2026-09-23 (2) — Revenue reads the ledger (it was showing 36% of the money)
+
+**Measured before touching anything:** Revenue screen **₹29,257**, ledger **₹80,488**. Gap
+**₹51,231**. Not a wrong sum — **two separate accounts of the same money**, and the screen read
+the older one.
+
+| Missed | Amount |
+|---|---|
+| branch Level-2 fees, in none of the three source tables | ₹22,963 / 39 payments |
+| **EXPIRED** subscriptions, dropped by `status IN ('active','cancelled')` | ₹14,034 / 9 subs |
+| renewals | ₹5,214 / 6 |
+| ₹499 reviews: 12 in the ledger, **2 rows** in the purchase table | ₹6,477 |
+
+The expired one matters most: **money already collected does not stop having been collected when
+a plan lapses.** That filter made total revenue **fall over time** — backwards, and the kind of
+number that quietly destroys trust in every other number on the screen.
+
+  - **Founder's definition (23 Sep): collected to date**, everything that ever came in, branch L2
+    included. The screen now says so in words.
+  - **GST is separate.** ₹9,873 of the ₹80,488 is collected for the government, not earned —
+    calling it revenue overstates by 12%. The split's **basis** is configurable so this is decided,
+    not assumed, and **defaults to the old behaviour** so nothing moved silently on ship day.
+  - **The split is configurable** and drawn from the data — "80:20" was typed into the HTML in
+    **four places**, which is exactly what made it not flexible. **Owner-only still**, until the
+    numbers have been watched: a number that moves every other day teaches people to doubt it.
+  - 🐞 **Everything sums in PAISE now, converted once.** The test's first run found a
+    **₹1 drift** from rounding five sources separately. A rupee today is visible drift at ten
+    times the volume.
+  - `_tools/test_revenue_ledger.py` — **22 checks** on a copy of live, including exact paise and
+    that a broken split config falls back rather than hiding money.
+  - `deploy/verify-revenue.py` stays as a **data-drift report**: the legacy tables still drive
+    other screens and 11 of 12 ₹499 reviews have no purchase row.
+
+**⏳ Next, agreed with the founder:** churn analytics. We already handle
+`subscription.cancelled / halted / pending / charged` and `payment.failed` — **but
+`nidaan_subscriptions` has only `cancelled_at` and no reason column anywhere.** The signals arrive
+and the reasons are thrown away. Recording them is the work, not building a new subsystem.
+
 ### ✅ SHIPPED 2026-09-23 — the retry link, notification routing, and two names that did not exist
 
 **✅ The payment retry link had NEVER been sent.** 27 failures since 17 Aug, zero retry rows.
