@@ -7690,3 +7690,25 @@ reminder dates are back, active and not required (worker log: fixed=4).
 **Open: the complainant's side (#1-#4)** - the phone editable from Claim Info, a claim-page link
 in the code email, immediate sending on re-issue or a new email, and a Save-and-submit step for
 documents with a way back in afterwards.
+
+
+**The complainant's side, #1-#4 (22 Sep).** `/portal/ensure` created a link, called
+`mark_link_sent()` and emailed nobody - its own docstring admitted it - so the screen showed
+"sent 2x" for two emails that never existed. It sends now and reports create and send separately.
+
+The test for it found the bigger fault: `send_greeting_email()` read `insured_email` only.
+`_claim_contact()` now returns `to_email`/`to_name`, preferring the complainant, because the
+dashboard, the documents and the fee authorisation are theirs. Putting an email on a claim that
+had none sends the link immediately, only when the address changed, and never fails the edit.
+
+`update_claim_info()` takes the complainant's name, phone and email. The code email names the
+claim page - a button plus the plain address, and deliberately NOT a sign-in link, since the code
+is the security; `deploy/verify-code-email.py` renders the template because it is %-formatted.
+
+Documents carry `submitted_at`, NULL until the complainant presses Save and submit. Staff see
+unsubmitted files marked rather than hidden, and are notified once on submit.
+
+The migration is the part to remember: `ensure_claim_documents_table()` runs on every save, so
+the backfill had to be guarded to the moment the column is added. Unguarded, saving one file
+stamped every file somebody was still choosing - the feature would have looked like it worked
+and done nothing.

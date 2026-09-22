@@ -6,7 +6,7 @@ _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned ·
 
 **Last updated:** 2026-09-22 — 🟢 **CUTOVER COMPLETE. NidaanPartner.com and Sarathi-AI.com are LIVE on Oracle Mumbai (161.118.186.201, aarch64).** Contabo parked as rollback, untouched.
 
-### 🟡 IN PROGRESS 2026-09-22 (3) — the founder's 16-item screenshot list
+### ✅ SHIPPED 2026-09-22 (3) — the founder's 16-item screenshot list
 Grouped by ROOT CAUSE rather than by screenshot, because several were the same fault twice.
 
 **✅ Batch 1 — dates (#6, #7, #13).** Two reports, one bug, and it is not obvious: an
@@ -53,14 +53,44 @@ its bucket.
   - The six page suites moved out of a scratch folder into `uitest/` — **nine browser suites**
     now, runnable by anyone.
 
-**🔴 Batch 4 — still to do: the complainant's side.**
-  - **#1** the phone number editable from the Claim Info **Edit** button.
-  - **#2** a link to open the claim page in the same email as the code.
-  - **#3** re-issuing a dashboard link, or entering an email on a new case, must send the email
-    **immediately** — he reports this failing now.
-  - **#4** documents: a **Save and submit** step with confirmation, so uploads do not reach us the
-    instant they are picked; an **exit** button; and a way back in from a link in their email
-    (with the code) so somebody who removed two of four files can return and fix it.
+**✅ Batch 4 — the complainant's side.**
+  - **#3 was not "failing to send" — it never tried.** `/portal/ensure`, which is what
+    *Re-issue & copy link* calls, created the link, called `mark_link_sent()` and emailed nobody;
+    its own docstring said *"Does NOT itself email yet"*. So the screen reported **"sent 2×"** for
+    two emails that were never written. It now sends, and says which of create/send happened. The
+    link is still returned when there is no email on file — copying it into WhatsApp is a real
+    thing staff do — but that case says so instead of claiming success.
+  - 🐞 **The test for #3 found something bigger.** `send_greeting_email()` read `insured_email`
+    and nothing else. The complainant is often a different person, and the dashboard, documents
+    and fee authorisation are all **theirs** — so putting their address on a claim sent the link
+    to the insured, or to **nobody** while the screen showed the claim as having an email. It now
+    goes to the complainant's address when there is one, addressed to their name.
+  - **#3b** putting an email on a claim that had none sends the link **there and then** — only
+    when the address actually changed, and never allowed to fail the edit. The screen says whether
+    it went, because *saved* and *they were told* are different things.
+  - **#1** the Edit button edited the **insured's** phone; the founder's arrow was on the
+    **complainant's**, which was editable nowhere. Name, phone and email, together.
+  - **#2** the code email now names the page the code is typed into, as a button with the plain
+    address under it. **Deliberately not a sign-in link** — the code is the security.
+    `deploy/verify-code-email.py` renders the template, because a stray `%` in the new CSS would
+    only fail at the moment somebody is waiting to get in.
+  - **#4** a document now carries `submitted_at`: NULL while they are still choosing, stamped on
+    **Save and submit**, which asks first. Their page tags each unsent file, explains in an amber
+    box that we do not have them yet, and afterwards says plainly that we do and they can close
+    the page. Staff **see** the unsubmitted files, marked *not submitted* — a staffer on the phone
+    needs to see what is happening at the moment somebody rings up, and the founder's report IS
+    that moment. Staff are told **once**, on submit.
+  - ⚠️ **The test caught my own migration:** the backfill ran on EVERY save, so saving one file
+    stamped every file somebody was still choosing — quietly undoing the feature while looking
+    like it worked. It now runs only when the column is first created.
+  - **Coming back needs nothing new:** the greeting email already carries their claim-page link
+    and the code email now names the page, so somebody who removed two of four files can return,
+    sign in with a code, and add more.
+
+### ✅ THE 16-ITEM LIST IS CLOSED (22 Sep)
+#1 · #2 · #3 · #4 · #5 · #6 · #7 · #8 · #9 · #10 · #11 · #12 · #13 · #14 · #15 · #16, and the Live
+bucket sequencing. Four batches, each shipped and verified against a copy of the live database
+before deploying, with the live worker log confirming the one-time corrections landed.
 
 ### ✅ SHIPPED 2026-09-22 (2) — the bucket screen on real devices, and the Sarathi cleanup
 
