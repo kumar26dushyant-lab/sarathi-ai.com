@@ -6,7 +6,9 @@
   "type": "commonjs",
   "scripts": {
     "check:ops": "node deploy/verify-page-js.mjs static/nidaan_ops.html",
-    "check:pages": "node deploy/verify-page-js.mjs static/nidaan_ops.html static/nidaan_dashboard.html static/nidaan_start.html static/nidaan_review.html static/nidaan_signup.html static/nidaan_login.html static/nidaan_index.html static/partner.html static/dashboard.html static/superadmin.html"
+    "check:pages": "node deploy/verify-page-js.mjs static/nidaan_ops.html static/nidaan_dashboard.html static/nidaan_start.html static/nidaan_review.html static/nidaan_signup.html static/nidaan_login.html static/nidaan_index.html static/partner.html static/dashboard.html static/superadmin.html",
+    "check:py": "py -3.13 deploy/verify-python-names.py",
+    "check:all": "npm run check:pages && npm run check:py"
   },
   "devDependencies": {
     "eslint": "^10.11.0"

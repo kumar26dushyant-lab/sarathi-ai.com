@@ -57,6 +57,12 @@ logger = logging.getLogger("nidaan.alarm.policy")
 # deploy. Comma-separated staff_ids. Empty/absent = fall back to the founder, resolved below.
 AUDIENCE_SETTING = "alarm_audience_staff_ids"
 
+# How long an alarm that is still true, and word for word unchanged, waits before it is said
+# again. Tunable from ops settings for the same reason the audience is: a number that needs a
+# deploy to change is a number nobody changes. 0 disables the hold entirely.
+REPEAT_HOURS_SETTING = "alarm_repeat_hours"
+REPEAT_HOURS_DEFAULT = 6
+
 # Last-resort identity of "me". Used only if the setting is unset AND the email lookup fails.
 _FOUNDER_EMAIL = "dushyant@nidaanpartner.com"
 
@@ -274,6 +280,72 @@ async def _already_said(event_key: str, subject: str, body: str) -> bool:
     return not first_time
 
 
+async def _repeat_held(event_key: str, subject: str, body: str) -> str:
+    """"" if this alarm should go out; a reason if it should be held.
+
+    The fan-out guard above stops one sweep alarming twelve times in a single pass. This stops
+    the same sweep alarming every ten minutes for days: on 22 Sep the founder had the same two
+    alarms 95 and 44 times in one day, word for word, about conditions that had not changed.
+
+    WORD FOR WORD is the test, and it is what makes holding safe. Any change in the text - a
+    different count, another failing subsystem - hashes differently and goes straight through, so
+    a situation that gets worse is never held behind a copy of the situation that was better.
+
+    Held repeats are counted rather than dropped on the floor, so how often something is really
+    firing stays answerable from the table.
+    """
+    import hashlib
+    from datetime import datetime, timedelta
+    import aiosqlite
+    import biz_database as db
+
+    hours = REPEAT_HOURS_DEFAULT
+    try:
+        import biz_nidaan as _nid
+        raw = (await _nid.get_ops_setting(REPEAT_HOURS_SETTING, "") or "").strip()
+        if raw:
+            hours = max(0, int(float(raw)))
+    except Exception:  # noqa: BLE001
+        hours = REPEAT_HOURS_DEFAULT
+    if hours <= 0:
+        return ""                      # the hold is switched off
+
+    digest = hashlib.sha256(
+        ("%s|%s|%s" % (event_key, subject or "", body or "")).encode("utf-8", "replace")
+    ).hexdigest()[:24]
+    akey = "alarmrep:%s" % digest
+    cutoff = (datetime.utcnow() - timedelta(hours=hours)).strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        async with aiosqlite.connect(db.DB_PATH) as c:
+            c.row_factory = aiosqlite.Row
+            row = await (await c.execute(
+                "SELECT sent_count, first_at, last_at FROM nidaan_alert_dedup WHERE alert_key=?",
+                (akey,))).fetchone()
+            if row is None:
+                await c.execute(
+                    "INSERT INTO nidaan_alert_dedup (alert_key, sent_count) VALUES (?, 1)", (akey,))
+                await c.commit()
+                return ""              # first time this text has ever been said
+            last = str(row["last_at"] or "")[:19]
+            if last and last >= cutoff:
+                await c.execute(
+                    "UPDATE nidaan_alert_dedup SET sent_count = sent_count + 1 "
+                    "WHERE alert_key=?", (akey,))
+                await c.commit()
+                return ("said at %s UTC and unchanged since - repeats held for %dh (%d so far)"
+                        % (last, hours, int(row["sent_count"] or 0) + 1))
+            # The window has passed and it is STILL true. Say it again, and start a new window.
+            await c.execute(
+                "UPDATE nidaan_alert_dedup SET last_at=CURRENT_TIMESTAMP, "
+                "sent_count = sent_count + 1 WHERE alert_key=?", (akey,))
+            await c.commit()
+    except Exception as e:  # noqa: BLE001
+        # Cannot remember? Then deliver. A repeated alarm is a nuisance; a swallowed one is a fault.
+        logger.warning("alarm repeat guard unavailable (%s) - delivering", e)
+        return ""
+    return ""
+
+
 # ── The one call the notification layer makes ────────────────────────────────
 async def gate(event_key: str, staff_ids: list, subject: str = "",
                body: str = "") -> tuple[list, str]:
@@ -289,6 +361,12 @@ async def gate(event_key: str, staff_ids: list, subject: str = "",
 
     if await _already_said(event_key, subject, body):
         return [], "identical alarm already delivered in this ten-minute block"
+
+    # Still true, and still word for word what we said earlier today? Say it once, not 95 times.
+    _held = await _repeat_held(event_key, subject, body)
+    if _held:
+        logger.info("ALARM HELD (%s): %s", event_key, _held)
+        return [], _held
 
     who = await audience()
     if not who:

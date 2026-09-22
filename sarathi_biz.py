@@ -5850,11 +5850,19 @@ async def nidaan_razorpay_webhook(request: Request):
     # This records arrival itself — signature verified, JSON parsed — whatever the event turns out
     # to do. Best-effort: a webhook must never fail because a diagnostic write failed.
     try:
+        # `datetime` is NOT a module-level name in this file - every other use imports it
+        # locally, aliased. Without this line the call raised NameError, the bare `except`
+        # swallowed it, and the stamp was never written once: from 20 Sep to 23 Sep the payment
+        # guardian read a frozen timestamp and emailed "No Razorpay webhook has reached us in 24
+        # hours" 44 times a day while webhooks were arriving and being processed normally.
+        from datetime import datetime as _dt_now
         await nidaan.set_ops_setting(
             "razorpay_webhook_last_at",
-            datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S") + "|" + str(event or "")[:60])
-    except Exception:
-        pass
+            _dt_now.utcnow().strftime("%Y-%m-%d %H:%M:%S") + "|" + str(event or "")[:60])
+    except Exception as _se:
+        # Still best-effort - a webhook must never fail because a diagnostic write failed - but
+        # no longer silent, because silence here cost three days of false alarms.
+        logger.warning("could not stamp razorpay_webhook_last_at: %s", _se)
 
     # ── #3(ii): Payment FAILED — alert every super-admin on ALL channels ─────────
     if event == "payment.failed":
@@ -6452,7 +6460,9 @@ async def _nidaan_resub_guard(account_id: int, requested_plan: str) -> Optional[
     try:
         _e = (cur.get("current_period_end") or "")[:10]
         if _e:
-            ends = datetime.strptime(_e, "%Y-%m-%d").strftime("%d %b %Y")
+            # Same missing import as the webhook stamp: `datetime` is not a name in this file.
+            from datetime import datetime as _dt_p
+            ends = _dt_p.strptime(_e, "%Y-%m-%d").strftime("%d %b %Y")
     except Exception:
         ends = (cur.get("current_period_end") or "")[:10]
     until_en = f" It stays active till {ends}." if ends else ""
@@ -11419,6 +11429,12 @@ async def ops_update_claim_status(claim_id: int, body: OpsClaimStatusUpdate, req
             _who = f" for {claim.get('insured_name','')}" if claim else ""
         except Exception:
             _who = ""
+        # `_asyncio` was never imported in this function. The call raised NameError, the
+        # `except` below swallowed it, and the status-change fan-out has never once run - which
+        # is why nidaan_notifications holds ZERO rows for claim.status. Found by
+        # deploy/verify-python-names.py, written the same day for the identical bug in the
+        # webhook stamp.
+        import asyncio as _asyncio
         _asyncio.create_task(_cp.notify_claim_parties(
             claim_id, event_key="claim.status",
             subject=f"Claim #{_claim_no(claim_id)} update — {_st}",
