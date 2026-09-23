@@ -301,6 +301,13 @@ async def handle_inbound_payload(payload: dict) -> dict:
                         continue  # duplicate wamid — already processed
                     await upsert_contact(msisdn, mark_inbound=True)
                     handled += 1
+                    # Two blue ticks, immediately. Before the reply is composed, because a
+                    # complainant chasing a rejected claim reads "delivered, not read" as
+                    # "nobody is there". Never allowed to delay or block the reply itself.
+                    try:
+                        await wa.mark_read(wamid)
+                    except Exception:  # noqa: BLE001
+                        pass
                     # A reply to a query we sent this complainant: tell the super admins and the
                     # person who asked, with what they said. Never allowed to break the inbox.
                     try:

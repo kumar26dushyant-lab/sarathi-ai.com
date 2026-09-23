@@ -276,6 +276,39 @@ async def send_text(to: str, body: str) -> dict:
                         "type": "text", "text": {"body": (body or "")[:4000]}})
 
 
+async def mark_read(wa_message_id: str) -> dict:
+    """Turn the sender's two grey ticks blue. Founder, 23 Sep: "double green tick nahi ho raha."
+
+    WhatsApp only shows a message as READ when the business says so through the API. We never
+    did, so every complainant who wrote to us saw their message sit on delivered - which reads
+    as "nobody is there", and is exactly what somebody chasing a rejected claim does not need.
+
+    Deliberately NOT routed through _post(): a read receipt is not a message. It costs nothing,
+    it is never a template, and it must never be held by the send guard or counted against a
+    daily cap - being rate-limited out of acknowledging somebody would be the opposite of the
+    point. Failure is swallowed; a receipt that does not go is a cosmetic loss, and it must
+    never stand between an inbound message and the reply to it.
+    """
+    wamid = (wa_message_id or "").strip()
+    if not (wamid and is_configured()):
+        return {"ok": False, "error": "not_configured"}
+    if os.getenv("NIDAAN_NO_OUTBOUND") == "1":
+        return {"ok": False, "error": "outbound_off"}
+    try:
+        async with httpx.AsyncClient(timeout=10) as c:
+            r = await c.post(
+                f"{GRAPH}/{_phone_id()}/messages",
+                headers={"Authorization": f"Bearer {_token()}"},
+                json={"messaging_product": "whatsapp", "status": "read", "message_id": wamid})
+        ok = r.status_code < 300
+        if not ok:
+            logger.info("mark_read %s: %s %s", wamid[:18], r.status_code, r.text[:120])
+        return {"ok": ok}
+    except Exception as e:  # noqa: BLE001
+        logger.info("mark_read failed: %s", e)
+        return {"ok": False, "error": str(e)}
+
+
 async def _upload_media(content: bytes, mime: str, filename: str = "file") -> dict:
     """Upload media to the Cloud API → returns {ok, media_id}. Needed before sending audio/doc."""
     if not is_configured():

@@ -12427,6 +12427,53 @@ async def _subsystem_checks() -> list:
              + f" · {_tmpl}/{len(_orch.JOURNEY_TEMPLATES)} templates wired")
     except Exception as _e:
         _chk("WA journey", False, f"check failed: {str(_e)[:70]}")
+    # IS THE WHATSAPP BOT ACTUALLY ANSWERING PEOPLE?
+    #
+    # Founder, 23 Sep: "until I message, I didn't know it's not working". He was right, and the
+    # check above is exactly why: "WhatsApp Cloud API" read CONNECTED / quality GREEN throughout,
+    # because it asks Meta about the NUMBER. The number was fine. Nobody was being answered.
+    #
+    # So this reads outcomes, and only outcomes:
+    #   1. of the inbound messages we DID receive, how many got a reply?
+    #   2. has ANY webhook reached us at all recently - a delivery status counts, and proves the
+    #      pipe from Meta is open even on a day nobody writes in.
+    #
+    # Silence is deliberately NOT a failure. This is a low-traffic number; a quiet Sunday must
+    # not page anybody. What IS a failure is somebody writing to us and getting nothing back.
+    try:
+        import biz_nidaan_whatsapp as _wab
+        if not _wab.is_configured():
+            _chk("WhatsApp bot replies", False, "not configured")
+        else:
+            async with aiosqlite.connect(nidaan.DB_PATH) as _wc:
+                _wc.row_factory = aiosqlite.Row
+                _in = [dict(r) for r in await (await _wc.execute(
+                    "SELECT msisdn, created_at FROM nidaan_wa_messages WHERE direction='in' "
+                    "AND created_at >= datetime('now','-24 hours') ORDER BY created_at")).fetchall()]
+                _unans = 0
+                for _m in _in:
+                    _r = await (await _wc.execute(
+                        "SELECT 1 FROM nidaan_wa_messages WHERE direction='out' AND msisdn=? "
+                        "AND created_at >= ? AND created_at <= datetime(?, '+15 minutes') LIMIT 1",
+                        (_m["msisdn"], _m["created_at"], _m["created_at"]))).fetchone()
+                    if not _r:
+                        _unans += 1
+                _last_in = await (await _wc.execute(
+                    "SELECT MAX(created_at) FROM nidaan_wa_messages WHERE direction='in'")).fetchone()
+            _li = (_last_in[0] if _last_in else "") or "never"
+            if _in and _unans:
+                _chk("WhatsApp bot replies", False,
+                     "%d of %d people who wrote in the last 24h got NO reply within 15 min"
+                     % (_unans, len(_in)))
+            elif _in:
+                _chk("WhatsApp bot replies", True,
+                     "%d inbound in 24h, every one answered" % len(_in))
+            else:
+                # Nobody wrote. Not a fault - but say when somebody last did, so a week of
+                # silence is visible as a week of silence rather than as "fine".
+                _chk("WhatsApp bot replies", True, "nobody wrote in 24h · last inbound %s" % _li)
+    except Exception as _e:
+        _chk("WhatsApp bot replies", False, f"check failed: {str(_e)[:70]}")
     # DID THE LOGIN CODES ACTUALLY REACH ANYBODY? On 17 Sep every branch was locked out while
     # every screen said fine: the endpoint answered "otp_sent", Brevo returned 201, and Google
     # discarded the lot. biz_nidaan_login_health has recorded the OUTCOME of every code since.
