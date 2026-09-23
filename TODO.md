@@ -87,6 +87,31 @@ its bucket.
     and the code email now names the page, so somebody who removed two of four files can return,
     sign in with a code, and add more.
 
+### 🔴 RAISED 23 Sep (afternoon) — not yet built
+
+1. **Status colours: weight, not just contrast.** Every pill is a pale wash, so nothing stands
+   out; "Review Delivered" is solid green while "Review Query" is faint orange — inconsistent
+   WEIGHT, which is what makes the row hard to scan. `uitest/status-pills.js` measures contrast
+   (all 22 pass, worst 3.15:1) and contrast was the wrong thing to measure alone. Needs a
+   deliberate hierarchy: what must be noticed, what is just state.
+2. **Advisor & Channel must say WHO, WHEN and HOW** — not a bare code. Branch/channel/account/
+   subscriber NAME, who initiated the claim (complainant or somebody else) and what we hold on
+   them, the time, and for a shared link, whose link it was. One block that explains the whole
+   origin of a claim, for every channel we accept claims through.
+3. **Payment notifications, pass AND fail.**
+   - super-admins: every payment, but **not repeated into irritation**
+   - branch / my-business / subscriber / CP: only THEIR claims
+   - every failure **recorded in Payment Follow-up** with the real reason, and repeats of the
+     same failure kept as history + attempt count, so it can be worked rather than just seen
+4. **Tagging a staff member on a claim → bell + Telegram to THAT person**, not everyone.
+   (`claim_note.mention` is already Telegram+bell only after this morning's routing change —
+   what still needs checking is that the tagged person actually receives it.)
+5. **WhatsApp automation screen does not list messages we sent.** The NP-96 query went out and
+   was READ (np_doc_reminder, 23 Sep 08:07:38) — delivery is fine, visibility is not.
+6. **SURAJ MALVIYA (claims 114/169): no payment at Razorpay in 7 days.** The founder reports one
+   was made via the Pay button's QR. Nothing captured under either claim or that number — needs
+   the date/amount or a Razorpay payment id from him to trace.
+
 ### 🔴 WHATSAPP CHARTER — foundation, security, alerting (founder, 23 Sep)
 
 **✅ Done today**
