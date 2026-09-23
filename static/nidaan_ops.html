@@ -6068,7 +6068,7 @@ async function openClaimDrawer(claimId) {
       <div class="msg" id="assignMsg_${c.claim_id}"></div>
     </div>`:''}
     <!-- Who gets notified on this claim + the contact details we're missing -->
-    <details data-ord="90" class="drawer-section" onclick="if(!this._loaded){this._loaded=true;loadClaimParties(${c.claim_id});}">
+    <details data-ord="45" class="drawer-section" onclick="if(!this._loaded){this._loaded=true;loadClaimParties(${c.claim_id});}">
       <summary style="cursor:pointer;font-weight:700;list-style:none">🔔 Who gets notified <span style="font-size:.72rem;color:var(--nd-text-faint);font-weight:400">— every party on this claim + any missing WhatsApp/email to chase</span></summary>
       <div id="claimParties_${c.claim_id}" style="font-size:.82rem;color:var(--nd-text-faint);margin-top:.6rem">Open to load…</div>
     </details>
@@ -6753,8 +6753,11 @@ function _drawerMode(isClaim){
 // "Status History" is caught as history before "Update Status" could be taken as work.
 const _DCOL_RULES = [
   // "Involved" sits with the notes on purpose: you involve somebody BECAUSE of what was said.
-  [3, /notes|discussion|messages with|activity|status history|involved/i],
-  [1, /claim info|branch|advisor|assign to|notified|who gets/i],
+  // "Who gets notified" moved here from column 1 on the founder's ask (24 Sep). It belongs with
+  // the conversation: you look at who hears about a claim at the moment you are tagging somebody
+  // or writing a note, not while reading the policy number.
+  [3, /notes|discussion|messages with|activity|status history|involved|notified|who gets/i],
+  [1, /claim info|branch|advisor|assign to/i],
 ];
 const _DCOL_NAMES = {1: 'Who & what', 2: 'The work', 3: 'Conversation & history'};
 
@@ -18726,18 +18729,39 @@ async function loadClaimParties(cid){
   catch(e){ el.innerHTML='<span style="color:var(--nd-danger-text)">Could not load.</span>'; return; }
   const ps=d.parties||[];
   if(!ps.length){ el.innerHTML='<span style="color:var(--nd-text-faint)">No parties resolved.</span>'; return; }
-  const chip=(ok,label)=>ok
-    ? `<span style="background:#064e3b;color:#6ee7b7;border-radius:999px;padding:.1rem .5rem;font-size:.68rem;white-space:nowrap">✓ ${label}</span>`
-    : `<span style="background:#7c2d12;color:#fdba74;border-radius:999px;padding:.1rem .5rem;font-size:.68rem;white-space:nowrap">⚠ no ${label}</span>`;
+  // Three states, because two were not enough. A flat green tick said "we have an address",
+  // which is a different question from "will this person be told" - and it hid the two channels
+  // staff are actually reached on. Theme variables only: these chips are read in both modes.
+  const CH_ICON={dashboard:'🔔',telegram:'✈️',email:'📧',whatsapp:'💬'};
+  const chip=(c)=>{
+    const st=c.state||'no', ic=CH_ICON[c.ch]||'•';
+    const look = st==='yes'   ? 'background:var(--nd-success-soft);color:var(--nd-success-text);border:1px solid rgba(34,197,94,.55)'
+               : st==='maybe' ? 'background:var(--nd-warning-soft);color:var(--nd-warning-text);border:1px solid rgba(234,179,8,.55)'
+               :                'background:var(--nd-bg-surface-2);color:var(--nd-text-muted);border:1px dashed var(--nd-border-strong)';
+    const mark = st==='yes' ? '✓' : (st==='maybe' ? '~' : '✕');
+    const tip  = c.why ? esc(c.why) : (st==='yes' ? 'Every update goes here' : '');
+    return `<span title="${tip}" style="${look};border-radius:999px;padding:.1rem .5rem;font-size:.68rem;white-space:nowrap">`
+         + `${mark} ${ic} ${esc(c.label||c.ch)}</span>`;
+  };
+  // A party built before this shipped has no `reach`; fall back to the addresses so an older
+  // response still draws something truthful rather than an empty row.
+  const reachOf=(p)=> (p.reach && p.reach.length) ? p.reach : [
+    {ch:'email', label:'Email', state: p.email?'yes':'no', why: p.email?'':'no address on file'},
+    {ch:'whatsapp', label:'WhatsApp', state: p.phone?'yes':'no', why: p.phone?'':'no number on file'}];
   el.innerHTML=`
-    ${d.gaps?`<div style="color:var(--nd-warning-text);font-size:.78rem;margin-bottom:.5rem">⚠ ${d.gaps} ${d.gaps===1?'party is':'parties are'} missing a contact detail — ask them to add it so they start getting updates.</div>`:'<div style="color:var(--nd-success-text);font-size:.78rem;margin-bottom:.5rem">✓ Everyone on this claim is reachable on both WhatsApp and email.</div>'}
+    ${d.gaps?`<div style="color:var(--nd-warning-text);font-size:.78rem;margin-bottom:.5rem">⚠ ${d.gaps} ${d.gaps===1?'party is':'parties are'} missing a contact detail — ask them to add it so they start getting updates.</div>`:'<div style="color:var(--nd-success-text);font-size:.78rem;margin-bottom:.5rem">✓ We have a WhatsApp number and an email address for every party on this claim.</div>'}
     ${ps.map(p=>`
       <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;padding:.35rem 0;border-bottom:1px dashed var(--nd-border)">
         <span style="min-width:104px;font-size:.72rem;color:var(--nd-text-faint)">${esc(p.label||p.role)}</span>
         <span style="font-weight:600;color:var(--nd-text-primary)">${esc(p.name||'—')}</span>
-        ${chip(!!p.phone,'WhatsApp')} ${chip(!!p.email,'email')}
+        ${reachOf(p).map(chip).join(' ')}
       </div>`).join('')}
-    <div style="font-size:.7rem;color:var(--nd-text-faint);margin-top:.5rem">Updates go out on every status change. A party with a missing channel still gets the one we have, and the message asks them for the other.</div>`;
+    <div style="font-size:.7rem;color:var(--nd-text-faint);margin-top:.5rem">
+      <b>✓</b> = every update goes here · <b>~</b> = only for some updates (hover to see which)
+      · <b>✕</b> = we cannot use this channel.<br>
+      Updates go out on every status change. A party with a missing channel still gets the one we
+      have, and the message asks them for the other. Staff are always reached on the dashboard
+      bell and Telegram, whatever contact details we hold for them.</div>`;
 }
 async function loadClaimActivity(cid){
   const el=document.getElementById('claimActivity_'+cid); if(!el) return;

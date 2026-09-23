@@ -39,6 +39,57 @@ ROLE_LABEL = {
     "staff": "Staff",
 }
 # Where each party updates their own details (used in the "we're missing X" ask).
+# ── how we actually reach each party ─────────────────────────────────────────
+# The panel used to tick a channel when an ADDRESS existed. That is a different question from
+# "will this person be told", and on 24 Sep the founder asked the second one.
+#
+# These rules mirror notify_claim_parties() below. Three states, because two are not enough:
+#   yes   - this goes out every time
+#   maybe - it goes out for some events; the notify policy decides (staff email is the case that
+#           matters: claim chatter deliberately does not email, which is what ended 550/day)
+#   no    - we cannot use this channel, and why
+def _reach(role: str, phone: str, email: str, stopped: set) -> list:
+    """What will actually reach this party. Mirrors notify_claim_parties()."""
+    out = []
+    if role == "staff":
+        # Always, and independent of any address we hold - which is why a staff member with
+        # neither a phone nor an email is still notified, and used to look unreachable.
+        out.append({"ch": "dashboard", "label": "Dashboard", "state": "yes"})
+        out.append({"ch": "telegram", "label": "Telegram", "state": "yes"})
+    if email:
+        out.append({"ch": "email", "label": "Email",
+                    # notify_staff_inapp() asks for email; biz_nidaan_notify_policy decides.
+                    "state": "maybe" if role == "staff" else "yes",
+                    "why": ("only for events the notification policy allows — claim notes and "
+                            "comments go to Telegram instead") if role == "staff" else ""})
+    else:
+        out.append({"ch": "email", "label": "Email", "state": "no", "why": "no address on file"})
+    if not phone:
+        out.append({"ch": "whatsapp", "label": "WhatsApp", "state": "no",
+                    "why": "no number on file"})
+    elif phone[-10:] in stopped:
+        # The sender skips these. The panel showed them green, so a party we may no longer
+        # message read as reachable.
+        out.append({"ch": "whatsapp", "label": "WhatsApp", "state": "no",
+                    "why": "they replied STOP — we may not message them"})
+    else:
+        out.append({"ch": "whatsapp", "label": "WhatsApp", "state": "yes"})
+    return out
+
+
+async def _stopped_numbers() -> set:
+    """Numbers that replied STOP. Failing to read this must not blank the panel - an empty set
+    only costs accuracy on one chip, where an exception costs the whole section."""
+    try:
+        async with aiosqlite.connect(DB_PATH) as c:
+            rows = await (await c.execute(
+                "SELECT msisdn FROM nidaan_wa_contacts WHERE LOWER(COALESCE(status,''))='stopped'"
+            )).fetchall()
+        return {_digits(r[0])[-10:] for r in rows if _digits(r[0])}
+    except Exception:  # noqa: BLE001
+        return set()
+
+
 ROLE_PROFILE_URL = {
     "complainant": "/nidaan/dashboard",
     "subscriber": "/nidaan/dashboard",
@@ -68,9 +119,15 @@ async def get_claim_parties(claim_id: int) -> list[dict]:
     """Resolve every party on a claim with their usable contacts + missing-channel gaps.
 
     Returns a list of dicts: {role, label, name, phone, email, account_id, branch_code,
-    staff_id, missing: ['whatsapp'|'email', ...]}. Roles with no contact at all are still
-    returned (with both gaps) so ops can see who we cannot reach."""
+    staff_id, missing: ['whatsapp'|'email', ...], reach: [...]}. Roles with no contact at all are
+    still returned (with both gaps) so ops can see who we cannot reach.
+
+    `reach` is what the screen shows: the channels we will actually USE for this party, not the
+    addresses we happen to hold. See _reach()."""
     out: list[dict] = []
+    # Read once for the whole claim rather than per party - and before the try, so a party is
+    # never built against an undefined name.
+    stopped = await _stopped_numbers()
     try:
         async with aiosqlite.connect(DB_PATH) as c:
             c.row_factory = aiosqlite.Row
@@ -91,7 +148,8 @@ async def get_claim_parties(claim_id: int) -> list[dict]:
             if not e:
                 missing.append("email")
             out.append({"role": role, "label": ROLE_LABEL.get(role, role), "name": (name or "").strip(),
-                        "phone": p, "email": e, "missing": missing, **ids})
+                        "phone": p, "email": e, "missing": missing,
+                        "reach": _reach(role, p, e, stopped), **ids})
 
         # 1) Complainant — falls back to the insured's contact when not captured separately.
         _add("complainant",
