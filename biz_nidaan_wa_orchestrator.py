@@ -132,6 +132,35 @@ async def pause_bot(msisdn: str, *, by: str = "support", paused: bool = True) ->
         logger.warning("pause_bot(%s) failed: %s", msisdn, e)
 
 
+async def _recent_history(msisdn: str, turns: int = 8, hours: int = 48) -> str:
+    """The last few turns with this number, oldest first, for the conversation brain.
+
+    Without it the model meets every customer for the first time, every time - which is how the
+    founder collected three different introductions to his own company in half an hour.
+
+    Bounded on purpose: a long history costs tokens and latency on every inbound, and anything
+    older than a couple of days is a different conversation rather than context for this one.
+    """
+    try:
+        async with aiosqlite.connect(DB_PATH) as c:
+            c.row_factory = aiosqlite.Row
+            rows = [dict(r) for r in await (await c.execute(
+                "SELECT direction, COALESCE(body,'') AS body FROM nidaan_wa_messages "
+                "WHERE msisdn=? AND COALESCE(body,'') <> '' "
+                "AND created_at >= datetime('now', ?) "
+                "ORDER BY created_at DESC LIMIT ?",
+                (msisdn, "-%d hours" % int(hours), int(turns)))).fetchall()]
+    except Exception as e:  # noqa: BLE001
+        logger.info("history lookup failed for %s: %s", msisdn, e)
+        return ""
+    rows.reverse()
+    out = []
+    for r in rows:
+        who = "Customer" if r["direction"] == "in" else "Us"
+        out.append("%s: %s" % (who, (r["body"] or "").replace("\n", " ")[:220]))
+    return "\n".join(out)
+
+
 async def _has_spoken(msisdn: str) -> bool:
     """Have we ever sent this number anything? Drives greet-once."""
     try:
@@ -776,7 +805,14 @@ async def handle_inbound_text(msisdn: str, text: str) -> dict:
         if got.get("captured"):
             return got
 
-    d = await _brain.decide(text, lang, context=sc.get("text", ""),
+    # WHAT WAS ALREADY SAID. `decide()` has always accepted history and this call never passed
+    # any, so every message was answered as if it were the first one. The founder sent "Hi",
+    # "Hi", "Hello" on 23 Sep and was introduced to the company three times, in three different
+    # wordings - the model was writing a fresh greeting each time because, as far as it could
+    # tell, it had never met him. A person who has just been told who we are does not need
+    # telling again; they need answering.
+    d = await _brain.decide(text, lang, history=await _recent_history(msisdn),
+                            context=sc.get("text", ""),
                             handoff_only=bool(sc.get("handoff_only")),
                             public_mode=not verified)
     action, reply = d.get("action"), d.get("reply") or ""
