@@ -21,12 +21,16 @@ So the list is checked here instead of remembered:
 
     py -3.13 deploy/verify-claim-statuses.py
 """
+import glob
 import io
+import os
 import re
 import sys
 
 OPS = io.open("static/nidaan_ops.html", encoding="utf-8").read()
 DASH = io.open("static/nidaan_dashboard.html", encoding="utf-8").read()
+# The pill colours live here now - one set for both screens, rather than a copy each.
+DESIGN = io.open("static/nidaan_design.css", encoding="utf-8").read()
 
 # Read biz_nidaan as TEXT, not by importing it. Importing drags in aiosqlite and a database
 # connection, which a checker that only compares two lists has no business needing - and the
@@ -99,15 +103,34 @@ check("the ops page knows the retired ones too",
 
 # A status with no pill rule renders as a bare word. That is the whole bug.
 ALL = [k for k, _ in PICK] + RETIRED
-for name, src in (("ops", OPS), ("dashboard", DASH)):
-    # A selector may be grouped - `.s-closed,.s-withdrawn{...}` - so the name is followed by a
-    # comma as often as by a brace. Looking only for the brace reported a rule that was there.
-    missing = [k for k in ALL
-               if not re.search(r"\.s-" + re.escape(k) + r"\b\s*[,{]", src)]
-    check("%s: every status has a pill rule" % name, not missing, missing)
+# A selector may be grouped - `.s-closed,.s-withdrawn{...}` - so the name is followed by a comma
+# as often as by a brace. Looking only for the brace reported a rule that was there.
+missing = [k for k in ALL
+           if not re.search(r"\.s-" + re.escape(k) + r"\b\s*[,{]", DESIGN)]
+check("every status has a pill rule in the shared stylesheet", not missing, missing)
+
+# One set of rules only helps the pages that load it, at the version that carries it. Cloudflare
+# holds /static for seven days, so a page still asking for an old ?v= shows the old colours to
+# every browser that has been there before - shipped and invisible.
+ver = re.findall(r"nidaan_design\.css\?v=(\d+)", OPS + DASH)
+pages = sorted(glob.glob("static/nidaan_*.html"))
+stale = []
+for f in pages:
+    src = io.open(f, encoding="utf-8").read()
+    if "nidaan_design.css" not in src:
+        continue
+    for v in re.findall(r"nidaan_design\.css\?v=(\d+)", src):
+        if not ver or v != ver[0]:
+            stale.append("%s -> ?v=%s" % (os.path.basename(f), v))
+check("every page asks for the same stylesheet version", not stale, stale)
+
+# No page may keep a private copy - that is how the two screens drifted apart in the first place.
+dup = [n for n, src in (("ops", OPS), ("dashboard", DASH))
+       if re.search(r"\.s-intimated\b\s*[,{]", src)]
+check("no page keeps its own copy of the pill colours", not dup, dup)
 
 # A literal colour reads in one mode and washes out in the other.
-for name, src in (("ops", OPS), ("dashboard", DASH)):
+for name, src in (("ops", OPS), ("dashboard", DASH), ("shared stylesheet", DESIGN)):
     bad = []
     for k in ALL:
         for m in re.finditer(r"\.s-%s\b[^{}\n]*\{([^}]*)\}" % k, src):

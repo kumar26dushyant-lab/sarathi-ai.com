@@ -55,6 +55,11 @@
   --nd-purple-soft:    rgba(139,92,246,.15);
   --nd-purple-text:    #c4b5fd;
   --nd-cyan-text:      #22d3ee;   /* cyan used as TEXT (darkens in light mode) */
+  /* Solid pill fills. Dark enough for white text (5.1:1 and 6.5:1), saturated enough to sit on
+     either ground - so unlike every other status colour these need no light-mode pair. */
+  --nd-pill-loud-bg:   #c2410c;
+  --nd-pill-alarm-bg:  #b91c1c;
+  --nd-pill-loud-fg:   #ffffff;
   --nd-orange-soft:    rgba(249,115,22,.15);
   --nd-orange-text:    #fdba74;
 
@@ -577,3 +582,47 @@
     transition-duration: .01ms !important;
   }
 }
+
+/* ── CLAIM STATUS PILLS ──────────────────────────────────────────────────────
+   One set of colours for both screens. Each page sets its own .pill-status /
+   .status-pill SHAPE; these say what the status MEANS.
+
+   The weight is the message. Thirteen statuses used to share one tint, so a
+   claim blocked on a complainant looked exactly like a claim that finished
+   three weeks ago. Now: solid = somebody is waiting on an answer, firm = in
+   motion, faint = settled and filed.                     (23 Sep 2026)       */
+
+/* LOUD - blocked on somebody outside. The only pills that shout. */
+.s-review_query,
+.s-overdue{
+  background:var(--nd-pill-loud-bg);
+  color:var(--nd-pill-loud-fg);
+  border:1px solid var(--nd-pill-loud-bg);
+  font-weight:800;
+}
+.s-overdue{ background:var(--nd-pill-alarm-bg); border-color:var(--nd-pill-alarm-bg); }
+
+/* LIVE - work is moving. Firm enough to read at a glance, quiet enough to
+   leave the loud pills alone. */
+.s-intimated{background:rgba(234,179,8,.18);color:var(--nd-warning-text);border:1px solid rgba(234,179,8,.55)}
+.s-assigned{background:rgba(59,130,246,.18);color:var(--nd-info-text);border:1px solid rgba(59,130,246,.55)}
+.s-in_review{background:rgba(139,92,246,.18);color:var(--nd-purple-text);border:1px solid rgba(139,92,246,.55)}
+.s-review_query_resolved{background:rgba(6,182,212,.18);color:var(--nd-cyan-text);border:1px solid rgba(6,182,212,.55)}
+.s-in_negotiation{background:rgba(234,179,8,.18);color:var(--nd-warning-text);border:1px solid rgba(234,179,8,.55)}
+.s-pending{background:rgba(234,179,8,.18);color:var(--nd-warning-text);border:1px solid rgba(234,179,8,.55)}
+.s-active{background:rgba(34,197,94,.18);color:var(--nd-success-text);border:1px solid rgba(34,197,94,.55)}
+
+/* DONE - settled. Still coloured, because won and lost are not the same fact,
+   but deliberately light: nothing here needs doing. review_delivered is the
+   status most of our claims sit in, and it was the loudest thing on the
+   screen. */
+.s-review_delivered{background:rgba(34,197,94,.07);color:var(--nd-success-text);border:1px solid rgba(34,197,94,.22)}
+.s-resolved_won{background:rgba(34,197,94,.07);color:var(--nd-success-text);border:1px solid rgba(34,197,94,.22)}
+.s-resolved_lost{background:rgba(239,68,68,.07);color:var(--nd-danger-text);border:1px solid rgba(239,68,68,.22)}
+.s-done{background:rgba(34,197,94,.07);color:var(--nd-success-text);border:1px solid rgba(34,197,94,.22)}
+.s-inactive,.s-suspended{background:rgba(239,68,68,.07);color:var(--nd-danger-text);border:1px solid rgba(239,68,68,.22)}
+
+/* FILED - no colour at all, because there is no state left to report. */
+/* --text-muted, not --text-faint: faint measured 3.15:1 on dark, and Withdrawn is one of the
+   six statuses actually in use, not a retired label nobody reads. */
+.s-closed,.s-withdrawn{background:var(--nd-bg-surface-2);color:var(--nd-text-muted);border:1px solid var(--nd-border-strong)}

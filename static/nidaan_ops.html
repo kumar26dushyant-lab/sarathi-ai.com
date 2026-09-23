@@ -11,7 +11,7 @@
 try { if (localStorage.getItem('nidaan_ops_token')) document.documentElement.classList.add('ops-has-token'); } catch (e) {}
 </script>
 <title>Nidaan Ops — Internal Portal</title>
-<link rel="stylesheet" href="/static/nidaan_design.css?v=5">
+<link rel="stylesheet" href="/static/nidaan_design.css?v=6">
 <link rel="stylesheet" href="/static/nidaan_polish.css?v=1">
 <link rel="icon" href="/static/nidaan_logo.png" type="image/png">
 <!-- PWA: installable staff app -->
@@ -114,23 +114,6 @@ tr:hover td{background:var(--nd-bg-surface)}
 
 /* ── STATUS PILLS ── */
 .pill-status{display:inline-block;border-radius:6px;padding:.2rem .55rem;font-size:.7rem;font-weight:700;letter-spacing:.04em;text-transform:capitalize}
-.s-intimated{background:rgba(251,191,36,.12);color:var(--nd-warning-text);border:1px solid rgba(251,191,36,.25)}
-.s-assigned{background:rgba(59,130,246,.12);color:var(--nd-info-text);border:1px solid rgba(59,130,246,.25)}
-.s-in_review{background:rgba(139,92,246,.12);color:var(--nd-purple-text);border:1px solid rgba(139,92,246,.25)}
-/* Added 22 Sep. review_delivered held 115 claims - the majority - with no rule here at all, so
-   it rendered as an unstyled lowercase word. in_negotiation carried a hardcoded #fde047: pale
-   yellow on pale yellow, fine on dark and near-invisible on light. No literal colours here. */
-.s-review_query{background:rgba(249,115,22,.12);color:var(--nd-orange-text);border:1px solid rgba(249,115,22,.25)}
-.s-review_query_resolved{background:rgba(6,182,212,.12);color:var(--nd-cyan-text);border:1px solid rgba(6,182,212,.25)}
-.s-review_delivered{background:rgba(34,197,94,.12);color:var(--nd-success-text);border:1px solid rgba(34,197,94,.25)}
-.s-in_negotiation{background:rgba(234,179,8,.12);color:var(--nd-warning-text);border:1px solid rgba(234,179,8,.25)}
-.s-resolved_won{background:rgba(34,197,94,.12);color:var(--nd-success-text);border:1px solid rgba(34,197,94,.25)}
-.s-resolved_lost{background:rgba(239,68,68,.12);color:var(--nd-danger-text);border:1px solid rgba(239,68,68,.25)}
-.s-closed,.s-withdrawn{background:var(--nd-bg-surface-2);color:var(--nd-text-faint);border:1px solid var(--nd-border-strong)}
-.s-active{background:rgba(34,197,94,.12);color:var(--nd-success-text);border:1px solid rgba(34,197,94,.25)}
-.s-inactive,.s-suspended{background:rgba(239,68,68,.12);color:var(--nd-danger-text);border:1px solid rgba(239,68,68,.25)}
-.s-pending,.s-overdue{background:rgba(251,191,36,.12);color:var(--nd-warning-text);border:1px solid rgba(251,191,36,.25)}
-.s-done{background:rgba(34,197,94,.12);color:var(--nd-success-text);border:1px solid rgba(34,197,94,.25)}
 
 /* ── BUTTONS ── */
 .btn{padding:.55rem 1.1rem;border-radius:8px;font-size:.84rem;font-weight:700;border:none;transition:opacity .15s}

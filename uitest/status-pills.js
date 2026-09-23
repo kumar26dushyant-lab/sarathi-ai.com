@@ -24,15 +24,21 @@ const OPS = fs.readFileSync(path.join(__dirname, '..', 'static', 'nidaan_ops.htm
 const DASH = fs.readFileSync(path.join(__dirname, '..', 'static', 'nidaan_dashboard.html'), 'utf8');
 const DESIGN = fs.readFileSync(path.join(__dirname, '..', 'static', 'nidaan_design.css'), 'utf8');
 
-// The style block that actually holds the pill rules - nidaan_ops.html has five, and the first
-// is 55 characters long. Taking the first one gave every status an identical ratio, which is
-// what an empty stylesheet looks like when you are not checking for it.
-function pillCss(src, name) {
+// The COLOURS now live once in nidaan_design.css. What each page still owns is the pill's shape -
+// ops draws a rectangle, the dashboard a rounded pill - so that is what gets pulled out here.
+// Still a search rather than "the first <style>": nidaan_ops.html has five style blocks and the
+// first is 55 characters long, which once gave every status an identical ratio and looked like a
+// pass.
+function pillCss(src, name, shapeClass) {
   const blocks = [...src.matchAll(/<style>([\s\S]*?)<\/style>/g)].map((m) => m[1]);
-  const hit = blocks.find((b) => b.includes('.s-intimated'));
-  if (!hit) { console.error('no stylesheet in ' + name + ' contains the pill rules'); process.exit(1); }
+  const hit = blocks.find((b) => b.includes('.' + shapeClass + '{'));
+  if (!hit) { console.error('no stylesheet in ' + name + ' defines .' + shapeClass); process.exit(1); }
   return hit;
 }
+
+// The pills, by how much they should ask of you. This is the founder's own reading of the list:
+// a claim waiting on somebody outside is the only thing that should shout.
+const LOUD = 'review_query', LIVE = 'in_review', DONE = 'review_delivered';
 
 // Every status the app can show, offered or retired.
 const STATUSES = [
@@ -86,8 +92,12 @@ const MEASURE = (ids) => {
     const fgc = parse(getComputedStyle(el).color) || [0, 0, 0, 1];
     const fg = over(fgc, bg);
     const a = lum(fg), b = lum(bg);
+    const g = lum(ground);
     out[id] = {
       ratio: (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05),
+      // How far the pill's own fill sits from the page behind it. A solid fill lands high, an
+      // 18% tint in the middle, a 7% tint barely above 1. This is "weight" as a number.
+      presence: (Math.max(b, g) + 0.05) / (Math.min(b, g) + 0.05),
       colour: getComputedStyle(el).color,
     };
   });
@@ -103,24 +113,44 @@ async function measure(page, pageName, pageCss, pillClass) {
     results[theme] = await page.evaluate(MEASURE, STATUSES);
   }
   console.log('\n── ' + pageName + ' ──\n');
-  console.log('  ' + 'status'.padEnd(24) + 'dark'.padEnd(10) + 'light');
+  console.log('  ' + 'status'.padEnd(24) + 'dark'.padEnd(10) + 'light'.padEnd(11)
+              + 'weight (dark / light)');
   for (const s of STATUSES) {
     const d = results.dark[s], l = results.light[s];
     if (!d || !l) { check(s + ' — no pill rendered at all', false); continue; }
     const line = '  ' + s.padEnd(24)
       + (d.ratio.toFixed(2) + ':1').padEnd(10)
-      + (l.ratio.toFixed(2) + ':1');
+      + (l.ratio.toFixed(2) + ':1').padEnd(11)
+      + d.presence.toFixed(2) + ' / ' + l.presence.toFixed(2);
     const ok = d.ratio >= FLOOR && l.ratio >= FLOOR;
     console.log(line + (ok ? '' : '   <-- too faint'));
     check(pageName + ': ' + s + ' is readable in BOTH modes', ok);
+  }
+
+  // The hierarchy itself. Readability is necessary and was never the complaint - the complaint
+  // was that nothing stood out, and that is a statement about the gaps between these three.
+  console.log('');
+  // Compared on distance from 1, not on the ratio itself: a contrast ratio of 1.0 means the fill
+  // is INDISTINGUISHABLE from the page, so 1.22 against 1.11 is twice the presence, not a tenth
+  // more of it. Multiplying the ratios instead made a real two-fold gap look like a failure.
+  const weight = (x) => x.presence - 1;
+  for (const theme of ['dark', 'light']) {
+    const r = results[theme];
+    if (!r[LOUD] || !r[LIVE] || !r[DONE]) continue;
+    check(pageName + ' / ' + theme + ': a blocked claim outweighs one in progress',
+          weight(r[LOUD]) > weight(r[LIVE]) * 3);
+    check(pageName + ' / ' + theme + ': one in progress outweighs one already settled',
+          weight(r[LIVE]) > weight(r[DONE]) * 1.6);
   }
 }
 
 (async () => {
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 500, height: 900 } });
-  await measure(page, 'ops workspace', pillCss(OPS, 'nidaan_ops.html'), 'pill-status');
-  await measure(page, 'subscriber dashboard', pillCss(DASH, 'nidaan_dashboard.html'), 'status-pill');
+  await measure(page, 'ops workspace',
+                pillCss(OPS, 'nidaan_ops.html', 'pill-status'), 'pill-status');
+  await measure(page, 'subscriber dashboard',
+                pillCss(DASH, 'nidaan_dashboard.html', 'status-pill'), 'status-pill');
   await browser.close();
   console.log('\n' + (failed ? failed + ' failed' : 'all readable in both modes'));
   process.exit(failed ? 1 : 0);
