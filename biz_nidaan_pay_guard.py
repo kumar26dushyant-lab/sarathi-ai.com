@@ -212,6 +212,76 @@ async def _rzp_payments(hours: int) -> tuple:
     return out, True
 
 
+async def webhook_self_test() -> tuple:
+    """Is the webhook silent because of THEM, or because of US? Ask our own endpoint.
+
+    Founder, 23 Sep: "at least we get telegram confirmation ... stating problem from Razorpay
+    side, if any (double check it's not from our side)."
+
+    Right, and it is cheap to be sure. We POST to our own public webhook URL with a deliberately
+    invalid signature. A healthy endpoint answers 400 - it read the body, checked the signature
+    and refused. Anything else (a timeout, a 502, a block) means the fault is on our side of the
+    wire and telling Razorpay would waste everyone's day.
+
+    Nothing is written and no event is processed: an invalid signature is rejected before the
+    payload is even parsed. Returns (ours_is_healthy, one line saying what happened).
+    """
+    url = (os.getenv("NIDAAN_BASE_URL", "https://nidaanpartner.com").rstrip("/")
+           + "/nidaan/api/webhook")
+    try:
+        async with httpx.AsyncClient(timeout=15) as c:
+            r = await c.post(url, json={"event": "selftest", "payload": {}},
+                             headers={"X-Razorpay-Signature": "self-test-not-a-real-signature",
+                                      "User-Agent": "NidaanPaymentGuardian/selftest"})
+    except Exception as e:  # noqa: BLE001
+        return False, "our endpoint could not be reached at all (%s)" % str(e)[:80]
+    if r.status_code == 400:
+        return True, "our endpoint is healthy (it rejected a bad signature, as it should)"
+    if r.status_code == 503:
+        return False, "our endpoint says the webhook secret is not configured"
+    return False, "our endpoint answered %s to a signature check it should have refused" % r.status_code
+
+
+async def _announce_recovery(p: dict, what: str) -> None:
+    """Tell the office, on Telegram, that money arrived and the webhook did not.
+
+    Two payments were recovered on 23 Sep and NEITHER produced a message - the money was in the
+    books and nobody was told, which left the "a payment nobody was told about" alarm repeating
+    21 times about a payment that had in fact been handled. record_payment announces ledger
+    writes, but skips branch_l2 on purpose (it has its own Level-2 message, which this path does
+    not send). Rather than chase two announcement routes, the recovery says its own piece - and
+    it is a different piece anyway: this one is about the WEBHOOK, not about the sale.
+    """
+    ok, why = await webhook_self_test()
+    amt = int(p.get("amount") or 0) / 100.0
+    body = (
+        "₹%s has been recorded from Razorpay's own record - %s.\n\n"
+        "The customer has paid and has what they bought. Nothing is owed to them.\n\n"
+        "WHY THIS WAS NEEDED: no Razorpay webhook reached us for it.\n"
+        "%s %s\n\n"
+        "Payment: %s  ·  method: %s"
+        % (("%.2f" % amt).rstrip("0").rstrip("."), what,
+           ("✅ NOT our side —" if ok else "⚠️ OUR SIDE —"), why,
+           p.get("id", ""), p.get("method", "") or "?"))
+    subject = ("\U0001f4b0 Payment recovered — ₹%s (webhook did not deliver)"
+               % ("%.2f" % amt).rstrip("0").rstrip("."))
+    try:
+        import biz_nidaan_notifications as _nnot
+        ids = [s["staff_id"] for s in await _nnot._super_admin_staff()]
+        if ids:
+            await _nnot.notify_staff_inapp(ids, subject, body, event_key="payment.recovered",
+                                           email=False, claim_id=_claim_of(p))
+    except Exception as e:  # noqa: BLE001
+        logger.warning("could not announce the recovery of %s: %s", p.get("id"), e)
+
+
+def _claim_of(p: dict):
+    try:
+        return int((p.get("notes") or {}).get("claim_id") or 0) or None
+    except (TypeError, ValueError):
+        return None
+
+
 async def _recover_payment(p: dict) -> str:
     """Razorpay took money we never heard about. Record it, do not just report it.
 
@@ -253,6 +323,7 @@ async def _recover_payment(p: dict) -> str:
             return "mark_l2_paid declined claim %s (already paid?)" % cid
         logger.warning("RECOVERED a branch L2 payment the webhook never delivered: %s -> "
                        "claim %s branch %s", pid, cid, branch)
+        await _announce_recovery(p, "a branch Level-2 fee on claim #%s" % cid)
         return ""
 
     if prod == "nidaan_review_999":
@@ -274,6 +345,7 @@ async def _recover_payment(p: dict) -> str:
             return "could not finalise purchase %s: %s" % (pur, str(e)[:80])
         logger.warning("RECOVERED a review payment the webhook never delivered: %s -> purchase %s",
                        pid, pur)
+        await _announce_recovery(p, "a ₹499 review (purchase #%s)" % pur)
         return ""
 
     # ── a shared payment LINK: the "Share link" button in my-business / branch ──────
@@ -311,6 +383,7 @@ async def _recover_payment(p: dict) -> str:
             logger.info("could not close the payment link for claim %s: %s", cid, e)
         logger.warning("RECOVERED a shared-link payment the webhook never delivered: %s -> "
                        "claim %s branch %s", pid, cid, branch)
+        await _announce_recovery(p, "a shared payment link on claim #%s" % cid)
         return ""
 
     # ── a subscription charge: identity lives on the SUBSCRIPTION, not the payment ──
@@ -342,6 +415,7 @@ async def _recover_payment(p: dict) -> str:
         return "activation failed: %s" % str(e)[:90]
     logger.warning("RECOVERED a payment the webhook never delivered: %s -> account %s plan %s "
                    "(Rs %s) result=%s", pid, acct, plan, int(p.get("amount") or 0) / 100, res)
+    await _announce_recovery(p, "a %s subscription (account %s)" % (plan, acct))
     return ""
 
 
@@ -460,14 +534,22 @@ async def _check_reconcile(findings: list, ran: set) -> None:
         newest = max(last_row, last_seen)          # ISO strings compare correctly
         cutoff = (datetime.utcnow() - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
         if not newest or newest < cutoff:
+            _self_ok, _self_why = await webhook_self_test()
             findings.append({
                 "key": "webhook_silent", "check": "webhook", "severity": "critical",
                 "title": "No Razorpay webhook has reached us in 24 hours",
+                # WHOSE FAULT, said plainly. On 20 Sep this alarm told a person to go and change
+                # a webhook URL and secret that were correct, which is worse than saying nothing.
+                # So before it accuses Razorpay it asks our own endpoint whether it is answering.
                 "detail": "Razorpay captured %d payment(s) in the last %dh, and no webhook has "
-                          "reached us in 24h%s. Renewals and late captures depend on it. Check the "
-                          "webhook URL and secret in the Razorpay dashboard."
+                          "reached us in 24h%s.\n\n%s %s\n\n"
+                          "Payments are still being recorded — the guardian reads Razorpay "
+                          "directly every 5 minutes and recovers anything missing — so no "
+                          "money is at risk. The webhook is what needs fixing."
                           % (len(captured), LOOK_BACK_H,
-                             (" (last seen %s UTC)" % newest) if newest else " — none on record")})
+                             (" (last seen %s UTC)" % newest) if newest else " — none on record",
+                             ("✅ NOT our side —" if _self_ok else "⚠️ OUR SIDE —"),
+                             _self_why)})
 
 
 async def _check_effects_and_duplicates(findings: list, ran: set) -> None:
