@@ -14678,6 +14678,12 @@ function l2CaseRender(rem){
     +   '<button class="l2mv g" onclick="l2MoveMenuCase()">Move somewhere else…</button>'
     +   (st.bucket === 'pending_draft'
           ? '<button class="l2mv d" onclick="l2QueryRaise(' + id + ')">\u2753 Raise a query</button>' : '')
+    // Back to L2 Claims, for a claim handed over by mistake. Super admin only, because that is
+    // all the endpoint allows, and only from the entry bucket - past that the server refuses it
+    // anyway ("Level-2 work has already started"), so offering it would be a lie.
+    +   ((st.is_super && st.bucket === _l2EntryKey())
+          ? '<button class="l2mv d" onclick="l2SendBack(' + id + ')">\u21a9 Back to L2 Claims</button>'
+          : '')
     // Its own window: the claim panel and a case sheet cannot both be read in one.
     +   '<button class="l2mv g" onclick="window.open(\'/nidaan/ops?claim=' + id + '\',\'_blank\')">Full claim \u2197</button>'
     + '</div>'
@@ -15527,6 +15533,13 @@ async function hoSend(force){
 
 // Level-2 refusing a handover. The comment is the whole point: intake only learns what they
 // missed if somebody tells them, and "it came back" on its own teaches nobody anything.
+function _l2EntryKey(){
+  try{
+    const b = ((_l2Cfg || {}).buckets || []).find(function(x){ return x.is_entry; });
+    return b ? b.bucket_key : 'live_cases';
+  }catch(e){ return 'live_cases'; }
+}
+
 async function l2SendBack(claimId){
   openModal('\u21a9 Send NP-' + claimId + ' back to L2 Claims',
       '<div class="l2ban amber">This returns the claim to the L2 Claims list. Whoever handed it '
