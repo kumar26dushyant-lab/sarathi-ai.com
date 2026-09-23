@@ -87,6 +87,38 @@ its bucket.
     and the code email now names the page, so somebody who removed two of four files can return,
     sign in with a code, and add more.
 
+### 🔴 WHATSAPP CHARTER — foundation, security, alerting (founder, 23 Sep)
+
+**✅ Done today**
+  - **Blue ticks.** We never told WhatsApp a message was read, so every complainant saw theirs
+    sit on "delivered" — which reads as *nobody is there*. `mark_read()` now fires the moment an
+    inbound is logged. Deliberately outside the send guard: a receipt is not a message and must
+    never be rate-limited or held.
+  - **"WhatsApp bot replies"** in App Health — reads OUTCOMES: of the people who wrote in the
+    last 24h, how many got a reply within 15 minutes. **Silence is not a failure** (low-traffic
+    number, a quiet Sunday must not page anybody); somebody writing in and getting nothing is.
+  - **The webhook now logs what arrived** (field names + counts, never content). The question
+    "did the message reach us or did we drop it" was previously unanswerable.
+  - ⚠️ **Why the existing check missed it:** "WhatsApp Cloud API" read CONNECTED / GREEN
+    the whole time, because it asks Meta about the NUMBER. The number was fine. Nobody was being
+    answered. **A check must read an outcome, not a configuration.**
+
+**🔴 Still to do — security and conduct**
+  1. **Identity before information.** Today the bot matches an inbound number to a claim and
+     starts giving case detail. A recycled or spoofed number would get somebody's medical claim
+     information. Needs a verification step — **design question for the founder below.**
+  2. **Stage-aware answers.** Once a claim reaches **Consolidation**, the bot must stop giving
+     detail and say: *the case is in the legal process, it will take time, thank you for your
+     patience.* Document collection is the ONLY thing it should transact, and only while
+     something is genuinely pending.
+  3. **Frustration → a human.** If the complainant is impatient or upset, hand off to the
+     on-duty support staff and tell the super-admins. The bot must not keep answering.
+  4. **Unexplained:** the founder's first two messages (12:45, 12:46 IST) were never recorded —
+     no webhook carrying them ever arrived. The two at 1:17/1:20 were handled in the same second.
+     Now answerable from the log if it recurs.
+  5. **25 outbound `failed` on 22 Sep with a BLANK error field** — the reason was never recorded.
+     Same silent-failure pattern; worth closing.
+
 ### 🔴 NEXT UP — agreed with the founder, in this order
 
 1. **🔴 WhatsApp Business not replying** (23 Sep, priority). See the investigation below.
