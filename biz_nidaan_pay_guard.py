@@ -556,9 +556,14 @@ async def _check_reconcile(findings: list, ran: set) -> None:
 
     async with aiosqlite.connect(DB_PATH) as c:
         c.row_factory = aiosqlite.Row
+        # EVERY payment id we hold, with no date window on it. The window used to be on OUR
+        # row's created_at, which answers a different question: a row written in August and
+        # stamped with its payment id in September fell outside it, so a payment that IS in the
+        # books read as missing and was "recovered" every five minutes for ever. A payment id is
+        # unique for all time - either we have it or we do not.
         ledger = {r["razorpay_payment_id"]: dict(r) for r in await (await c.execute(
-            "SELECT * FROM nidaan_payments WHERE COALESCE(razorpay_payment_id,'') <> '' "
-            "AND created_at > datetime('now', ?)", ("-%d hours" % (LOOK_BACK_H + 6),))).fetchall()}
+            "SELECT * FROM nidaan_payments "
+            "WHERE COALESCE(razorpay_payment_id,'') <> ''")).fetchall()}
         recent_rows = [dict(r) for r in await (await c.execute(
             "SELECT * FROM nidaan_payments WHERE created_at > datetime('now', ?) "
             "AND status <> 'duplicate'", ("-%d hours" % LOOK_BACK_H,))).fetchall()]
@@ -865,7 +870,8 @@ async def _alert_due() -> int:
         subj = "%s — %s" % (head, inc["title"])
         body = ("%s\n\n%s\n\nFirst seen: %s%s\n\nOpen ops → Revenue → Payment Health."
                 % (inc["title"], inc["detail"], inc["first_seen"],
-                   ("\nSaid %d times — nobody has tapped Seen yet." % again) if again >= 1 else ""))
+                   ("\nSaid %d times — nobody has tapped Seen yet." % again)
+                   if (again >= 1 and inc["status"] != "acked") else ""))
         if inc["status"] == "acked":
             body += "\n\n(%s tapped Seen %s and it is still not fixed.)" % (
                 inc.get("acked_by_name") or "Someone", str(inc.get("acked_at") or "")[:16])
@@ -881,10 +887,16 @@ async def _alert_due() -> int:
         except Exception as e:  # noqa: BLE001
             logger.info("guardian bell failed: %s", e)
         async with aiosqlite.connect(DB_PATH) as c:
+            # status is NOT touched here. It used to be forced to 'open' on every alert, so the
+            # two-hour reminder after a Seen reset the incident to unacknowledged and dropped it
+            # back to every ten minutes - telling the person who had tapped Seen that nobody had.
+            # An acknowledged incident stays acknowledged; only the count moves, and an acked one
+            # waits the full reminder period again rather than ten minutes.
+            gap = ("+%d hours" % REMIND_AFTER_ACK_H) if inc["status"] == "acked" \
+                else ("+%d minutes" % ALERT_EVERY_MIN)
             await c.execute(
-                "UPDATE nidaan_pay_incidents SET alert_count=alert_count+1, status='open', "
-                "next_alert_at=datetime('now', ?) WHERE inc_id=?",
-                ("+%d minutes" % ALERT_EVERY_MIN, inc["inc_id"]))
+                "UPDATE nidaan_pay_incidents SET alert_count=alert_count+1, "
+                "next_alert_at=datetime('now', ?) WHERE inc_id=?", (gap, inc["inc_id"]))
             await c.commit()
         sent += 1
     return sent
