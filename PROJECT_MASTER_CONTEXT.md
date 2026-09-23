@@ -7831,3 +7831,92 @@ doubted.
 halted, pending, charged and payment.failed. nidaan_subscriptions has `cancelled_at` and no
 reason column at all, and there is no churn table - so the signals arrive and the reasons are
 discarded. Recording them is the work.
+
+
+## 🎨 A110 — WEIGHT, NOT COLOUR, AND A BUTTON ON THE WRONG LIST (Sep 23 2026, evening)
+
+> ⚠️ **Both commits are on `master` and NOT on the server.** `6c72f52` and `114d60a`. The deploy
+> step and every live-DB read were refused by the sandbox this session, so nothing here is live.
+> They need the founder's go-ahead.
+
+### "The color coding is so pathetic"
+
+He was right, and the reason was structural rather than any one bad hue. Every status pill used
+the same recipe - a 12% tint, a 25% border, themed text - so **thirteen statuses carried
+identical visual weight**. A claim blocked on a complainant looked exactly like a claim that
+settled three weeks ago. Colour was being used to say WHICH status and *nothing at all* was
+saying whether anybody had to do something about it.
+
+The 22 Sep work had measured contrast and every pill passed. That was the wrong question asked
+carefully: thirteen identical washes all pass a contrast test. **Readability was never the
+complaint.** The complaint was that nothing stood out, and that is a statement about the GAPS
+between pills, not about any pill on its own.
+
+So a pill now carries two facts. The hue still says which status. The **weight** says how much it
+wants from you:
+
+| weight | look | means |
+|---|---|---|
+| loud | solid fill, white text | blocked, waiting on somebody outside (Review Query, Overdue) |
+| live | 18% tint, firm border | work is moving, nothing stuck |
+| done | 7% tint, hairline border | settled; here for the record, not for action |
+
+### The duplication underneath it
+
+The rules were hand-kept in **both** `nidaan_ops.html` and `nidaan_dashboard.html`, with
+different tints in each. That is how the same status came to look heavier on one screen than the
+other, and `verify-claim-statuses.py` could not see it - it checked each copy against the server
+list *separately*, and both copies passed. The colours now live once in `nidaan_design.css`;
+each page keeps only its own SHAPE, which is a page decision. The verifier now refuses a page
+that forks them.
+
+### Two things that would have made this ship invisibly
+
+- **Cloudflare holds `/static` for 7 days.** A page still asking for `?v=5` shows the old colours
+  to every browser that has ever been there. Bumped to `?v=6` on all eleven pages, **and made a
+  check** - because remembering this every time is not a plan.
+- **Withdrawn and Closed measured 3.15:1 on dark.** Above the 3:1 large-text floor, under the
+  4.5:1 that small bold text needs - and Withdrawn is one of the six statuses actually in use,
+  not a retired label. `--nd-text-muted` instead of `--nd-text-faint`: **4.95:1**.
+
+### The metric I got wrong first
+
+`status-pills.js` now measures PRESENCE - how far a pill's fill sits from the page behind it -
+and asserts the ramp holds in both themes. My first assertion compared presence *ratios* and
+failed a gap that was real: a contrast ratio of 1.0 means INDISTINGUISHABLE, so 1.22 against 1.11
+is **twice** the presence, not a tenth more of it. The comparison is on distance from 1.
+
+Both new checks (the version check and the fork check) were **proven to fail** before being
+trusted - by setting one page back to `?v=5` and by pasting a private rule into `nidaan_ops`.
+That habit exists because `verify-python-names.py` twice failed to catch its own bug.
+
+### The undo button that existed all along
+
+The founder asked twice for NP-84 to come back from Live Cases, then asked for a button. I built
+one. `verify-ops-buttons.py` reported `DUPLICATE l2SendBack is defined more than once - the last
+one wins`, and it was right: `l2SendBack` had been there since the bucket work.
+
+Everything he asked for already worked. `POST /cases/{id}/handover/undo` is super-admin only,
+demands a reason, and records the real person behind an impersonation through `_actor_label`.
+`undo_handover()` deliberately permits a claim sitting **untouched in the entry bucket**, which
+is exactly how an accidental hand-over looks.
+
+**What was missing was reach.** The one button calling it sits on the *waiting* list - and a
+hand-over now drops a claim STRAIGHT into Live Cases, so that list is almost always empty. The
+feature was complete and unreachable from the only place he was ever standing.
+
+> **The lesson worth keeping:** when a flow changes, the controls attached to the OLD flow do not
+> report that they have been orphaned. They just stop being found. "It does not exist" and "it
+> exists somewhere nobody goes" look identical from the screen.
+
+### Tagging — read, not yet proven
+
+`ops_add_note` is correct: the @mentioned get `claim_note.mention`, everyone else already
+watching gets `notify_claim_watchers` with the mentioned explicitly excluded. Nobody is told
+twice, nobody uninvolved is told at all, and the routing verifier passes 29/29. **But that is
+configuration.** Whether the message ARRIVES needs a live read of `nidaan_notifications`, which
+was refused this session. It stays open, because this is the exact failure class that cost us two
+outages.
+
+Noticed in passing and deliberately not touched: **`@app.get("/admin")` is defined twice** in
+`sarathi_biz.py` (l.6914, l.16802). FastAPI serves the first; the second is unreachable.

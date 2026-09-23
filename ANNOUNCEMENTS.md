@@ -1,5 +1,71 @@
 # Staff Announcement Drafts
 
+## 2026-09-23 (1) — Claim colours now show what needs you, and a claim can come back from Live Cases
+
+**Title (EN):**
+🎨 Status colours tell you what to do first — and a claim moved by mistake can be sent back
+
+**Details (EN):**
+• **The claim status colours have changed.** Until now every status looked equally loud, so a
+claim that was stuck looked the same as one that finished weeks ago. Now the colour tells you
+how much the claim needs you:
+
+  – **Solid orange — Review Query.** We are waiting on the complainant. **These are the ones to
+    look at first.**
+  – **Bright with a clear border — Intimated, Assigned, In Review, Review Query Resolved.**
+    Work is moving. Nothing is stuck.
+  – **Light and faded — Review Delivered, Resolved, Withdrawn, Closed.** Finished. Nothing to do.
+
+• **Nothing about your work has changed.** Same statuses, same buttons, same steps. Only how
+they look.
+
+• **The colours now work properly in light mode too.** If you use the app in daylight mode,
+"Withdrawn" and "Closed" were hard to read. They are clear now.
+
+• **New — send a claim back to L2 Claims.** If a claim reaches **Live Cases by mistake**, a
+**super admin** can now open that claim and press **"↩ Back to L2 Claims"**. You must type the
+reason, and your name is saved with it.
+  – This only works **before anyone has started Level-2 work** on that claim. After that, move
+    it inside the workspace as usual.
+  – Earlier this had to be requested and done by hand. Now it is a button.
+
+• **If something looks wrong, tell us.** Screenshot + claim number is enough.
+
+---
+
+**शीर्षक (HI):**
+🎨 क्लेम के रंग अब बताएँगे कि पहले क्या देखना है — और गलती से आगे गया क्लेम वापस भेजा जा सकता है
+
+**विवरण (HI):**
+• **क्लेम स्टेटस के रंग बदल गए हैं।** पहले हर स्टेटस एक जैसा चमकीला दिखता था, इसलिए अटका हुआ क्लेम
+और हफ़्तों पहले पूरा हो चुका क्लेम एक जैसे लगते थे। अब रंग बताता है कि क्लेम को आपकी कितनी ज़रूरत है:
+
+  – **गहरा नारंगी — Review Query.** हम शिकायतकर्ता के जवाब का इंतज़ार कर रहे हैं। **इन्हें सबसे पहले
+    देखिए।**
+  – **साफ़ बॉर्डर वाला चमकीला रंग — Intimated, Assigned, In Review, Review Query Resolved.**
+    काम चल रहा है। कुछ अटका नहीं है।
+  – **हल्का, फीका रंग — Review Delivered, Resolved, Withdrawn, Closed.** पूरा हो चुका है। कुछ
+    करना नहीं है।
+
+• **आपके काम में कोई बदलाव नहीं है।** वही स्टेटस, वही बटन, वही तरीका। सिर्फ़ दिखने का तरीका बदला है।
+
+• **अब लाइट मोड में भी रंग ठीक दिखते हैं।** दिन वाली (सफ़ेद) स्क्रीन में "Withdrawn" और "Closed"
+पढ़ने में मुश्किल थे। अब साफ़ दिखेंगे।
+
+• **नया — क्लेम को L2 Claims में वापस भेजना।** अगर कोई क्लेम **गलती से Live Cases में चला जाए**, तो
+**सुपर एडमिन** उस क्लेम को खोलकर **"↩ Back to L2 Claims"** दबा सकते हैं। कारण लिखना ज़रूरी है, और
+आपका नाम उसके साथ दर्ज हो जाएगा।
+  – यह तभी होगा जब **उस क्लेम पर Level-2 का काम शुरू न हुआ हो।** काम शुरू होने के बाद, हमेशा की तरह
+    वर्कस्पेस के अंदर ही मूव कीजिए।
+  – पहले इसके लिए कहना पड़ता था और हाथ से करना पड़ता था। अब यह एक बटन है।
+
+• **कुछ गलत लगे तो बताइए।** स्क्रीनशॉट और क्लेम नंबर काफ़ी है।
+
+---
+_Status: DRAFT — founder to review and send via the Announce feature. Not sent._
+_⚠️ Do not send until both commits (`6c72f52`, `114d60a`) are deployed — the button and the
+colours are not live yet._
+
 ## 2026-09-22 (4) — Two questions are back on the Live Cases form
 
 **Title (EN):**

@@ -4,7 +4,9 @@ _Auto-maintained by Claude **every conversation**, alongside `PROJECT_MASTER_CON
 _**Two-terminal workflow:** work 🟦 NidaanPartner items in one VS Code terminal, 🟩 Sarathi items in another. Each app's section is self-contained so both can progress simultaneously without collision._
 _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned · ✅ done_
 
-**Last updated:** 2026-09-22 — 🟢 **CUTOVER COMPLETE. NidaanPartner.com and Sarathi-AI.com are LIVE on Oracle Mumbai (161.118.186.201, aarch64).** Contabo parked as rollback, untouched.
+**Last updated:** 2026-09-23 (evening) — 🟡 two commits built and checked locally, **awaiting deploy approval**.
+
+**Previously:** 2026-09-22 — 🟢 **CUTOVER COMPLETE. NidaanPartner.com and Sarathi-AI.com are LIVE on Oracle Mumbai (161.118.186.201, aarch64).** Contabo parked as rollback, untouched.
 
 ### ✅ SHIPPED 2026-09-22 (3) — the founder's 16-item screenshot list
 Grouped by ROOT CAUSE rather than by screenshot, because several were the same fault twice.
@@ -87,13 +89,30 @@ its bucket.
     and the code email now names the page, so somebody who removed two of four files can return,
     sign in with a code, and add more.
 
-### 🔴 RAISED 23 Sep (afternoon) — not yet built
+### 🟡 RAISED 23 Sep (afternoon) — built locally, AWAITING DEPLOY
 
-1. **Status colours: weight, not just contrast.** Every pill is a pale wash, so nothing stands
-   out; "Review Delivered" is solid green while "Review Query" is faint orange — inconsistent
-   WEIGHT, which is what makes the row hard to scan. `uitest/status-pills.js` measures contrast
-   (all 22 pass, worst 3.15:1) and contrast was the wrong thing to measure alone. Needs a
-   deliberate hierarchy: what must be noticed, what is just state.
+⚠️ Two commits are on `master` and **not on the server**: `6c72f52` (undo button) and `114d60a`
+(status colours). The deploy step and live-DB reads were both refused by the sandbox this
+session — they need the founder's go-ahead. Nothing below is live yet.
+
+1. ✅ **Status colours: weight, not just contrast.** — `114d60a`
+   The fault was structural, not a bad hue: thirteen statuses shared one recipe (12% tint, 25%
+   border), so a claim blocked on a complainant looked exactly like one that settled three weeks
+   ago. Colour said WHICH status and nothing said whether anybody had to act.
+   - **Three weights now.** Loud = solid fill, white text, only for blocked-on-somebody-outside
+     (Review Query, Overdue). Live = 18% tint + firm border, work is moving. Done = 7% tint +
+     hairline, settled and filed.
+   - **Written once, in `nidaan_design.css`.** The rules were duplicated in `nidaan_ops.html`
+     and `nidaan_dashboard.html` with *different tints in each* — which is how the same status
+     came to look heavier on one screen than the other. Each page keeps only its own SHAPE.
+   - **Withdrawn/Closed were 3.15:1 on dark**, under what small bold text needs. `--nd-text-muted`
+     instead of `--nd-text-faint` → **4.95:1**. Solid fills carry white text at 5.1:1 and 6.5:1.
+   - **`?v=6` on all eleven pages.** Cloudflare holds `/static` for 7 days; shipping without the
+     bump would have changed nothing for anyone who had been there before.
+   - **Checked, not eyeballed.** `uitest/status-pills.js` now measures PRESENCE as well as
+     contrast and asserts the ramp in both themes; `verify-claim-statuses.py` (18 checks) refuses
+     a page that forks the colours or asks for a stale version. **Both new checks were proven to
+     fail before being trusted.**
 2. **Advisor & Channel must say WHO, WHEN and HOW** — not a bare code. Branch/channel/account/
    subscriber NAME, who initiated the claim (complainant or somebody else) and what we hold on
    them, the time, and for a shared link, whose link it was. One block that explains the whole
@@ -104,10 +123,31 @@ its bucket.
    - every failure **recorded in Payment Follow-up** with the real reason, and repeats of the
      same failure kept as history + attempt count, so it can be worked rather than just seen
 4. **Tagging a staff member on a claim → bell + Telegram to THAT person**, not everyone.
-   (`claim_note.mention` is already Telegram+bell only after this morning's routing change —
-   what still needs checking is that the tagged person actually receives it.)
+   Code read end to end and it is correct: `ops_add_note` splits the room in two — the
+   @mentioned get `claim_note.mention`, everyone else already watching gets
+   `notify_claim_watchers` with the mentioned explicitly excluded, so nobody is told twice and
+   nobody uninvolved is told at all. Routing verifier: 29 checks, 0 wrong. **Still unproven:**
+   whether the message actually ARRIVES — that needs a live read of
+   `nidaan_notifications WHERE event_key='claim_note.mention'`, which the sandbox refused. This
+   is exactly the failure class that cost us two outages (a provider returning 201 and delivering
+   nothing), so it stays open until an OUTCOME is read.
+   - ⚠️ Noticed while reading: **`@app.get("/admin")` is defined twice** in `sarathi_biz.py`
+     (l.6914 and l.16802). FastAPI serves the first; the second is dead code nobody can reach.
+     Not touched — worth a look on its own, not folded into a colour change.
 5. **WhatsApp automation screen does not list messages we sent.** The NP-96 query went out and
    was READ (np_doc_reminder, 23 Sep 08:07:38) — delivery is fine, visibility is not.
+7. ✅ **Super-admin can send a Live Case back to L2 Claims, with a reason.** — `6c72f52`
+   It already existed, and I nearly built it twice — `verify-ops-buttons.py` caught the duplicate
+   and the second copy was reverted. `POST /cases/{id}/handover/undo` is super-admin only, demands
+   a reason, and records the real person behind an impersonation via `_actor_label`.
+   `undo_handover()` deliberately allows a claim sitting UNTOUCHED in the entry bucket, which is
+   exactly how NP-84 was stuck twice.
+   **What was missing was reach.** The one button calling it sat on the *waiting* list — and a
+   hand-over now drops a claim STRAIGHT into Live Cases, so that list is almost always empty and
+   the button was unreachable from where the founder actually was. Same function, now on the
+   claim panel, gated on `is_super` + entry bucket (past that the server refuses it anyway, so
+   offering it would be a lie).
+
 6. **SURAJ MALVIYA (claims 114/169): no payment at Razorpay in 7 days.** The founder reports one
    was made via the Pay button's QR. Nothing captured under either claim or that number — needs
    the date/amount or a Razorpay payment id from him to trace.
