@@ -152,6 +152,56 @@ session — they need the founder's go-ahead. Nothing below is live yet.
    was made via the Pay button's QR. Nothing captured under either claim or that number — needs
    the date/amount or a Razorpay payment id from him to trace.
 
+### 🚨 24 Sep — AN OPEN DOOR, FOUND WHILE VERIFYING THE CLOUDFLARE FIX
+
+`POST /api/whatsapp/v2/webhook` accepts **unauthenticated requests on BOTH domains**. Verified
+from outside: `200 {"ok":true}` to an empty, unsigned body. `validate_webhook_token()` returns
+**True when no token is configured** ("dev only"), and `EVOLUTION_WEBHOOK_TOKEN` is unset in
+production — it **fails open**, against the standing axiom that an unexpected branch ends in
+"denied".
+
+Reachable through it: `connection.update` (writes `wa_instances` + `nidaan_official_instances`)
+and `messages.upsert`, which routes into `handle_official_inbound` — the Nidaan
+document-ingestion handler. Honest limit: `messages.upsert` needs the caller to name a real
+Evolution instance. A guess, not a control.
+
+- 🔴 **Step 1 of `deploy/HANDOVER_24_SEP.md` — Cloudflare block, 3 min.** Safe in either
+  configuration: Evolution runs on `localhost`, so legitimate traffic never reaches Cloudflare;
+  if it posts to the public URL it comes from our own IP and is allowed.
+- 🔴 **Then, NOT tonight:** set `EVOLUTION_WEBHOOK_TOKEN`, re-register each Evolution instance
+  (existing ones keep their old webhook config — the env alone does nothing), and only then make
+  `validate_webhook_token` refuse without a token. That order matters: reversed, inbound WhatsApp
+  stops.
+
+### ✅ 24 Sep — RAZORPAY WEBHOOK UNBLOCKED (founder's extension, verified from outside)
+
+Bot Fight Mode off for nidaanpartner.com + a Skip rule on the webhook path. **Proved by outcome,
+from outside our network, with Razorpay's own user agent:**
+`POST /nidaan/api/webhook → 400 {"detail":"Invalid signature"} in 0.5s`, no challenge page.
+All four webhook paths (both Razorpay, both WhatsApp) and the Meta GET verification now reach the
+app. Remaining: ask Razorpay to re-deliver `pay_TfPq2skEiSuArv` for a true end-to-end 2xx.
+
+### 🟡 24 Sep — "WHO GETS NOTIFIED" TOLD US WHAT WE HOLD, NOT WHO WE REACH — `2af87d7`
+
+Founder: *"are we notifying everyone whom we are marking green on notifications?"* **No.** The
+tick was `!!phone` / `!!email`. Three lies, all in his screenshot:
+- **staff are reached on Telegram and the dashboard bell, and neither appeared** — a staffer with
+  no phone and no email showed two red chips and read as unreachable while being notified twice;
+- **staff email showed flat green**, though the policy deliberately does not email claim chatter;
+- **a number that replied STOP showed green**, though the sender skips it.
+Now: `reach` per party, three states (yes / maybe-with-reason / no-with-reason), built from the
+same rules the sender follows. Chips were `#064e3b`/`#7c2d12` literals → theme variables.
+`_tools/test_party_reach.py`, 13 checks. Also: **"Who gets notified" moved to the Conversation &
+history column** on his ask — a move between two title regexes, no HTML relocated.
+
+### 🟢 OPEN QUESTION — "Tag a teammate" vs "Involve a colleague"
+
+They do different things and neither label says so. **Tag** = the people this NOTE is for; they
+get `claim_note.mention` (bell + Telegram) with the text, *and* become involved. **Involve** =
+start following the claim, no message. So tagging is a superset. Recommendation is in the reply;
+awaiting the founder's word before merging, because silently adding a supervisor is a real
+workflow.
+
 ### 🔴 RAZORPAY WEBHOOK — CAUSE CONFIRMED, FIX NEEDS THE CLOUDFLARE DASHBOARD
 
 **Razorpay replied 23 Sep** on `pay_TfPq2skEiSuArv`: the webhook fired, our server answered
