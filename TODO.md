@@ -87,6 +87,28 @@ its bucket.
     and the code email now names the page, so somebody who removed two of four files can return,
     sign in with a code, and add more.
 
+### 🔴 NEXT UP — agreed with the founder, in this order
+
+1. **🔴 WhatsApp Business not replying** (23 Sep, priority). See the investigation below.
+2. **Churn analytics.** Why a subscription cancelled or did not renew: user cancelled, bank
+   declined (and WHY), transaction not compliant. Plus a fallback so we can approach the customer
+   in time to retain them.
+   - We ALREADY handle `subscription.cancelled / halted / pending / charged` and `payment.failed`
+     (which carries Razorpay's real error reason). **`nidaan_subscriptions` has only
+     `cancelled_at` — no reason column anywhere, and no churn table.** The signals arrive and
+     the reasons are discarded. Recording them is the work; this is not a new subsystem.
+3. **App Health** — each module declares its own check instead of one hand-written list; a small
+   history table so "it was down from 3 to 4" is answerable; and **security observability folded
+   in here** rather than as a separate screen (founder, 23 Sep: medical data, protective without
+   being heavy, surface an intrusion attempt and tell the super-admins).
+   - Standing rule proved twice on 22–23 Sep: **a check must read an OUTCOME, not a
+     configuration.** "The key is set" is not "email is arriving".
+4. **Notification registry** — 77 event keys across 12 modules, none configurable. New keys should
+   register themselves. Two questions still open for the founder: per-event only or per-event
+   per-role; and whether some events must never be silenceable (money, security, health).
+   - Note: `notify_policy.summary()` claims in its own docstring to be "surfaced in ops so the
+     rules are visible, not folklore" — **it is not wired to anything.**
+
 ### ✅ SHIPPED 2026-09-23 (2) — Revenue reads the ledger (it was showing 36% of the money)
 
 **Measured before touching anything:** Revenue screen **₹29,257**, ledger **₹80,488**. Gap
