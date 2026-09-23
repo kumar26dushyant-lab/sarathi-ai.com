@@ -212,19 +212,33 @@ async def _rzp_payments(hours: int) -> tuple:
     return out, True
 
 
+# What an edge challenge page says about itself. Cloudflare serves "Just a moment..." with a 403
+# or 503; the application never sees the request at all.
+_CHALLENGE_MARKS = ("just a moment", "cf-browser-verification", "cf_chl_", "checking your browser",
+                    "attention required", "__cf_chl")
+
+
 async def webhook_self_test() -> tuple:
-    """Is the webhook silent because of THEM, or because of US? Ask our own endpoint.
+    """Can our webhook endpoint answer at all - and is anything in front of it turning callers away?
 
     Founder, 23 Sep: "at least we get telegram confirmation ... stating problem from Razorpay
     side, if any (double check it's not from our side)."
 
-    Right, and it is cheap to be sure. We POST to our own public webhook URL with a deliberately
-    invalid signature. A healthy endpoint answers 400 - it read the body, checked the signature
-    and refused. Anything else (a timeout, a 502, a block) means the fault is on our side of the
-    wire and telling Razorpay would waste everyone's day.
+    READ WHAT THIS CAN AND CANNOT TELL YOU. We POST to our own public webhook URL with a
+    deliberately invalid signature. A healthy application answers 400 - it read the body, checked
+    the signature and refused.
+
+    A 400 proves the application is up and reachable FROM HERE. It does NOT prove Razorpay can
+    reach it, and on 23 Sep it wrongly said so. Razorpay's webhook was being served a Cloudflare
+    "Just a moment..." challenge and 403 on every retry, while this same test passed - because an
+    edge challenge scores the CALLER, not the path, and our own server calling itself with our own
+    user agent is not scored like a payment provider's webhook agent. So the pass is reported as
+    "our app is up", never as "not our side".
+
+    What it CAN catch outright is a challenge served to us too, which is now detected by name.
 
     Nothing is written and no event is processed: an invalid signature is rejected before the
-    payload is even parsed. Returns (ours_is_healthy, one line saying what happened).
+    payload is even parsed. Returns (app_is_answering, one line saying what happened).
     """
     url = (os.getenv("NIDAAN_BASE_URL", "https://nidaanpartner.com").rstrip("/")
            + "/nidaan/api/webhook")
@@ -235,8 +249,18 @@ async def webhook_self_test() -> tuple:
                                       "User-Agent": "NidaanPaymentGuardian/selftest"})
     except Exception as e:  # noqa: BLE001
         return False, "our endpoint could not be reached at all (%s)" % str(e)[:80]
+
+    # Look at the BODY, not only the code. A challenge page is a 403 that never reached the app,
+    # and it is the one failure this test can name with certainty.
+    body = (r.text or "")[:2000].lower()
+    if any(m in body for m in _CHALLENGE_MARKS):
+        return False, ("Cloudflare is serving a challenge page on the webhook path (HTTP %s) - "
+                       "the request never reaches the app. Turn off Bot Fight Mode for "
+                       "nidaanpartner.com, or exempt /nidaan/api/webhook." % r.status_code)
     if r.status_code == 400:
-        return True, "our endpoint is healthy (it rejected a bad signature, as it should)"
+        return True, ("our app answered correctly from here (it refused a bad signature) - but "
+                      "this cannot prove Razorpay gets through, because an edge block scores the "
+                      "caller, not the path")
     if r.status_code == 503:
         return False, "our endpoint says the webhook secret is not configured"
     return False, "our endpoint answered %s to a signature check it should have refused" % r.status_code
@@ -538,18 +562,30 @@ async def _check_reconcile(findings: list, ran: set) -> None:
             findings.append({
                 "key": "webhook_silent", "check": "webhook", "severity": "critical",
                 "title": "No Razorpay webhook has reached us in 24 hours",
-                # WHOSE FAULT, said plainly. On 20 Sep this alarm told a person to go and change
-                # a webhook URL and secret that were correct, which is worse than saying nothing.
-                # So before it accuses Razorpay it asks our own endpoint whether it is answering.
+                # WHERE TO LOOK, said plainly. On 20 Sep this alarm told a person to go and
+                # change a webhook URL and secret that were correct. On 23 Sep it did the
+                # opposite and told him it was Razorpay's problem, on the strength of a self-test
+                # that can only ever prove our app answers US. It was Cloudflare's Bot Fight Mode
+                # serving Razorpay a challenge page. So the alarm now names the THREE places the
+                # request can die and says which one the evidence rules out, and never exonerates
+                # us from a test taken inside our own network.
                 "detail": "Razorpay captured %d payment(s) in the last %dh, and no webhook has "
                           "reached us in 24h%s.\n\n%s %s\n\n"
+                          "%s\n\n"
                           "Payments are still being recorded — the guardian reads Razorpay "
                           "directly every 5 minutes and recovers anything missing — so no "
                           "money is at risk. The webhook is what needs fixing."
                           % (len(captured), LOOK_BACK_H,
                              (" (last seen %s UTC)" % newest) if newest else " — none on record",
-                             ("✅ NOT our side —" if _self_ok else "⚠️ OUR SIDE —"),
-                             _self_why)})
+                             ("🔎 OUR APP IS UP —" if _self_ok else "⚠️ BLOCKED BEFORE THE APP —"),
+                             _self_why,
+                             ("Next place to look: the Cloudflare edge. It sits in front of this "
+                              "path and can turn a caller away without the app ever seeing it — "
+                              "Bot Fight Mode did exactly that on 23 Sep. Check "
+                              "Security → Bots and the WAF events for /nidaan/api/webhook."
+                              if _self_ok else
+                              "Fix the block above first; nothing else can be judged until "
+                              "requests reach the app."))})
 
 
 async def _check_effects_and_duplicates(findings: list, ran: set) -> None:

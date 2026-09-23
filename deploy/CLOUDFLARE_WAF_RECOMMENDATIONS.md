@@ -8,15 +8,73 @@ Estimated time: 30 minutes total (one-time setup; takes minutes to test).
 
 ---
 
+## 0. ⚠️ READ FIRST — machine callers we WANT
+
+Everything below is about turning automated traffic away. Some automated traffic is
+**ours and must get through**, and Cloudflare cannot tell the difference:
+
+| Path | Who calls it | What happens if it is blocked |
+|---|---|---|
+| `/nidaan/api/webhook` | Razorpay (Nidaan) | Payment confirmations never arrive |
+| `/api/payments/webhook` | Razorpay (Sarathi) | Same, on the other product |
+| `/nidaan/api/wa/webhook` | Meta / WhatsApp Cloud API | Inbound complainant messages never arrive. **GET too** — Meta re-verifies the endpoint |
+| `/api/whatsapp/v2/webhook` | Meta (Sarathi) | Same, on the other product |
+| `/nidaan/telegram/webhook/*` | Telegram | Ops bot goes silent. Only if webhook mode is in use — `@NidaanOpsBot` currently long-polls, so nothing to open today |
+| `/api/telegram/webhook/*` | Telegram (Sarathi) | Same |
+
+Routes confirmed in `sarathi_biz.py` on 23 Sep 2026; re-grep `@app.post("/.*webhook` before
+trusting this table, because a path written from memory into a firewall rule is a hole or an
+outage.
+
+**This has already cost us once.** On 23 Sep 2026 Razorpay's webhook for
+`pay_TfPq2skEiSuArv` was served a Cloudflare **"Just a moment..."** challenge and a **403**, on
+every retry, for days. Razorpay's own delivery log is what proved it. Money was never lost — the
+payment guardian reconciles against the Razorpay API every 5 minutes and recovers — but every
+confirmation was late, and a day was spent with Razorpay support because our own self-test said
+the fault was theirs.
+
+**Before enabling anything below, confirm each path above answers a plain POST from outside our
+network.** A test from the server itself does not count: an edge challenge scores the CALLER, not
+the path, so our own request sails through while a provider's is stopped.
+
+---
+
 ## 1. Security → Bots
 
-**Enable: Bot Fight Mode** (free)
+> ⚠️ **Bot Fight Mode has no exception list on the free plan.** WAF custom rules and
+> Configuration Rules run AFTER it, so a "Skip" rule does not rescue a blocked webhook. If a
+> provider webhook is being challenged, the only free-tier answer is to turn Bot Fight Mode
+> **off** for that zone and replace it with a custom rule that excludes the webhook paths
+> (pattern below). Verify on the dashboard rather than trusting this line — Cloudflare's free
+> tier changes.
+
+**Enable: Bot Fight Mode** (free) — `sarathi-ai.com` only, unless the webhook paths above are
+confirmed reachable.
 
 - Cloudflare → sarathi-ai.com → Security → Bots → Bot Fight Mode → **On**
-- Same for nidaanpartner.com
+- **nidaanpartner.com: leave OFF** while it carries the Razorpay, WhatsApp and Telegram
+  webhooks, or verify each one end to end immediately after turning it on.
 
 Blocks crawlers/scrapers/automated tools that aren't allowed list bots (Google,
-Bing). Doesn't affect real users.
+Bing). Doesn't affect real users. **It does affect payment providers.**
+
+### Replacement for nidaanpartner.com — a custom rule that spares the webhooks
+
+| Field | Value |
+|---|---|
+| Name | `challenge-bots-except-webhooks` |
+| Expression | `(cf.client.bot_score lt 30) and not (http.request.uri.path in {"/nidaan/api/webhook" "/api/payments/webhook" "/nidaan/api/wa/webhook" "/api/whatsapp/v2/webhook"}) and not (starts_with(http.request.uri.path, "/nidaan/telegram/webhook/")) and not (starts_with(http.request.uri.path, "/api/telegram/webhook/"))` |
+| Action | Managed Challenge |
+
+`cf.client.bot_score` needs Bot Management; on free tier use
+`(not cf.client.bot) and not (http.request.uri.path in {...})` or rely on the rate limits in
+§2 instead. **Whatever is used, the webhook paths must be excluded by name.**
+
+### After ANY change here, prove the webhook still arrives
+
+Do not read a setting — read an outcome. Make a real ₹1 payment, or in the Razorpay dashboard
+(Settings → Webhooks → the endpoint → recent deliveries) confirm a **2xx**. A 403 carrying
+`Just a moment...` means the edge is still eating it.
 
 ---
 
@@ -168,7 +226,8 @@ After 24 hours of having the rules above, check:
 
 Once you have 30 min, work through this. Mark each as done:
 
-- [ ] Bot Fight Mode → On (both domains)
+- [ ] Bot Fight Mode → On (**sarathi-ai.com only** — see §0; it blocked Razorpay's webhook on nidaanpartner.com for days)
+- [ ] Razorpay / WhatsApp / Telegram webhook paths verified reachable FROM OUTSIDE after every edge change
 - [ ] WAF Rule 1: block SQLi patterns
 - [ ] WAF Rule 2: rate-limit auth endpoints
 - [ ] WAF Rule 3: geo-restrict admin to India
