@@ -5777,7 +5777,26 @@ async def nidaan_wa_webhook(request: Request):
         payload = json.loads(raw.decode("utf-8") or "{}")
     except Exception:
         payload = {}
-    await _waflow.handle_inbound_payload(payload)
+    # WHAT ARRIVED, AND WHAT WE DID WITH IT. Shape only - counts and types, never a message
+    # body or a number. On 23 Sep the founder reported the WhatsApp number not replying:
+    # nginx showed 17 webhooks all answering 200, delivery statuses were updating normally,
+    # and yet no inbound message had been recorded since 22 Sep 06:03. There was no way to
+    # tell whether messages were arriving and being dropped, or not arriving at all - the
+    # webhook logged nothing either way. That question should never be unanswerable again.
+    try:
+        _fields, _msgs, _stats = [], 0, 0
+        for _e in (payload.get("entry") or []):
+            for _ch in (_e.get("changes") or []):
+                _fields.append(_ch.get("field") or "?")
+                _v = _ch.get("value") or {}
+                _msgs += len(_v.get("messages") or [])
+                _stats += len(_v.get("statuses") or [])
+        _res = await _waflow.handle_inbound_payload(payload)
+        logger.info("WA webhook: fields=%s messages=%d statuses=%d handled=%s",
+                    ",".join(sorted(set(_fields))) or "none", _msgs, _stats,
+                    (_res or {}).get("handled", "?"))
+    except Exception as _we:
+        logger.warning("WA webhook handling failed: %s", _we)
     return {"ok": True}   # Meta needs a fast 200 or it retries
 
 
