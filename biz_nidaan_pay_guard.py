@@ -266,6 +266,75 @@ async def webhook_self_test() -> tuple:
     return False, "our endpoint answered %s to a signature check it should have refused" % r.status_code
 
 
+# How many "payment recovered" messages may leave this module in an hour, whatever happens.
+# Not a tuning knob for volume - a fuse. If twelve payments are recovered at once the news is
+# "something is badly wrong", and that is one message, not twelve.
+_RECOVERY_MAX_PER_HOUR = 3
+
+
+async def _announced_already(pid: str) -> bool:
+    """Have we already told the office about THIS payment? Read from what we actually sent.
+
+    No new table: a sent notification is the durable record of having spoken, and its body
+    carries the payment id. Payment ids are unique and high-entropy, so the LIKE is exact in
+    practice.
+
+    Fails CLOSED - if we cannot tell, we stay quiet. That is the right way round here. A recovery
+    that goes unannounced is still in the guardian's findings, in the ledger, and on the portal;
+    a message that repeats every five minutes teaches everyone to ignore the channel, and then
+    the one that matters is ignored too.
+    """
+    if not pid:
+        return True
+    try:
+        async with aiosqlite.connect(DB_PATH) as c:
+            row = await (await c.execute(
+                "SELECT 1 FROM nidaan_notifications WHERE event_key='payment.recovered' "
+                "AND body LIKE ? LIMIT 1", ("%Payment: " + pid + "%",))).fetchone()
+        return bool(row)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("could not check whether %s was announced - staying quiet: %s", pid, e)
+        return True
+
+
+async def _recovery_quota_left() -> bool:
+    """The fuse. True while this hour still has room for another recovery message."""
+    try:
+        async with aiosqlite.connect(DB_PATH) as c:
+            # DISTINCT on the BODY, not the subject. notify_staff_inapp writes one row per
+            # recipient, so raw rows would count three per message - and the subject is only the
+            # amount, so two different payments of the same size shared one. The body carries the
+            # payment id, which is what makes each message distinct.
+            row = await (await c.execute(
+                "SELECT COUNT(DISTINCT COALESCE(body,'')) FROM nidaan_notifications "
+                "WHERE event_key='payment.recovered' "
+                "AND created_at > datetime('now','-1 hour')")).fetchone()
+        return int((row or [0])[0] or 0) < _RECOVERY_MAX_PER_HOUR
+    except Exception as e:  # noqa: BLE001
+        logger.warning("could not read the recovery quota - staying quiet: %s", e)
+        return False
+
+
+async def _stamp_announced(pid: str) -> None:
+    """Mark this payment as DEALT WITH, whether or not a message went out.
+
+    `announced_at` means "nobody needs telling about this again", not "a message was sent". The
+    difference matters: finding 7 raises "a payment nobody was told about" for any unstamped row,
+    so staying quiet without stamping would swap a message that repeats every five minutes for an
+    ALARM that repeats every five minutes. That alarm fired 21 times on 23 Sep for exactly this
+    reason. Silence has to be recorded as a decision, or it reads as a gap.
+    """
+    if not pid:
+        return
+    try:
+        async with aiosqlite.connect(DB_PATH) as c:
+            await c.execute("UPDATE nidaan_payments SET announced_at=CURRENT_TIMESTAMP "
+                            "WHERE razorpay_payment_id=? AND COALESCE(announced_at,'')=''", (pid,))
+            await c.commit()
+    except Exception as e:  # noqa: BLE001
+        logger.warning("could not stamp %s as announced: %s", pid, e)
+
+
 async def _announce_recovery(p: dict, what: str) -> None:
     """Tell the office, on Telegram, that money arrived and the webhook did not.
 
@@ -276,6 +345,18 @@ async def _announce_recovery(p: dict, what: str) -> None:
     not send). Rather than chase two announcement routes, the recovery says its own piece - and
     it is a different piece anyway: this one is about the WEBHOOK, not about the sale.
     """
+    pid = str(p.get("id") or "")
+    # Once per payment, ever. Checked before anything else is done, including the self-test,
+    # which makes an outbound HTTP request we have no reason to repeat either.
+    if await _announced_already(pid):
+        logger.info("recovery of %s was already announced - not saying it again", pid)
+        await _stamp_announced(pid)
+        return
+    if not await _recovery_quota_left():
+        logger.warning("recovery announcements are over the hourly ceiling - %s not sent. "
+                       "The recovery itself is recorded and in the findings.", pid)
+        await _stamp_announced(pid)
+        return
     ok, why = await webhook_self_test()
     amt = int(p.get("amount") or 0) / 100.0
     body = (
@@ -297,6 +378,9 @@ async def _announce_recovery(p: dict, what: str) -> None:
                                            email=False, claim_id=_claim_of(p))
     except Exception as e:  # noqa: BLE001
         logger.warning("could not announce the recovery of %s: %s", p.get("id"), e)
+    # Stamped whether the send worked or not. A send that failed is a logged problem; retrying it
+    # every five minutes for the rest of the week is a worse one.
+    await _stamp_announced(pid)
 
 
 def _claim_of(p: dict):
@@ -439,7 +523,11 @@ async def _recover_payment(p: dict) -> str:
         return "activation failed: %s" % str(e)[:90]
     logger.warning("RECOVERED a payment the webhook never delivered: %s -> account %s plan %s "
                    "(Rs %s) result=%s", pid, acct, plan, int(p.get("amount") or 0) / 100, res)
-    await _announce_recovery(p, "a %s subscription (account %s)" % (plan, acct))
+    # "dup" means this charge was ALREADY recorded - nothing was recovered, so there is nothing
+    # to announce. The return value was being logged and then ignored, which is what made this
+    # path shout every five minutes about a payment that had been handled hours earlier.
+    if str(res) != "dup":
+        await _announce_recovery(p, "a %s subscription (account %s)" % (plan, acct))
     return ""
 
 
