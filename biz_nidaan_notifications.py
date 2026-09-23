@@ -833,13 +833,30 @@ async def _telegram_mirror(staff_id: int, text: str, url: str, buttons: list = N
         logger.info("Telegram repeat to staff %s suppressed (same text within %ss)",
                     staff_id, _TG_REPEAT_S)
         return
+    # Telegram refuses a relative button URL and throws away THE WHOLE MESSAGE with it. Three
+    # callers passed a bare "/nidaan/ops" and lost every alert they ever sent. Repair it here,
+    # once, so no caller can do that again.
+    safe_url = (url or "").strip()
+    if safe_url and not safe_url.lower().startswith(("http://", "https://")):
+        safe_url = NIDAAN_BASE_URL.rstrip("/") + "/" + safe_url.lstrip("/")
+    if safe_url and not safe_url.lower().startswith(("http://", "https://")):
+        logger.warning("Telegram button URL %r is unusable - sending without the button", url)
+        safe_url = ""
     try:
         import biz_nidaan_telegram as _tg
-        ok, err = await _tg.notify_staff(staff_id, text, url=url, extra_buttons=buttons)
-        if not ok and err not in ("not_linked", "telegram_disabled", "no_chat_id"):
-            logger.info("Telegram notify failed for staff %s: %s", staff_id, err)
+        ok, err = await _tg.notify_staff(staff_id, text, url=safe_url or None,
+                                         extra_buttons=buttons)
+        if not ok and err in ("not_linked", "telegram_disabled", "no_chat_id"):
+            return          # genuinely not errors - this person simply has no Telegram
+        if not ok and safe_url:
+            # A bad button must not cost the message. Retry plain, and say so.
+            logger.warning("Telegram send to staff %s failed (%s) - retrying with no button",
+                           staff_id, err)
+            ok, err = await _tg.notify_staff(staff_id, text, url=None, extra_buttons=buttons)
+        if not ok:
+            logger.warning("TELEGRAM NOT DELIVERED to staff %s: %s", staff_id, err)
     except Exception as e:
-        logger.info("Telegram mirror error: %s", e)
+        logger.warning("Telegram mirror error for staff %s: %s", staff_id, e)
 
 
 async def on_support_escalated(thread_id: int) -> None:

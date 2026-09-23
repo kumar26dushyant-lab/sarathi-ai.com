@@ -61,6 +61,10 @@ import biz_database as db
 import biz_nidaan as _n
 
 logger = logging.getLogger("nidaan.pay_guard")
+
+# Telegram rejects a relative button URL and drops the message with it.
+_OPS_URL = (os.getenv("NIDAAN_BASE_URL", "https://nidaanpartner.com").rstrip("/")
+            + "/nidaan/ops")
 DB_PATH = db.DB_PATH
 IST = timezone(timedelta(hours=5, minutes=30))
 
@@ -868,7 +872,7 @@ async def _alert_due() -> int:
         btn = [[{"text": "👀 Seen — I'm on it", "callback_data": "pgk:%d" % inc["inc_id"]}]]
         for sid in ids:
             try:
-                await _nnot._telegram_mirror(sid, subj + "\n\n" + body, url="/nidaan/ops", buttons=btn)
+                await _nnot._telegram_mirror(sid, subj + "\n\n" + body, url=_OPS_URL, buttons=btn)
             except Exception as e:  # noqa: BLE001
                 logger.info("guardian telegram failed for %s: %s", sid, e)
         try:
@@ -915,7 +919,7 @@ async def acknowledge(inc_id: int, staff_id: int, staff_name: str) -> dict:
             await _nnot._telegram_mirror(
                 sid, "👀 Seen by %s — %s\n\nThey are on it. If it is still not fixed in %d hours, "
                      "this will come back." % (staff_name, inc["title"], REMIND_AFTER_ACK_H),
-                url="/nidaan/ops")
+                url=_OPS_URL)
         except Exception:
             pass
     return {"ok": True, "title": inc["title"]}

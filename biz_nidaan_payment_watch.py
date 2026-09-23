@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from datetime import datetime, timedelta, timezone
 
 import aiosqlite
@@ -23,6 +24,10 @@ import biz_database as db
 import biz_nidaan as _n
 
 logger = logging.getLogger("nidaan.pay_watch")
+
+# Telegram rejects a relative button URL and drops the message with it.
+_OPS_URL = (os.getenv("NIDAAN_BASE_URL", "https://nidaanpartner.com").rstrip("/")
+            + "/nidaan/ops")
 DB_PATH = db.DB_PATH
 IST = timezone(timedelta(hours=5, minutes=30))
 
@@ -252,7 +257,7 @@ async def chase_unrecovered_failures() -> dict:
         # Telegram ONLY — deliberately not notify_staff_inapp, which would also email.
         for sid in ids:
             try:
-                await _nnot._telegram_mirror(sid, body, url="/nidaan/ops")
+                await _nnot._telegram_mirror(sid, body, url=_OPS_URL)
             except Exception:
                 pass
         stamp = now.strftime("%Y-%m-%d %H:%M:%S")
