@@ -152,6 +152,37 @@ session — they need the founder's go-ahead. Nothing below is live yet.
    was made via the Pay button's QR. Nothing captured under either claim or that number — needs
    the date/amount or a Razorpay payment id from him to trace.
 
+### ✅ 24 Sep 02:30 — THE ALARM THAT COULD NOT DIE — ROOT CAUSE FIXED, RESOLVED LIVE (`3380eb8`)
+
+The founder tapped "👀 Seen — I'm on it" and it kept firing. **His tap DID land** (acked_by
+Dushyant Sharma 20:52, next alert pushed to 22:52) — the messages he saw were just before it.
+Two bugs behind the rest, and the second was about to restart the first at 22:52.
+
+**ROOT CAUSE — a date window on the wrong question.** "Is this payment already in our books?"
+was answered from a map built with `AND created_at > datetime('now','-54 hours')`. That window is
+on **our row's** created_at. `pay_TfAr9LNYpxJFzL` **is** in the ledger — row 22, with its payment
+id — but the row was written **20 August** and stamped with the id later. The map missed it → the
+guardian called a recorded payment missing → "recovered" it → got `dup` → raised the finding →
+alarmed → repeat, for ever.
+> A payment id is unique for all time. Asking "have we got this id" and then qualifying it with
+> "…but only if we wrote the row recently" is **two questions**, and the second has nothing to do
+> with the first. Window removed — the table holds 113 rows; it was never about size.
+
+**THE ACK WAS WIPED BY THE ALERT ITSELF.** `_alert_due` ran
+`SET alert_count=alert_count+1, status='open'` **unconditionally, every time it spoke**.
+`acknowledge()` sets `'acked'` + 2h; the 2h reminder then reset it to `'open'` and dropped it back
+to every 10 minutes, printing *"nobody has tapped Seen yet"* on a message somebody had tapped Seen
+on. **The button could never end anything — it could only buy two hours.** `status` is no longer
+touched when alerting; an acked incident waits the full reminder period.
+
+**VERIFIED LIVE:** `{'findings': 0, 'opened': 0, 'closed': 1, 'alerts_sent': 0}` · incident 7
+`resolved` · **0 open incidents** · one `payment.guardian_ok` all-clear to the founder alone ·
+0 tracebacks.
+
+⚠️ **Noted for the notification controller:** `claim.l2_queued` fired to **16 super-admins** for
+one event. Not a repeat — but 16 people for one claim being queued is the "overwhelming everyone"
+shape the founder is asking to control.
+
 ### ✅ 24 Sep 01:40 — THE NOTIFICATION MACHINE-GUN, STOPPED AND DEPLOYED
 
 Founder, 01:27: *"it's really irritating if these messages firing again and again to others too
