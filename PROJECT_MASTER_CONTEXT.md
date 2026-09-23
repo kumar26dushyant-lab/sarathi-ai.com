@@ -7920,3 +7920,58 @@ outages.
 
 Noticed in passing and deliberately not touched: **`@app.get("/admin")` is defined twice** in
 `sarathi_biz.py` (l.6914, l.16802). FastAPI serves the first; the second is unreachable.
+
+
+## 🔒 A111 — THE CHECKER THAT EXONERATED US (Sep 23 2026, evening)
+
+Razorpay answered on `pay_TfPq2skEiSuArv`. The webhook fired. Our server returned **403** with a
+Cloudflare **"Just a moment..."** page, to every retry. It never reached the application.
+
+The cause is **item 1 of our own security checklist** — "Bot Fight Mode → On (both domains)".
+It challenges automated callers, and a payment provider's webhook agent is an automated caller.
+Cloudflare cannot tell ours from a scraper. We turned on a control that was doing exactly what
+it says on the tin, against traffic we needed.
+
+### The part worth remembering
+
+I told the founder it was **not our side**. The guardian's `webhook_self_test()` POSTs to our own
+public URL with a bad signature and expects a 400. It got one. It reported "✅ NOT our side".
+
+Every step of that was true and the conclusion was wrong. **An edge challenge scores the caller,
+not the path.** A request from our own server, with our own user agent, is not scored like
+Razorpay's. The test proved *our app answers us*. It was never capable of proving *a third party
+gets through* — and it said so anyway.
+
+This project has written the rule down twice this month: **a check must read an OUTCOME, not a
+configuration.** It caught "WhatsApp Cloud API: CONNECTED" while nobody was being answered. It
+caught a provider returning 201 and delivering nothing. Here the outcome — *Razorpay captured
+money and no webhook arrived* — was being reported **correctly, by the alarm**, and my
+self-test overrode it with a false exoneration. The wrong answer was louder than the right one.
+
+> A self-test can only ever measure the distance from where it stands. When the question is
+> "can somebody else reach us", standing inside is the one place that cannot answer it.
+
+### What changed
+
+- The self-test reads the **body**, not just the code, and names a challenge page. A 503 carrying
+  one previously read as "the webhook secret is not configured" — an answer that sends a person
+  to edit a correct secret, which is the same failure as 20 Sep.
+- A pass **may no longer claim the fault is elsewhere**. The strongest honest sentence is "our app
+  answered us, and this cannot prove Razorpay gets through", and the alarm now names the edge as
+  the next place to look.
+- `_tools/test_webhook_selftest.py` pins both — 11 checks, run against the old code first, where
+  it fails 4.
+- `CLOUDFLARE_WAF_RECOMMENDATIONS.md` carries the exception **above** the instruction that caused
+  it, because that document is what gets re-applied on every migration. Paths grepped out of
+  `sarathi_biz.py`: a path written from memory into a firewall rule is a hole or an outage.
+
+### What is NOT wrong
+
+No money was lost and none is at risk. The guardian reads the Razorpay API every 5 minutes and
+recovers. What the outage costs is promptness — and the **second independent path**. While the
+webhook is down, reconciliation is the only way money reaches our books, and a single path is
+exactly the shape of the last two outages.
+
+The fix is a Cloudflare dashboard action. **There is no Cloudflare API token anywhere in this
+repo**, so it cannot be scripted from the app server — `deploy/RAZORPAY_WEBHOOK_BLOCKED_RUNBOOK.md`
+has the steps, and the rule that it must be proven by outcome, not by reading a setting back.

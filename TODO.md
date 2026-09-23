@@ -152,6 +152,40 @@ session — they need the founder's go-ahead. Nothing below is live yet.
    was made via the Pay button's QR. Nothing captured under either claim or that number — needs
    the date/amount or a Razorpay payment id from him to trace.
 
+### 🔴 RAZORPAY WEBHOOK — CAUSE CONFIRMED, FIX NEEDS THE CLOUDFLARE DASHBOARD
+
+**Razorpay replied 23 Sep** on `pay_TfPq2skEiSuArv`: the webhook fired, our server answered
+**403** with a Cloudflare **"Just a moment..."** challenge page, and answered that to every
+retry. The request never reached the application.
+
+**The cause is item 1 of our own checklist** — `CLOUDFLARE_WAF_RECOMMENDATIONS.md` §1, "Bot Fight
+Mode → On (both domains)". It challenges automated callers; a payment provider's webhook agent
+is an automated caller.
+
+⚠️ **I told the founder it was not our side, and that was wrong.** `webhook_self_test()` POSTs to
+our public URL, got its 400, and said "✅ NOT our side". An edge challenge scores the **caller**,
+not the path — our own server with our own user agent is not scored like Razorpay's. The test
+proved *our app answers us*; it could never prove a third party gets through. That is this
+project's own rule — **read an outcome, not a configuration** — broken by my own checker, and it
+cost a day with Razorpay support.
+
+- ✅ **Fixed so it cannot recur** (`1d567e0`): the self-test names a challenge page on any status
+  code (a 503 carrying one used to read as "webhook secret not configured" — sending somebody to
+  edit a correct secret), and a pass may no longer claim the fault is elsewhere.
+  `_tools/test_webhook_selftest.py`, 11 checks, **proven to fail 4 against the old code**.
+- ✅ **The checklist now carries the exception above the instruction that caused it**, with the
+  webhook paths grepped out of `sarathi_biz.py` rather than written from memory.
+- 🔴 **`deploy/RAZORPAY_WEBHOOK_BLOCKED_RUNBOOK.md` — FOUNDER ACTION.** There is **no Cloudflare
+  API token anywhere in this repo**, so this cannot be scripted from the app server. Dashboard,
+  ~5 minutes: Security → Events to confirm, Bot Fight Mode **off for nidaanpartner.com only**,
+  replace with a custom rule that excludes the webhook paths, then prove it by **outcome** (a 2xx
+  in Razorpay's delivery log, or a ₹1 payment).
+- **No money is at risk meanwhile.** The guardian reconciles against the Razorpay API every 5
+  minutes and recovers. What is lost is promptness, and the second independent path — right now
+  reconciliation is the *only* way money reaches our books.
+- ❌ **Never "fix" this by giving Razorpay an unproxied hostname.** It exposes the origin IP and
+  undoes `lock-origin-to-cloudflare.sh`.
+
 ### 🔴 WHATSAPP CHARTER — foundation, security, alerting (founder, 23 Sep)
 
 **✅ Done today**
