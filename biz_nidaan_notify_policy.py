@@ -75,6 +75,7 @@ TELEGRAM_ONLY_EVENTS = {
     # claims - tagging, comments, movement, assignment, status
     "claim_note.mention",
     "claim.watch",          # a note or a document landing on a claim somebody is on
+    "claim.wa_inbound",     # the complainant replied on WhatsApp - Telegram, never email
     "claim.involved",
     "claim.assigned",
     "claim.status",

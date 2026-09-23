@@ -59,12 +59,20 @@ check("...and on Telegram", state(bare, "telegram") == "yes", bare)
 check("...so the row can never read as 'we cannot reach this person'",
       any(c["state"] == "yes" for c in bare), bare)
 
-# ── staff email is conditional, and says why ────────────────────────────────
+# ── inside the company: Telegram and the bell, and nothing else ─────────────
+# Founder, 24 Sep, overruling the earlier "email for some events": "no whatsapp messages to
+# staff ... No email updates for normal case related updates and nothing claims related update
+# to staff on email, it doesnt make sense." So both are a flat no, with a phone and an address
+# on file, because holding one is not a reason to use it.
 st = cp._reach("staff", PHONE, EMAIL, set())
-check("staff email is 'maybe', not a flat green", state(st, "email") == "maybe", st)
-check("...and names the policy that decides",
-      "policy" in why(st, "email").lower() and "telegram" in why(st, "email").lower(),
-      why(st, "email"))
+check("staff get NO claim email, even with an address on file",
+      state(st, "email") == "no", st)
+check("...and it says Telegram instead, rather than looking like a gap",
+      "telegram" in why(st, "email").lower(), why(st, "email"))
+check("staff get NO WhatsApp, even with a number on file",
+      state(st, "whatsapp") == "no", st)
+check("...and says why, so nobody 'fixes' it by adding a number",
+      "telegram" in why(st, "whatsapp").lower(), why(st, "whatsapp"))
 
 # ── an outsider's email is unconditional ────────────────────────────────────
 comp = cp._reach("complainant", PHONE, EMAIL, set())

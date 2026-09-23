@@ -299,6 +299,32 @@ async def ask_next(claim_id: int, msisdn: str, *, greeted: bool = True, force: b
     return {"ok": True, "asked": doc["key"]}
 
 
+async def _tell_staff_inbound(claim_id, msisdn: str, text: str) -> None:
+    """Tell the people on this claim that the complainant has replied — Telegram + bell.
+
+    Founder, 24 Sep: "if anything we get from customer/complainant side on a particular claim
+    through whatsapp, updates should be going to our related staff on telegram."
+
+    Before this, an inbound message wrote one line to the activity timeline and nothing else. On
+    a claim waiting for a document, the wait was however long it took somebody to look.
+
+    Never email (claim traffic does not go to staff by email) and never require an acknowledgement
+    (a day of "the customer said ok" popups teaches people to dismiss popups unread). Failure here
+    must never break the reply the customer is waiting on, so it is caught and logged.
+    """
+    if not claim_id:
+        return          # not tied to a claim yet - there is nobody specific to tell
+    try:
+        import biz_nidaan_notifications as _nnot
+        body = ('💬 The complainant replied on WhatsApp about claim #%s:\n"%s"\n\n'
+                'Open: /nidaan/ops?claim=%s' % (claim_id, (text or "").strip()[:140] or "(no text — an attachment)",
+                                                claim_id))
+        await _nnot.notify_claim_watchers(
+            claim_id, "💬 WhatsApp reply on claim #%s" % claim_id, body,
+            event_key="claim.wa_inbound", email=False, require_ack=False)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("could not tell staff about the WhatsApp reply on claim %s: %s", claim_id, e)
+
 async def start_or_continue(msisdn: str, *, force_ask: bool = False) -> dict:
     """A complainant messaged us. Match to their claim, greet ONCE ever, then ask the next doc."""
     claim = await _claim_for_msisdn(msisdn)
@@ -827,6 +853,7 @@ async def handle_inbound_text(msisdn: str, text: str) -> dict:
         except Exception:
             pass
     await _activity(claim_id, "wa_inbound", f"Customer: {(text or '')[:120]}", direction="in")
+    await _tell_staff_inbound(claim_id, msisdn, text)
 
     if action == "continue_docs" and claim:
         # They're ready to send — always re-state the exact document (force past the throttle).

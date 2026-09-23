@@ -2299,7 +2299,8 @@ async def on_claim_assigned(claim_id: int, staff_ids: list, assigned_by_id: int 
 
 
 async def notify_claim_watchers(claim_id: int, subject: str, body: str,
-                                exclude_ids=None, event_key: str = "claim.watch"):
+                                exclude_ids=None, event_key: str = "claim.watch",
+                                email: bool = True, require_ack: bool = True):
     """Ping EVERYONE involved in a claim — non-muted watchers (tagged/@mentioned/involved) PLUS the
     current assignee(s) — on ALL channels: dashboard bell + web push + Telegram mirror + EMAIL, with a
     must-acknowledge popup. So tagged/involved/assigned staff never miss claim activity. Excludes the
@@ -2336,8 +2337,12 @@ async def notify_claim_watchers(claim_id: int, subject: str, body: str,
         return
     try:
         # All channels + email + must-acknowledge popup (notify_staff_inapp mirrors to Telegram/push).
+        # Both were hardcoded. A must-acknowledge popup is right for "you have been assigned"
+        # and wrong for "the customer said ok" - a day of those teaches people to dismiss popups
+        # unread, which is how a real one gets missed. Defaults keep every existing caller as it
+        # was; only the new ones opt out.
         await notify_staff_inapp(list(ids), subject, body, event_key=event_key,
-                                 email=True, require_ack=True, claim_id=claim_id)
+                                 email=email, require_ack=require_ack, claim_id=claim_id)
     except Exception as e:
         logger.warning("notify_claim_watchers failed: %s", e)
 

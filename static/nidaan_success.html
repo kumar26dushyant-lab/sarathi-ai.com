@@ -39,11 +39,28 @@
 var LANG = (localStorage.getItem('nidaan_lang') || 'hi');
 var q = new URLSearchParams(location.search);
 var type = q.get('type') || '';
-var next = q.get('next') || '/nidaan/dashboard';
+// `next` used to be followed as given. A query string is written by whoever sends the link, so
+// this page was a one-hop redirector on our own domain, reached through a screen that says
+// "Payment successful". Same-site paths only: one leading slash, and never "//host".
+function safeNext(v){
+  if (!v || v.charAt(0) !== '/' || v.charAt(1) === '/' || v.charAt(1) === '\\') return '/nidaan/dashboard';
+  return v;
+}
+var next = safeNext(q.get('next'));
+// A payment LINK sends the payer back here with Razorpay's own result attached. Those are just
+// query parameters until the server has checked the signature on them.
+var fromLink = !!q.get('razorpay_payment_link_id');
 var T = {
   en: {
     title:"Payment successful 🎉",
-    sub:{ subscription:"Thank you! Your subscription is active. Welcome aboard.",
+    checking:"Confirming your payment…",
+    failed:"We could not confirm this payment",
+    failedSub:"If money has left your account, it is safe — nothing is lost. Our team checks "
+             +"every payment against Razorpay and will update your claim. Please contact us with "
+             +"the payment details if you do not hear back today.",
+    sub:{ link:"Thank you! Your payment has reached us. Our team can see it and your claim moves "
+              +"to the next step — you do not need to send us a screenshot.",
+          subscription:"Thank you! Your subscription is active. Welcome aboard.",
           review:"Thank you! Your ₹499 legal review is confirmed — our team will assess your claim.",
           claim:"Thank you! Your payment is confirmed and your claim is moving forward.",
           l2:"Thank you! The Level-2 legal fee is confirmed — your claim is queued for legal action.",
@@ -51,27 +68,54 @@ var T = {
     cta:"Continue to my dashboard →", redir:"Taking you there…", lang:"हिंदी" },
   hi: {
     title:"भुगतान सफल 🎉",
-    sub:{ subscription:"धन्यवाद! आपकी सदस्यता सक्रिय हो गई है। आपका स्वागत है।",
+    checking:"आपका भुगतान जाँच रहे हैं…",
+    failed:"हम इस भुगतान की पुष्टि नहीं कर पाए",
+    failedSub:"अगर आपके खाते से पैसे कट गए हैं तो वे सुरक्षित हैं — कुछ डूबता नहीं। "
+             +"हमारी टीम हर भुगतान को Razorpay से मिलाती है और आपका दावा अपडेट करेगी। "
+             +"आज जवाब न मिले तो भुगतान की जानकारी के साथ हमसे संपर्क करें।",
+    sub:{ link:"धन्यवाद! आपका भुगतान हम तक पहुँच गया है। हमारी टीम को यह दिख रहा है और आपका दावा आगे बढ़ रहा है — "
+              +"स्क्रीनशॉट भेजने की ज़रूरत नहीं।",
+          subscription:"धन्यवाद! आपकी सदस्यता सक्रिय हो गई है। आपका स्वागत है।",
           review:"धन्यवाद! आपका ₹499 कानूनी रिव्यू पक्का हो गया — हमारी टीम आपके दावे का आकलन करेगी।",
           claim:"धन्यवाद! आपका भुगतान पक्का हो गया और आपका दावा आगे बढ़ रहा है।",
           l2:"धन्यवाद! लेवल-2 कानूनी शुल्क पक्का हो गया — आपका दावा कानूनी कार्रवाई के लिए तैयार है।",
           "":"धन्यवाद! आपका भुगतान पक्का हो गया। सब तैयार है।" },
     cta:"मेरे डैशबोर्ड पर जाएँ →", redir:"आपको वहाँ ले जा रहे हैं…", lang:"English" }
 };
+// null = we have not asked yet, true/false = the server has answered. Only meaningful for a
+// payment link; our own checkouts only reach this page after Razorpay's handler has fired.
+var paidVerdict = null;
 function render(){
   var t = T[LANG] || T.en;
-  document.getElementById('title').textContent = t.title;
-  document.getElementById('msg').textContent = t.sub[type] || t.sub[""];
+  var pending = fromLink && paidVerdict === null;
+  var refused = fromLink && paidVerdict === false;
+  document.getElementById('title').textContent =
+    pending ? t.checking : (refused ? t.failed : t.title);
+  document.getElementById('msg').textContent =
+    pending ? '' : (refused ? t.failedSub : (t.sub[type] || t.sub[""]));
   document.getElementById('cta').textContent = t.cta;
   document.getElementById('cta').href = next;
-  document.getElementById('redir').textContent = t.redir;
+  // Nobody arriving from a payment link is walked anywhere: they may have no login at all, and
+  // being bounced to a sign-in screen three seconds after paying reads as the payment failing.
+  document.getElementById('redir').textContent = fromLink ? '' : t.redir;
+  document.getElementById('cta').style.display = (fromLink && !refused) ? 'none' : '';
   document.getElementById('langBtn').textContent = t.lang;
   document.documentElement.lang = LANG;
 }
 function toggleLang(){ LANG = (LANG==='hi')?'en':'hi'; localStorage.setItem('nidaan_lang', LANG); render(); }
 render();
-// Auto-continue after a few seconds so nobody is stuck on this page.
-setTimeout(function(){ location.href = next; }, 3000);
+
+if (fromLink){
+  // Ask the server. It recomputes Razorpay's HMAC over the parameters and tells us yes or no -
+  // which is the only reason this page may say a payment succeeded.
+  fetch('/nidaan/api/paylink/verify' + location.search, {headers:{'Accept':'application/json'}})
+    .then(function(r){ return r.ok ? r.json() : {ok:false}; })
+    .then(function(d){ paidVerdict = !!(d && d.ok); render(); })
+    .catch(function(){ paidVerdict = false; render(); });
+} else {
+  // Our own checkout already knows it worked - Razorpay's handler fired before we came here.
+  setTimeout(function(){ location.href = next; }, 3000);
+}
 </script>
 </body>
 </html>

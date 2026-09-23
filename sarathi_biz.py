@@ -774,10 +774,54 @@ async def nidaan_terms_page(request: Request):
 
 @app.get("/nidaan/success", response_class=HTMLResponse)
 async def nidaan_success_page(request: Request):
-    """Post-payment thank-you page (all payment flows land here, then continue to the dashboard)."""
+    """Post-payment thank-you page. Every payment flow lands here - the in-dashboard checkouts
+    redirect to it, and payment links are created with it as their callback_url.
+
+    The page shows nothing about a payment until /nidaan/api/paylink/verify has checked
+    Razorpay's signature, so a hand-written URL cannot produce a success screen on our domain."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     return _nidaan_page("nidaan_success.html", request)
+
+
+@app.get("/nidaan/api/paylink/verify")
+@limiter.limit("30/minute")
+async def nidaan_paylink_verify(request: Request):
+    """Did this payment link really get paid? Answered from Razorpay's signature, not the URL.
+
+    Razorpay appends payment_link_id, payment_link_reference_id, payment_link_status,
+    payment_id and a signature to the callback. The signature is
+    HMAC-SHA256("id|reference_id|status|payment_id", key_secret). Anyone can type the first four;
+    only Razorpay can produce the fifth.
+
+    Returns {ok, status} and nothing else - no amount, no name, no claim. The caller is an
+    anonymous browser arriving from a payment page, so it is told whether its own payment went
+    through and not one thing more.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    q = request.query_params
+    link_id = (q.get("razorpay_payment_link_id") or "")[:64]
+    ref = (q.get("razorpay_payment_link_reference_id") or "")[:64]
+    status = (q.get("razorpay_payment_link_status") or "")[:32]
+    pay_id = (q.get("razorpay_payment_id") or "")[:64]
+    sig = (q.get("razorpay_signature") or "")[:128]
+    if not (link_id and sig):
+        return {"ok": False, "status": "unknown"}
+    secret = _nidaan_rzp_secret()
+    if not secret:
+        logger.warning("paylink verify: no Nidaan Razorpay secret configured")
+        return {"ok": False, "status": "unknown"}
+    import hashlib as _hl
+    import hmac as _hm
+    expected = _hm.new(secret.encode(), f"{link_id}|{ref}|{status}|{pay_id}".encode(),
+                       _hl.sha256).hexdigest()
+    if not _hm.compare_digest(expected, sig):
+        # Worth knowing about: a wrong signature here is either a misconfiguration or somebody
+        # building a fake receipt on our domain. Never echoed to the caller.
+        logger.warning("paylink verify: bad signature for link %s", link_id)
+        return {"ok": False, "status": "unverified"}
+    return {"ok": status.lower() == "paid", "status": status.lower() or "unknown"}
 
 
 @app.get("/nidaan/branch", response_class=HTMLResponse)
@@ -1256,7 +1300,9 @@ async def _create_rzp_payment_link(amount_paise: int, description: str, *,
                                    customer_email: str = "", notes: dict = None,
                                    expire_by: int = None, reminder: bool = True) -> dict:
     """Create a Razorpay Payment Link (hosted page + short_url; SMS/reminders handled by
-    Razorpay). Returns the Razorpay response dict (id, short_url, …)."""
+    Razorpay). Returns the Razorpay response dict (id, short_url, …).
+
+    The payer is sent back to /nidaan/success when they are done - see callback_url below."""
     rzp_id = _nidaan_rzp_id(); rzp_secret = _nidaan_rzp_secret()
     if not rzp_id or not rzp_secret:
         raise HTTPException(status_code=503, detail="Payments not configured")
@@ -1274,6 +1320,14 @@ async def _create_rzp_payment_link(amount_paise: int, description: str, *,
     if customer_email: cust["email"] = customer_email[:120]
     if cust: payload["customer"] = cust
     if expire_by: payload["expire_by"] = int(expire_by)
+    # Bring the payer back to us. Without this Razorpay keeps them on its own hosted page: no
+    # thank-you, no "here is what happens next", and no idea on our side that they arrived.
+    # Razorpay signs the parameters it appends; /nidaan/api/paylink/verify checks that signature,
+    # because a query string is written by whoever sends the link.
+    _base = (os.getenv("NIDAAN_BASE_URL", "https://nidaanpartner.com") or "").rstrip("/")
+    if _base:
+        payload["callback_url"] = _base + "/nidaan/success?type=link"
+        payload["callback_method"] = "get"
     import httpx as _hx
     async with _hx.AsyncClient() as _cl:
         r = await _cl.post("https://api.razorpay.com/v1/payment_links",

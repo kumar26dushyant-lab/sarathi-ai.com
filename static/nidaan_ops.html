@@ -6068,7 +6068,7 @@ async function openClaimDrawer(claimId) {
       <div class="msg" id="assignMsg_${c.claim_id}"></div>
     </div>`:''}
     <!-- Who gets notified on this claim + the contact details we're missing -->
-    <details data-ord="45" class="drawer-section" onclick="if(!this._loaded){this._loaded=true;loadClaimParties(${c.claim_id});}">
+    <details data-ord="40" class="drawer-section" onclick="if(!this._loaded){this._loaded=true;loadClaimParties(${c.claim_id});}">
       <summary style="cursor:pointer;font-weight:700;list-style:none">🔔 Who gets notified <span style="font-size:.72rem;color:var(--nd-text-faint);font-weight:400">— every party on this claim + any missing WhatsApp/email to chase</span></summary>
       <div id="claimParties_${c.claim_id}" style="font-size:.82rem;color:var(--nd-text-faint);margin-top:.6rem">Open to load…</div>
     </details>
@@ -6080,14 +6080,14 @@ async function openClaimDrawer(claimId) {
     <!-- Notes, and who is involved - ONE box (founder, 17 Sep). They were two sections doing
          one job: you involve somebody BECAUSE of what was said. The long list of name chips is
          gone; pick a colleague from the dropdown, or type @ in the note as before. -->
-    <div data-ord="40" class="drawer-section">
+    <div data-ord="90" class="drawer-section">
       <h4 style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap">
         <span>💬 Notes &amp; who is involved</span>
         <button class="btn-sm btn-ghost" id="claimMuteBtn_${c.claim_id}" onclick="toggleClaimMute(${c.claim_id})" title="Mute/unmute your notifications for this claim">🔔 Mute me</button>
       </h4>
       <div id="notesArea_${c.claim_id}">${notesHtml}</div>
       <div style="margin-top:.75rem;display:flex;flex-direction:column;gap:.45rem">
-        <textarea id="noteInput_${c.claim_id}" class="note-input" style="width:100%" placeholder="Add a note… type @ to tag a teammate"></textarea>
+        <textarea id="noteInput_${c.claim_id}" class="note-input" style="width:100%" placeholder="Add a note… type @ to tag someone (they get it on Telegram)"></textarea>
         <div id="claimMentionBox_${c.claim_id}" style="display:flex;flex-wrap:wrap;gap:.3rem;font-size:.78rem;color:var(--nd-text-muted)"></div>
         <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
           <input type="file" id="claimNoteFiles_${c.claim_id}" multiple style="display:none" onchange="claimNoteFilesPicked(${c.claim_id})">
@@ -6099,10 +6099,10 @@ async function openClaimDrawer(claimId) {
       </div>
       <div style="margin-top:.8rem;padding-top:.6rem;border-top:1px dashed var(--nd-border)">
         <select id="involvePick_${c.claim_id}" class="form-input" style="width:100%;margin-bottom:.4rem" onchange="claimInvolve(${c.claim_id}, this)">
-          <option value="">＋ Involve a colleague…</option>
+          <option value="">＋ Add someone — they follow this claim</option>
         </select>
         <div id="claimWatchersArea_${c.claim_id}" style="font-size:.85rem;color:var(--nd-text-faint)">Loading…</div>
-        <div style="font-size:.7rem;color:var(--nd-text-faint);margin-top:.3rem">Involved staff get this claim's updates until they mute.</div>
+        <div style="font-size:.7rem;color:var(--nd-text-faint);margin-top:.3rem">Both send a Telegram message and a bell alert straight away. <b>Tag</b> sends your note with it; <b>Add</b> just puts them on the claim. Either way they keep getting its updates until they mute it.</div>
       </div>
     </div>
     <!-- (The second Documents box lived here. It is now part of the one 📂 Documents section
@@ -6514,7 +6514,7 @@ async function loadClaimWatchers(claimId){
       try { staff = await _loadAssigneesOnce(); } catch(e){}
       const on = new Set(ws.map(w=>w.staff_id));
       const left = (staff||[]).filter(s=>!s.deleted_at && !on.has(s.staff_id));
-      pick.innerHTML = '<option value="">＋ Involve a colleague…</option>'
+      pick.innerHTML = '<option value="">＋ Add someone — they follow this claim</option>'
         + left.map(s=>'<option value="'+s.staff_id+'">'+esc(s.name)+'</option>').join('');
     }
   } catch(e){ el.textContent=''; }
@@ -6639,7 +6639,7 @@ function _renderMentionPick(claimId){
   box.innerHTML =
       '<select class="form-input" style="flex:1 1 180px;min-width:150px;font-size:.8rem;padding:.3rem .4rem" '
     +   'onchange="claimToggleMention(' + claimId + ', parseInt(this.value,10)); this.value=\'\'">'
-    +   '<option value="">＋ Tag a teammate…</option>'
+    +   '<option value="">＋ Tag someone — they get this note</option>'
     +   left.map(function(c){ return '<option value="' + c.staff_id + '">'
         + (c.is_assignee ? '★ ' : '') + esc(c.name) + '</option>'; }).join('')
     + '</select>'
@@ -6753,10 +6753,14 @@ function _drawerMode(isClaim){
 // "Status History" is caught as history before "Update Status" could be taken as work.
 const _DCOL_RULES = [
   // "Involved" sits with the notes on purpose: you involve somebody BECAUSE of what was said.
-  // "Who gets notified" moved here from column 1 on the founder's ask (24 Sep). It belongs with
-  // the conversation: you look at who hears about a claim at the moment you are tagging somebody
-  // or writing a note, not while reading the policy number.
-  [3, /notes|discussion|messages with|activity|status history|involved|notified|who gets/i],
+  // Founder, 24 Sep: "conversation will sit at the place of who gets notified and who gets
+  // notified will sit at conversation place". A straight swap of the two, so the notes sit under
+  // Assign - where you are already looking at who is on this claim - and the notify list moves
+  // over with the timeline, which is the other "what went out" panel. Order matters here: /notes/
+  // is tested before /involved/, because the notes section is titled "Notes & who is involved".
+  [1, /notes/i],
+  [3, /notified|who gets/i],
+  [3, /discussion|messages with|activity|status history|involved/i],
   [1, /claim info|branch|advisor|assign to/i],
 ];
 const _DCOL_NAMES = {1: 'Who & what', 2: 'The work', 3: 'Conversation & history'};

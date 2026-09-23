@@ -52,16 +52,18 @@ def _reach(role: str, phone: str, email: str, stopped: set) -> list:
     """What will actually reach this party. Mirrors notify_claim_parties()."""
     out = []
     if role == "staff":
-        # Always, and independent of any address we hold - which is why a staff member with
-        # neither a phone nor an email is still notified, and used to look unreachable.
-        out.append({"ch": "dashboard", "label": "Dashboard", "state": "yes"})
-        out.append({"ch": "telegram", "label": "Telegram", "state": "yes"})
+        # INSIDE the company: the bell and Telegram, and nothing else. Both are independent of
+        # any address we hold, which is why a staff member with neither a phone nor an email is
+        # still fully notified - and used to read as unreachable.
+        return [{"ch": "dashboard", "label": "Dashboard", "state": "yes"},
+                {"ch": "telegram", "label": "Telegram", "state": "yes"},
+                {"ch": "whatsapp", "label": "WhatsApp", "state": "no",
+                 "why": "staff are reached on Telegram — we do not send them WhatsApp"},
+                {"ch": "email", "label": "Email", "state": "no",
+                 "why": "claim updates do not go to staff by email — Telegram instead"}]
+    # OUTSIDE: WhatsApp and email, which is all they have.
     if email:
-        out.append({"ch": "email", "label": "Email",
-                    # notify_staff_inapp() asks for email; biz_nidaan_notify_policy decides.
-                    "state": "maybe" if role == "staff" else "yes",
-                    "why": ("only for events the notification policy allows — claim notes and "
-                            "comments go to Telegram instead") if role == "staff" else ""})
+        out.append({"ch": "email", "label": "Email", "state": "yes"})
     else:
         out.append({"ch": "email", "label": "Email", "state": "no", "why": "no address on file"})
     if not phone:
@@ -308,8 +310,13 @@ async def notify_claim_parties(claim_id: int, *, event_key: str, subject: str, b
             # ── email + dashboard (the always-on rail) ─────────────────────────
             try:
                 if p["role"] == "staff" and p.get("staff_id"):
+                    # email=False, decided here rather than left to the policy. A claim update is
+                    # exactly the traffic the founder asked to keep off email ("nothing claims
+                    # related update to staff on email, it doesnt make sense"), and the Brevo
+                    # allowance is for complainants. The policy still runs underneath.
                     await _nnot.notify_staff_inapp([p["staff_id"]], subject, text,
-                                                   event_key=event_key, email=True, claim_id=claim_id)
+                                                   event_key=event_key, email=False,
+                                                   claim_id=claim_id)
                 elif p.get("email"):
                     await _nnot.dispatch(
                         event_key=event_key, priority=_nnot.PRIORITY_P1,
@@ -319,8 +326,11 @@ async def notify_claim_parties(claim_id: int, *, event_key: str, subject: str, b
                         recipient_email=p["email"], subject=subject, body=text, claim_id=claim_id)
             except Exception as e:  # noqa: BLE001
                 logger.info("party email/dash failed (%s claim %s): %s", p["role"], claim_id, e)
-            # ── WhatsApp (Cloud API) ──────────────────────────────────────────
-            if p.get("phone") and p["phone"][-10:] not in _skip:
+            # ── WhatsApp (Cloud API) — for people OUTSIDE the company ─────────
+            # Staff are reached on Telegram and the bell. They were also being sent WhatsApp for
+            # every claim update: a channel none of them reads, billed per message, from the
+            # number complainants know us by.
+            if p["role"] != "staff" and p.get("phone") and p["phone"][-10:] not in _skip:
                 try:
                     await _send_party_whatsapp(p, text)
                 except Exception as e:  # noqa: BLE001
