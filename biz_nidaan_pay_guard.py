@@ -276,6 +276,43 @@ async def _recover_payment(p: dict) -> str:
                        pid, pur)
         return ""
 
+    # ── a shared payment LINK: the "Share link" button in my-business / branch ──────
+    # These record through payment_link.paid, a different webhook event from the rest - so when
+    # the webhook is down, a link the staff shared and the customer paid leaves the screen still
+    # asking for money. Checked BEFORE the subscription branch below, because a payment link
+    # carries an invoice_id too and would otherwise be mistaken for a subscription charge.
+    if prod == "nidaan_plink":
+        purpose = str(notes.get("purpose") or "")
+        try:
+            cid = int(notes.get("claim_id") or 0)
+        except (TypeError, ValueError):
+            cid = 0
+        branch = str(notes.get("branch") or "")
+        if purpose != "l2" or not (cid and branch):
+            return ("payment link (purpose=%r) needs a person: only the Level-2 fee can be "
+                    "applied from the link alone" % purpose)
+        try:
+            pricing = await _n.branch_l2_fee_for_claim(cid)
+            ok = await _n.mark_l2_paid(cid, branch, int(pricing["fee"]), pid)
+        except Exception as e:  # noqa: BLE001
+            return "could not mark L2 paid from the link: %s" % str(e)[:80]
+        if not ok:
+            return "mark_l2_paid declined claim %s (already paid?)" % cid
+        # Close the link too, so the screen stops offering it and the links list tells the truth.
+        try:
+            async with aiosqlite.connect(DB_PATH) as c:
+                c.row_factory = aiosqlite.Row
+                row = await (await c.execute(
+                    "SELECT plink_id FROM nidaan_payment_links WHERE claim_id=? AND purpose='l2' "
+                    "AND status <> 'paid' ORDER BY created_at DESC LIMIT 1", (cid,))).fetchone()
+            if row:
+                await _n.mark_payment_link_paid(dict(row)["plink_id"], pid)
+        except Exception as e:  # noqa: BLE001
+            logger.info("could not close the payment link for claim %s: %s", cid, e)
+        logger.warning("RECOVERED a shared-link payment the webhook never delivered: %s -> "
+                       "claim %s branch %s", pid, cid, branch)
+        return ""
+
     # ── a subscription charge: identity lives on the SUBSCRIPTION, not the payment ──
     inv = p.get("invoice_id") or ""
     if not inv:
