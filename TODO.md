@@ -152,6 +152,55 @@ session — they need the founder's go-ahead. Nothing below is live yet.
    was made via the Pay button's QR. Nothing captured under either claim or that number — needs
    the date/amount or a Razorpay payment id from him to trace.
 
+### ✅ 24 Sep 01:40 — THE NOTIFICATION MACHINE-GUN, STOPPED AND DEPLOYED
+
+Founder, 01:27: *"it's really irritating if these messages firing again and again to others too
+... do control notifications and do intelligently, do[n't] fire gun continuously from any
+notification channel to anyone."*
+
+**Measured before fixing: 16 rows every 5 minutes — 16 super-admins × the SAME one message.
+~192 notifications an hour, for one payment.** My bug, two faults stacked:
+- `_recover_payment` ignored `activate_from_razorpay_webhook`'s return value, so a charge already
+  recorded (`"dup"` — nothing recovered) was announced anyway, on every guardian pass.
+- Nothing remembered having spoken.
+
+Three guards (`80f41d3`): say nothing when nothing was recovered · once per payment id **ever** ·
+a hard **ceiling of 3/hour** across all payments. The third is a fuse, not a volume knob — the
+first two reason about one payment, and what he described is a **channel** failure.
+⚠️ **The trap:** finding 7 alarms on any row without `announced_at`, so going quiet without
+stamping would have swapped a message repeating every 5 min for an ALARM repeating every 5 min —
+the one that fired 21 times on 23 Sep. `announced_at` now means "nobody needs telling again".
+`_tools/test_recovery_once.py` (10). Its first run caught my quota counting `DISTINCT subject` —
+and the subject is only the amount, so two ₹588.82 payments shared one.
+
+**DEPLOYED and verified live:** guardian logged `result=dup` and said nothing; **0 messages sent
+since**.
+
+### 🔴 24 Sep — 235 TELEGRAM MESSAGES A DAY WERE BEING DESTROYED — `99e0cbe`
+
+Found while proving on live data that tagging reaches Telegram:
+`Bad Request: inline keyboard button URL '/nidaan/ops' is invalid: URL host is empty`.
+
+**Telegram refuses a relative button URL and rejects THE WHOLE MESSAGE with it.** `dispatch()`
+builds `NIDAAN_BASE_URL + url` and is fine; three callers bypassed it with a bare `/nidaan/ops`
+(`payment_watch:255`, `pay_guard:871,918`) — **all three are the payment guardian's own alarms,
+and not one has ever arrived.**
+
+⚠️ **Why it hid for so long:** it logged at **INFO**, on a line shared with three outcomes that
+genuinely aren't errors (not linked, disabled, no chat id). A real delivery failure wore the same
+clothes as "this person has no Telegram", at a level nobody greps — and the bell showed the
+alert, so from the inside it looked delivered. **Same class as the 201-and-delivers-nothing
+outage.**
+Fixed so no future caller can repeat it: a non-absolute URL is repaired; if still unusable the
+message goes **without** the button; a failed send is retried plain; failures log at WARNING.
+`verify-python-names.py` caught `os` undefined in payment_watch — second time this session.
+
+⚠️ **STILL OPEN — `channel='telegram'` is never recorded.** 7-day channel counts: dashboard 4055,
+email 280, **telegram 0**. Telegram is a side-effect of the bell, so the DB cannot answer "did
+Telegram deliver?" — which is exactly why 235 failures a day were invisible. **The founder is
+standardising staff notifications on Telegram; that channel has no delivery record at all.**
+This belongs in the notification-controller work.
+
 ### 🚨 24 Sep — AN OPEN DOOR, FOUND WHILE VERIFYING THE CLOUDFLARE FIX
 
 `POST /api/whatsapp/v2/webhook` accepts **unauthenticated requests on BOTH domains**. Verified
