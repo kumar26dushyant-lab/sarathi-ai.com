@@ -5,8 +5,9 @@ Founder, 15 Sep: "anything not working correctly (in our mechanics), flag and no
 telegram ... it should trigger every 10 min until any superadmin sees it ... payment is serious."
 
 WHAT IT IS, AND WHAT IT DELIBERATELY IS NOT
-  * It READS, it ALERTS, and — since 23 Sep — it RECOVERS ONE THING: a subscription payment
-    Razorpay has captured that never reached our ledger. Nothing else. It still never retries,
+  * It READS, it ALERTS, and — since 23 Sep — it RECOVERS ONE THING: a payment Razorpay has
+    captured that never reached our ledger (a subscription charge, a branch Level-2 fee, or a
+    Rs499 review). Nothing else. It still never retries,
     refunds, or cancels, and if this module dies the payment paths carry on untouched (a
     heartbeat, checked from the web processes, notices the silence).
 
@@ -211,8 +212,8 @@ async def _rzp_payments(hours: int) -> tuple:
     return out, True
 
 
-async def _recover_subscription_payment(p: dict) -> str:
-    """Razorpay took subscription money we never heard about. Record it, do not just report it.
+async def _recover_payment(p: dict) -> str:
+    """Razorpay took money we never heard about. Record it, do not just report it.
 
     23 Sep: a customer paid Rs 588.82 by UPI, Razorpay captured it, and our system had nothing -
     no ledger row, no subscription, "PAID (LTV) Rs 0" on his own account page. TWO things had to
@@ -228,9 +229,57 @@ async def _recover_subscription_payment(p: dict) -> str:
     webhook turns up later it changes nothing. Returns "" on success, or a reason it could not.
     """
     pid = p.get("id") or ""
+    notes = p.get("notes") or {}
+    prod = str(notes.get("product") or "")
+
+    # ── a claim payment: the branch Level-2 fee, or a Rs499 review ───────────
+    # These carry their identity in the ORDER's notes, so nothing has to be looked up. 23 Sep,
+    # a second one the same day: claim #204's Rs 588.82 went through on UPI and our screen still
+    # asked the branch to pay. Each runs exactly what the webhook's payment.captured branch runs.
+    if prod == "nidaan_branch_l2":
+        try:
+            cid = int(notes.get("claim_id") or 0)
+        except (TypeError, ValueError):
+            cid = 0
+        branch = str(notes.get("branch") or "")
+        if not (cid and branch):
+            return "branch_l2 payment with no claim/branch in its notes"
+        try:
+            pricing = await _n.branch_l2_fee_for_claim(cid)
+            ok = await _n.mark_l2_paid(cid, branch, int(pricing["fee"]), pid)
+        except Exception as e:  # noqa: BLE001
+            return "could not mark L2 paid: %s" % str(e)[:90]
+        if not ok:
+            return "mark_l2_paid declined claim %s (already paid?)" % cid
+        logger.warning("RECOVERED a branch L2 payment the webhook never delivered: %s -> "
+                       "claim %s branch %s", pid, cid, branch)
+        return ""
+
+    if prod == "nidaan_review_999":
+        try:
+            pur = int(notes.get("purchase_id") or 0)
+        except (TypeError, ValueError):
+            pur = 0
+        if not pur:
+            return "review payment with no purchase_id in its notes"
+        try:
+            async with aiosqlite.connect(DB_PATH) as c:
+                await c.execute(
+                    "UPDATE nidaan_per_claim_purchase SET status='paid', "
+                    "reviewed_at=CURRENT_TIMESTAMP WHERE purchase_id=? AND status='pending_payment'",
+                    (pur,))
+                await c.commit()
+            await _n.ensure_claim_for_paid_purchase(pur)
+        except Exception as e:  # noqa: BLE001
+            return "could not finalise purchase %s: %s" % (pur, str(e)[:80])
+        logger.warning("RECOVERED a review payment the webhook never delivered: %s -> purchase %s",
+                       pid, pur)
+        return ""
+
+    # ── a subscription charge: identity lives on the SUBSCRIPTION, not the payment ──
     inv = p.get("invoice_id") or ""
     if not inv:
-        return "not a subscription payment (no invoice)"
+        return "unrecognised payment (product=%r, no invoice)" % prod
     key, sec = _rzp_auth()
     if not (key and sec):
         return "no Razorpay credentials"
@@ -300,7 +349,7 @@ async def _check_reconcile(findings: list, ran: set) -> None:
         if not row:
             # FIX IT, then say so. Reporting alone leaves a paying customer with nothing until
             # somebody reads an alert - which on 23 Sep was twelve hours and counting.
-            why_not = await _recover_subscription_payment(p)
+            why_not = await _recover_payment(p)
             if not why_not:
                 findings.append({
                     "key": "recovered_payment:%s" % pid, "check": "reconcile",
