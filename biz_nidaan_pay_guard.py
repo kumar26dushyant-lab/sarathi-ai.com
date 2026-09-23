@@ -5,9 +5,22 @@ Founder, 15 Sep: "anything not working correctly (in our mechanics), flag and no
 telegram ... it should trigger every 10 min until any superadmin sees it ... payment is serious."
 
 WHAT IT IS, AND WHAT IT DELIBERATELY IS NOT
-  * It READS and it ALERTS. It never records, retries, refunds or activates anything. A bug here
-    cannot break a payment, and if this module dies the payment paths carry on untouched (a
+  * It READS, it ALERTS, and — since 23 Sep — it RECOVERS ONE THING: a subscription payment
+    Razorpay has captured that never reached our ledger. Nothing else. It still never retries,
+    refunds, or cancels, and if this module dies the payment paths carry on untouched (a
     heartbeat, checked from the web processes, notices the silence).
+
+    That exception exists because reporting alone was not enough. On 23 Sep a customer paid
+    Rs 588.82 by UPI; Razorpay captured it; our system had no row, no subscription, and showed
+    him "PAID (LTV) Rs 0" on his own account page. A UPI payment switches app, so the browser
+    that was meant to confirm it is gone by the time the money moves, and the webhook — the
+    thing that exists to catch exactly that — had not delivered for twelve hours. A guardian
+    that only raises this needs a person awake to be worth anything.
+
+    The recovery runs the webhook's own function and is idempotent on the Razorpay payment id,
+    so a late webhook changes nothing. The money is provably taken before it runs — Razorpay
+    says captured — so the risk is not "might invent a payment", it is "might record a real one
+    twice", and that is what the idempotency key is for.
   * Every finding is a FACT from Razorpay's own records or our database - never a guess.
   * One problem is ONE incident, keyed, so repeated runs can never produce a flood.
   * Customer-side trouble (a declined card, an abandoned checkout) is NOT for this: that lives in
@@ -37,6 +50,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from datetime import datetime, timedelta, timezone
 
 import aiosqlite
@@ -138,9 +152,25 @@ def _is_ours(p: dict, in_ledger: bool) -> bool:
     if "sarathi" in prod:
         return False
     # Sarathi's payments carry tenant_id/plan_key and product=sarathi-ai-crm (excluded above);
-    # ours carry the claim or the account they are for.
-    if notes.get("claim_id") or notes.get("account_id") or notes.get("purchase_id"):
+    # ours carry the claim or the account they are for. `nidaan_account_id` is what the
+    # subscription actually writes - the other spellings are kept for anything older.
+    if (notes.get("claim_id") or notes.get("account_id") or notes.get("purchase_id")
+            or notes.get("nidaan_account_id")):
         return True
+    # A SUBSCRIPTION CHARGE CARRIES NO NOTES AT ALL. Razorpay puts notes on the subscription and
+    # does not copy them onto the payment - checked on the live account, 23 Sep: `notes: []`.
+    # So every recurring payment we have ever taken failed this test and the guardian was blind
+    # to all of them, which is how Rs 588.82 sat captured at Razorpay and absent from our books
+    # with nothing saying so.
+    #
+    # An invoice_id means a subscription charge. It is ours when we are looking at OUR OWN
+    # Razorpay account - which is the normal case and is verified here rather than assumed,
+    # because the Nidaan keys fall back to the shared ones if they are ever unset, and on a
+    # shared account this would claim Sarathi's subscriptions too.
+    if p.get("invoice_id"):
+        _nk = (os.getenv("NIDAAN_RAZORPAY_KEY_ID") or "").strip()
+        _sk = (os.getenv("RAZORPAY_KEY_ID") or "").strip()
+        return bool(_nk and _nk != _sk)
     return False
 
 
@@ -157,7 +187,15 @@ async def _rzp_payments(hours: int) -> tuple:
     key, sec = _rzp_auth()
     if not (key and sec):
         return [], False
-    now = int(datetime.utcnow().timestamp())
+    # A REAL POSIX EPOCH. datetime.utcnow() is naive, and .timestamp() reads a naive datetime as
+    # LOCAL time - so on this server (+0200, TZ unset) it lands two hours in the past, and the
+    # window we asked Razorpay for ENDED two hours ago. Every payment taken in the last two
+    # hours was invisible to this guardian, which is how Rs 588.82 sat captured at Razorpay on
+    # 23 Sep with nothing in our books and nothing saying so.
+    #
+    # The same trap is called out at biz_nidaan.create_branch_magic_token - it was found once,
+    # for short-lived tokens, and this caller was missed.
+    now = int(time.time())
     params = {"from": now - hours * 3600, "to": now + 300, "count": 100}
     out = []
     try:
@@ -171,6 +209,54 @@ async def _rzp_payments(hours: int) -> tuple:
         logger.warning("razorpay payments list failed: %s", e)
         return [], False
     return out, True
+
+
+async def _recover_subscription_payment(p: dict) -> str:
+    """Razorpay took subscription money we never heard about. Record it, do not just report it.
+
+    23 Sep: a customer paid Rs 588.82 by UPI, Razorpay captured it, and our system had nothing -
+    no ledger row, no subscription, "PAID (LTV) Rs 0" on his own account page. TWO things had to
+    fail together and both did: a UPI payment switches app, so the browser that was meant to call
+    verify is gone by the time the money moves; and the webhook, the very thing that exists to
+    catch that, had not delivered for twelve hours.
+
+    A guardian that only RAISES this is a guardian that needs a person awake to be worth
+    anything. The money is provably taken - Razorpay says captured - so the safe thing is to
+    record it and say we did.
+
+    Runs the webhook's own function, which is idempotent on the Razorpay payment id: if the
+    webhook turns up later it changes nothing. Returns "" on success, or a reason it could not.
+    """
+    pid = p.get("id") or ""
+    inv = p.get("invoice_id") or ""
+    if not inv:
+        return "not a subscription payment (no invoice)"
+    key, sec = _rzp_auth()
+    if not (key and sec):
+        return "no Razorpay credentials"
+    try:
+        async with httpx.AsyncClient(timeout=20, auth=(key, sec)) as c:
+            r = await c.get("https://api.razorpay.com/v1/invoices/%s" % inv)
+            sub_id = ((r.json() or {}).get("subscription_id") or "")
+            if not sub_id:
+                return "invoice %s carries no subscription" % inv
+            r = await c.get("https://api.razorpay.com/v1/subscriptions/%s" % sub_id)
+            notes = ((r.json() or {}).get("notes") or {})
+    except Exception as e:  # noqa: BLE001
+        return "could not read Razorpay: %s" % str(e)[:80]
+
+    acct = str(notes.get("nidaan_account_id") or notes.get("account_id") or "").strip()
+    plan = str(notes.get("nidaan_plan") or notes.get("plan") or "").strip()
+    if not (acct.isdigit() and plan):
+        return "subscription %s has no account/plan in its notes" % sub_id
+    try:
+        res = await _n.activate_from_razorpay_webhook(
+            sub_id, int(acct), plan, int(p.get("amount") or 0), razorpay_payment_id=pid)
+    except Exception as e:  # noqa: BLE001
+        return "activation failed: %s" % str(e)[:90]
+    logger.warning("RECOVERED a payment the webhook never delivered: %s -> account %s plan %s "
+                   "(Rs %s) result=%s", pid, acct, plan, int(p.get("amount") or 0) / 100, res)
+    return ""
 
 
 async def _check_reconcile(findings: list, ran: set) -> None:
@@ -212,13 +298,28 @@ async def _check_reconcile(findings: list, ran: set) -> None:
         if not _is_ours(p, bool(row)):
             continue                      # Sarathi's, or unrecognisable: not ours to judge
         if not row:
+            # FIX IT, then say so. Reporting alone leaves a paying customer with nothing until
+            # somebody reads an alert - which on 23 Sep was twelve hours and counting.
+            why_not = await _recover_subscription_payment(p)
+            if not why_not:
+                findings.append({
+                    "key": "recovered_payment:%s" % pid, "check": "reconcile",
+                    "severity": "warning",
+                    "title": "Recovered a payment the webhook never delivered — ₹%s" % (amt / 100),
+                    "amount_paise": amt,
+                    "detail": "Razorpay captured %s (₹%s, %s) and no webhook reached us, so it "
+                              "has been recorded and the plan activated from Razorpay's own "
+                              "record. Nothing is owed to the customer. The WEBHOOK is what "
+                              "needs looking at." % (pid, amt / 100, who)})
+                continue
             findings.append({
                 "key": "paid_not_recorded:%s" % pid, "check": "reconcile", "severity": "critical",
                 "title": "Money taken, not in our ledger — ₹%s" % (amt / 100),
                 "amount_paise": amt,
-                "detail": "Razorpay captured %s (₹%s, %s) but we have no ledger row for it. The "
-                          "customer has paid and may be waiting for what they bought."
-                          % (pid, amt / 100, who)})
+                "detail": "Razorpay captured %s (₹%s, %s) but we have no ledger row for it, and "
+                          "it could not be recovered automatically (%s). The customer has paid "
+                          "and may be waiting for what they bought."
+                          % (pid, amt / 100, who, why_not)})
         elif int(row.get("total_paise") or 0) != amt:
             findings.append({
                 "key": "amount_mismatch:%s" % pid, "check": "reconcile", "severity": "critical",
