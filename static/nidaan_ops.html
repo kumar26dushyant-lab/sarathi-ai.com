@@ -4637,14 +4637,87 @@ function _filterClaimsBySearch(list){
 let _claimSearchTimer;
 function _claimSearchDebounced(){ clearTimeout(_claimSearchTimer); _claimSearchTimer=setTimeout(_renderClaimResults, 160); }
 window._claimSearchDebounced=_claimSearchDebounced;  // _renderClaimResults is already global (top-level fn)
+// ── Pages ────────────────────────────────────────────────────────────────────
+// Founder, 24 Sep: "as claims are increasing the scrolling is getting increasing ... if they
+// want to see 10 claims, 20 claims, or 30 claims in one page ... if nothing is selected default
+// should be 30".
+//
+// One pager for every list, keyed by list name, because All Claims, L2 Claims, the buckets and
+// Accounts all want it and four copies is how three of them end up subtly different.
+//
+// It pages the list the browser ALREADY HAS. Turning a page costs nothing and never touches the
+// server - which matters more than it sounds on the old machines the office runs, and keeps the
+// client-side search working as it does today.
+const _PAGE_SIZES = [10, 20, 30, 50];
+const _pageNo = {};
+function pageSize(key){
+  try{
+    const v = parseInt(localStorage.getItem('nd_ps_' + key), 10);
+    return _PAGE_SIZES.indexOf(v) >= 0 ? v : 30;   // his default, and the fallback
+  }catch(e){ return 30; }
+}
+function pageOf(key, total){
+  const n = pageSize(key);
+  const last = Math.max(1, Math.ceil((total || 0) / n));
+  // Clamp: filtering down to 3 rows while on page 7 must not show an empty table.
+  const p = Math.min(Math.max(1, _pageNo[key] || 1), last);
+  _pageNo[key] = p;
+  return p;
+}
+function pageSlice(key, list){
+  const n = pageSize(key), p = pageOf(key, (list || []).length);
+  return (list || []).slice((p - 1) * n, p * n);
+}
+function setPageSize(key, n, redraw){
+  try{ localStorage.setItem('nd_ps_' + key, String(n)); }catch(e){}
+  _pageNo[key] = 1;                                  // a new size means a new page 1
+  const fn = window[redraw]; if (typeof fn === 'function') fn();
+}
+function gotoPage(key, n, redraw){
+  _pageNo[key] = n;
+  const fn = window[redraw]; if (typeof fn === 'function') fn();
+}
+// Nothing at all under one page's worth: no bar, because a pager over 7 rows is furniture.
+function pagerBar(key, total, redraw){
+  const n = pageSize(key);
+  const last = Math.max(1, Math.ceil((total || 0) / n));
+  const p = pageOf(key, total);
+  const from = total ? ((p - 1) * n + 1) : 0, to = Math.min(p * n, total || 0);
+  const sizes = _PAGE_SIZES.map(function(s){
+    return '<option value="' + s + '"' + (s === n ? ' selected' : '') + '>' + s + '</option>';
+  }).join('');
+  const btn = function(label, target, on){
+    return '<button class="btn-sm btn-ghost" ' + (on ? '' : 'disabled ')
+      + 'style="font-size:.72rem;padding:.15rem .5rem' + (on ? '' : ';opacity:.4') + '" '
+      + 'onclick="gotoPage(&quot;' + key + '&quot;,' + target + ',&quot;' + redraw + '&quot;)">'
+      + label + '</button>';
+  };
+  return '<div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;'
+       +   'padding:.5rem .1rem;font-size:.78rem;color:var(--nd-text-muted)">'
+       +   '<span>Showing <b>' + from + '–' + to + '</b> of <b>' + (total || 0) + '</b></span>'
+       +   '<span style="margin-left:auto;display:flex;align-items:center;gap:.35rem">'
+       +     btn('‹ Prev', p - 1, p > 1)
+       +     '<span>Page ' + p + ' of ' + last + '</span>'
+       +     btn('Next ›', p + 1, p < last)
+       +   '</span>'
+       +   '<span style="display:flex;align-items:center;gap:.3rem">per page'
+       +     '<select onchange="setPageSize(&quot;' + key + '&quot;,parseInt(this.value,10),'
+       +       '&quot;' + redraw + '&quot;)" style="font-size:.75rem;padding:.1rem .3rem">'
+       +     sizes + '</select></span>'
+       + '</div>';
+}
+window.pageSize = pageSize; window.pageOf = pageOf; window.pageSlice = pageSlice;
+window.setPageSize = setPageSize; window.gotoPage = gotoPage; window.pagerBar = pagerBar;
+
 function _renderClaimResults(){
  try {
-  const claims = _filterClaimsBySearch(
+  const all = _filterClaimsBySearch(
     _filterClaimsByOriginAndCustomer(_claimsCache || []));
-  if (!claims.length) {
+  if (!all.length) {
     document.getElementById('claimTableWrap').innerHTML='<div class="empty"><div class="ei">📋</div><p>No claims found</p></div>';
     return;
   }
+  const claims = pageSlice('claims', all);
 
   // Universal "how the claim came in + who's behind it" badge (source_kind from the backend).
   window._sourceBadge = window._sourceBadge || function(c){
@@ -4707,7 +4780,10 @@ function _renderClaimResults(){
         : `<button class="btn" style="font-size:.8rem;padding:.35rem .8rem;background:#a78bfa;color:#0a1628;font-weight:700${_claimSel.size?'':';opacity:.5;pointer-events:none'}" onclick="_archiveSelectedClaims(true)">🗄️ Archive selected</button>`}
       ${archView?'<span style="color:var(--nd-text-faint);font-size:.74rem">Archived claims are hidden from all working views but never deleted.</span>':''}
     </div>` : '';
-  document.getElementById('claimTableWrap').innerHTML = sw + toolbar + bodyHtml;
+  // The pager goes both above and below: above so the count is visible without scrolling, below
+  // so Next is where your eyes already are when you reach the end of the page.
+  const _pg = pagerBar('claims', all.length, '_renderClaimResults');
+  document.getElementById('claimTableWrap').innerHTML = sw + toolbar + _pg + bodyHtml + _pg;
  } catch(e){
    try{ document.getElementById('claimTableWrap').innerHTML = '<div class="empty"><p>Could not render claims — '+esc(String((e&&e.message)||e))+'</p></div>'; }catch(_){}
  }
