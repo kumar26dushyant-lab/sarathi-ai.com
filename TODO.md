@@ -522,7 +522,74 @@ week. Server already takes `LIMIT`/`OFFSET` on the claims query — this is most
   ⚠️ **No screenshot received for this one** (seven arrived, this was the eighth). Will find the
   form and check its layout at phone and desktop widths.
 
-#### 🟢 C. QUESTION FIRST, THEN CUT — the founder is asking what these are FOR
+#### ✅ SHIPPED 24 Sep evening — A1 · A2 · A3 · B4 · B5 · B6 · B7
+
+`6dbf955` and before. All deployed after 6pm IST, all verified live, 0 tracebacks.
+
+| | what it was | what it is now |
+|---|---|---|
+| **A1** | "Branch SP-GJG7BA — house account" on a colleague's claim | "🏠 House account · SP-GJG7BA · opened for TAMANNA VASHISHTHA" |
+| **A2** | chips recounted inside their own filter — "Escalated 0" about a claim that exists | counts come from the bucket; only the list narrows. **21 checks** |
+| **A3** | fee said Due after a real payment | see below — the customer **did** pay, Razorpay refunded it |
+| **B4** | Open was off the right edge of every bucket table | any row opens on click, keyboard too, controls inside keep their own click |
+| **B5** | one long scroll | **default 30**, choices 10/20/30/50, remembered. **14 checks** |
+| **B6** | each query **overwrote** the last — no history existed | `nidaan_claim_queries`, one row per ask, reply lands on its own ask. **14 checks** |
+| **B7** | Insurance Company sat on top of Disputed amount | grid arithmetic fixed; **measured** at 1280/760/360. **12 checks** |
+
+**A3, the whole story.** UTR `511846804526` from his screenshot = `pay_TfOQly6xXZmGqJ`:
+`description: QRv2 Payment` · `order_id: None` · `captured: False` · refunded **the same minute**
+· Razorpay's reason: **"The checkout order associated to the QR is closed"**.
+Staff opened pay-now, screenshotted the QR, closed the window. **A checkout QR dies with its
+window** — whoever scans it later is auto-refunded *after* being shown "Transaction Successful".
+Everyone was telling the truth.
+⚠️ **And we could never have known:** the guardian only ever looked at `captured`. Now it raises
+`bounced_payment:<id>`, and on deploy it found this one, told **the founder alone**, said it
+**once**, and went quiet — the notify policy and the new severity cadence both working on a real
+incident. **Swept 60 days: 1 occurrence in 149 payments.** Not a pattern.
+
+⚠️ **Found on the way:** six columns on `nidaan_claimant_portal` are added by `ALTER` at
+`init_db` line 2838, and the table is not created until line 3325 — so **a fresh database never
+gets them** and All Claims would fail outright on a restored schema. Production has them, which
+is why nobody could notice. Fixed in the CREATE.
+
+#### 🟢 C. ANSWERED WITH NUMBERS — the founder decides, nothing cut yet
+
+Live data, tonight:
+
+```
+not in Level-2 yet  136        live_cases     12  (sub-state: none on all 12)
+live_cases          12         pending_draft   3  (all 3 'drafting')
+escalation           6         escalation      6  (5 pending, 1 escalated)
+pending_draft        3
+```
+
+**C8 · "BEFORE LEVEL-2: Intake 0 · Review 44 · Conversion 86" — it DOES work.** Clicking one
+opens a real filtered list (the Case Board, pinned to that stage). It is not decoration.
+**But:** it puts **136 claims that are not Level-2 work** across the top of the Level-2
+workspace, above the **21** that are. That is the "overbuilt" feeling — the screen is trying to
+be both the whole line and the Level-2 desk.
+→ **Proposal:** keep the information, lose the prominence. One collapsed line — *"136 before
+Level-2 — Review 44 · Conversion 86"* — that expands on click, instead of three buttons ranked
+equally with the buckets. **Founder's call.**
+
+**C9 · The chip strip** (*3 in this bucket · 3 draft queries · 1 window closing · 3 ours to move ·
+1 short of documents · 3 missing something we need*). Six chips describing **three claims** —
+more chips than claims. And *"3 in this bucket"* repeats the number already on the sidebar button
+that was just clicked.
+→ **Proposal:** drop *"in this bucket"* (duplicate), and show a chip only when it is **non-zero
+AND actionable**. On a busy bucket they earn their place; on a bucket of three they are noise.
+
+**C10 · The sub-state tabs** — *"how well we are utilizing these internal bucket statuses?"*
+The numbers answer it: **Escalation's are carrying real information** (5 / 1). **Pending Draft
+shows four tabs for three claims all in one state.** **Live Cases has tabs and not one of its 12
+claims uses them.**
+→ **Proposal, and it is the scalable one:** do not delete anything. **Hide a sub-state tab while
+it is empty**, so tabs appear as the workflow actually starts being used and vanish when it is
+not. The bucket designer keeps every state; the screen stops showing four doors into an empty
+room. Reversible, and it makes the UI reflect how the office really works rather than how the
+design imagined it.
+
+#### 🟢 C. (original questions, for reference)
 
 **C8 · "BEFORE LEVEL-2: Intake 0 · Review 44 · Conversion 86".** *"why we are showing them? if we
 are showing them what purpose they are solving?"*
