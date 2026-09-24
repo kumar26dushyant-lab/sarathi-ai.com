@@ -422,6 +422,76 @@ BotFather + `biz.env`. Nidaan's ops bot is separate and unaffected.
 puts it in its own error message. `_scrub_secrets()` redacts by SHAPE now. That token is already
 dead; **rotate anyway**, it has been in the journal.
 
+### ⚡ PERFORMANCE — MEASURED 24 Sep, NOTHING BUILT YET
+
+Founder: *"multiple payments are happening at the same time, the application is busy ... a few
+people are using old machines, old versions ... filters should work faster in loading."*
+
+**Measured first, because the obvious suspects were all innocent.**
+
+| Layer | TTFB | Total |
+|---|---|---|
+| Our app, direct (`:8001`) | **14 ms** | 15 ms — full 1.3 MB |
+| + nginx, gzipped | **22 ms** | 51 ms — 342 KB |
+| + Cloudflare, from outside | **1,000–1,600 ms** | **1,800–2,500 ms** |
+
+**It is NOT:**
+- **the server** — load `0.03` on 2 cores, 9.4 GB free, measured at 12:28 IST on a working day
+- **the database** — 22 MB, **188 claims**, and `nidaan_claims` already has 4 indexes
+- **our code** — the app answers in `x-response-time-ms: 13`
+
+**It IS, in order of impact:**
+
+1. 🔴 **The page is 1.27 MB of HTML+JS in ONE file, and it is `no-cache`.**
+   Response headers: `Cache-Control: no-cache, must-revalidate` · `cf-cache-status: DYNAMIC` ·
+   `Content-Encoding: br`. So **Cloudflare Brotli-compresses 1.3 MB on every single page load**
+   and can never reuse the result, and the browser re-downloads 326 KB and **re-parses and
+   re-executes 1.3 MB of JavaScript every time**. That parse cost is the same on every machine
+   and it is exactly what an old laptop feels.
+   ⚠️ **AND IT IS WILDLY VARIABLE.** Four consecutive samples of the same page, same machine:
+   **0.79 s · 3.57 s · 12.70 s · 11.96 s** — plus two outright stalls earlier, 89 s and >120 s.
+   Every one of them served by an app that answered in 13 ms. **That variance is what the team
+   reports as "sometimes it is slow", and it is entirely outside our code.**
+   - **Fix:** move the JavaScript out of `nidaan_ops.html` into a versioned immutable
+     `nidaan_ops.js?v=N`. The HTML drops to a few KB (cheap to revalidate); the JS is cached by
+     Cloudflare **and** the browser, downloaded once per release, and old machines get to reuse
+     the browser's compiled-code cache.
+   - **HIGH LIFT, and genuinely risky:** 427 handlers in one global scope. Must be a pure
+     extraction — same code, same order, same scope — proven by `check:pages` + `verify-ops-buttons`
+     before and after. **Not a refactor. A move.** Do it on a quiet evening, not mid-week.
+
+2. 🔴 **Every filter change refetches the server AND rebuilds the whole panel.**
+   `applyClaimFilters()` → `loadClaims()` → re-fetches the branch list, re-renders the filter bar,
+   re-fetches `/claims` (**32.6 KB**), re-renders the entire table. **130 calls / 4.14 MB today.**
+   - ⚠️ **Two of those filters need no server at all.** `claimOriginFilter` and `claimCustFilter`
+     are applied *in the browser* on rows already loaded — the code says so in its own comment —
+     and they still trigger the full round-trip.
+   - **Fix (LOW lift, high payoff):** filter the rows already in memory; only go to the server
+     when the search text or a server-side filter actually changes. Keep the filter bar mounted
+     instead of re-rendering it.
+
+3. 🟡 **No latency measurement exists.** nginx defines a `timed` log format with
+   `rt=$request_time urt=$upstream_response_time` — **and never applies it.** The live log is
+   plain `combined`. We cannot currently answer "what was slow at 3pm yesterday".
+   - **Fix (tiny):** apply `access_log ... timed` to both sites. One line. Do this FIRST — it is
+     how we will know whether anything else worked.
+
+4. 🟡 **~4 polling requests per 45 s per open tab.** Today: `/changes` 1402, `/notifications` 667,
+   `/broadcasts` 665, `/notifications/pending-ack` 660, `/pulse` 657 ≈ **4,000 requests**.
+   The `/changes` sequence-check is a good pattern (cheap, `document.hidden`-aware); the other
+   three could ride on it instead of polling independently.
+
+5. 🟢 **`nidaan_notifications` is 26,323 rows** and growing — most of it from the alert floods.
+   Indexed on status/recipient/event, so it is not slow *yet*. Needs a retention policy before it
+   becomes the reason the bell is slow.
+
+6. 🟢 **Duplicate security headers** — nginx and the app both set `x-content-type-options`,
+   `x-frame-options`, `referrer-policy`, `strict-transport-security` (with *different* max-ages).
+   Harmless for speed, untidy, and the conflicting HSTS values should be reconciled.
+
+**Suggested order when we start:** 3 (see it) → 2 (cheap, fixes his actual complaint) → 1 (the
+big one, on a quiet evening) → 4 → 5 → 6.
+
 ### 🔴 NEXT UP — agreed with the founder, in this order
 
 1. **🔴 WhatsApp Business not replying** (23 Sep, priority). See the investigation below.
