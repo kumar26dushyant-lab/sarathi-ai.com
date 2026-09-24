@@ -422,6 +422,72 @@ BotFather + `biz.env`. Nidaan's ops bot is separate and unaffected.
 puts it in its own error message. `_scrub_secrets()` redacts by SHAPE now. That token is already
 dead; **rotate anyway**, it has been in the journal.
 
+### 📋 RAISED 24 Sep (afternoon) — deploy after 6pm IST
+
+Ground rule restated by the founder: *"whatever we are fixing/changing/enhancing, we should be
+doing it in a way we move towards making the foundation strong ... solutions should be scalable
+not temporary."*
+
+#### 🔴 A. WRONG — a screen saying something untrue
+
+**A1 · "Branch SP-GJG7BA — house account" on a staff-raised claim.** My own label, shipped this
+morning. The account row is a *house account* created for a staff referral, and calling it
+"Branch" re-introduces exactly the confusion `2bc9ce0` set out to remove. Needs to read as what
+it is — a house account standing behind a colleague's referral — **without breaking the real
+branch case.**
+
+**A2 · Escalation chips recount inside the filter.** *All 6 · Escalation Pending 5 · Escalation
+Query 0 · Escalated 1* — click "Escalation Pending" and it becomes *All 5 · … · Escalated 0*.
+The chips are counting the **filtered** set instead of the bucket, so the numbers move when you
+touch them and "Escalated" reads 0 when there is 1. Counts must come from the bucket, always.
+
+**A3 · Payment shows "Due" after a QR payment.** NP-200 (PRITI PAWAR) — *"Awaiting branch ₹499 +
+GST L2 fee"* and *"Fee not paid yet"*, but it was paid against a shared QR.
+  - **Investigate first:** which QR? A Razorpay payment link (we create those and they carry
+    `notes`) or a static personal/UPI QR (no link id, nothing to reconcile against)?
+  - Founder's ask: it should flip to paid **automatically** when the money lands; and where that
+    is impossible, let the staff member who shared the QR **attach the payment screenshot** and
+    have the system record it.
+  - ⚠️ A screenshot is **not** proof of payment and must never write the ledger on its own. Design
+    needs a verified path (Razorpay) and a **claimed-and-pending** path (screenshot → a person
+    confirms) that are visibly different. This is money; it gets the careful treatment.
+
+#### 🟡 B. AWKWARD — costs the team time every day
+
+**B4 · "Open" is off the right edge of every bucket table.** Everyone scrolls right, clicks Open,
+scrolls back. **A click anywhere on the row should open the claim.** Must not break the controls
+inside the row (Move…, the type dropdown, Query) — those keep their own click.
+
+**B5 · Pagination everywhere.** All Claims, L2 Claims, the buckets, Accounts. User picks
+**10 / 20 / 30 per page, default 30**. Founder frames it as growth: scrolling gets worse every
+week. Server already takes `LIMIT`/`OFFSET` on the claims query — this is mostly wiring.
+
+**B6 · "Send the query to complainant" needs to be a conversation, not a one-shot.**
+  - the tick-boxes should decide **who is notified**, and it should be sendable **more than once**
+  - **the whole history lives in that panel** — who sent what, to whom, on which channel, when —
+    so the next person can see the last ask before adding another.
+  - Today it warns *"A query already went to the complainant"* but shows only the most recent.
+
+**B7 · My Business → raise a claim: Insurance Company and Disputed Amount overlap.**
+  ⚠️ **No screenshot received for this one** (seven arrived, this was the eighth). Will find the
+  form and check its layout at phone and desktop widths.
+
+#### 🟢 C. QUESTION FIRST, THEN CUT — the founder is asking what these are FOR
+
+**C8 · "BEFORE LEVEL-2: Intake 0 · Review 44 · Conversion 86".** *"why we are showing them? if we
+are showing them what purpose they are solving?"*
+
+**C9 · The chip strip:** *3 in this bucket · 3 draft queries · 1 window closing · 3 ours to move ·
+1 short of documents · 3 missing something we need.* Same question.
+
+**C10 · The sub-filters:** *All 3 · Drafting 3 · With Medical Officer 0 · Draft Query 0 ·
+Approved 0.* *"how well we are utilizing these internal bucket statuses and filters? ... how
+better we can manage these statuses/filters without overbuilding but keep things simple?"*
+
+→ **These three are one question: is the bucket screen earning its complexity?** The answer should
+come from evidence — which of these is ever clicked — not from my taste. **Nothing gets deleted
+until we can say what it was for and who used it.** Proposal to follow, not a unilateral cut.
+
 ### ⚡ PERFORMANCE — MEASURED 24 Sep, NOTHING BUILT YET
 
 Founder: *"multiple payments are happening at the same time, the application is busy ... a few
