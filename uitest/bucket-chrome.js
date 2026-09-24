@@ -105,5 +105,28 @@ t('...closed by default', /<details class="l2pre">/.test(OPS) && !/<details clas
 t('...and the fold is styled in both themes (variables only, no literals)',
   /\.l2pre>summary\{[^}]*var\(--nd-text-muted\)/.test(OPS));
 
-console.log('\n' + (failed ? `${failed} failed` : 'tabs appear when used, chips when needed, buckets first'));
+// ── the step picker ─────────────────────────────────────────────────────────
+// Founder, 25 Sep: "where I can see or find the option to move in internal bucket status?"
+// The tabs were only ever FILTERS. The mover is this picker on the claim — and it was hidden for
+// Pending Draft, whose four configured steps left two ('with_mo', 'approved') that nothing in
+// the codebase could set. Configured and unreachable.
+const pickSrc = OPS.slice(OPS.indexOf('// The step picker is gone only where'),
+                          OPS.indexOf('_escPanel(st, id)'));
+t('the step picker is shown for Pending Draft again',
+  pickSrc.length > 0 && !/st\.bucket !== 'pending_draft'/.test(pickSrc), pickSrc.slice(0, 200));
+t('...and still hidden for Escalation, where the work decides the step',
+  /st\.bucket !== 'escalation'/.test(pickSrc));
+t('...and says it changes the step only, not the bucket',
+  /the claim stays where it is/.test(pickSrc));
+
+// The automatic state must not be offered by hand, but must still show when a claim is in it —
+// otherwise the dropdown silently disagrees with the row it is sitting on.
+const autoSrc = OPS.slice(OPS.indexOf('const _autoSub ='), OPS.indexOf('// Rich-text fields'));
+t('the query flow keeps ownership of draft_query',
+  /_autoSub\s*=\s*\{pending_draft:\s*\['draft_query'\]\}/.test(autoSrc), autoSrc.slice(0, 160));
+t('...but it still appears when the claim is already in it',
+  /_autoFor\.indexOf\(s\.sub_key\) < 0 \|\| st\.sub === s\.sub_key/.test(autoSrc));
+
+console.log('\n' + (failed ? `${failed} failed`
+  : 'tabs appear when used, chips when needed, buckets first, steps settable'));
 process.exit(failed ? 1 : 0);

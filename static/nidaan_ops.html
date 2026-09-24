@@ -14874,10 +14874,18 @@ function l2CaseRender(rem){
     return;
   }
 
-  const subOpts = (st.substates || []).map(function(s){
-    return '<option value="' + s.sub_key + '"' + (st.sub === s.sub_key ? ' selected' : '') + '>'
-      + esc(s.name_en) + '</option>';
-  }).join('');
+  // Steps the APP sets, which a person must not pick by hand: choosing "Draft Query" without
+  // raising one would label a claim as waiting for an answer nobody asked for.
+  // It still SHOWS when the claim is already in it - otherwise the dropdown would silently
+  // disagree with the row it is sitting on.
+  const _autoSub = {pending_draft: ['draft_query']};
+  const _autoFor = _autoSub[st.bucket] || [];
+  const subOpts = (st.substates || [])
+    .filter(function(s){ return _autoFor.indexOf(s.sub_key) < 0 || st.sub === s.sub_key; })
+    .map(function(s){
+      return '<option value="' + s.sub_key + '"' + (st.sub === s.sub_key ? ' selected' : '') + '>'
+        + esc(s.name_en) + '</option>';
+    }).join('');
 
   // Rich-text fields - the two drafts - are drawn separately below as two big boxes side by
   // side, the ClaimShield way. Everything else is the ordinary list.
@@ -15048,14 +15056,21 @@ function l2CaseRender(rem){
     +   '<div style="font-size:.84rem;color:var(--nd-text-secondary)">'
     +   '<b>' + esc((st.guide || {}).what || '') + '</b><br>' + esc((st.guide || {}).do || '')
     +   '<br><span style="color:var(--nd-warning-text)">⚠ ' + esc((st.guide || {}).watch || '') + '</span></div></div>'
-    // The step picker is gone where the work itself decides the step (founder, 19 Sep).
-    //   Escalation   — the escalation DATE makes it Escalated; the insurer's reply does the rest.
-    //   Pending Draft — a draft query changes the status without moving or re-labelling anything.
-    // Buckets like Lokpal keep it: their steps are genuine choices a person makes (which annexure
-    // has come back), not facts already recorded elsewhere.
-    + (((st.substates || []).length && st.bucket !== 'escalation' && st.bucket !== 'pending_draft')
+    // The step picker is gone only where EVERY step is decided by the work itself (founder,
+    // 19 Sep). That is Escalation: the escalation DATE makes it Escalated and the insurer's
+    // reply does the rest, so there is nothing for a person to choose.
+    //
+    // Pending Draft was excluded for the same reason and should not have been. Its stated cause
+    // was "a draft query changes the status without moving or re-labelling anything" - true of
+    // `draft_query`, and of nothing else in that bucket. With the picker hidden, NOTHING
+    // anywhere could set "With Medical Officer / Advocate" or "Approved": two steps configured
+    // and unreachable, which is what the founder ran into on 25 Sep. The picker is back, minus
+    // the one state the query flow owns (filtered out of subOpts above).
+    + (((st.substates || []).length && st.bucket !== 'escalation')
         ? '<div class="l2fld"><label>Step inside this bucket</label>'
-          + '<select onchange="l2SetSub(this.value,this)">' + subOpts + '</select></div>' : '')
+          + '<select onchange="l2SetSub(this.value,this)">' + subOpts + '</select>'
+          + '<div class="hint">Where this claim has got to inside ' + esc(st.bucket_name || 'this bucket')
+          + '. It changes the step only — the claim stays where it is.</div></div>' : '')
     + ((st.bucket === 'escalation') ? _escPanel(st, id) : '')
     // Every paper on the claim, right above the fields they are read into. Each opens in its own
     // tab, so the gist being typed below is never lost to go and look at one.
