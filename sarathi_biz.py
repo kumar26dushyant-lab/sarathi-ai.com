@@ -14556,6 +14556,33 @@ async def ops_flags_list(request: Request):
     return {"flags": await ntasks.list_flags()}
 
 
+@app.get("/nidaan/ops/api/notifications/registry")
+async def ops_notification_registry(request: Request, lang: str = "en"):
+    """Every notification the app can send, what it is, who gets it, and how.
+
+    Founder, 23 Sep: "notification setup from superadmin itself ... new notifications
+    auto-registering". This is the seeing half. Before it, 75 event keys were spread across 12
+    modules with nothing able to list them - so nobody could tell, on the night of 23 Sep, that
+    three separate paths were each choosing their own cadence.
+
+    Super-admin only: it is a complete map of who hears what, which is worth keeping to the
+    people who set it. Read-only for now - the switches need the founder's answer on whether
+    control is per-event or per-event-per-role.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    import biz_nidaan_notify_registry as _reg
+    import biz_nidaan_notify_policy as _pol
+    return {"events": _reg.describe(lang),
+            "groups": _reg.GROUPS,
+            "lock_reason": _reg.LOCK_REASON,
+            # The routing rules in the policy's own words - the thing summary() was written for
+            # and never connected to anything.
+            "policy": _pol.summary(),
+            "editable": False}
+
+
 @app.post("/nidaan/ops/api/system-flags")
 async def ops_flags_set(body: _SystemFlagReq, request: Request):
     if not _is_nidaan_host(request): raise HTTPException(404)

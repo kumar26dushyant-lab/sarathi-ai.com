@@ -11605,7 +11605,88 @@ async function loadWorkflowSettings(){
   panel.innerHTML = html;
   renderTaskCatManager(cats);
   try { plPurposeChange(); loadPaymentLinks(); } catch(e){}
+  // Appended rather than built into `html`: it loads on its own, so a slow or failed fetch
+  // cannot hold up the settings the founder came here for.
+  loadNotificationRegistry();
 }
+
+// ── Every notification this app can send ─────────────────────────────────────
+// The list nobody had. Read-only until the founder answers how the switches should work; a
+// toggle that silently does nothing is worse than no toggle.
+async function loadNotificationRegistry(){
+  const panel = document.getElementById('panel-settings');
+  if (!panel) return;
+  const box = document.createElement('div');
+  box.className = 'card';
+  box.style.marginTop = '1rem';
+  box.innerHTML = '<div class="section-title" style="font-size:1rem">🔔 Notifications</div>'
+    + '<div style="padding:.6rem 0;color:var(--nd-text-muted);font-size:.85rem">Loading…</div>';
+  panel.appendChild(box);
+
+  let d;
+  try{
+    const r = await API('/notifications/registry?lang=' + (localStorage.getItem('nidaan_lang')==='hi'?'hi':'en'));
+    if (!r.ok) throw 0;
+    d = await r.json();
+  }catch(e){
+    box.innerHTML = '<div class="section-title" style="font-size:1rem">🔔 Notifications</div>'
+      + '<div style="padding:.6rem 0;color:var(--nd-danger-text);font-size:.85rem">Could not load the notification list.</div>';
+    return;
+  }
+
+  const ev = d.events || [];
+  // Group in the order the server sent them - it is already the order a person looks in.
+  const groups = [];
+  ev.forEach(function(e){
+    let g = groups.find(function(x){ return x.key === e.group; });
+    if (!g){ g = {key: e.group, label: e.group_label || e.group, rows: []}; groups.push(g); }
+    g.rows.push(e);
+  });
+  const locked = ev.filter(function(e){ return e.locked; }).length;
+
+  box.innerHTML =
+      '<div class="section-hdr" style="margin-bottom:.5rem"><div>'
+    +   '<div class="section-title" style="font-size:1rem">🔔 Notifications</div>'
+    +   '<div class="section-sub">Every message this system can send, who receives it, and on '
+    +   'which channel. ' + ev.length + ' in total.</div></div></div>'
+    + '<div style="font-size:.78rem;color:var(--nd-text-muted);margin-bottom:.7rem">'
+    +   '🔒 ' + locked + ' of them cannot be switched off — ' + esc(((d.lock_reason||{}).en)||'') + '<br>'
+    +   'Staff are always reached on Telegram and the dashboard bell. Email is used only where '
+    +   'it says so below.</div>'
+    + groups.map(function(g){
+        return '<div style="margin-bottom:.9rem">'
+          + '<div style="font-size:.74rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;'
+          + 'color:var(--nd-text-faint);margin-bottom:.3rem">' + esc(g.label) + '</div>'
+          + '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:.8rem">'
+          + '<thead><tr style="background:var(--nd-bg-surface-2)">'
+          + '<th style="padding:.4rem .55rem;text-align:left">What happened</th>'
+          + '<th style="padding:.4rem .55rem;text-align:left">Who is told</th>'
+          + '<th style="padding:.4rem .55rem;text-align:left">How</th>'
+          + '<th style="padding:.4rem .55rem;text-align:center">Can be turned off</th>'
+          + '</tr></thead><tbody>'
+          + g.rows.map(function(e){
+              return '<tr style="border-top:1px solid var(--nd-border)">'
+                + '<td style="padding:.45rem .55rem">' + esc(e.label)
+                +   '<div style="font-size:.68rem;color:var(--nd-text-faint);font-family:monospace">'
+                +   esc(e.key) + '</div></td>'
+                + '<td style="padding:.45rem .55rem;color:var(--nd-text-secondary)">' + esc(e.who) + '</td>'
+                + '<td style="padding:.45rem .55rem;color:var(--nd-text-secondary)">' + esc(e.channels) + '</td>'
+                + '<td style="padding:.45rem .55rem;text-align:center">'
+                +   (e.locked
+                      ? '<span title="' + esc(((d.lock_reason||{}).en)||'') + '" style="color:var(--nd-text-faint)">🔒 no</span>'
+                      : '<span style="color:var(--nd-text-muted)">yes</span>')
+                + '</td></tr>';
+            }).join('')
+          + '</tbody></table></div></div>';
+      }).join('')
+    + '<div style="font-size:.74rem;color:var(--nd-text-faint);border-top:1px dashed var(--nd-border);padding-top:.5rem">'
+    +   'The switches are not live yet — two decisions are needed first: whether control is per '
+    +   'notification or per notification <b>per role</b>, and whether anything beyond money, '
+    +   'security and system health should be impossible to switch off. '
+    +   'A new notification cannot be added without appearing on this list: the build refuses it.'
+    + '</div>';
+}
+window.loadNotificationRegistry = loadNotificationRegistry;
 
 // ── Payment Links (super-admin generator) ────────────────────────────────────
 function plPurposeChange(){
