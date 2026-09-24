@@ -2152,9 +2152,14 @@ async def set_payment_link_account(plink_id: str, account_id: int) -> None:
 
 
 async def list_payment_links(limit: int = 100, created_by_type: str = "",
-                             created_by_id: str = "") -> list[dict]:
+                             created_by_id: str = "", claim_id: int = 0) -> list[dict]:
     q = "SELECT * FROM nidaan_payment_links"
     conds, params = [], []
+    # Per claim, so the claim itself can answer "did anybody share a way to pay this, and did
+    # the customer ever use it" - the question that had to be put to Razorpay's API by hand on
+    # 24 Sep, while a staff member and a screen disagreed about whether a fee had been paid.
+    if claim_id:
+        conds.append("claim_id=?"); params.append(int(claim_id))
     if created_by_type:
         conds.append("created_by_type=?"); params.append(created_by_type)
     if created_by_id:

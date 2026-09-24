@@ -4055,6 +4055,12 @@ function _l2HandoverControls(c){
             + 'paid, the fee marks itself paid." '
             + 'onclick="event.stopPropagation();l2ShareFeeLink(' + c.claim_id + ',this)">'
             + '\ud83d\udd17 Share fee link</button>'
+            // "We sent a QR days ago" versus "it says Due" is an argument nobody can settle from
+            // this screen. This is the button that settles it.
+            + ' <button class="btn-sm btn-ghost" style="font-size:.66rem;padding:.1rem .4rem" '
+            + 'title="Was a link or QR ever shared for this claim, and did the customer try to '
+            + 'pay it?" onclick="event.stopPropagation();payAttempts(' + c.claim_id + ')">'
+            + '\ud83d\udd0e Was it shared?</button>'
           : '');
   }
   const done = !!c.docs_complete_at;
@@ -11792,7 +11798,13 @@ function _plShareOverlay(url, amount, name, phone){
 // webhook attaches the money to this claim and the fee marks itself paid. A QR shared from
 // anywhere else arrives with nothing to match it against, and the claim reads "Fee not paid yet"
 // until somebody notices - which is what happened to NP-200.
+let _feeLinkBusy = false;
 async function l2ShareFeeLink(claimId, btn){
+  // SIX orders were created for claim 194 inside the same minute, and every one is a real
+  // Razorpay order somebody has to reconcile later while the customer can only ever pay one.
+  // The guard is on the ACTION, not just the button: a second row carries its own button.
+  if (_feeLinkBusy) return;
+  _feeLinkBusy = true;
   const was = btn ? btn.textContent : '';
   if (btn){ btn.disabled = true; btn.textContent = '\u2026'; }
   try{
@@ -11808,10 +11820,90 @@ async function l2ShareFeeLink(claimId, btn){
   }catch(e){
     ndUI.toast('Could not make the link.', 'error');
   }finally{
+    _feeLinkBusy = false;
     if (btn){ btn.disabled = false; btn.textContent = was; }
   }
 }
 window.l2ShareFeeLink = l2ShareFeeLink;
+
+// Every way to pay that has been made for this claim, and what the customer did with it.
+//
+// The number that matters is ATTEMPTS. A QR with 0 attempts was never scanned - which is a
+// completely different conversation from "the payment failed", and the two were
+// indistinguishable from this screen until now.
+async function payAttempts(claimId){
+  openModal('\ud83d\udd0e Was a payment ever shared for NP-' + claimId + '?',
+            '<div id="paBody" style="font-size:.85rem">Checking with Razorpay\u2026</div>',
+            [{label:'Close', cls:'btn-ghost', fn: closeModal}], false);
+  let d;
+  try{
+    const r = await API('/claims/' + claimId + '/payment-attempts');
+    if (!r.ok) throw 0;
+    d = await r.json();
+  }catch(e){
+    const b = document.getElementById('paBody');
+    if (b) b.innerHTML = '<span style="color:var(--nd-danger-text)">Could not check just now.</span>';
+    return;
+  }
+  const box = document.getElementById('paBody');
+  if (!box) return;
+  const when = function(t){
+    try{ return fmtDate(typeof t === 'number' ? new Date(t*1000).toISOString() : t); }
+    catch(e){ return ''; }
+  };
+  const orders = d.orders || [], links = d.links || [];
+  let html = '';
+  if (d.paid){
+    html += '<div class="l2ban" style="background:var(--nd-success-soft);border:1px solid '
+          + 'rgba(34,197,94,.5);color:var(--nd-success-text)">\u2705 This fee IS paid and '
+          + 'recorded.</div>';
+  }
+  if (!orders.length && !links.length){
+    html += '<div class="l2ban amber">Nothing has ever been shared for this claim from our '
+          + 'system \u2014 no payment link, no QR. If a customer was sent a QR, it did not come '
+          + 'from here, so no payment against it can reach this claim.</div>';
+  } else {
+    const tried = orders.reduce(function(a, o){ return a + (o.attempts || 0); }, 0);
+    if (!d.paid && !tried){
+      html += '<div class="l2ban amber">A way to pay <b>was</b> shared \u2014 and '
+            + '<b>nobody has tried to use it.</b> Razorpay records <b>zero</b> payment attempts. '
+            + 'That is not a failed payment: the QR was never scanned. If the customer says they '
+            + 'paid, they paid somewhere else.</div>';
+    }
+    if (orders.length){
+      html += '<div style="font-weight:700;margin:.6rem 0 .3rem">QR / pay-now, made ' + orders.length
+            + ' time' + (orders.length > 1 ? 's' : '') + '</div>'
+            + '<table style="width:100%;border-collapse:collapse;font-size:.8rem">'
+            + '<thead><tr style="background:var(--nd-bg-surface-2)">'
+            + '<th style="padding:.3rem .5rem;text-align:left">Made</th>'
+            + '<th style="padding:.3rem .5rem">Amount</th>'
+            + '<th style="padding:.3rem .5rem">Tried to pay</th>'
+            + '<th style="padding:.3rem .5rem">Result</th></tr></thead><tbody>'
+            + orders.map(function(o){
+                return '<tr style="border-top:1px solid var(--nd-border)">'
+                  + '<td style="padding:.3rem .5rem">' + esc(when(o.created_at)) + '</td>'
+                  + '<td style="padding:.3rem .5rem;text-align:center">\u20b9' + (o.amount || 0) + '</td>'
+                  + '<td style="padding:.3rem .5rem;text-align:center;font-weight:700;color:'
+                  +   (o.attempts ? 'var(--nd-text-primary)' : 'var(--nd-warning-text)') + '">'
+                  +   (o.attempts ? (o.attempts + '\u00d7') : 'never') + '</td>'
+                  + '<td style="padding:.3rem .5rem;text-align:center">' + esc(o.status || '') + '</td>'
+                  + '</tr>';
+              }).join('') + '</tbody></table>';
+    }
+    if (links.length){
+      html += '<div style="font-weight:700;margin:.7rem 0 .3rem">Payment links shared</div>'
+            + links.map(function(l){
+                return '<div style="padding:.25rem 0;border-top:1px solid var(--nd-border)">'
+                  + esc(when(l.created_at)) + ' \u00b7 \u20b9' + (l.amount || 0)
+                  + ' \u00b7 <b>' + esc(l.status || 'created') + '</b>'
+                  + (l.by ? ' <span style="color:var(--nd-text-faint)">by ' + esc(l.by) + '</span>' : '')
+                  + '</div>';
+              }).join('');
+    }
+  }
+  box.innerHTML = html;
+}
+window.payAttempts = payAttempts;
 
 async function loadPaymentLinks(){
   const box = document.getElementById('plList'); if(!box) return;

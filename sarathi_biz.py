@@ -10753,6 +10753,59 @@ async def ops_my_l2_payment_link(claim_id: int, request: Request):
     return {"short_url": link.get("short_url"), "fee": fee, "claim_id": claim_id}
 
 
+@app.get("/nidaan/ops/api/claims/{claim_id}/payment-attempts")
+async def ops_claim_payment_attempts(claim_id: int, request: Request):
+    """Has anybody been given a way to pay this claim's fee, and did they ever use it?
+
+    Founder, 24 Sep: staff insisted they had generated a QR and it was paid; the claim said Due.
+    Both were true. Razorpay's ORDERS api held the answer - three orders for that claim, all
+    `attempts=0`, meaning nobody ever TRIED to pay against the QR. Not a failure: not one
+    attempt.
+
+    That answer should not require somebody to query an API by hand, so the claim carries it.
+    Read-only, and it asks Razorpay for the live attempt count because our own tables only know
+    what we created, not what the customer did with it.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    links = await nidaan.list_payment_links(limit=20, claim_id=claim_id)
+    paid = False
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+        r = await (await _c.execute(
+            "SELECT 1 FROM nidaan_payments WHERE claim_id=? AND status='captured' LIMIT 1",
+            (claim_id,))).fetchone()
+        paid = bool(r)
+    # Orders are what the "pay now" button makes; links are what the share button makes. Both
+    # end up at Razorpay, and only Razorpay knows whether the customer got as far as trying.
+    orders: list = []
+    kid, sec = _nidaan_rzp_id(), _nidaan_rzp_secret()
+    if kid and sec:
+        try:
+            import httpx as _hx
+            since = int(_time.time()) - 30 * 86400
+            async with _hx.AsyncClient(timeout=15, auth=(kid, sec)) as _cl:
+                _r = await _cl.get("https://api.razorpay.com/v1/orders",
+                                   params={"from": since, "to": int(_time.time()), "count": 100})
+                for o in ((_r.json() or {}).get("items") or []):
+                    if str((o.get("notes") or {}).get("claim_id") or "") != str(claim_id):
+                        continue
+                    orders.append({
+                        "id": o.get("id"), "created_at": o.get("created_at"),
+                        "amount": int(o.get("amount") or 0) // 100,
+                        "status": o.get("status"),
+                        # The number that answers the argument.
+                        "attempts": int(o.get("attempts") or 0)})
+        except Exception as e:  # noqa: BLE001 — the claim must open even if Razorpay is slow
+            logger.info("payment attempts lookup failed for claim %s: %s", claim_id, e)
+    return {"claim_id": claim_id, "paid": paid,
+            "links": [{"short_url": l.get("short_url"), "status": l.get("status"),
+                       "created_at": l.get("created_at"),
+                       "by": l.get("created_by_type"), "amount": (l.get("amount_paise") or 0) // 100}
+                      for l in links],
+            "orders": sorted(orders, key=lambda o: o.get("created_at") or 0, reverse=True)}
+
+
 # ── Plans & billing config (SUPER-ADMIN only — sensitive) ─────────────────────
 @app.get("/nidaan/api/content")
 @limiter.limit("60/minute")
