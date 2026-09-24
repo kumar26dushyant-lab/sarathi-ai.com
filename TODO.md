@@ -348,6 +348,64 @@ cost a day with Razorpay support.
   5. **25 outbound `failed` on 22 Sep with a BLANK error field** — the reason was never recorded.
      Same silent-failure pattern; worth closing.
 
+### 🟡 24 Sep — NOTIFICATION REGISTER: THE LIST NOBODY HAD — `b889a81`
+
+**75 event keys across 12 modules, and nothing anywhere could list them.** That is the whole
+reason nobody could see, the night of 23 Sep, that three separate paths were each choosing their
+own cadence. `notify_policy.summary()` claims in its own docstring to be *"surfaced in ops so the
+rules are visible, not folklore"* — **it was wired to nothing.**
+
+- `biz_nidaan_notify_registry.py` — all 75 named in **both languages**, with who receives each
+  and whether it may ever be switched off. **Not a second copy of the routing rules:** whether an
+  event emails is still decided by `notify_policy` and the register *asks* it. Two sources of
+  truth for one question is how the "who gets notified" panel came to show ticks that meant
+  nothing.
+- **Auto-registration is ENFORCED, not hoped for.** `verify-notify-registry.py` greps for
+  `event_key="…"` and fails the build on any key with no entry — and refuses an entry for a
+  notification that does not exist, because a toggle that controls nothing is worse than no
+  toggle. Folded into `check:all`. **Proven both ways:** an unregistered notification fails it
+  and names the file; unlocking `payment.failed` fails it.
+- **Money, security and health are LOCKED**, and say why in both languages.
+- Settings shows the list, grouped, key under each name. **Read-only on purpose.**
+
+🟢 **TWO ANSWERS NEEDED BEFORE THE SWITCHES GO LIVE:**
+  1. Control **per notification**, or per notification **per role**? (e.g. super-admins keep
+     `claim.status`, team members turn it off)
+  2. Beyond money / security / system health — anything else that must **never** be silenceable?
+
+⚠️ **Latent weakness found in the audit, not yet fixed:** the alarm policy's repeat-hold
+(`_repeat_held`) compares messages **word for word**, and the guardian's body contained *"Said 9
+times… Said 10 times…"* — so the text changed every time and **the hold never matched**. The new
+cadence bounds it at source; the shared gate is still defeatable by any counter in a message
+body. Belongs with the switches work.
+
+### ✅ 24 Sep — SERVICE CHECKS SAY "IS IT WORKING", NOT "IS THERE WORK" — `7c7f47c`
+
+Founder: *"it's showing whatsapp not replied, that should not be here."* The panel had two states,
+so "1 of 4 still waiting for a reply", "11 branches with no WhatsApp number" and "the database is
+unreachable" all rendered identically and all counted as failing subsystems. **Red that is
+usually nothing is how a real outage gets scrolled past.**
+Three states now — `down` (the only thing that counts) / `attention` (amber, and says WHERE) /
+`ok`. The WhatsApp check keeps its teeth: if **nobody** who wrote got an answer, that is a dead
+bot, still `down`.
+
+**And severity now means what he said it means.** 11 of 14 findings were `critical` — including
+*"we found a payment the webhook missed and already fixed it"*, a success reported as an
+emergency. critical backs off (10m→30m→2h→6h, never silent) · warn twice then quiet · info once
+ever. ⚠️ The due query was `COALESCE(next_alert_at,'') <= now` and `''` ≤ every timestamp — so
+NULL, meaning *"say no more"*, would have made an incident **permanently due**. Silence as an
+infinite loop. `_tools/test_alert_cadence.py` (19) exercises the real SQL and proves it.
+
+### ✅ 24 Sep — HEALTH ALERT: 96 EMAILS/DAY → 2 — `058068c`
+`if critical > 0: send`, every 15 min, no state. 97 identical "Master bot not running" emails in
+24h. Now: mails when the problem CHANGES, restates every 12h, one all-clear when green.
+**Verified live:** `Health: 1 critical, unchanged — not emailing again`, no email sent.
+⚠️ **The alert is TRUE** — `@SarathiBizBot`'s token is **rejected by Telegram**. Needs rotating in
+BotFather + `biz.env`. Nidaan's ops bot is separate and unaffected.
+🔒 **A live bot token was being written to journald in plaintext** on every restart — the library
+puts it in its own error message. `_scrub_secrets()` redacts by SHAPE now. That token is already
+dead; **rotate anyway**, it has been in the journal.
+
 ### 🔴 NEXT UP — agreed with the founder, in this order
 
 1. **🔴 WhatsApp Business not replying** (23 Sep, priority). See the investigation below.
