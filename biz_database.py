@@ -2817,8 +2817,16 @@ async def init_db():
             " status TEXT DEFAULT 'open',"
             " alert_count INTEGER DEFAULT 0, next_alert_at TIMESTAMP,"
             " acked_by INTEGER, acked_by_name TEXT DEFAULT '', acked_at TIMESTAMP,"
+            # Silenced by a person. Separate from acked on purpose: "I am on it" and "stop
+            # telling me" are different statements, and the second one has to be answerable
+            # without closing an incident that is still true.
+            " muted_by INTEGER, muted_by_name TEXT DEFAULT '', muted_at TIMESTAMP,"
             " resolved_at TIMESTAMP)",
             "CREATE INDEX IF NOT EXISTS idx_pay_inc_status ON nidaan_pay_incidents (status, next_alert_at)",
+            # For databases that already have the table.
+            "ALTER TABLE nidaan_pay_incidents ADD COLUMN muted_by INTEGER",
+            "ALTER TABLE nidaan_pay_incidents ADD COLUMN muted_by_name TEXT DEFAULT ''",
+            "ALTER TABLE nidaan_pay_incidents ADD COLUMN muted_at TIMESTAMP",
             "INSERT OR IGNORE INTO nidaan_change_seq (id, seq) VALUES (1, 0)",
             "CREATE TRIGGER IF NOT EXISTS trg_chg_nidaan_claims_insert AFTER INSERT ON nidaan_claims BEGIN UPDATE nidaan_change_seq SET seq = seq + 1 WHERE id = 1; END",
             "CREATE TRIGGER IF NOT EXISTS trg_chg_nidaan_claims_update AFTER UPDATE ON nidaan_claims BEGIN UPDATE nidaan_change_seq SET seq = seq + 1 WHERE id = 1; END",

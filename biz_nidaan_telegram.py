@@ -1454,6 +1454,30 @@ async def _handle_callback(cq: dict) -> None:
         return
     lang = _lang(staff)
     try:
+        if data.startswith("pgm:"):
+            # "Stop telling me" on a payment guardian alert. Different from Seen: that one says
+            # somebody is on it and buys time, this one ends the interruption. The incident stays
+            # OPEN and on the Payment Health screen either way - what stops is the message.
+            if (staff.get("role") or "") != "super_admin":
+                await ack("Only a super admin can silence this"); return
+            try:
+                _inc = int(data.split(":")[1])
+            except Exception:
+                await ack(); return
+            try:
+                import biz_nidaan_pay_guard as _pg
+                res = await _pg.mute(_inc, staff["staff_id"], staff.get("name") or "")
+                if res.get("already") == "resolved":
+                    await ack("That one is already resolved")
+                elif res.get("ok"):
+                    await ack("Silenced — it stays on Payment Health until it is fixed")
+                else:
+                    await ack(res.get("error") or "Could not silence it")
+            except Exception as e:  # noqa: BLE001
+                logger.warning("guardian mute failed: %s", e)
+                await ack("Could not silence it — please open the portal")
+            return
+
         if data.startswith("pgk:"):
             # "Seen" on a payment guardian alert: stops the repeats for every super admin.
             if (staff.get("role") or "") != "super_admin":

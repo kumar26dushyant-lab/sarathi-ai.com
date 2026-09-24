@@ -7318,6 +7318,27 @@ async def ops_payment_incident_ack(inc_id: int, request: Request):
     return res
 
 
+@app.post("/nidaan/ops/api/payments/incidents/{inc_id}/mute")
+@limiter.limit("30/minute")
+async def ops_payment_incident_mute(inc_id: int, request: Request):
+    """"Stop telling me" from the dashboard — the same act as the Telegram button.
+
+    Founder, 25 Sep: "there has to be a button also to stop these notifications on telegram and
+    on dashboard bell icon". Seen says somebody is on it and buys time; this ends the
+    interruption. Neither closes the incident: it stays open, listed and counted on Payment
+    Health. What stops is the message, and it is recorded against a name.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "super_admin")
+    import biz_nidaan_pay_guard as _pg
+    res = await _pg.mute(inc_id, caller.get("staff_id"), _actor_label(caller))
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("error") or "Could not silence that")
+    await _ops_audit(request, "payment.incident_mute", "incident", str(inc_id), res.get("title", ""))
+    return res
+
+
 @app.post("/nidaan/ops/api/payments/guardian/run")
 @limiter.limit("6/minute")
 async def ops_payment_guardian_run(request: Request):

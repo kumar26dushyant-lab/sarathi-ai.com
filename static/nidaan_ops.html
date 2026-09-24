@@ -8653,10 +8653,22 @@ async function _pgRender(where){
       + '<div class="pg-m">First seen ' + esc(String(i.first_seen).slice(0, 16))
       +   ' · said ' + (i.alert_count || 0) + ' time' + ((i.alert_count || 0) === 1 ? '' : 's')
       +   (acked ? ' · 👀 seen by <b>' + esc(i.acked_by_name || '') + '</b> '
-                 + esc(String(i.acked_at || '').slice(0, 16)) + ' — returns in 2h if not fixed' : '')
+                 + esc(String(i.acked_at || '').slice(0, 16))
+                 // Only a critical one keeps coming back. Saying "returns in 2h" about a warning
+                 // that has already said its piece would be a promise the code does not keep.
+                 + (i.severity === 'critical' ? ' — returns in 2h if not fixed' : '') : '')
       + '</div>'
       + (acked ? '' : '<button class="btn-sm btn-primary" onclick="_pgAck(' + i.inc_id + ',this)">'
                  + '👀 Seen — I\'m on it</button>')
+      // Offered even once acked - that is the case he actually hit. He had tapped Seen hours
+      // earlier; at 3am the only thing he wanted was for it to stop.
+      + (i.muted_at
+          ? '<div style="font-size:.74rem;color:var(--nd-text-faint);margin-top:.3rem">🔕 silenced by '
+            + esc(i.muted_by_name || 'someone') + ' ' + esc(String(i.muted_at).slice(0, 16))
+            + ' — still open here until it is fixed</div>'
+          : '<button class="btn-sm btn-ghost" style="margin-left:.35rem" '
+            + 'title="Stop the Telegram and bell messages. It stays on this screen until it is fixed." '
+            + 'onclick="_pgMute(' + i.inc_id + ',this)">🔕 Stop telling me</button>')
       + '</div>';
   }).join('');
 }
@@ -8670,7 +8682,26 @@ async function _pgAck(id, btn){
     _pgRender('pgBox');
   }catch(e){ ndUI.toast('Could not record.', 'error'); if (btn){ btn.disabled = false; } }
 }
-window._pgAck = _pgAck; window._pgRender = _pgRender;
+async function _pgMute(id, btn){
+  // Deliberately a confirm: it is the one action here that makes a true thing stop speaking,
+  // and somebody tapping it half-asleep should be told what they are turning off.
+  if (!confirm('Stop the Telegram and bell messages about this?\n\n'
+             + 'It stays on Payment Health until it is actually fixed — only the messages stop, '
+             + 'and your name is recorded against that.')) return;
+  if (btn){ btn.disabled = true; btn.textContent = 'Silencing…'; }
+  try{
+    const r = await API('/payments/incidents/' + id + '/mute', {method:'POST'});
+    if (!r.ok){
+      const e = await r.json().catch(()=>({}));
+      ndUI.toast(_extractErr(e, 'Could not silence it'), 'error');
+      if (btn){ btn.disabled = false; btn.textContent = '🔕 Stop telling me'; }
+      return;
+    }
+    ndUI.toast('Silenced. It stays on this screen until it is fixed.', 'success');
+    _pgRender('pgBox');
+  }catch(e){ ndUI.toast('Could not silence it.', 'error'); if (btn){ btn.disabled = false; } }
+}
+window._pgAck = _pgAck; window._pgMute = _pgMute; window._pgRender = _pgRender;
 
 async function loadRevenue() {
   const el = document.getElementById('panel-revenue');

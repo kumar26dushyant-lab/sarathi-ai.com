@@ -42,10 +42,24 @@ THE CHECKS (each one caught, or would have caught, a real bug)
   12 guardian_silent     (checked from the web processes) this guardian has not run for 15 minutes.
 
 ALERTS
-  Telegram to every super admin with a "👀 Seen" button, plus the dashboard bell. Unseen, it
-  repeats every 10 minutes for as long as it takes. The first tap records who saw it, stops the
-  repeats for everyone, and tells the others. If it is still not fixed 2 hours later, it speaks up
-  again (founder's rule). When the fact stops being true, it says so once and closes itself.
+  Telegram to every super admin, plus the dashboard bell, with two buttons - and they mean
+  different things:
+    👀 Seen — I'm on it      somebody has it in hand; the repeats stop for everyone
+    🔕 Stop telling me       end the messages entirely
+
+  HOW OFTEN IT SPEAKS is decided by severity, not by persistence (founder, 24 Sep: "1-2 alerts
+  are fine now, not in every 5 min continuously"):
+    critical  10 min, 30 min, 2h, then every 6h - backs off, never goes silent
+    warn      once, once more a day later, then quiet
+    info      once, ever
+
+  An acknowledgement buys the full reminder window, but the severity still decides whether there
+  is a next one at all - this used to be +2h unconditionally, which meant tapping Seen on a
+  warning committed you to being reminded all night, and did (25 Sep, 03:00).
+
+  NEITHER BUTTON CLOSES ANYTHING. A silenced incident stays open, listed and counted on Payment
+  Health, with the name of whoever silenced it - going quiet must never look like going away.
+  Only the fact stopping being true closes it, and then it says so once.
 """
 from __future__ import annotations
 
@@ -141,7 +155,14 @@ async def _sync(findings: list[dict], checks_ran: set) -> dict:
                 "account_id, amount_paise, first_seen, last_seen, status, next_alert_at, alert_count) "
                 "VALUES (?,?,?,?,?,?,?,?,?,?, 'open', ?, 0) "
                 "ON CONFLICT(key) DO UPDATE SET status='open', last_seen=excluded.last_seen, "
-                "detail=excluded.detail, next_alert_at=excluded.next_alert_at, resolved_at=NULL",
+                # A REOPEN clears the silence. The problem went away and came back, which is
+                # new information - and leaving muted_at set would have the screen calling it
+                # silenced while it was speaking again.
+                # (Re-raising a still-true finding takes the branch above and does NOT touch
+                # this: the guardian re-raises every five minutes, so unmuting there would
+                # make the mute button undo itself.)
+                "detail=excluded.detail, next_alert_at=excluded.next_alert_at, resolved_at=NULL, "
+                "muted_by=NULL, muted_by_name='', muted_at=NULL",
                 (f["key"], f["check"], f.get("severity", "critical"), f["title"][:200],
                  f.get("detail", "")[:2000], f.get("claim_id"), f.get("account_id"),
                  f.get("amount_paise") or 0, now, now, now))
@@ -965,7 +986,12 @@ async def _alert_due() -> int:
         if inc["status"] == "acked":
             body += "\n\n(%s tapped Seen %s and it is still not fixed.)" % (
                 inc.get("acked_by_name") or "Someone", str(inc.get("acked_at") or "")[:16])
-        btn = [[{"text": "👀 Seen — I'm on it", "callback_data": "pgk:%d" % inc["inc_id"]}]]
+        # Two buttons, because "I am on it" and "stop telling me" are different statements and
+        # the founder only ever had the first one. Separate rows: at 2am, on a phone, they must
+        # not be a thumb-width apart.
+        btn = [[{"text": "👀 Seen — I'm on it", "callback_data": "pgk:%d" % inc["inc_id"]}],
+               [{"text": "🔕 Stop telling me about this",
+                 "callback_data": "pgm:%d" % inc["inc_id"]}]]
         for sid in ids:
             try:
                 await _nnot._telegram_mirror(sid, subj + "\n\n" + body, url=_OPS_URL, buttons=btn)
@@ -986,11 +1012,25 @@ async def _alert_due() -> int:
             # on the very next alert.
             said = again + 1
             if inc["status"] == "acked":
-                # Somebody is on it. Give them the full reminder window whatever the severity.
-                await c.execute(
-                    "UPDATE nidaan_pay_incidents SET alert_count=?, "
-                    "next_alert_at=datetime('now', ?) WHERE inc_id=?",
-                    (said, "+%d hours" % REMIND_AFTER_ACK_H, inc["inc_id"]))
+                # Somebody is on it, so the next nudge waits the full reminder window - but the
+                # SEVERITY still decides whether there is a next one at all.
+                #
+                # This used to set +2h unconditionally, which meant an acknowledged incident
+                # nudged every two hours FOR EVER. The founder tapped Seen on a bounced payment
+                # at 19:27 and it woke him again at 03:00. Acknowledging something must not
+                # commit you to being reminded about it all night.
+                mins = _next_gap_minutes(inc["severity"], said)
+                if mins is None:
+                    logger.info("incident %s (%s) acknowledged and has said its piece - quiet",
+                                inc["inc_id"], inc["severity"])
+                    await c.execute(
+                        "UPDATE nidaan_pay_incidents SET alert_count=?, next_alert_at=NULL "
+                        "WHERE inc_id=?", (said, inc["inc_id"]))
+                else:
+                    await c.execute(
+                        "UPDATE nidaan_pay_incidents SET alert_count=?, "
+                        "next_alert_at=datetime('now', ?) WHERE inc_id=?",
+                        (said, "+%d hours" % REMIND_AFTER_ACK_H, inc["inc_id"]))
             else:
                 mins = _next_gap_minutes(inc["severity"], said)
                 if mins is None:
@@ -1008,6 +1048,37 @@ async def _alert_due() -> int:
             await c.commit()
         sent += 1
     return sent
+
+
+async def mute(inc_id: int, staff_id: int, staff_name: str) -> dict:
+    """Stop telling anybody about this one. It stays OPEN and on the Payment Health screen.
+
+    Founder, 25 Sep, after a 2am reminder about a bounced payment he had already acknowledged:
+    "there has to be a button also to stop these notifications on telegram and on dashboard bell
+    icon, one more below seen I am on it."
+
+    "I am on it" and "stop telling me" are different statements and needed different buttons.
+    Seen buys time; this ends the interruption. Neither closes the incident - it is still true,
+    still listed, and still counted. What stops is the message.
+
+    Recorded with a name, because silence that nobody owns is how a real problem goes missing.
+    """
+    async with aiosqlite.connect(DB_PATH) as c:
+        c.row_factory = aiosqlite.Row
+        row = await (await c.execute(
+            "SELECT status, title FROM nidaan_pay_incidents WHERE inc_id=?",
+            (int(inc_id),))).fetchone()
+        if not row:
+            return {"ok": False, "error": "That alert no longer exists."}
+        if (row["status"] or "") == "resolved":
+            return {"ok": True, "already": "resolved", "title": row["title"]}
+        await c.execute(
+            "UPDATE nidaan_pay_incidents SET next_alert_at=NULL, muted_by=?, muted_by_name=?, "
+            "muted_at=CURRENT_TIMESTAMP WHERE inc_id=?",
+            (int(staff_id), (staff_name or "")[:80], int(inc_id)))
+        await c.commit()
+    logger.info("incident %s muted by %s - still open, no longer speaking", inc_id, staff_name)
+    return {"ok": True, "title": row["title"]}
 
 
 async def acknowledge(inc_id: int, staff_id: int, staff_name: str) -> dict:
