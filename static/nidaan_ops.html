@@ -5049,12 +5049,17 @@ async function loadMyBusiness() {
       <div class="section-sub">${hi?'खारिज या कम भुगतान वाला क्लेम यहाँ जमा करें — कोई शुल्क नहीं। समीक्षा के बाद अगर यह लड़ने लायक (Level-2) है, तभी शुल्क देना होगा।':'Submit a rejected/underpaid claim here — free. Only if the review says it can go to Level-2 do you pay the fee.'}</div>
     </div></div>
     <div style="background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:12px;padding:1rem;margin-bottom:1rem">
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.55rem">
+      <!-- 190px, not 150px: the insurer picker is a real control with a caret and a long name in
+           it, and a 150px track squeezed it into the field beside it. -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:.55rem">
         <input id="mbcName" placeholder="${hi?'ग्राहक का पूरा नाम':'Customer full name'}" style="text-transform:uppercase">
         <input id="mbcPhone" type="tel" inputmode="numeric" maxlength="10" placeholder="${hi?'ग्राहक मोबाइल (10 अंक)':'Customer mobile (10-digit)'}" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,10)">
         <input id="mbcEmail" type="email" placeholder="${hi?'ग्राहक का ईमेल (ज़रूरी)':'Customer email (required)'}">
         <select id="mbcType"><option value="">${hi?'क्लेम प्रकार…':'Claim type…'}</option><option value="health">${hi?'स्वास्थ्य':'Health'}</option><option value="life">${hi?'जीवन':'Life'}</option><option value="motor">${hi?'मोटर':'Motor'}</option><option value="general">${hi?'सामान्य / अन्य':'General / Other'}</option></select>
-        <span id="mbcInsurerBox" style="display:inline-block;min-width:13rem"></span>
+        <!-- OVERLAPPED "Disputed amount" until 24 Sep. min-width:13rem is ~208px and the grid
+             track was 150px, so this box could not shrink into its cell and spilled over the
+             field next to it. A grid child needs min-width:0 to be allowed to shrink at all. -->
+        <span id="mbcInsurerBox" style="display:block;width:100%;min-width:0"></span>
         <input id="mbcAmount" type="number" min="0" placeholder="${hi?'विवादित राशि ₹ (वैकल्पिक)':'Disputed amount ₹ (optional)'}">
         <input id="mbcPolicy" placeholder="${hi?'पॉलिसी नं. (वैकल्पिक)':'Policy no. (optional)'}">
         <select id="mbcAssociate" title="Credit the associate who introduced this case"><option value="">${hi?'चैनल पार्टनर (वैकल्पिक)…':'Channel Partner (optional)…'}</option></select>
