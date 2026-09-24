@@ -10710,6 +10710,16 @@ async def ops_my_l2_payment_link(claim_id: int, request: Request):
     staffer can send it to their customer to pay (instead of paying it themselves)."""
     if not _is_nidaan_host(request): raise HTTPException(404)
     _staff, code = await _staff_claim_code(request)
+    # A super admin can raise this link for ANY claim, not only one under their own referral
+    # code. Without it the button is invisible to the people who most often chase a fee, and the
+    # link stays unused - which is how we ended up with 5 of these created in total, none since
+    # 8 Sept, while staff shared QR codes that carry no claim id and can never come back.
+    # The link is still tagged with the CLAIM's own code, so attribution is unchanged.
+    if (_staff.get("role") or "") in ("super_admin", "sub_super_admin"):
+        _own = await nidaan.get_claim_with_account(claim_id)
+        if not _own:
+            raise HTTPException(404, "Claim not found")
+        code = ((_own.get("branch_code") or "") or code).strip().upper()
     pricing = await nidaan.branch_l2_fee_for_claim(claim_id)
     if not pricing["charge_required"]:
         raise HTTPException(400, "No Level-2 fee is configured")
@@ -10722,10 +10732,24 @@ async def ops_my_l2_payment_link(claim_id: int, request: Request):
         raise HTTPException(400, "Level-2 fee already paid for this claim")
     _l2_paise = (await nidaan.charge_with_gst(fee))["total_paise"]
     import time as _tt
+    _exp = int(_tt.time()) + 3 * 24 * 3600
     link = await _create_rzp_payment_link(
         _l2_paise, f"Nidaan Level-2 fee — claim #{claim_id}",
         notes={"product": "nidaan_branch_l2", "claim_id": str(claim_id), "branch": code},
-        expire_by=int(_tt.time()) + 3 * 24 * 3600)
+        expire_by=_exp)
+    # Recorded, like the branch route does. Without this the link exists only at Razorpay, so
+    # "who shared a link for this claim, and when" is unanswerable - which is exactly the
+    # question being asked when a claim still reads "Fee not paid yet".
+    try:
+        await nidaan.record_payment_link(
+            link["id"], link.get("short_url", ""), "l2", _l2_paise,
+            claim_id=claim_id, branch_code=code, created_by_type="staff",
+            created_by_id=str(_staff.get("staff_id") or ""),
+            description=f"L2 fee claim #{claim_id} — shared by {_staff.get('name') or 'staff'}",
+            expire_by=_exp)
+    except Exception as _re:  # noqa: BLE001 — a missing audit row must not cost the link
+        logger.warning("could not record the L2 payment link for claim %s: %s", claim_id, _re)
+    await _ops_audit(request, "l2.pay_link", "claim", str(claim_id), f"₹{fee} link shared")
     return {"short_url": link.get("short_url"), "fee": fee, "claim_id": claim_id}
 
 

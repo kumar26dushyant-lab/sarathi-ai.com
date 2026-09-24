@@ -2059,9 +2059,15 @@ async def board(bucket_key: str = "", *, sub: str = "", q: str = "",
     if bucket_key:
         where.append("c.pipeline_stage = ?")
         params.append(bucket_key)
-    if sub:
-        where.append("COALESCE(c.pipeline_sub,'') = ?")
-        params.append(sub)
+    # `sub` is deliberately NOT in the SQL. The sub-state chips and the summary above them have
+    # to describe THE BUCKET, and they were being computed from rows the sub filter had already
+    # removed - so clicking "Escalation Pending" turned "All 6 · Pending 5 · Escalated 1" into
+    # "All 5 · Pending 5 · Escalated 0". The numbers moved when you touched them, and a tab said
+    # 0 about a claim that exists. It is applied to the LIST further down instead.
+    #
+    # `q` stays in the SQL on purpose: a search changes what you are looking at, so the counts
+    # SHOULD narrow with it. A sub-state chip is a tab within that, and tabs do not renumber
+    # each other.
     if q:
         like = "%" + q.strip() + "%"
         where.append("(c.insured_name LIKE ? OR c.complainant_name LIKE ? OR "
@@ -2164,13 +2170,25 @@ async def board(bucket_key: str = "", *, sub: str = "", q: str = "",
     items.sort(key=lambda i: (0 if (i.get("query") or {}).get("state") == "open" else 1,
                               order.get(i["age_state"], 3), -(i["days"] or 0)))
 
+    # Counted over the WHOLE bucket, before the sub filter touches the list, so a chip always
+    # says how many are in that sub-state rather than how many survived the tab you are on.
     sub_counts: dict = {}
     for i in items:
         sub_counts[i["sub"]] = sub_counts.get(i["sub"], 0) + 1
+    in_bucket = len(items)
+    # Only now does the tab apply, and only to what is shown.
+    shown = [i for i in items if i["sub"] == sub] if sub else items
 
     # A one-line summary for the top of the bucket: what is in here, and what needs a person.
+    # Every figure below counts the BUCKET (`items`), never the current tab (`shown`) - they sit
+    # above the tabs and describe the pile, so they must not change when a tab is clicked.
     ours = sum(1 for i in items if (i.get("waits_on") or "internal") == "internal")
-    return {"items": items[:limit], "matching": len(items),
+    return {"items": shown[:limit],
+            # What the tab is showing, and what the bucket holds. The screen needs both: one
+            # labels the list, the other labels the "All" chip.
+            "showing": len(shown),
+            "matching": in_bucket,
+            "sub": sub,
             "sub_counts": sub_counts,
             "late": sum(1 for i in items if i["age_state"] in ("red", "amber")),
             "red": sum(1 for i in items if i["age_state"] == "red"),

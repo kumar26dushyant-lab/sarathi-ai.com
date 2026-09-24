@@ -2582,10 +2582,28 @@ async def claim_origin(claim_id: int, lang: str = "en") -> dict:
         add("Partner added by", "पार्टनर जोड़ा", cp.get("created_by_name") or "")
 
     # The account the claim is filed under - the "subscriber name" he asked for by name.
-    add("Subscriber account", "सब्सक्राइबर खाता",
-        c.get("owner_name") or c.get("firm_name") or ("#%s" % c.get("account_id")),
-        " · ".join(x for x in (c.get("firm_name") if c.get("owner_name") else "",
-                               c.get("account_phone") or c.get("account_email")) if x))
+    #
+    # HOUSE ACCOUNTS. Every referral code gets an internal account named "Branch <CODE> — house
+    # account". For a real branch that is accurate. For a STAFF referral code it puts the word
+    # "Branch" on a claim a colleague raised, which is the confusion this whole block exists to
+    # remove - the founder spotted it the same day. The stored name is not changed (other screens
+    # and exports read it); it is presented as what it is, and only where it would mislead.
+    acct_name = (c.get("owner_name") or c.get("firm_name")
+                 or ("#%s" % c.get("account_id")))
+    acct_mail = c.get("account_email") or ""
+    is_house = ("@house.nidaanpartner.internal" in acct_mail.lower()
+                or "house account" in acct_name.lower())
+    if is_house and code_staff:
+        add("Billing account", "बिलिंग खाता",
+            "🏠 House account · %s" % code,
+            "opened for %s — no separate subscriber" % (code_staff.get("name") or "this referral"))
+    elif is_house:
+        add("Billing account", "बिलिंग खाता", "🏠 House account · %s" % code,
+            "the branch's own account — no separate subscriber")
+    else:
+        add("Subscriber account", "सब्सक्राइबर खाता", acct_name,
+            " · ".join(x for x in (c.get("firm_name") if c.get("owner_name") else "",
+                                   c.get("account_phone") or acct_mail) if x))
 
     if c.get("raised_by_name"):
         add("Raised by", "दर्ज किया", c["raised_by_name"],

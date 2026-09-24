@@ -81,6 +81,13 @@ async def setup():
                             (87, 'Dushyant Sharma', '')):
             await c.execute("INSERT INTO nidaan_accounts (account_id, owner_name, phone, "
                             "created_at) VALUES (?,?,?,'2026-01-01')", (aid, nm, ph))
+        # House accounts, named exactly as the app names them.
+        for aid, code in ((88, 'SP-GJG7BA'), (89, 'BIAORA-01')):
+            await c.execute(
+                "INSERT INTO nidaan_accounts (account_id, owner_name, email, created_at) "
+                "VALUES (?,?,?,'2026-01-01')",
+                (aid, 'Branch %s — house account' % code,
+                 'branch.%s@house.nidaanpartner.internal' % code.lower()))
         rows = [
             # a STAFF referral code sitting in branch_code - the 64-claim case
             (1, 'branch', '2026-09-15 07:21', 'SP-GJG7BA', 'TAMANNA VASHISHTHA', 5,
@@ -94,6 +101,10 @@ async def setup():
              'ANNAPURNA KASERA', 86),
             # no origin at all - the 59-claim case
             (5, '', '2026-07-08 16:15', '', '', None, '', None, '', 87),
+            # a STAFF referral whose account is a house account - the "why does it say Branch"
+            (6, 'branch', '2026-09-22 12:06', 'SP-GJG7BA', '', None, '', None, '', 88),
+            # a REAL branch with a house account - must keep reading as a branch
+            (7, 'branch', '2026-09-22 12:06', 'BIAORA-01', '', None, '', None, '', 89),
         ]
         for r in rows:
             await c.execute("INSERT INTO nidaan_claims (claim_id, origin, created_at, "
@@ -131,6 +142,8 @@ async def main():
           staff and "SP-GJG7BA" in staff["detail"], staff)
     check("the subscriber is named, not just numbered",
           (find(d, "Subscriber account") or {}).get("value") == "CHETAN", all_text(d))
+    check("...and a real subscriber is NOT relabelled as a house account",
+          find(d, "Billing account") is None, all_text(d))
     check("who raised it is named", (find(d, "Raised by") or {}).get("value")
           == "TAMANNA VASHISHTHA", all_text(d))
     check("and WHEN is carried", (d.get("when") or "").startswith("2026-09-15"), d.get("when"))
@@ -160,6 +173,22 @@ async def main():
           ref is not None and "ANNAPURNA KASERA" in ref["value"], all_text(d))
     check("...without echoing the name back as if it were a code",
           ref and ref["detail"].count("ANNAPURNA") == 0, ref)
+
+    # ── the house account must not wear the word "Branch" on a staff referral ──
+    # Founder, 24 Sep: "subscriber account shows branch and code number, but that's internal
+    # staff Shraddha raised not branch, so is it possible to remove 'branch' word".
+    d = await n.claim_origin(6)
+    house = find(d, "Billing account")
+    check("a staff referral's house account is not called a Branch",
+          house is not None and "branch" not in house["value"].lower(), all_text(d))
+    check("...and says whose it is", house and "TAMANNA" in house["detail"], house)
+    check("...while no 'Subscriber account' row pretends there is a subscriber",
+          find(d, "Subscriber account") is None, all_text(d))
+
+    d = await n.claim_origin(7)
+    house = find(d, "Billing account")
+    check("a REAL branch's house account still reads as the branch's own",
+          house is not None and "branch" in (house["detail"] or "").lower(), all_text(d))
 
     # ── no channel recorded ─────────────────────────────────────────────────
     d = await n.claim_origin(5)

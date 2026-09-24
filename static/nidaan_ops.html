@@ -112,6 +112,13 @@ td{padding:.65rem 1rem;border-bottom:1px solid var(--nd-border);vertical-align:m
 tr:last-child td{border-bottom:none}
 tr:hover td{background:var(--nd-bg-surface)}
 
+/* A whole row opens its claim. The Open button is still there for anyone who looks for it -
+   this only removes the need to scroll to the far right to find it. Focus is visible because the
+   row answers Enter, and an outline nobody can see is not keyboard support. */
+tr.rowclick{cursor:pointer}
+tr.rowclick:hover>td{background:var(--nd-bg-surface-2)}
+tr.rowclick:focus-visible{outline:2px solid var(--nd-brand-cyan-strong);outline-offset:-2px}
+
 /* ── STATUS PILLS ── */
 .pill-status{display:inline-block;border-radius:6px;padding:.2rem .55rem;font-size:.7rem;font-weight:700;letter-spacing:.04em;text-transform:capitalize}
 
@@ -4038,7 +4045,17 @@ function _l2HandoverControls(c){
       + 'onclick="event.stopPropagation();showPanel(\'l2\')">Open workspace</button>';
   }
   if (!_l2Eligible(c)){
-    return '<span style="color:var(--nd-text-faint)">Fee not paid yet</span>';
+    // The fee is the only thing standing between this claim and Level-2, so the way to collect
+    // it belongs here rather than three screens away. A link made here comes back attached to
+    // the claim; a QR shared from anywhere else does not.
+    return '<span style="color:var(--nd-text-faint)">Fee not paid yet</span>'
+      + (c.review_outcome === 'can_fight'
+          ? '<br><button class="btn-sm btn-ghost" style="font-size:.66rem;padding:.1rem .4rem;'
+            + 'color:var(--nd-cyan-text)" title="Make a payment link for this claim. When it is '
+            + 'paid, the fee marks itself paid." '
+            + 'onclick="event.stopPropagation();l2ShareFeeLink(' + c.claim_id + ',this)">'
+            + '\ud83d\udd17 Share fee link</button>'
+          : '');
   }
   const done = !!c.docs_complete_at;
   return '<label style="display:flex;gap:.3rem;align-items:center;font-size:.7rem;cursor:pointer;'
@@ -4479,7 +4496,7 @@ async function loadAwaitingFee(){
       // viewClaim has never existed anywhere in this page, so this Open button has always done
       // nothing. openClaimDrawer is what every other Open on this screen calls.
       + '<td><button class="l2mv g" onclick="openClaimDrawer(' + i.claim_id + ')">Open</button></td>'
-      + '</tr>';
+      + '</tr>';   // the row itself opens too - see rowAttrs on the <tr> above
   }).join('');
   el.innerHTML =
       '<div class="section-hdr"><div><div class="section-title">Reviewed · fee due</div>'
@@ -11769,6 +11786,33 @@ function _plShareOverlay(url, amount, name, phone){
   document.getElementById('plCloseBtn').onclick=()=>ov.remove();
   document.getElementById('plCopyBtn').onclick=()=>{ try{navigator.clipboard.writeText(url);}catch(e){} document.getElementById('plCopyBtn').textContent='✓ Copied'; };
 }
+// Make a payment link BOUND TO THIS CLAIM and offer it for sharing.
+//
+// The binding is the whole point: the notes carry claim_id + branch, so when it is paid the
+// webhook attaches the money to this claim and the fee marks itself paid. A QR shared from
+// anywhere else arrives with nothing to match it against, and the claim reads "Fee not paid yet"
+// until somebody notices - which is what happened to NP-200.
+async function l2ShareFeeLink(claimId, btn){
+  const was = btn ? btn.textContent : '';
+  if (btn){ btn.disabled = true; btn.textContent = '\u2026'; }
+  try{
+    const r = await API('/my-claims/' + claimId + '/l2-payment-link', {method:'POST'});
+    const d = await r.json().catch(function(){ return {}; });
+    if (!r.ok){
+      // The server's own words - it knows whether the fee is already paid, the claim is not
+      // eligible yet, or no fee is configured, and each needs a different thing done about it.
+      ndUI.toast(_extractErr(d, 'Could not make the link'), 'error');
+      return;
+    }
+    _plShareOverlay(d.short_url, d.fee, '', '');
+  }catch(e){
+    ndUI.toast('Could not make the link.', 'error');
+  }finally{
+    if (btn){ btn.disabled = false; btn.textContent = was; }
+  }
+}
+window.l2ShareFeeLink = l2ShareFeeLink;
+
 async function loadPaymentLinks(){
   const box = document.getElementById('plList'); if(!box) return;
   try{
@@ -14103,6 +14147,46 @@ function _l2DutyLine(key){
   return '<span class="none">👤 Nobody on duty</span>' + set;
 }
 
+// ── Open a claim by clicking its row ─────────────────────────────────────────
+// The Open button sits off the right edge of every wide table, so the day is spent scrolling
+// right, clicking, and scrolling back. One helper for every table: the tables differ, the rule
+// does not.
+//
+// Anything interactive inside the row keeps its own click. Not all of those buttons call
+// stopPropagation, and relying on forty call sites to remember is how a "Move…" starts also
+// opening the claim behind the menu.
+const _ROW_SKIP = 'button,a,select,input,textarea,label,summary,[role="button"],[onclick]';
+// The opener is passed by NAME, not as an inline function: an anonymous `function(){...}` inside
+// an onclick reads to verify-ops-buttons.py as a handler called "function", and a checker that
+// cries wolf is a checker people stop reading.
+function rowOpen(ev, opener, id){
+  try{
+    const t = ev && ev.target;
+    if (!t) return;
+    // A control, or anything inside one.
+    if (t.closest && t.closest(_ROW_SKIP) && t.closest(_ROW_SKIP) !== ev.currentTarget) return;
+    // Somebody is copying a claim number, not opening a claim.
+    const sel = window.getSelection && window.getSelection();
+    if (sel && String(sel).length > 1) return;
+  }catch(e){ /* fall through and open — a broken guard must not make every row dead */ }
+  const fn = window[opener];
+  if (typeof fn === 'function') fn(id);
+}
+function rowKey(ev, opener, id){
+  if (ev.key !== 'Enter' && ev.key !== ' ') return;
+  ev.preventDefault();
+  const fn = window[opener];
+  if (typeof fn === 'function') fn(id);
+}
+// Attributes for a clickable row. Keyboard too — Enter and Space open it, so this does not
+// become a mouse-only app.
+function rowAttrs(opener, id){
+  return ' class="rowclick" tabindex="0" role="link"'
+       + ' onclick="rowOpen(event,&quot;' + opener + '&quot;,' + id + ')"'
+       + ' onkeydown="rowKey(event,&quot;' + opener + '&quot;,' + id + ')"';
+}
+window.rowOpen = rowOpen; window.rowKey = rowKey; window.rowAttrs = rowAttrs;
+
 function l2Table(b){
   const rows = _l2Rows.map(function(i){
     const mv = (b.moves || []);
@@ -14141,7 +14225,7 @@ function l2Table(b){
     const docs = '<button class="l2mv g" title="All documents on this claim" '
       + 'onclick="docsOpen(' + i.claim_id + ')">📂 '
       + (i.files ? i.files + ' file' + (i.files === 1 ? '' : 's') : 'Documents') + '</button>';
-    return '<tr>'
+    return '<tr' + rowAttrs('l2Open', i.claim_id) + '>'
       + '<td data-label="Ref" class="c-ref"><b>NP-' + i.claim_id + '</b>'
       +   (i.insurer_claim_no
             ? '<div class="c-icn" '
@@ -18075,7 +18159,11 @@ function cbRender(d){
       '<div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;margin-top:.35rem">'
     +   '<div style="font-size:.78rem;color:var(--nd-text-muted)">Showing ' + items.length
     +     ' of ' + (d.matching || items.length)
-    +     (items.length < (d.matching || 0) ? ' \u2014 narrow the filters to see the rest' : '')
+    // Only when the row LIMIT actually cut the list, which is what this hint was for. `matching`
+    // now means "in the bucket", so comparing against it made the hint appear whenever a
+    // sub-state tab was open - telling somebody to narrow filters they had just narrowed.
+    +     (items.length < (d.showing != null ? d.showing : (d.matching || 0))
+            ? ' \u2014 narrow the filters to see the rest' : '')
     +   '</div>'
     +   '<span class="vw-switch" style="margin-left:auto">'
     +     '<button class="' + (VIEW === 'cards' ? 'active' : '') + '" onclick="cbSetView(\'cards\')">\u25a4 Cards</button>'
