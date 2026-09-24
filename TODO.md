@@ -452,7 +452,37 @@ GST L2 fee"* and *"Fee not paid yet"*, but it was paid against a shared QR.
     needs a verified path (Razorpay) and a **claimed-and-pending** path (screenshot → a person
     confirms) that are visibly different. This is money; it gets the careful treatment.
 
-  **✅ ANSWERED — and the good news is the automatic path already exists and works.**
+  **✅✅ ANSWERED PROPERLY (2nd pass, after the founder said staff insist they generated a QR).**
+  **Both sides are telling the truth.** Razorpay's ORDERS api settles it — three orders exist for
+  claim 200:
+
+  | order | created | status | paid | **attempts** |
+  |---|---|---|---|---|
+  | `order_TfONH3olENyEQV` | 23 Sep 07:14 | created | ₹0 | **0** |
+  | `order_TfOqfe7GWuHsHE` | 23 Sep 07:42 | created | ₹0 | **0** |
+  | `order_TfoSgqKvRFmB51` | 24 Sep 08:46 | created | ₹0 | **0** |
+
+  - **Staff are right:** they initiated and a QR was generated — three times.
+  - **The system is right:** no money arrived. `attempts=0` means nobody ever *tried* to pay
+    against that QR. Not a failure — **not a single attempt.**
+  - So the complainant paid *somewhere that was not our QR*, or has not actually paid.
+  - Nothing from their number (9575244166) anywhere at Razorpay in 7 days. And every
+    unattributed ₹588.82 payment resolves to a real `subscription_id` — checked at Razorpay, not
+    assumed. ₹499+GST being BOTH the L2 fee and the Silver price is what made that worth checking.
+
+  🔴 **AND IT IS A PATTERN, not one claim.** Of 22 L2 fee orders in 5 days: **9 paid, 13 unpaid
+  with zero attempts.** Claim 194 has **six orders created inside the same minute** — a button
+  that does not disable while it works. We generate QR after QR that nobody ever scans, and
+  nothing on any screen says so.
+
+  **What to build (scalable, not a patch):**
+  1. **Show the fee link/QR ON the claim with its real state** — "shared by X at Y · not yet
+     attempted". Then the conflict answers itself on the screen instead of by me querying an API.
+  2. **Prefer the payment LINK over a raw checkout order** for sharing: a link is durable, has
+     its own status, survives being sent on WhatsApp, and Razorpay tracks it.
+  3. **Stop the six-orders-a-minute** — disable the button while it is working.
+
+  **(1st pass, kept because the mechanism note is still right:)**
   - Claim 200 has **no payment anywhere** — not in our ledger, not at Razorpay. The money never
     reached our account. (The note-less ₹588.82 payments I first suspected turned out to be
     **subscriptions** — ₹499+GST is both prices. Checked before concluding.)
