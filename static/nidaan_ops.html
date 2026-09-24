@@ -15569,8 +15569,34 @@ async function l2QuerySend(claimId, preset){
       + (asked.replied ? '\u2705 they replied ' + esc(String(asked.reply_at).slice(0, 16))
                        : '\u23f3 no reply yet. One message, not a stream: if it has been less than a '
                          + 'day, call them instead.') + '</div>' : '';
+  // EVERY ask, not just the newest \u2014 in front of the person about to add another one.
+  // Until 24 Sep a query overwrote the one before it, so nobody could see that the same thing
+  // had been asked twice last week, and "have we already chased this?" had no answer.
+  const hist = info.history || [];
+  const histHtml = hist.length < 2 ? '' :
+      '<details style="margin:.4rem 0"><summary style="cursor:pointer;font-size:.82rem;'
+    +   'color:var(--nd-cyan-text)">\ud83d\udcdc Everything we have asked them \u2014 '
+    +   hist.length + ' time' + (hist.length > 1 ? 's' : '') + '</summary>'
+    + '<div style="max-height:190px;overflow:auto;margin-top:.35rem">'
+    + hist.map(function(q){
+        const replied = !!q.reply_at;
+        return '<div style="border-left:3px solid ' + (replied ? 'var(--nd-success-text)'
+                 : 'var(--nd-warning-text)') + ';padding:.2rem .5rem;margin-bottom:.4rem">'
+          + '<div style="font-size:.74rem;color:var(--nd-text-faint)">'
+          +   esc(String(q.asked_at || '').slice(0, 16)) + ' \u00b7 ' + esc(q.asked_by || 'staff')
+          +   ' \u00b7 ' + esc(q.channels || '')
+          +   (q.copies ? ' \u00b7 copy: ' + esc(q.copies) : '') + '</div>'
+          + '<div style="font-size:.82rem">' + esc(q.text || '') + '</div>'
+          + (replied
+              ? '<div style="font-size:.76rem;color:var(--nd-success-text)">\u2705 replied '
+                + esc(String(q.reply_at).slice(0, 16))
+                + (q.reply_text ? ': \u201c' + esc(q.reply_text) + '\u201d' : '') + '</div>'
+              : '<div style="font-size:.76rem;color:var(--nd-warning-text)">\u23f3 no reply</div>')
+          + '</div>';
+      }).join('')
+    + '</div></details>';
   _qOv('qSend', '\u{1f4e8} Send the query to the complainant \u2014 NP-' + claimId,
-      was + waNote
+      was + histHtml + waNote
     + '<div style="font-size:.82rem;color:var(--nd-text-muted)">To <b>' + esc(to.name || 'the complainant')
     + '</b>' + (to.phone ? ' \u00b7 ' + esc(to.phone) : '') + (to.email ? ' \u00b7 ' + esc(to.email) : '') + '</div>'
     + '<div class="l2fld"><label>What must they send or answer? <span class="req">*</span></label>'

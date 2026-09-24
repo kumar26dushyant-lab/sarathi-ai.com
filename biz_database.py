@@ -1263,6 +1263,34 @@ async def init_db():
                 created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
 
+            -- EVERY query we have ever put to a complainant, one row each.
+            --
+            -- Founder, 24 Sep: "all history should be recording in this section only just so
+            -- whosoever staff is triggering it should know when the last time query been sent".
+            --
+            -- Until now a query lived in columns ON THE CLAIM (cq_at, cq_by, cq_text, ...) and
+            -- every new one OVERWROTE the last. So the screen could show the most recent ask and
+            -- nothing else: a colleague could not see that the same thing had been asked twice
+            -- last week, and "have we already chased this?" was unanswerable.
+            --
+            -- Those columns stay, as a cached copy of the newest row, because the badges, the
+            -- board filters and the reply matcher all read them. This is the record; they are
+            -- the shortcut. Append-only.
+            CREATE TABLE IF NOT EXISTS nidaan_claim_queries (
+                query_id    INTEGER PRIMARY KEY AUTOINCREMENT,
+                claim_id    INTEGER NOT NULL,
+                asked_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                asked_by    TEXT DEFAULT '',
+                asked_by_id INTEGER,
+                text        TEXT NOT NULL,
+                channels    TEXT DEFAULT '',   -- 'whatsapp+email' — what actually went out
+                copies      TEXT DEFAULT '',   -- who was copied, as sent
+                reply_at    TIMESTAMP,
+                reply_text  TEXT DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_claimq_claim
+                ON nidaan_claim_queries(claim_id, asked_at DESC);
+
             -- Unified CLAIM ACTIVITY timeline. Every automation message/reminder sent, every
             -- customer response, and key events are recorded here so a claim reads like a human
             -- was managing it. The ops claim view MERGES this with status-log + WA messages +

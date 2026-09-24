@@ -1476,7 +1476,21 @@ async def contact_recipients(claim_id: int) -> dict:
             wa = await _g.summary(_w.normalize_msisdn(to["phone"])) or {}
         except Exception as e:  # noqa: BLE001
             logger.info("whatsapp reachability lookup failed for %s: %s", claim_id, e)
-    return {"to": to, "cc": cc, "asked": _query_info(row).get("asked"), "wa": wa}
+    # EVERY ask, not just the newest. Founder, 24 Sep: "all history should be recording in this
+    # section only just so whosoever staff is triggering it should know when the last time query
+    # been sent". `asked` stays for the banner and for anything already reading it.
+    history = []
+    try:
+        async with aiosqlite.connect(DB_PATH) as c:
+            c.row_factory = aiosqlite.Row
+            history = [dict(r) for r in await (await c.execute(
+                "SELECT query_id, asked_at, asked_by, text, channels, copies, reply_at, "
+                "reply_text FROM nidaan_claim_queries WHERE claim_id=? "
+                "ORDER BY asked_at DESC LIMIT 30", (int(claim_id),))).fetchall()]
+    except Exception as e:  # noqa: BLE001 — a missing history must not stop somebody asking
+        logger.info("query history unavailable for claim %s: %s", claim_id, e)
+    return {"to": to, "cc": cc, "asked": _query_info(row).get("asked"), "wa": wa,
+            "history": history}
 
 
 async def send_query_to_complainant(claim_id: int, text: str, *, whatsapp: bool, email: bool,
@@ -1541,13 +1555,22 @@ async def send_query_to_complainant(claim_id: int, text: str, *, whatsapp: bool,
         return dict(out, error="Nothing was sent - " + "; ".join(
             "%s: %s" % (k, v["error"]) for k, v in (("WhatsApp", out["whatsapp"]), ("Email", out["email"]))
             if v and not v.get("ok")))
+    copies = [x["to"] for x in out["cc"] if x.get("ok")]
     async with aiosqlite.connect(DB_PATH) as c:
+        # The record: one row per query, kept for ever.
+        await c.execute(
+            "INSERT INTO nidaan_claim_queries (claim_id, asked_by, asked_by_id, text, channels, "
+            "copies) VALUES (?,?,?,?,?,?)",
+            (int(claim_id), (actor or "")[:80], actor_id, text, "+".join(sent),
+             ", ".join(copies)))
+        # The shortcut: the newest one, cached on the claim, because the badges, the board
+        # filters and the WhatsApp reply matcher all read these columns. Same values, written
+        # together, so the two can never disagree about what was asked last.
         await c.execute(
             "UPDATE nidaan_claims SET cq_at=CURRENT_TIMESTAMP, cq_by=?, cq_by_id=?, cq_text=?, "
             "cq_channels=?, cq_reply_at=NULL WHERE claim_id=?",
             ((actor or "")[:80], actor_id, text, "+".join(sent), int(claim_id)))
         await c.commit()
-    copies = [x["to"] for x in out["cc"] if x.get("ok")]
     await _log(claim_id, "\U0001f4e8 Query sent to the complainant by %s via %s%s: %s" % (
         actor or "staff", " and ".join(sent), (" (copy: %s)" % ", ".join(copies)) if copies else "",
         text), actor)
@@ -1570,9 +1593,19 @@ async def on_query_reply(msisdn: str, mtype: str, text: str = "") -> int:
             "AND (substr(replace(replace(COALESCE(complainant_phone,''),'+',''),' ',''),-10)=? "
             "  OR substr(replace(replace(COALESCE(insured_phone,''),'+',''),' ',''),-10)=?)",
             (digits, digits))).fetchall()]
+        _said = (text or "").strip()[:300]
         for r in rows:
             await c.execute("UPDATE nidaan_claims SET cq_reply_at=CURRENT_TIMESTAMP WHERE claim_id=?",
                             (r["claim_id"],))
+            # Land the answer on the query it answers - the newest one still waiting. Without
+            # this the history would list asks with no answers beside them, which reads as
+            # "nobody ever replied" and is exactly the wrong conclusion to invite.
+            await c.execute(
+                "UPDATE nidaan_claim_queries SET reply_at=CURRENT_TIMESTAMP, reply_text=? "
+                "WHERE query_id = (SELECT query_id FROM nidaan_claim_queries "
+                "                   WHERE claim_id=? AND reply_at IS NULL "
+                "                   ORDER BY asked_at DESC LIMIT 1)",
+                (_said, r["claim_id"]))
         await c.commit()
     if not rows:
         return 0
