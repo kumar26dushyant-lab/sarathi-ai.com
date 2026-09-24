@@ -115,6 +115,18 @@ tr:hover td{background:var(--nd-bg-surface)}
 /* A whole row opens its claim. The Open button is still there for anyone who looks for it -
    this only removes the need to scroll to the far right to find it. Focus is visible because the
    row answers Enter, and an outline nobody can see is not keyboard support. */
+/* Before Level-2, folded into the rail. It reads as one more rail entry until it is opened,
+   which is the point: the buckets are the work, this is context. */
+.l2pre{border-top:1px dashed var(--nd-border);margin-top:.35rem;padding-top:.35rem}
+.l2pre>summary{display:flex;align-items:center;gap:.5rem;cursor:pointer;list-style:none;
+  padding:.4rem .55rem;border-radius:8px;font-size:.8rem;color:var(--nd-text-muted)}
+.l2pre>summary::-webkit-details-marker{display:none}
+.l2pre>summary:hover{background:var(--nd-bg-surface-2)}
+.l2pre>summary::before{content:"\25b8";font-size:.7rem;transition:transform .12s}
+.l2pre[open]>summary::before{transform:rotate(90deg)}
+.l2pre>summary .nm{flex:1}
+.l2pre>summary .ct{font-variant-numeric:tabular-nums;font-weight:700}
+
 tr.rowclick{cursor:pointer}
 tr.rowclick:hover>td{background:var(--nd-bg-surface-2)}
 tr.rowclick:focus-visible{outline:2px solid var(--nd-brand-cyan-strong);outline-offset:-2px}
@@ -13968,6 +13980,7 @@ function l2Shell(){
     return bucketKeys.indexOf(k) < 0 && k !== 'hold';
   });
   const preIcon = {intake:'📝', review:'🔎', conversion:'💰'};
+  const preTotal = pre.reduce(function(a, k){ return a + (byS[k] || 0); }, 0);
   const preRail = pre.map(function(k){
     return '<button class="l2b" aria-pressed="' + (_l2Sel === 'pre:' + k) + '"'
       + ' onclick="l2Pick(\'pre:' + k + '\')">'
@@ -13989,7 +14002,9 @@ function l2Shell(){
     +     '<button class="l2b" aria-pressed="' + (_l2Sel === 'all') + '" onclick="l2Pick(\'all\')">'
     +       '<span>🗂️</span><span class="nm">All open claims</span>'
     +       '<span class="ct">' + (ln.open_total || 0) + '</span></button>'
-    +     (preRail ? '<div class="l2rh">Before Level-2</div>' + preRail : '')
+    // Folded, and below the buckets - see the block further down. The line still carries the
+    // total, so "how much is coming" is answerable without opening it.
+    +     ''
     // "To start" is gone (founder, 21 Sep): handing a claim over now puts it straight into Live
     // Cases. This entry appears ONLY if something is genuinely stuck between the two - a start
     // that failed, or a claim already waiting when that changed. In normal running nobody sees
@@ -14004,6 +14019,14 @@ function l2Shell(){
     +     (held ? '<button class="l2b" aria-pressed="' + (_l2Sel === 'pre:hold') + '" onclick="l2Pick(\'pre:hold\')">'
     +       '<span>⏸️</span><span class="nm">' + esc(lab.hold || 'Paused') + '</span>'
     +       '<span class="ct">' + held + '</span></button>' : '')
+    // BEFORE LEVEL-2, folded. It used to sit above the buckets: 136 claims that are not
+    // Level-2 work, ranked over the 21 that are, on the Level-2 desk. The information is worth
+    // having - it answers "what is coming" - so it keeps its total on the summary line and
+    // opens to exactly the buttons it had. One click away instead of nought.
+    +     (preRail
+        ? '<details class="l2pre"><summary><span class="nm">Before Level-2</span>'
+          + '<span class="ct">' + preTotal + '</span></summary>' + preRail + '</details>'
+        : '')
     +   '</div>'
     +   '<div class="l2main" id="l2Main"><div class="empty"><p>Loading…</p></div></div>'
     + '</div>';
@@ -14262,11 +14285,30 @@ function l2RenderBucket(){
   const subs = b.substates || [];
   const sc = d.sub_counts || {};
 
-  const tabs = subs.length
+  // A TAB APPEARS WHEN THERE IS SOMETHING BEHIND IT.
+  //
+  // Founder, 24 Sep: "how well we are utilizing these internal bucket statuses and filters? ...
+  // how better we can manage these statuses/filters without overbuilding but keep things
+  // simple?" The live numbers answered it: Escalation's tabs carry real information (5 and 1),
+  // Pending Draft showed FOUR tabs for three claims all in one state, and Live Cases showed tabs
+  // that not one of its twelve claims used.
+  //
+  // Nothing is deleted — every sub-state stays in the bucket designer, and a tab reappears the
+  // moment a claim lands in it. The screen just stops showing four doors into an empty room.
+  //
+  // Two rules keep it from being annoying:
+  //   - the tab you are STANDING ON always shows, even at zero. Otherwise clicking a tab with
+  //     one claim, then moving that claim, makes the tab you are on vanish underneath you.
+  //   - if only one tab would remain, show none. A lone "All" tab beside a lone sub-tab is two
+  //     buttons that do the same thing.
+  const _liveSubs = subs.filter(function(s){
+    return (sc[s.sub_key] || 0) > 0 || _l2Sub === s.sub_key;
+  });
+  const tabs = _liveSubs.length
     ? '<div class="l2tabs">'
       + '<button class="l2tab" aria-pressed="' + (!_l2Sub) + '" onclick="l2Sub(\'\')">All '
       +   (d.matching || 0) + '</button>'
-      + subs.map(function(s){
+      + _liveSubs.map(function(s){
           return '<button class="l2tab" aria-pressed="' + (_l2Sub === s.sub_key) + '"'
             + ' onclick="l2Sub(\'' + s.sub_key + '\')">' + esc(s.name_en)
             + ' ' + (sc[s.sub_key] || 0) + '</button>';
@@ -14284,19 +14326,30 @@ function l2RenderBucket(){
   const pill = function(n, label, cls){
     return n ? '<span class="pill ' + (cls || '') + '"><b>' + n + '</b> ' + label + '</span>' : '';
   };
-  const sum = (d.matching || 0)
-    ? '<div class="l2sum">'
-      + '<span class="pill"><b>' + d.matching + '</b> in this bucket</span>'
-      + pill((_l2Rows || []).filter(function(x){ return x.query && x.query.state === 'open'; }).length,
-             'draft quer' + ((_l2Rows || []).filter(function(x){ return x.query && x.query.state === 'open'; }).length === 1 ? 'y' : 'ies'), 'red')
-      + pill(d.closing_window, 'window closing', 'red')
-      + pill(d.red, 'past the limit', 'red')
+  // WHAT THESE CHIPS ARE FOR, since the founder asked (24 Sep): they summarise a pile you
+  // cannot take in at a glance. On a bucket of three they were six chips describing the same
+  // three claims from six angles — and every one of those facts is ALREADY on its own row: the
+  // red DRAFT QUERY box, the Lokpal countdown, the docs count, "WHY IT IS WAITING".
+  //
+  // So they appear when they earn it. Over a screenful, they are the only way to see the shape
+  // of the pile. Under it, you just read the rows.
+  //
+  // Two exceptions that show at ANY size, because they are deadlines rather than descriptions:
+  // a closing Lokpal window and a claim past its limit. Those must never be something you only
+  // notice on a busy day.
+  const _qOpen = (_l2Rows || []).filter(function(x){ return x.query && x.query.state === 'open'; }).length;
+  const _big = (d.matching || 0) >= 10;
+  const _urgent = pill(d.closing_window, 'window closing', 'red')
+                + pill(d.red, 'past the limit', 'red');
+  const _rest = !_big ? '' :
+        pill(_qOpen, 'draft quer' + (_qOpen === 1 ? 'y' : 'ies'), 'red')
       + pill(d.late - (d.red || 0), 'need looking at', 'amber')
       + pill(d.ours, 'ours to move', 'ok')
       + pill(d.docs_short, 'short of documents')
-      + pill(d.blocked_fields, 'missing something we need')
-      + '</div>'
-    : '';
+      + pill(d.blocked_fields, 'missing something we need');
+  // "N in this bucket" is gone: it repeated the number on the sidebar button that was just
+  // clicked, and on a three-claim bucket it was the loudest thing on the screen.
+  const sum = (_urgent || _rest) ? '<div class="l2sum">' + _urgent + _rest + '</div>' : '';
 
   // A bucket with nothing written against it rendered an empty banner - a bar of colour saying
   // nothing, which on a phone is a chunk of the screen spent on silence.
