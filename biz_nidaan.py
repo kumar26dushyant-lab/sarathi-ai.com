@@ -7088,6 +7088,7 @@ async def get_claims_ops(
     archived_only: bool = False,
     limit: int = 100,
     offset: int = 0,
+    stats: Optional[dict] = None,
 ) -> list[dict]:
     """Fetch claims for ops portal. team_member sees only their assigned claims.
     Paid/subscription claims (active reviews with a running SLA) sort ABOVE
@@ -7156,6 +7157,31 @@ async def get_claims_ops(
             params.extend([like, like, like, like, like, like])
 
         where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+
+        # HOW MANY MATCH, not how many this page holds. A pager cannot exist without it, and the
+        # endpoint was returning `count: len(claims)` - the page size - so no screen could say
+        # "30 of 188" or know there was a second page.
+        #
+        # Filled into a caller-supplied dict rather than changing the return type, so every
+        # existing caller is untouched. It reuses THIS `where` and THESE params, so the total can
+        # never drift from the rows it is counting - which is what a separate count_claims_ops()
+        # would eventually have done.
+        if stats is not None:
+            # The SAME joins the conditions can reference. Checked, not assumed: the WHERE uses
+            # a.branch_code, a.owner_name, a.firm_name and sub.plan, so counting from
+            # nidaan_claims alone would fail outright on a branch filter and silently overcount
+            # on the accounts INNER JOIN.
+            #
+            # `params` alone, deliberately: the main query prepends [staff_id, staff_id] for the
+            # unseen-notes subquery in its SELECT list, and those belong to the columns, not to
+            # the WHERE.
+            _c = await (await conn.execute(
+                "SELECT COUNT(*) FROM nidaan_claims c "
+                "JOIN nidaan_accounts a ON a.account_id = c.account_id "
+                "LEFT JOIN nidaan_subscriptions sub "
+                "  ON sub.account_id = a.account_id AND sub.status = 'active' "
+                + where, params)).fetchone()
+            stats["total"] = int((_c or [0])[0] or 0)
         cur = await conn.execute(
             f"""SELECT c.*,
                     a.owner_name, a.firm_name, a.email AS advisor_email, a.phone AS advisor_phone,

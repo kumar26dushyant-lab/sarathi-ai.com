@@ -11300,6 +11300,7 @@ async def ops_list_claims(
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     staff = _require_staff(request, "team_member")
+    _stats: dict = {}
     claims = await nidaan.get_claims_ops(
         staff_id=staff["staff_id"], role=staff["role"],
         status=status, assigned_to=assigned_to,
@@ -11307,7 +11308,7 @@ async def ops_list_claims(
         payment_status=payment_status,
         branch=branch, plan=plan, account_id=account_id,
         review_outcome=review_outcome, archived_only=archived_only,
-        limit=limit, offset=offset,
+        limit=limit, offset=offset, stats=_stats,
     )
     # Pipeline counters (global, independent of the active filter) so the ops UI
     # can badge the unpaid-lead funnel vs paid work and keep counts while filtering.
@@ -11322,7 +11323,11 @@ async def ops_list_claims(
         for r in await (await _c.execute(
                 f"SELECT payment_status, COUNT(*) n FROM nidaan_claims{_scope} GROUP BY payment_status")).fetchall():
             counts[r["payment_status"] or "paid"] = r["n"]
-    return {"claims": claims, "count": len(claims), "pipeline": counts}
+    # `count` keeps its meaning (this page's size) because callers read it. `total` is how many
+    # match the filters — what a pager needs, and what nothing could previously ask for.
+    return {"claims": claims, "count": len(claims),
+            "total": _stats.get("total", len(claims)),
+            "limit": limit, "offset": offset, "pipeline": counts}
 
 
 class OpsClaimArchiveReq(BaseModel):

@@ -3333,6 +3333,20 @@ async def init_db():
                 consent_fee_pct       REAL,
                 consent_gst_pct       REAL,
                 consent_ip            TEXT DEFAULT '',
+                -- These six are also added by ALTER further up this same function, and those
+                -- ALTERs run BEFORE this CREATE - so on a fresh database they fail into a bare
+                -- `except: pass` and the columns never appear. Production has them (the ALTERs
+                -- ran there against an existing table), which is exactly why nobody noticed:
+                -- the only database that would have been broken is a brand new one, i.e. a
+                -- restore. get_claims_ops selects cp.consent_pushed_at, so All Claims would
+                -- have failed outright on a rebuilt schema.
+                -- Declared here so a fresh database is correct; the ALTERs stay for old ones.
+                consent_terms_snapshot TEXT DEFAULT '',
+                consent_user_agent    TEXT DEFAULT '',
+                consent_name          TEXT DEFAULT '',
+                consent_hash          TEXT DEFAULT '',
+                consent_pushed_by     TEXT DEFAULT '',
+                consent_pushed_at     TIMESTAMP,
                 link_sent_at          TIMESTAMP,
                 link_sent_count       INTEGER DEFAULT 0,
                 created_at            TIMESTAMP DEFAULT CURRENT_TIMESTAMP
