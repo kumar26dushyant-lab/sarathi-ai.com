@@ -452,6 +452,26 @@ GST L2 fee"* and *"Fee not paid yet"*, but it was paid against a shared QR.
     needs a verified path (Razorpay) and a **claimed-and-pending** path (screenshot → a person
     confirms) that are visibly different. This is money; it gets the careful treatment.
 
+  **✅ ANSWERED — and the good news is the automatic path already exists and works.**
+  - Claim 200 has **no payment anywhere** — not in our ledger, not at Razorpay. The money never
+    reached our account. (The note-less ₹588.82 payments I first suspected turned out to be
+    **subscriptions** — ₹499+GST is both prices. Checked before concluding.)
+  - `POST /my-claims/{id}/l2-payment-link` and the branch portal's equivalent **already** create a
+    Razorpay link whose notes carry `purpose=l2`, `claim_id` and `branch`. When one of those is
+    paid, the webhook/guardian attaches it and **the claim flips to paid by itself**. No
+    screenshot needed. It is exactly what he asked for.
+  - 🔴 **Nobody can reach it.** `ops_my_l2_payment_link` is referenced by **no HTML at all** — an
+    endpoint built and never given a button. The branch-portal one has been used **5 times ever,
+    none since 8 Sept**. Meanwhile 15 branch L2 payments landed in the last 7 days by other
+    routes. So staff share *some other* QR — personal UPI, or the generic Settings link generator,
+    which offers only `review499 / subscription / custom` and **cannot attach a claim**.
+  - **Fix (small, high value):** put the claim-bound "Share ₹499+GST link / QR" button on the
+    claim, where "Fee not paid yet" is already printed. Then the automatic conversion he
+    described happens on its own.
+  - **Screenshot path stays SECOND** and separate: for money that genuinely arrived outside
+    Razorpay there is already an offline-payment recorder — it must be claim-scoped and marked
+    *claimed, awaiting confirmation*, never silently trusted.
+
 #### 🟡 B. AWKWARD — costs the team time every day
 
 **B4 · "Open" is off the right edge of every bucket table.** Everyone scrolls right, clicks Open,
