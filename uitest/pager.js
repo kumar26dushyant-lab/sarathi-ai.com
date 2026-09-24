@@ -78,5 +78,36 @@ gotoPage('claims', 3, 'noop');
 gotoPage('accounts', 1, 'noop');
 t('each list keeps its own page', pageOf('claims', 200) === 3 && pageOf('accounts', 200) === 1);
 
-console.log('\n' + (bad ? bad + ' failed' : 'paging holds, including the page that outlives its rows'));
+// ── every list, not just All Claims ─────────────────────────────────────────
+// Founder, 25 Sep: "pagination is only done on all claims, why it's not done on L2 claims,
+// accounts, and all buckets?"
+const OPSH = fs.readFileSync(path.join(__dirname, '..', 'static', 'nidaan_ops.html'), 'utf8');
+
+// THE ONE THAT WOULD BE SILENT DATA LOSS: an Excel export holding only the page somebody
+// happened to be looking at, with nothing on screen to say so.
+const exp = OPSH.slice(OPSH.indexOf('function l2Export'), OPSH.indexOf('function l2Export') + 900);
+t('the Excel export still takes EVERY row, not the page', /const rows = _l2Rows\.map/.test(exp));
+t('...and nothing paged leaked into it', !exp.includes('pageSlice'));
+
+// L2 Claims has three views and two of them return early — paging only the table would have
+// left Board and Cards quietly unpaged.
+const oc = OPSH.slice(OPSH.indexOf('const _pkOc ='), OPSH.indexOf('const _pkOc =') + 900);
+t('L2 Claims pages BEFORE the view branches',
+  oc.indexOf('rows = pageSlice') < oc.indexOf("_l2View==='board'"));
+t('...so the Board view is paged too', /_l2View==='board'\).*_ocBar\+_renderClaimBoard/.test(oc));
+t('...and the Cards view', /_l2View==='cards'\).*_ocBar\+_renderClaimCards/.test(oc));
+
+const bt = OPSH.slice(OPSH.indexOf('function l2Table(b){'), OPSH.indexOf('function l2Table(b){') + 400);
+t('each bucket gets its own page number', /_pk = 'bucket:' \+ \(b\.bucket_key/.test(bt));
+
+t('accounts repaint the FILTERED list, not the whole set',
+  OPSH.includes('window._accShown = accounts'));
+t('...through a named repaint the pager can call', OPSH.includes('window.renderAccountsPage'));
+
+t('the pager can hand an argument back to its renderer',
+  /function pagerBar\(key, total, redraw, arg\)/.test(h));
+t('...quoted for a string, bare for a number', /typeof arg === 'number'/.test(h));
+
+console.log('\n' + (bad ? bad + ' failed'
+  : 'every list paged, the page outlives its rows, and the export is untouched'));
 process.exit(bad ? 1 : 0);

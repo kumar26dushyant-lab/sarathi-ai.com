@@ -110,14 +110,24 @@ t('...and the fold is styled in both themes (variables only, no literals)',
 // The tabs were only ever FILTERS. The mover is this picker on the claim — and it was hidden for
 // Pending Draft, whose four configured steps left two ('with_mo', 'approved') that nothing in
 // the codebase could set. Configured and unreachable.
-const pickSrc = OPS.slice(OPS.indexOf('// The step picker is gone only where'),
+// Founder, 25 Sep, second message: "dont keep escalation picker hidden, make it drop down."
+// So EVERY bucket with steps shows it now. Escalation's two steps are still written by the work
+// (the escalation date, the insurer's reply) — the dropdown exists so a mis-set one can be
+// corrected, and says so rather than reading like a normal choice.
+const pickSrc = OPS.slice(OPS.indexOf('// EVERY bucket with steps gets this dropdown'),
                           OPS.indexOf('_escPanel(st, id)'));
 t('the step picker is shown for Pending Draft again',
   pickSrc.length > 0 && !/st\.bucket !== 'pending_draft'/.test(pickSrc), pickSrc.slice(0, 200));
-t('...and still hidden for Escalation, where the work decides the step',
-  /st\.bucket !== 'escalation'/.test(pickSrc));
+t('...and for Escalation too — no bucket is excluded any more',
+  !/st\.bucket !== 'escalation'/.test(pickSrc), pickSrc.slice(0, 200));
+t('...shown whenever the bucket HAS steps', /\(st\.substates \|\| \[\]\)\.length/.test(pickSrc));
 t('...and says it changes the step only, not the bucket',
   /the claim stays where it is/.test(pickSrc));
+t('a bucket whose steps the app writes says so, and offers itself as a correction',
+  /_AUTO_STEP_BUCKETS\.indexOf\(st\.bucket\) >= 0/.test(pickSrc)
+  && /only to correct a mistake/.test(pickSrc));
+t('...and Escalation is the bucket that is flagged that way',
+  /_AUTO_STEP_BUCKETS\s*=\s*\['escalation'\]/.test(OPS));
 
 // The automatic state must not be offered by hand, but must still show when a claim is in it —
 // otherwise the dropdown silently disagrees with the row it is sitting on.

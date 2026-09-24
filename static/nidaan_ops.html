@@ -4370,10 +4370,17 @@ function _renderOutcome(key){
   // Reflect the active view on the switcher (L2 only).
   if(isL2){ ['table','board','cards'].forEach(v=>{ const b=document.getElementById('vw_'+v); if(b) b.classList.toggle('active', _l2View===v); }); }
   if(!rows.length){ wrap.innerHTML='<div class="empty"><div class="ei">📭</div><p>No claims match.</p></div>'; return; }
+  // Paged HERE, before the view branches: Board and Cards return early, so paging only the
+  // table would have left two of the three views quietly unpaged.
+  // _renderOutcome is shared by L2 Claims and the other outcome lists and is told which by
+  // argument, so the key is passed back through the pager.
+  const _pkOc = 'oc:' + key;
+  const _ocBar = pagerBar(_pkOc, rows.length, '_renderOutcome', key);
+  rows = pageSlice(_pkOc, rows);
   // Views engine (L2): Board / Cards alternatives to the table.
-  if(isL2 && _l2View==='board'){ wrap.innerHTML=_renderClaimBoard(rows, true); return; }
-  if(isL2 && _l2View==='cards'){ wrap.innerHTML=_renderClaimCards(rows, true); return; }
-  wrap.innerHTML = '<div class="table-wrap"><table><thead><tr><th>#</th><th>Insured / Patient</th><th>Type</th><th>Disputed</th>'
+  if(isL2 && _l2View==='board'){ wrap.innerHTML=_ocBar+_renderClaimBoard(rows, true)+_ocBar; return; }
+  if(isL2 && _l2View==='cards'){ wrap.innerHTML=_ocBar+_renderClaimCards(rows, true)+_ocBar; return; }
+  wrap.innerHTML = _ocBar + '<div class="table-wrap"><table><thead><tr><th>#</th><th>Insured / Patient</th><th>Type</th><th>Disputed</th>'
     + (isL2?'<th>L2 fee</th><th>Stage</th><th>ClaimShield</th><th>Consolidation</th>':'') + '<th>Subscriber</th><th>Referred by</th><th>Delivered</th></tr></thead><tbody>'
     + rows.map(c=>{
         let csCell='';
@@ -4405,7 +4412,7 @@ function _renderOutcome(key){
         + `<td style="font-size:.78rem">${_subscriberCell(c)}</td>`
         + `<td style="font-size:.78rem">${_referredByCell(c)}</td>`
         + `<td style="font-size:.72rem;color:var(--nd-text-faint)">${fmtDate(c.review_delivered_at||c.last_status_at||c.created_at)}</td>
-      </tr>`;}).join('') + '</tbody></table></div>';
+      </tr>`;}).join('') + '</tbody></table></div>' + _ocBar;
 }
 // "Subscriber" and "Referred by" are two DIFFERENT facts and used to share one column, which
 // read as contradictory (a branch name under a "Subscriber" label). Now split.
@@ -4680,17 +4687,20 @@ function pageSlice(key, list){
   const n = pageSize(key), p = pageOf(key, (list || []).length);
   return (list || []).slice((p - 1) * n, p * n);
 }
-function setPageSize(key, n, redraw){
+// `arg` is passed straight back to the redraw function. Some renderers take one - _renderOutcome
+// is the same function for L2 Claims and every other outcome list and is told which by argument -
+// so without this each of them would need a wrapper on window just to be repaintable.
+function setPageSize(key, n, redraw, arg){
   try{ localStorage.setItem('nd_ps_' + key, String(n)); }catch(e){}
   _pageNo[key] = 1;                                  // a new size means a new page 1
-  const fn = window[redraw]; if (typeof fn === 'function') fn();
+  const fn = window[redraw]; if (typeof fn === 'function') fn(arg);
 }
-function gotoPage(key, n, redraw){
+function gotoPage(key, n, redraw, arg){
   _pageNo[key] = n;
-  const fn = window[redraw]; if (typeof fn === 'function') fn();
+  const fn = window[redraw]; if (typeof fn === 'function') fn(arg);
 }
 // Nothing at all under one page's worth: no bar, because a pager over 7 rows is furniture.
-function pagerBar(key, total, redraw){
+function pagerBar(key, total, redraw, arg){
   const n = pageSize(key);
   const last = Math.max(1, Math.ceil((total || 0) / n));
   const p = pageOf(key, total);
@@ -4698,11 +4708,14 @@ function pagerBar(key, total, redraw){
   const sizes = _PAGE_SIZES.map(function(s){
     return '<option value="' + s + '"' + (s === n ? ' selected' : '') + '>' + s + '</option>';
   }).join('');
+  // A string argument has to arrive at the handler quoted; a number or nothing must not be.
+  const a = (arg === undefined || arg === null) ? ''
+          : (typeof arg === 'number' ? (',' + arg) : (',&quot;' + String(arg) + '&quot;'));
   const btn = function(label, target, on){
     return '<button class="btn-sm btn-ghost" ' + (on ? '' : 'disabled ')
       + 'style="font-size:.72rem;padding:.15rem .5rem' + (on ? '' : ';opacity:.4') + '" '
-      + 'onclick="gotoPage(&quot;' + key + '&quot;,' + target + ',&quot;' + redraw + '&quot;)">'
-      + label + '</button>';
+      + 'onclick="gotoPage(&quot;' + key + '&quot;,' + target + ',&quot;' + redraw + '&quot;'
+      + a + ')">' + label + '</button>';
   };
   return '<div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;'
        +   'padding:.5rem .1rem;font-size:.78rem;color:var(--nd-text-muted)">'
@@ -4714,7 +4727,7 @@ function pagerBar(key, total, redraw){
        +   '</span>'
        +   '<span style="display:flex;align-items:center;gap:.3rem">per page'
        +     '<select onchange="setPageSize(&quot;' + key + '&quot;,parseInt(this.value,10),'
-       +       '&quot;' + redraw + '&quot;)" style="font-size:.75rem;padding:.1rem .3rem">'
+       +       '&quot;' + redraw + '&quot;' + a + ')" style="font-size:.75rem;padding:.1rem .3rem">'
        +     sizes + '</select></span>'
        + '</div>';
 }
@@ -7179,8 +7192,13 @@ function renderAccounts(accounts) {
   if (!accounts.length) {
     document.getElementById('accTableWrap').innerHTML='<div class="empty"><p>No accounts found</p></div>'; return;
   }
+  // Held so the pager can repaint the SAME filtered set: renderAccounts is called from several
+  // places with different lists, and a Next button that redrew the unfiltered list would throw
+  // away whatever the person had just narrowed down to.
+  window._accShown = accounts;
+  const _accBar = pagerBar('accounts', accounts.length, 'renderAccountsPage');
   const isSA = _role==='super_admin';
-  const rows = accounts.map(a=>{
+  const rows = pageSlice('accounts', accounts).map(a=>{
     const deleted = (a.status||'')==='deleted';
     return `
     <tr style="cursor:pointer" onclick="openAccountDrawer(${a.account_id})">
@@ -7209,14 +7227,19 @@ function renderAccounts(accounts) {
     </tr>`;}).join('');
   document.getElementById('accTableWrap').innerHTML = `
     <div style="font-size:.75rem;color:var(--nd-text-faint);margin-bottom:.4rem">💡 Click any row to view account details, claims and reviews</div>
+    ${_accBar}
     <div class="table-wrap">
       <table>
         <thead><tr>${isSA?'<th></th>':''}<th>#</th><th>Name</th><th>Firm</th><th>Email</th><th>Phone</th><th>Branch</th><th>Type</th><th>Usage</th><th>Status</th><th>Joined</th><th></th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
-    </div>`;
+    </div>
+    ${_accBar}`;
   updateAccBulkBar();
 }
+// Repaint whatever list is on screen, not the whole set. The pager calls this by name.
+function renderAccountsPage(){ renderAccounts(window._accShown || window._allAccounts || []); }
+window.renderAccountsPage = renderAccountsPage;
 
 // ── Fix referral attribution (super-admin) — corrects the first-touch-locked code ──
 function openReattributeModal(id){
@@ -14428,7 +14451,10 @@ function rowAttrs(opener, id){
 window.rowOpen = rowOpen; window.rowKey = rowKey; window.rowAttrs = rowAttrs;
 
 function l2Table(b){
-  const rows = _l2Rows.map(function(i){
+  // One page key per BUCKET: paging Live Cases must not leave you on page 3 of Escalation.
+  const _pk = 'bucket:' + (b.bucket_key || '');
+  const _allRows = _l2Rows || [];
+  const rows = pageSlice(_pk, _allRows).map(function(i){
     const mv = (b.moves || []);
     const fwd = mv.filter(function(x){ return x.kind === 'forward'; })[0];
     const others = mv.filter(function(x){ return x !== fwd; });
@@ -14505,12 +14531,14 @@ function l2Table(b){
       + '</td>'
       + '<td class="c-act" style="white-space:nowrap">' + btns + '</td></tr>';
   }).join('');
-  return '<div class="table-wrap"><table><thead><tr>'
+  // l2RenderBucket re-runs this whole function, so it is the right thing to repaint.
+  const _bar = pagerBar(_pk, _allRows.length, 'l2RenderBucket');
+  return _bar + '<div class="table-wrap"><table><thead><tr>'
     + '<th>Ref</th><th>Complainant</th><th>Type</th><th>Insurance Co.</th>'
     + '<th style="text-align:right">Disputed</th>'
     + '<th>Docs</th>' + (b.substates && b.substates.length ? '<th>Step</th>' : '')
     + '<th>In bucket</th><th>Why it is waiting</th><th></th>'
-    + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+    + '</tr></thead><tbody>' + rows + '</tbody></table></div>' + _bar;
 }
 
 // Claim type and who holds the claim, as editable cells rather than facts you have to open the
@@ -14878,6 +14906,9 @@ function l2CaseRender(rem){
   // raising one would label a claim as waiting for an answer nobody asked for.
   // It still SHOWS when the claim is already in it - otherwise the dropdown would silently
   // disagree with the row it is sitting on.
+  // Buckets whose steps the APP writes from a recorded fact. The dropdown still shows - it is
+  // how a mis-set step gets corrected - but it says so rather than reading like a normal choice.
+  const _AUTO_STEP_BUCKETS = ['escalation'];
   const _autoSub = {pending_draft: ['draft_query']};
   const _autoFor = _autoSub[st.bucket] || [];
   const subOpts = (st.substates || [])
@@ -15056,21 +15087,29 @@ function l2CaseRender(rem){
     +   '<div style="font-size:.84rem;color:var(--nd-text-secondary)">'
     +   '<b>' + esc((st.guide || {}).what || '') + '</b><br>' + esc((st.guide || {}).do || '')
     +   '<br><span style="color:var(--nd-warning-text)">⚠ ' + esc((st.guide || {}).watch || '') + '</span></div></div>'
-    // The step picker is gone only where EVERY step is decided by the work itself (founder,
-    // 19 Sep). That is Escalation: the escalation DATE makes it Escalated and the insurer's
-    // reply does the rest, so there is nothing for a person to choose.
+    // EVERY bucket with steps gets this dropdown (founder, 25 Sep: "dont keep escalation picker
+    // hidden, make it drop down").
     //
-    // Pending Draft was excluded for the same reason and should not have been. Its stated cause
-    // was "a draft query changes the status without moving or re-labelling anything" - true of
-    // `draft_query`, and of nothing else in that bucket. With the picker hidden, NOTHING
-    // anywhere could set "With Medical Officer / Advocate" or "Approved": two steps configured
-    // and unreachable, which is what the founder ran into on 25 Sep. The picker is back, minus
-    // the one state the query flow owns (filtered out of subOpts above).
-    + (((st.substates || []).length && st.bucket !== 'escalation')
+    // It was hidden for Escalation because both of its steps are written by real events - the
+    // escalation DATE makes it Escalated, an insurer reply logged as a query makes it Query. That
+    // is a good reason not to ask somebody to set them by hand in the normal run of work. It is
+    // not a reason to make them uncorrectable: a date typed onto the wrong claim leaves that
+    // claim filed under a step that is untrue, with no way to fix it from the screen showing it.
+    //
+    // It was also hidden for Pending Draft, and there the reasoning simply did not hold: only
+    // `draft_query` is automatic, so "With Medical Officer / Advocate" and "Approved" were
+    // configured and settable by nobody. `draft_query` is filtered out of subOpts above.
+    //
+    // The hint says which situation you are in rather than pretending they are the same.
+    + ((st.substates || []).length
         ? '<div class="l2fld"><label>Step inside this bucket</label>'
           + '<select onchange="l2SetSub(this.value,this)">' + subOpts + '</select>'
-          + '<div class="hint">Where this claim has got to inside ' + esc(st.bucket_name || 'this bucket')
-          + '. It changes the step only — the claim stays where it is.</div></div>' : '')
+          + '<div class="hint">'
+          + (_AUTO_STEP_BUCKETS.indexOf(st.bucket) >= 0
+              ? 'Normally set by the work itself \u2014 recording the escalation date, or logging '
+                + 'the insurer\'s reply. Change it here only to correct a mistake.'
+              : 'Where this claim has got to inside ' + esc(st.bucket_name || 'this bucket') + '.')
+          + ' It changes the step only \u2014 the claim stays where it is.</div></div>' : '')
     + ((st.bucket === 'escalation') ? _escPanel(st, id) : '')
     // Every paper on the claim, right above the fields they are read into. Each opens in its own
     // tab, so the gist being typed below is never lost to go and look at one.
