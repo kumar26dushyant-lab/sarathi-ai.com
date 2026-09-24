@@ -579,9 +579,56 @@ async def _check_reconcile(findings: list, ran: set) -> None:
                           "biz.env and Razorpay's status."})
         return
     await _n.set_ops_setting(_RZP_FAIL_KEY, "0")
-    ran.update({"gateway", "reconcile", "webhook"})
+    ran.update({"gateway", "reconcile", "webhook", "bounced"})
     since = await _since()
     captured = [p for p in pays if (p.get("status") or "") == "captured"]
+
+    # ── MONEY THAT ARRIVED AND BOUNCED STRAIGHT BACK ────────────────────────
+    # 23 Sep, claim 200: a complainant paid Rs 588.82, saw "Transaction Successful" on PhonePe,
+    # and sent the screenshot. Razorpay refunded it the SAME MINUTE, with the reason
+    # "The checkout order associated to the QR is closed" - the staff member had screenshotted
+    # the checkout QR and closed the window, so by the time it was scanned the order was dead.
+    #
+    # Nobody knew. This guardian only ever looked at `captured`, so a payment that arrived and
+    # was auto-refunded was invisible to us, while the customer believed they had paid and the
+    # claim went on reading "Fee not paid yet" for two days.
+    #
+    # It is the worst shape a payment problem can take: the customer is sure, we are sure, and
+    # both are right. So it is surfaced the moment it happens.
+    for p in pays:
+        if (p.get("status") or "") != "refunded" or p.get("captured"):
+            continue          # a deliberate refund of a real payment is somebody's decision
+        when = (datetime.utcfromtimestamp(int(p.get("created_at") or 0))
+                .strftime("%Y-%m-%d %H:%M:%S") if p.get("created_at") else "")
+        if when and when < since:
+            continue
+        why = ""
+        try:
+            key, sec = _rzp_auth()
+            async with httpx.AsyncClient(timeout=15, auth=(key, sec)) as _c:
+                _r = await _c.get("https://api.razorpay.com/v1/payments/%s/refunds" % p.get("id"))
+                for rf in ((_r.json() or {}).get("items") or []):
+                    why = (rf.get("notes") or {}).get("refund_reason") or ""
+                    if why:
+                        break
+        except Exception:  # noqa: BLE001 — the reason is a nicety, the alert is not
+            pass
+        findings.append({
+            "key": "bounced_payment:%s" % p.get("id"), "check": "bounced", "severity": "warn",
+            "title": "A customer paid ₹%s and it bounced straight back"
+                     % (int(p.get("amount") or 0) / 100),
+            "amount_paise": int(p.get("amount") or 0),
+            "detail": "%s (%s) was paid at %s UTC and refunded automatically — the customer saw "
+                      "'successful' on their phone and has a screenshot.\n\n"
+                      "Razorpay's reason: %s\n\n"
+                      "This is what happens when a CHECKOUT QR is screenshotted and sent on: the "
+                      "QR dies with the browser window, and anyone who scans it later is refunded. "
+                      "Use \"Share fee link\" on the claim instead — a link stays alive and comes "
+                      "back attached to the claim.\n\n"
+                      "Nothing is owed to the customer; their money is already back. They need "
+                      "telling, and the fee still needs paying."
+                      % (p.get("id"), p.get("method") or "?", when,
+                         why or "not given by Razorpay")})
 
     async with aiosqlite.connect(DB_PATH) as c:
         c.row_factory = aiosqlite.Row

@@ -10779,6 +10779,7 @@ async def ops_claim_payment_attempts(claim_id: int, request: Request):
     # Orders are what the "pay now" button makes; links are what the share button makes. Both
     # end up at Razorpay, and only Razorpay knows whether the customer got as far as trying.
     orders: list = []
+    bounced: list = []
     kid, sec = _nidaan_rzp_id(), _nidaan_rzp_secret()
     if kid and sec:
         try:
@@ -10796,9 +10797,41 @@ async def ops_claim_payment_attempts(claim_id: int, request: Request):
                         "status": o.get("status"),
                         # The number that answers the argument.
                         "attempts": int(o.get("attempts") or 0)})
+                # MONEY THAT ARRIVED AND CAME STRAIGHT BACK. A screenshotted checkout QR dies
+                # with the browser window, and whoever scans it afterwards is auto-refunded -
+                # having seen "successful" on their phone first. That payment carries no order
+                # and no notes, so it cannot be tied to a claim by id; it is matched on amount
+                # and on being close in time to something we created for this claim, and it is
+                # offered as "look at this", not as proof.
+                _win = [o.get("created_at") or 0 for o in orders]
+                if _win:
+                    _lo, _hi = min(_win) - 3600, max(_win) + 6 * 3600
+                    _p = await _cl.get("https://api.razorpay.com/v1/payments",
+                                       params={"from": _lo, "to": _hi, "count": 100})
+                    _amts = {int(o.get("amount") or 0) for o in
+                             ((_r.json() or {}).get("items") or [])
+                             if str((o.get("notes") or {}).get("claim_id") or "") == str(claim_id)}
+                    for pm in ((_p.json() or {}).get("items") or []):
+                        if (pm.get("status") or "") != "refunded" or pm.get("captured"):
+                            continue
+                        if pm.get("order_id") or (int(pm.get("amount") or 0) not in _amts):
+                            continue
+                        reason = ""
+                        try:
+                            _rf = await _cl.get(
+                                "https://api.razorpay.com/v1/payments/%s/refunds" % pm.get("id"))
+                            for rf in ((_rf.json() or {}).get("items") or []):
+                                reason = (rf.get("notes") or {}).get("refund_reason") or ""
+                                if reason:
+                                    break
+                        except Exception:  # noqa: BLE001
+                            pass
+                        bounced.append({"id": pm.get("id"), "created_at": pm.get("created_at"),
+                                        "amount": int(pm.get("amount") or 0) // 100,
+                                        "reason": reason})
         except Exception as e:  # noqa: BLE001 — the claim must open even if Razorpay is slow
             logger.info("payment attempts lookup failed for claim %s: %s", claim_id, e)
-    return {"claim_id": claim_id, "paid": paid,
+    return {"claim_id": claim_id, "paid": paid, "bounced": bounced,
             "links": [{"short_url": l.get("short_url"), "status": l.get("status"),
                        "created_at": l.get("created_at"),
                        "by": l.get("created_by_type"), "amount": (l.get("amount_paise") or 0) // 100}
