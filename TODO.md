@@ -113,10 +113,26 @@ session — they need the founder's go-ahead. Nothing below is live yet.
      contrast and asserts the ramp in both themes; `verify-claim-statuses.py` (18 checks) refuses
      a page that forks the colours or asks for a stale version. **Both new checks were proven to
      fail before being trusted.**
-2. **Advisor & Channel must say WHO, WHEN and HOW** — not a bare code. Branch/channel/account/
-   subscriber NAME, who initiated the claim (complainant or somebody else) and what we hold on
-   them, the time, and for a shared link, whose link it was. One block that explains the whole
-   origin of a claim, for every channel we accept claims through.
+2. ✅ **Advisor & Channel says WHO, WHEN and HOW** — `2bc9ce0`
+   ⚠️ **The headline was WRONG on 64 claims.** The panel said *"Came in as: 🏢 Branch ·
+   SP-GJG7BA"*. **SP-GJG7BA is not a branch — it is TAMANNA VASHISHTHA.** Under the
+   staff-as-branch referral scheme a colleague's referral code sits in the same column an office
+   code does, and the screen called all of them a branch. Live data: **64 claims carry a STAFF
+   referral code, 23 carry a real branch.** The most common thing that screen said about a
+   claim's origin was wrong.
+   > My first attempt made it *worse* — it reported "no branch on file for SP-GJG7BA" on 64
+   > claims. True, and useless. Caught by running it against every SHAPE of claim we hold before
+   > it reached a screen, not the one claim I picked.
+   - `biz_nidaan.claim_origin()` — **one resolver**. The claims LIST already turned a code into a
+     name; the DETAIL never did, so the one screen where somebody works a claim was the one that
+     could only show a code.
+   - staff codes resolved **before** branch codes · *"Raised on the branch portal"* not *"a
+     branch raised it"* (how it arrived and who brought it are two facts) · a hand-typed referrer
+     **name** still finds its person · **59 claims have no channel at all** and those say the
+     answer was WORKED OUT — a blank line reads as "nothing to see" instead of "never recorded"
+   - branch name + city + contact · subscriber name + number · who raised it and via what · the
+     referrer · **and WHEN** — all in both languages.
+   - `_tools/test_claim_origin.py`, 20 checks.
 3. **Payment notifications, pass AND fail.**
    - super-admins: every payment, but **not repeated into irritation**
    - branch / my-business / subscriber / CP: only THEIR claims
