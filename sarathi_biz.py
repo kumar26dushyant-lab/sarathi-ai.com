@@ -19,6 +19,7 @@ import logging
 import os
 import platform
 import random
+import re
 import signal
 import subprocess
 import sys
@@ -92,6 +93,29 @@ logging.basicConfig(
 for _noisy in ("httpx", "httpcore", "urllib3", "openai", "google_genai", "google.genai"):
     logging.getLogger(_noisy).setLevel(logging.WARNING)
 logger = logging.getLogger("sarathi.biz")
+
+
+# Third-party libraries put the credential they were handed straight into their error messages.
+# python-telegram-bot's InvalidToken was writing a live bot token into journald in plaintext on
+# every worker restart. A log line is not a safe place for a secret: it is readable by anyone with
+# log access, retained for as long as the journal is, and swept up by anything that ships logs.
+#
+# The last 6 characters are kept so two tokens can be told apart in a bug report; that is not
+# enough to use one. Patterns are deliberately shape-based rather than name-based - a secret does
+# not announce itself.
+_SECRET_SHAPES = [
+    re.compile(r"\b\d{8,12}:[A-Za-z0-9_-]{30,}"),        # Telegram bot token
+    re.compile(r"\brzp_(?:live|test)_[A-Za-z0-9]{10,}"),  # Razorpay key id
+    re.compile(r"\b[A-Za-z0-9_-]{32,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}"),  # JWT
+]
+
+
+def _scrub_secrets(text: str) -> str:
+    """Replace anything shaped like a credential with its last 6 characters."""
+    out = text or ""
+    for pat in _SECRET_SHAPES:
+        out = pat.sub(lambda m: "***REDACTED***" + m.group(0)[-6:], out)
+    return out
 
 # ── Control-center error ring buffer: keep the most recent WARNING+ log records
 # in memory so the superadmin can see what's failing without shell access. ──────
@@ -29000,8 +29024,14 @@ async def main():
             tenant_count = await mgr.start_all_tenant_bots()
             logger.info("✅ %d tenant bot(s) started", tenant_count)
         except Exception as _legacy_bot_err:
+            # SCRUB THE TOKEN. python-telegram-bot puts the rejected token verbatim in its
+            # InvalidToken message, so this line was writing a live bot credential into journald
+            # in plaintext, every restart, where it is readable by anyone with log access and
+            # retained for as long as the journal is. Only the last 6 characters survive, which
+            # is enough to tell two tokens apart and not enough to use one.
             logger.error("⚠️ Legacy Sarathi bot startup failed — continuing WITHOUT it "
-                         "(scheduler/Nidaan bot/digests unaffected): %s", _legacy_bot_err)
+                         "(scheduler/Nidaan bot/digests unaffected): %s",
+                         _scrub_secrets(str(_legacy_bot_err)))
     else:
         logger.info("🌐 APP_ROLE=%s — skipping Telegram bots (web-only instance)", APP_ROLE)
 

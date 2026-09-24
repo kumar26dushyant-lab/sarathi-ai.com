@@ -78,9 +78,21 @@ async def run_full_health_check(manual: bool = False) -> dict:
                     (rid, a["status"], a["name"], a.get("detail", "")))
             await conn.commit()
 
-    # Email alert if critical issues found
+    # Email alert if critical issues found — but only when the PICTURE CHANGES.
+    #
+    # This ran every 15 minutes and mailed on every pass with any critical check. "Master bot not
+    # running" has been true since 23 Sep 05:00, so it sent 97 identical emails in 24 hours. A
+    # problem that has not changed is not news, and an inbox that gets 96 copies of it stops being
+    # read — which is how the one that matters gets missed.
     if critical > 0:
-        await _send_alert_email(rid, results, critical, warnings, fixed)
+        if await _alert_is_new(sorted(r["name"] for r in results if r["status"] == "critical")):
+            await _send_alert_email(rid, results, critical, warnings, fixed)
+        else:
+            logger.info("Health: %d critical, unchanged — not emailing again", critical)
+    elif await _clear_alert_state():
+        # It was broken and now is not. That IS news, and it is the message that tells somebody
+        # they can stop worrying — so it is sent once, and it re-arms the alert for next time.
+        await _send_recovery_email(rid, results)
 
     summary = {
         "run_id": rid,
@@ -489,6 +501,84 @@ async def _check_auth(rid: str) -> list:
 
 
 # ─── Alert Email ──────────────────────────────────────────────────────────────
+
+# How long the same unchanged set of critical checks may stay quiet before it is said again. Not
+# silence: a re-send after this proves the alerting itself is still alive, without being a drip.
+_REPEAT_AFTER_H = 12
+_ALERT_STATE_KEY = "health_alert_state"
+
+
+async def _alert_is_new(names: list) -> bool:
+    """Is this a DIFFERENT problem from the one we last emailed about, or an old one gone stale?
+
+    Fails OPEN - if the state cannot be read, the email goes. This is the opposite of the payment
+    recovery guard, deliberately: there, silence still left the money in the ledger and on the
+    portal, so quiet was the safe failure. Here the whole point of the message is that a check is
+    critical and nobody has looked. Losing it to a database hiccup is the worse outcome.
+    """
+    fingerprint = "|".join(names)
+    try:
+        async with aiosqlite.connect(db.DB_PATH) as conn:
+            row = await (await conn.execute(
+                "SELECT value FROM nidaan_ops_settings WHERE key=?", (_ALERT_STATE_KEY,)
+            )).fetchone()
+            prev, when = ((row[0] or "").split("@@", 1) + [""])[:2] if row else ("", "")
+            same = (prev == fingerprint)
+            fresh = False
+            if same and when:
+                cur = await (await conn.execute(
+                    "SELECT datetime(?, ?) > datetime('now')", (when, "+%d hours" % _REPEAT_AFTER_H)
+                )).fetchone()
+                fresh = bool(cur and cur[0])
+            if same and fresh:
+                return False        # same problem, said recently - nothing new to report
+            await conn.execute(
+                "INSERT INTO nidaan_ops_settings (key, value) VALUES (?,?) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (_ALERT_STATE_KEY, "%s@@%s" % (fingerprint, _now_iso())))
+            await conn.commit()
+        return True
+    except Exception as e:  # noqa: BLE001
+        logger.warning("health alert state unreadable (%s) - sending anyway", e)
+        return True
+
+
+async def _clear_alert_state() -> bool:
+    """Everything is healthy again. Returns True if we had been alerting, so the all-clear is
+    sent exactly once rather than on every green run for ever."""
+    try:
+        async with aiosqlite.connect(db.DB_PATH) as conn:
+            row = await (await conn.execute(
+                "SELECT value FROM nidaan_ops_settings WHERE key=?", (_ALERT_STATE_KEY,)
+            )).fetchone()
+            if not row or not (row[0] or "").strip():
+                return False
+            await conn.execute("UPDATE nidaan_ops_settings SET value='' WHERE key=?",
+                               (_ALERT_STATE_KEY,))
+            await conn.commit()
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _now_iso() -> str:
+    from datetime import datetime as _dt
+    return _dt.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+
+
+async def _send_recovery_email(rid: str, results: list):
+    """The all-clear. Somebody was told something was broken; they are owed the other half."""
+    try:
+        await email_svc.send_email(
+            SA_EMAIL, "✅ Health Alert cleared — everything is healthy again",
+            email_svc._wrap_template(
+                "Health Monitor", f"<h2>✅ All clear</h2><p>The critical health issue reported "
+                f"earlier is resolved. {len(results)} checks ran and none are critical.</p>"
+                f"<p><strong>Run ID:</strong> {rid}</p>"
+                f'<p><a href="https://sarathi-ai.com/superadmin" class="btn">Open Cockpit →</a></p>'))
+    except Exception as e:  # noqa: BLE001
+        logger.warning("could not send the health all-clear: %s", e)
+
 
 async def _send_alert_email(rid: str, results: list, critical: int, warnings: int, fixed: int):
     """Send alert email to SA when critical issues detected."""
