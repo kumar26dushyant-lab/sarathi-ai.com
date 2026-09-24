@@ -12472,8 +12472,13 @@ async def _subsystem_checks() -> list:
     no monitor. Returns [{name, ok, note}]."""
     checks: list = []
 
-    def _chk(name, ok, note=""):
-        checks.append({"name": name, "ok": bool(ok), "note": note})
+    def _chk(name, ok, note="", level="", where=""):
+        # level: "" lets ok/not-ok decide, as every existing caller expects. Pass "attention"
+        # for something that is TRUE but is work to do rather than a subsystem being down -
+        # those are shown amber and never counted as a failing subsystem.
+        lv = level or ("ok" if ok else "down")
+        checks.append({"name": name, "ok": lv != "down", "level": lv,
+                       "note": note, "where": where})
 
     # ── Subsystems added since this panel was first built ────────────────────
     # WhatsApp Cloud API (the live NidaanPartner number). The block above still reports the
@@ -12539,10 +12544,20 @@ async def _subsystem_checks() -> list:
                 _last_in = await (await _wc.execute(
                     "SELECT MAX(created_at) FROM nidaan_wa_messages WHERE direction='in'")).fetchone()
             _li = (_last_in[0] if _last_in else "") or "never"
-            if _in and _unans:
+            if _in and _unans >= len(_in) and len(_in) >= 2:
+                # NOBODY got an answer. That is not a backlog, that is a bot that is not
+                # replying - the outage this check was built for after "CONNECTED" read green
+                # for days while nobody was being answered.
                 _chk("WhatsApp bot replies", False,
-                     "%d of %d people who wrote in the last 24h got NO reply within 15 min"
-                     % (_unans, len(_in)))
+                     "NOBODY who wrote in the last 24h got a reply (%d people) — the bot is not "
+                     "answering" % len(_in))
+            elif _in and _unans:
+                # Some answered, some not. The connection is fine and messages are going out;
+                # this is a queue, and it belongs on the WhatsApp automation screen, not here.
+                _chk("WhatsApp bot replies", True,
+                     "working — %d of %d answered within 15 min; %d still waiting"
+                     % (len(_in) - _unans, len(_in), _unans),
+                     level="attention", where="WhatsApp automation")
             elif _in:
                 _chk("WhatsApp bot replies", True,
                      "%d inbound in 24h, every one answered" % len(_in))
@@ -12685,9 +12700,13 @@ async def _subsystem_checks() -> list:
             _noc = (await (await _cc.execute(
                 "SELECT COUNT(*) FROM nidaan_claims WHERE COALESCE(archived,0)=0 AND "
                 "COALESCE(complainant_phone,'')='' AND COALESCE(insured_phone,'')=''")).fetchone())[0]
-        _chk("Contact reachability", (_nob + _noc) == 0,
+        # A missing phone number is a record to complete, not a system that is down. It stays
+        # visible - it is why a complainant never hears from us - but amber, and it says where.
+        _chk("Contact reachability", True,
              (f"{_nob} branch(es) without WhatsApp, {_noc} claim(s) with no phone at all"
-              if (_nob + _noc) else "every branch and claim has a contact"))
+              if (_nob + _noc) else "every branch and claim has a contact"),
+             level=("attention" if (_nob + _noc) else "ok"),
+             where="Branches · Claims")
     except Exception as _e:
         _chk("Contact reachability", False, f"check failed: {str(_e)[:70]}")
     # Backups — silent backup failure is the classic invisible disaster.
@@ -12781,8 +12800,10 @@ async def _login_checks() -> list:
     """
     out: list = []
 
-    def _chk(name, ok, note=""):
-        out.append({"name": name, "ok": bool(ok), "note": note})
+    def _chk(name, ok, note="", level="", where=""):
+        lv = level or ("ok" if ok else "down")
+        out.append({"name": name, "ok": lv != "down", "level": lv,
+                    "note": note, "where": where})
 
     try:
         sent = await _login_health.summary()
@@ -12819,10 +12840,14 @@ async def _login_checks() -> list:
         total = len(rows)
         stranded = [r["branch_code"] for r in rows if not r["email"] and not r["phone"]]
         with_phone = [r for r in rows if r["phone"]]
-        _chk("Branch login — a way in", not stranded,
+        # Serious, and still not a subsystem failure: the login system works, these records are
+        # incomplete. Amber with the branch codes in it is more actionable than a red ✗ on a
+        # working service.
+        _chk("Branch login — a way in", True,
              "all %d active branches have an email or a mobile" % total if not stranded
              else "%d of %d branches have NEITHER an email nor a mobile and cannot log in at "
-                  "all: %s" % (len(stranded), total, ", ".join(stranded[:8])))
+                  "all: %s" % (len(stranded), total, ", ".join(stranded[:8])),
+             level=("attention" if stranded else "ok"), where="Branches")
         # Email is the only channel most branches have today; the founder's plan is to make
         # WhatsApp primary once every branch has a mobile on file, so track the gap.
         _chk("Branch login — WhatsApp fallback", bool(with_phone),
@@ -12954,8 +12979,13 @@ async def ops_health(request: Request):
     health = await nidaan.get_app_health()
     # Live service checks for the control center.
     checks = []
-    def _chk(name, ok, note=""):
-        checks.append({"name": name, "ok": bool(ok), "note": note})
+    def _chk(name, ok, note="", level="", where=""):
+        # level: "" lets ok/not-ok decide, as every existing caller expects. Pass "attention"
+        # for something that is TRUE but is work to do rather than a subsystem being down -
+        # those are shown amber and never counted as a failing subsystem.
+        lv = level or ("ok" if ok else "down")
+        checks.append({"name": name, "ok": lv != "down", "level": lv,
+                       "note": note, "where": where})
     _chk("Database", health is not None, "SQLite reachable")
     # Brevo's balance is checked in _subsystem_checks (so the watchdog sees it too) — here we
     # only say whether it is wired up at all.
@@ -13046,7 +13076,12 @@ async def ops_health(request: Request):
     checks.extend(await _subsystem_checks())
 
     health["checks"] = checks
-    health["failing"] = [c["name"] for c in checks if not c["ok"]]
+    # Only genuinely-down machinery. An "attention" item is true and worth doing, and it is not
+    # a subsystem failure - counting it as one is what made the banner cry wolf.
+    health["failing"] = [c["name"] for c in checks if c.get("level") == "down"]
+    health["attention"] = [{"name": c["name"], "note": c.get("note", ""),
+                            "where": c.get("where", "")}
+                           for c in checks if c.get("level") == "attention"]
     health["errors_recent"] = len(_ERROR_RING)
     health["system"] = _system_metrics()
     health["latency"] = _latency_stats()

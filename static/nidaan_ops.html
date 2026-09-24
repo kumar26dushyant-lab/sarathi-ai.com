@@ -9826,11 +9826,24 @@ async function loadHealth() {
   const loginChecks = (d.checks||[]).filter(c=>isLogin(c.name));
   const otherChecks = (d.checks||[]).filter(c=>!isLogin(c.name));
 
-  const checks = otherChecks.map(c=>
-    `<div class="stat-card ${c.ok?'ok':'danger'}" title="${esc(c.note||'')}">
-      <div class="sv" style="font-size:1.1rem;color:${c.ok?'var(--nd-success-text)':'var(--nd-danger-text)'}">${c.ok?'✓':'✕'}</div>
-      <div class="sl">${esc(c.name)}<div style="font-size:.66rem;color:var(--nd-text-faint)">${esc(c.note||'')}</div></div>
-    </div>`).join('');
+  // Three states. `level` is what the server now sends; older responses only had `ok`, so fall
+  // back to that rather than showing everything as healthy if one side is redeployed first.
+  const lvl = (c)=> c.level || (c.ok ? 'ok' : 'down');
+  const MARK = {ok:'✓', attention:'!', down:'✕'};
+  const TINT = {
+    ok:        'var(--nd-success-text)',
+    attention: 'var(--nd-warning-text)',
+    down:      'var(--nd-danger-text)'
+  };
+  const checks = otherChecks.map(c=>{
+    const L = lvl(c);
+    // The "where" is the whole point of an amber card: it is work, so say where the work is done.
+    const where = (L==='attention' && c.where)
+      ? `<div style="font-size:.64rem;color:var(--nd-warning-text);margin-top:.15rem">→ ${esc(c.where)}</div>` : '';
+    return `<div class="stat-card ${L==='down'?'danger':(L==='attention'?'warn':'ok')}" title="${esc(c.note||'')}">
+      <div class="sv" style="font-size:1.1rem;color:${TINT[L]}">${MARK[L]}</div>
+      <div class="sl">${esc(c.name)}<div style="font-size:.66rem;color:var(--nd-text-faint)">${esc(c.note||'')}</div>${where}</div>
+    </div>`;}).join('');
 
   // Where a broken way in is fixed. Nothing is "fixed" by a button that only refreshes a
   // number — these open the screen that holds the missing data.
@@ -9859,10 +9872,15 @@ async function loadHealth() {
     </div>
 
     ${(d.failing||[]).length?`<div style="background:rgba(220,38,38,.12);border:1px solid rgba(220,38,38,.45);border-radius:10px;padding:.75rem 1rem;margin-bottom:1rem">
-      <div style="font-weight:800;color:var(--nd-danger-text)">⚠️ ${(d.failing||[]).length} subsystem(s) need attention</div>
+      <div style="font-weight:800;color:var(--nd-danger-text)">✕ ${(d.failing||[]).length} subsystem(s) DOWN</div>
       <div style="font-size:.82rem;color:var(--nd-text-secondary);margin-top:.2rem">${(d.failing||[]).map(esc).join(' · ')}</div>
-      <div style="font-size:.74rem;color:var(--nd-text-muted);margin-top:.3rem">Details on the cards below — hover any ✕ for the reason. Several can be fixed with the self-serve buttons.</div>
-    </div>`:'<div style="background:rgba(16,185,129,.10);border:1px solid rgba(16,185,129,.35);border-radius:10px;padding:.6rem 1rem;margin-bottom:1rem;font-size:.85rem;color:var(--nd-success-text);font-weight:700">✓ All subsystems healthy</div>'}
+      <div style="font-size:.74rem;color:var(--nd-text-muted);margin-top:.3rem">Something is actually broken. Details on the cards below — hover any ✕ for the reason.</div>
+    </div>`:'<div style="background:rgba(16,185,129,.10);border:1px solid rgba(16,185,129,.35);border-radius:10px;padding:.6rem 1rem;margin-bottom:1rem;font-size:.85rem;color:var(--nd-success-text);font-weight:700">✓ Everything is running</div>'}
+
+    ${(d.attention||[]).length?`<div style="background:var(--nd-warning-soft);border:1px solid rgba(234,179,8,.5);border-radius:10px;padding:.6rem 1rem;margin-bottom:1rem">
+      <div style="font-weight:800;color:var(--nd-warning-text);font-size:.88rem">! ${(d.attention||[]).length} thing(s) to do — nothing is broken</div>
+      <div style="font-size:.78rem;color:var(--nd-text-secondary);margin-top:.25rem">${(d.attention||[]).map(a=>esc(a.name)+(a.where?' <span style="color:var(--nd-text-faint)">→ '+esc(a.where)+'</span>':'')).join(' · ')}</div>
+    </div>`:''}
 
     <div style="margin-bottom:1.25rem">
       <div class="section-hdr" style="margin-bottom:.55rem"><div class="section-title" style="font-size:1rem">Service Checks</div>${d.errors_recent>0?`<span style="font-size:.78rem;color:var(--nd-danger-text)">⚠️ ${d.errors_recent} recent error log(s)</span>`:'<span style="font-size:.78rem;color:var(--nd-success-text)">No recent errors</span>'}</div>

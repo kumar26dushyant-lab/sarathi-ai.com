@@ -68,8 +68,37 @@ _OPS_URL = (os.getenv("NIDAAN_BASE_URL", "https://nidaanpartner.com").rstrip("/"
 DB_PATH = db.DB_PATH
 IST = timezone(timedelta(hours=5, minutes=30))
 
-ALERT_EVERY_MIN = 10        # unseen: say it again this often, for as long as it takes
+ALERT_EVERY_MIN = 10        # unseen: the FIRST gap for a critical incident
 REMIND_AFTER_ACK_H = 2      # seen but still broken: speak up again after this long
+
+# How long before an incident may speak AGAIN, by severity, indexed by how many times it has
+# already spoken. The last entry repeats for critical; for anything else, running off the end of
+# the list means it stops talking altogether.
+#
+#   critical : 10 min, 30 min, 2h, then every 6h - backs off, never goes silent
+#   warn     : once, then once more a day later, then quiet
+#   info     : once, ever
+#
+# Founder, 24 Sep: "1-2 alerts are fine now, not in every 5 min continuously."
+_CADENCE = {
+    "critical": [ALERT_EVERY_MIN, 30, 120, 360],
+    "warning":  [1440],
+    "warn":     [1440],
+    "info":     [],
+}
+
+
+def _next_gap_minutes(severity: str, said_count: int):
+    """Minutes until this may be said again, or None for 'it has said its piece'.
+
+    None does NOT mean resolved. The incident stays open and stays on the Payment Health screen;
+    it simply stops interrupting people. Critical never returns None - something that is actually
+    broken has to keep asking.
+    """
+    plan = _CADENCE.get((severity or "").lower(), _CADENCE["warn"])
+    if said_count < len(plan):
+        return plan[said_count]
+    return plan[-1] if ((severity or "").lower() == "critical" and plan) else None
 LOOK_BACK_H = 48            # how far back the reconciliation looks
 HEARTBEAT_KEY = "pay_guard_heartbeat"
 SINCE_KEY = "pay_guard_since"    # it judges what happens from the moment it starts watching
@@ -585,7 +614,10 @@ async def _check_reconcile(findings: list, ran: set) -> None:
             if not why_not:
                 findings.append({
                     "key": "recovered_payment:%s" % pid, "check": "reconcile",
-                    "severity": "warning",
+                    # We found it AND fixed it. That is news once, not an emergency - it was
+                    # this finding, repeating, that put ~192 messages an hour on the founder's
+                    # phone. (24 Sep)
+                    "severity": "info",
                     "title": "Recovered a payment the webhook never delivered — ₹%s" % (amt / 100),
                     "amount_paise": amt,
                     "detail": "Razorpay captured %s (₹%s, %s) and no webhook reached us, so it "
@@ -622,7 +654,9 @@ async def _check_reconcile(findings: list, ran: set) -> None:
             continue          # older than the window Razorpay returned - not evidence of anything
         if pid not in rzp_captured_ids:
             findings.append({
-                "key": "ledger_not_at_rzp:%s" % pid, "check": "reconcile", "severity": "critical",
+                # Bookkeeping to investigate, not an outage: nobody is being charged wrongly
+                # and nothing is down. It needs a person, today, not tonight.
+                "key": "ledger_not_at_rzp:%s" % pid, "check": "reconcile", "severity": "warn",
                 "title": "We recorded a payment Razorpay has not captured",
                 "amount_paise": int(row.get("total_paise") or 0),
                 "account_id": row.get("account_id"), "claim_id": row.get("claim_id"),
@@ -657,7 +691,11 @@ async def _check_reconcile(findings: list, ran: set) -> None:
         if not newest or newest < cutoff:
             _self_ok, _self_why = await webhook_self_test()
             findings.append({
-                "key": "webhook_silent", "check": "webhook", "severity": "critical",
+                # NOT critical by the founder's definition: money is still reaching us and
+                # nothing is owed to any customer - the guardian reconciles against Razorpay
+                # every 5 minutes and recovers. What is lost is promptness and the second
+                # independent path. Worth saying twice, not worth a siren.
+                "key": "webhook_silent", "check": "webhook", "severity": "warn",
                 "title": "No Razorpay webhook has reached us in 24 hours",
                 # WHERE TO LOOK, said plainly. On 20 Sep this alarm told a person to go and
                 # change a webhook URL and secret that were correct. On 23 Sep it did the
@@ -858,8 +896,13 @@ async def _alert_due() -> int:
     async with aiosqlite.connect(DB_PATH) as c:
         c.row_factory = aiosqlite.Row
         due = [dict(r) for r in await (await c.execute(
+            # `next_alert_at IS NULL` means "this one has said its piece" - it must be
+            # EXCLUDED. COALESCE(next_alert_at,'') made NULL compare as '' , which is <= every
+            # timestamp, so a silenced incident would have become permanently due: the exact
+            # opposite of silence.
             "SELECT * FROM nidaan_pay_incidents WHERE status IN ('open','acked') "
-            "AND COALESCE(next_alert_at,'') <= ? ORDER BY inc_id", (now,))).fetchall()]
+            "AND next_alert_at IS NOT NULL AND next_alert_at <> '' "
+            "AND next_alert_at <= ? ORDER BY inc_id", (now,))).fetchall()]
     if not due:
         return 0
     ids = await _supers()
@@ -892,11 +935,29 @@ async def _alert_due() -> int:
             # back to every ten minutes - telling the person who had tapped Seen that nobody had.
             # An acknowledged incident stays acknowledged; only the count moves, and an acked one
             # waits the full reminder period again rather than ten minutes.
-            gap = ("+%d hours" % REMIND_AFTER_ACK_H) if inc["status"] == "acked" \
-                else ("+%d minutes" % ALERT_EVERY_MIN)
-            await c.execute(
-                "UPDATE nidaan_pay_incidents SET alert_count=alert_count+1, "
-                "next_alert_at=datetime('now', ?) WHERE inc_id=?", (gap, inc["inc_id"]))
+            # status is NOT touched here - it used to be forced to 'open', which wiped a Seen
+            # on the very next alert.
+            said = again + 1
+            if inc["status"] == "acked":
+                # Somebody is on it. Give them the full reminder window whatever the severity.
+                await c.execute(
+                    "UPDATE nidaan_pay_incidents SET alert_count=?, "
+                    "next_alert_at=datetime('now', ?) WHERE inc_id=?",
+                    (said, "+%d hours" % REMIND_AFTER_ACK_H, inc["inc_id"]))
+            else:
+                mins = _next_gap_minutes(inc["severity"], said)
+                if mins is None:
+                    # It has said what it has to say. Still open, still on the screen, silent.
+                    logger.info("incident %s (%s) has said its piece - going quiet",
+                                inc["inc_id"], inc["severity"])
+                    await c.execute(
+                        "UPDATE nidaan_pay_incidents SET alert_count=?, next_alert_at=NULL "
+                        "WHERE inc_id=?", (said, inc["inc_id"]))
+                else:
+                    await c.execute(
+                        "UPDATE nidaan_pay_incidents SET alert_count=?, "
+                        "next_alert_at=datetime('now', ?) WHERE inc_id=?",
+                        (said, "+%d minutes" % mins, inc["inc_id"]))
             await c.commit()
         sent += 1
     return sent
