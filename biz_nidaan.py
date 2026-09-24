@@ -2434,6 +2434,195 @@ async def deliver_review(claim_id: int, outcome: str, findings: str,
     return True
 
 
+# ── Where a claim came from ──────────────────────────────────────────────────
+# Founder, 23 Sep: "for advisor & channel info: we need all details not only code but branch
+# name, channel name accounts name, subscriber name and other details ... so it'll be easy to
+# track who, when, what."
+#
+# The claim panel showed "Branch · SP-GJG7BA" and an internal email address. The LIST query
+# already resolved a code into a human name; the DETAIL query never did, so the one screen where
+# somebody is actually working a claim was the one screen that could not say who brought it.
+#
+# Resolved once, here, rather than in each screen - the two were already disagreeing.
+
+# How a claim reached us, in both languages. The key is whatever is in nidaan_claims.origin.
+_ORIGIN_LABELS = {
+    # "Raised on the branch portal", not "a branch raised it" - under the staff-as-branch scheme
+    # the code on the claim is very often a colleague's, not an office's, and 64 claims were
+    # being announced as coming from a branch that does not exist. HOW it arrived and WHO brought
+    # it are two facts; the rows below say the second.
+    "branch":        ("🏢", "Raised on the branch portal", "ब्रांच पोर्टल से दर्ज किया गया"),
+    "ops_on_behalf": ("👤", "Our staff raised it for a subscriber",
+                      "हमारे स्टाफ़ ने सब्सक्राइबर की ओर से दर्ज किया"),
+    "d2c_review":    ("🌐", "Website — ₹499 review", "वेबसाइट — ₹499 रिव्यू"),
+    "my_business":   ("💼", "My Business", "माय बिज़नेस"),
+    "cp":            ("🤝", "A channel partner brought it", "चैनल पार्टनर लाया"),
+    "subscriber":    ("💳", "A subscriber filed it themselves",
+                      "सब्सक्राइबर ने ख़ुद दर्ज किया"),
+}
+
+
+async def claim_origin(claim_id: int, lang: str = "en") -> dict:
+    """Who brought this claim, when, and through which channel - with NAMES, not codes.
+
+    Returns {how, when, rows[], gaps[]}. `rows` is ordered for reading: the channel first, then
+    the organisation, then the people. `gaps` names what we do not hold, because 59 of our claims
+    carry no origin at all and a blank line reads as "nothing to see" rather than "not recorded".
+    """
+    hi = str(lang).lower().startswith("hi")
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        row = await (await conn.execute(
+            """SELECT c.claim_id, c.origin, c.created_at, c.branch_code AS claim_branch,
+                      c.raised_by_name, c.raised_by_staff_id, c.raised_via,
+                      c.channel_partner_id, c.associate_referrer, c.account_id,
+                      a.owner_name, a.firm_name, a.email AS account_email, a.phone AS account_phone,
+                      a.branch_code AS account_branch, a.source_channel, a.created_at AS account_since
+                 FROM nidaan_claims c
+                 JOIN nidaan_accounts a ON a.account_id = c.account_id
+                WHERE c.claim_id=?""", (int(claim_id),))).fetchone()
+        if not row:
+            return {}
+        c = dict(row)
+        code = (c.get("claim_branch") or c.get("account_branch") or "").strip()
+
+        # THE CODE IN branch_code IS NOT ALWAYS A BRANCH. 64 of our coded claims carry a STAFF
+        # referral code there (the staff-as-branch referral scheme) and only 23 a real branch -
+        # and the screen called all of them "Branch · SP-GJG7BA". SP-GJG7BA is a person.
+        # Staff first, because that is the larger and the mislabelled case.
+        branch = cp = code_staff = None
+        if code:
+            code_staff = await (await conn.execute(
+                "SELECT staff_id, name, role, status FROM nidaan_staff "
+                "WHERE UPPER(COALESCE(referral_code,''))=UPPER(?) AND COALESCE(referral_code,'')<>''",
+                (code,))).fetchone()
+            code_staff = dict(code_staff) if code_staff else None
+            if not code_staff:
+                branch = await (await conn.execute(
+                    "SELECT branch_code, name, city, contact_email, contact_phone, status, created_at "
+                    "FROM nidaan_branches WHERE UPPER(branch_code)=UPPER(?)", (code,))).fetchone()
+                branch = dict(branch) if branch else None
+        if c.get("channel_partner_id"):
+            cp = await (await conn.execute(
+                "SELECT cp_id, name, company, email, phone, created_by_name, approved_by_name "
+                "FROM nidaan_channel_partners WHERE cp_id=?",
+                (c["channel_partner_id"],))).fetchone()
+            cp = dict(cp) if cp else None
+
+        # The attribution code can belong to a STAFF member (their own referral code) or to a
+        # branch. Same resolution the claims list does - kept identical on purpose.
+        # associate_referrer is not always a code either - some rows hold a NAME typed by hand
+        # ("ANNAPURNA KASERA"). Try it as a code, then as a name, before calling it unmatched:
+        # "matches nobody" about a person we do have is a worse answer than no answer.
+        ref_staff = ref_branch = None
+        ref_code = (c.get("associate_referrer") or "").strip()
+        if ref_code:
+            ref_staff = await (await conn.execute(
+                "SELECT name, role FROM nidaan_staff "
+                "WHERE UPPER(COALESCE(referral_code,''))=UPPER(?) AND COALESCE(referral_code,'')<>''",
+                (ref_code,))).fetchone()
+            if not ref_staff:
+                ref_staff = await (await conn.execute(
+                    "SELECT name, role FROM nidaan_staff WHERE UPPER(name)=UPPER(?)",
+                    (ref_code,))).fetchone()
+            ref_staff = dict(ref_staff) if ref_staff else None
+            if not ref_staff:
+                ref_branch = await (await conn.execute(
+                    "SELECT name, city FROM nidaan_branches "
+                    "WHERE UPPER(branch_code)=UPPER(?) OR UPPER(name)=UPPER(?)",
+                    (ref_code, ref_code))).fetchone()
+                ref_branch = dict(ref_branch) if ref_branch else None
+
+    origin = (c.get("origin") or "").strip().lower()
+    icon, en, hin = _ORIGIN_LABELS.get(origin, ("", "", ""))
+    if not en:
+        # No origin recorded. Say what we can infer and SAY that it is an inference - 59 live
+        # claims are in this state and pretending otherwise is how a screen starts lying.
+        if code_staff:
+            icon, en, hin = "👤", "Brought in by a colleague's referral code (worked out)", \
+                            "एक साथी के रेफ़रल कोड से आया (अनुमान)"
+        elif branch or code:
+            icon, en, hin = "🏢", "A branch raised it (from the branch code)", \
+                            "ब्रांच ने दर्ज किया (ब्रांच कोड से)"
+        elif c.get("account_id"):
+            icon, en, hin = "💳", "A subscriber filed it themselves (from the account)", \
+                            "सब्सक्राइबर ने ख़ुद दर्ज किया (खाते से)"
+        else:
+            icon, en, hin = "❔", "Not recorded", "दर्ज नहीं है"
+
+    rows, gaps = [], []
+
+    def add(label_en, label_hi, value, detail=""):
+        if value:
+            rows.append({"label": label_hi if hi else label_en,
+                         "value": value, "detail": detail})
+
+    if code_staff:
+        # The honest label. This is a colleague's referral code, not a branch office, and calling
+        # it a branch is what made "who brought this claim" unanswerable on 64 claims.
+        add("Staff referral", "स्टाफ़ रेफ़रल", "👤 " + (code_staff.get("name") or code),
+            " · ".join(x for x in (code_staff.get("role"), code) if x))
+        if (code_staff.get("status") or "") != "active":
+            gaps.append("%s is no longer active" % code_staff.get("name") if not hi
+                        else "%s अब सक्रिय नहीं हैं" % code_staff.get("name"))
+    elif branch:
+        add("Branch", "ब्रांच", "🏢 " + (branch.get("name") or code),
+            " · ".join(x for x in (branch.get("branch_code"), branch.get("city")) if x))
+        add("Branch contact", "ब्रांच संपर्क",
+            branch.get("contact_phone") or branch.get("contact_email") or "",
+            (branch.get("contact_email") or "") if branch.get("contact_phone") else "")
+    elif code:
+        add("Code on the claim", "क्लेम पर कोड", code)
+        gaps.append("the code %s matches neither a branch nor a staff referral" % code if not hi
+                    else "कोड %s न किसी ब्रांच से मेल खाता है, न किसी स्टाफ़ रेफ़रल से" % code)
+
+    if cp:
+        add("Channel partner", "चैनल पार्टनर", cp.get("name") or "",
+            " · ".join(x for x in (cp.get("company"), cp.get("phone")) if x))
+        add("Partner added by", "पार्टनर जोड़ा", cp.get("created_by_name") or "")
+
+    # The account the claim is filed under - the "subscriber name" he asked for by name.
+    add("Subscriber account", "सब्सक्राइबर खाता",
+        c.get("owner_name") or c.get("firm_name") or ("#%s" % c.get("account_id")),
+        " · ".join(x for x in (c.get("firm_name") if c.get("owner_name") else "",
+                               c.get("account_phone") or c.get("account_email")) if x))
+
+    if c.get("raised_by_name"):
+        add("Raised by", "दर्ज किया", c["raised_by_name"],
+            ("via " + c["raised_via"]) if c.get("raised_via") else "")
+
+    # Show the code in the detail only when it IS a code. Some rows hold a typed name, and
+    # echoing "ANNAPURNA KASERA · ANNAPURNA KASERA" reads as a bug in the screen.
+    _rc = "" if (ref_code and ref_staff and ref_code.upper() ==
+                 (ref_staff.get("name") or "").upper()) else ref_code
+    if ref_staff:
+        add("Referred by", "रेफ़र किया", "👤 " + (ref_staff.get("name") or ""),
+            " · ".join(x for x in (ref_staff.get("role") or "staff", _rc) if x))
+    elif ref_branch:
+        add("Referred by", "रेफ़र किया", "🏢 " + (ref_branch.get("name") or ""),
+            " · ".join(x for x in (ref_branch.get("city"), ref_code) if x))
+    elif c.get("associate_referrer"):
+        add("Referred by", "रेफ़र किया", c["associate_referrer"])
+        gaps.append("the referral code %s matches nobody" % c["associate_referrer"] if not hi
+                    else "रेफ़रल कोड %s किसी से मेल नहीं खाता" % c["associate_referrer"])
+
+    if c.get("source_channel"):
+        add("Account came from", "खाता कहाँ से आया", c["source_channel"])
+
+    if not origin:
+        gaps.append("the channel was never recorded on this claim — the line above is worked out "
+                    "from what else we hold" if not hi else
+                    "इस क्लेम पर चैनल दर्ज नहीं हुआ — ऊपर की पंक्ति बाक़ी जानकारी से निकाली गई है")
+
+    return {
+        "how": {"icon": icon, "label": hin if hi else en, "key": origin or "unknown"},
+        "when": c.get("created_at"),
+        "account_since": c.get("account_since"),
+        "rows": rows,
+        "gaps": gaps,
+    }
+
+
 async def get_claim_with_account(claim_id: int) -> Optional[dict]:
     """Fetch a single claim joined with its account email and owner_name."""
     async with aiosqlite.connect(DB_PATH) as conn:

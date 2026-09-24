@@ -3923,6 +3923,45 @@ function _claimChannel(c){
   return c.branch_code ? ('🏢 Branch · ' + esc(c.branch_code))
                        : (c.account_id ? '👤 Subscriber dashboard' : '—');
 }
+// The whole origin of a claim, in one block. Built server-side by biz_nidaan.claim_origin()
+// so the claim panel, the lists and anything later all give the same answer - they were already
+// disagreeing, which is how "Branch · SP-GJG7BA" survived on 64 claims that no branch raised.
+function _originBlock(c){
+  const d = c.origin_detail || {};
+  const how = d.how || {};
+  // Older responses (or a claim opened from a cached list) have no origin_detail. Fall back to
+  // what the page can work out itself rather than showing an empty panel.
+  if (!how.label){
+    return '<div class="kv"><span class="kv-label">Came in as</span><span class="kv-val">'
+      + _claimChannel(c) + '</span></div>'
+      + '<div class="kv"><span class="kv-label">Name</span><span class="kv-val">'
+      + esc(c.owner_name||'\u2014') + '</span></div>';
+  }
+  const when = d.when ? fmtDate(d.when) : '';
+  const rows = (d.rows||[]).map(function(r){
+    return '<div class="kv"><span class="kv-label">' + esc(r.label) + '</span>'
+      + '<span class="kv-val">' + esc(r.value)
+      + (r.detail ? ' <span style="color:var(--nd-text-faint);font-size:.74rem">\u00b7 '
+                    + esc(r.detail) + '</span>' : '')
+      + '</span></div>';
+  }).join('');
+  // A gap is not an error - it is a fact about our own records, and saying it is what lets
+  // somebody go and fix it. Amber, never red.
+  const gaps = (d.gaps||[]).map(function(g){
+    return '<div style="font-size:.74rem;color:var(--nd-warning-text);margin-top:.25rem">! '
+      + esc(g) + '</div>';
+  }).join('');
+  const fix = (_role==='super_admin')
+    ? ' <button class="btn-sm btn-ghost" style="font-size:.7rem;padding:.15rem .5rem;color:var(--nd-cyan-text)"'
+      + ' onclick="openClaimReattributeModal(' + c.claim_id + ')"'
+      + ' title="Correct who referred this claim">\ud83c\udff7\ufe0f Fix</button>' : '';
+  return '<div style="font-weight:700;margin-bottom:.35rem">' + esc(how.icon||'') + ' '
+       +   esc(how.label) + fix + '</div>'
+       + (when ? '<div class="kv"><span class="kv-label">When</span><span class="kv-val">'
+                 + esc(when) + '</span></div>' : '')
+       + rows + gaps;
+}
+
 function _l2CsBadge(c){
   if(c.claimshield_case_id) return `<span style="color:var(--nd-cyan-text);font-weight:700">CS #${esc(c.claimshield_case_id)}</span>${c.claimshield_status_raw?` · <span style="color:var(--nd-text-secondary)">${esc(c.claimshield_status_raw)}</span>`:''}`;
   return _l2Eligible(c) ? '<span style="color:var(--nd-text-faint)">not sent</span>' : '<span style="color:var(--nd-warning-text)">fee due</span>';
@@ -6043,19 +6082,10 @@ async function openClaimDrawer(claimId) {
       }</span></div>
       ${c.l2_paid_at?`<div class="kv"><span class="kv-label">L2 paid</span><span class="kv-val">${fmtDate(c.l2_paid_at)}</span></div>`:''}
     </div>`:''}
-    <!-- Advisor -->
+    <!-- Where this claim came from: who, when and how, in names rather than codes -->
     <div data-ord="20" class="drawer-section">
-      <h4 style="display:flex;justify-content:space-between;align-items:center;gap:.5rem">Advisor &amp; channel${(_role==='super_admin'||_role==='sub_super_admin')?`<button class="btn-sm btn-ghost" style="font-size:.72rem;padding:.2rem .55rem;color:var(--nd-cyan-text)" onclick="editAdvisorModal(${c.claim_id})">✏️ Edit</button>`:''}</h4>
-      <div class="kv"><span class="kv-label">Came in as</span><span class="kv-val">${_claimChannel(c)}</span></div>
-      <div class="kv"><span class="kv-label">Name</span><span class="kv-val">${esc(c.owner_name||'—')}</span></div>
-      <div class="kv"><span class="kv-label">Firm</span><span class="kv-val">${esc(c.firm_name||'—')}</span></div>
-      <div class="kv"><span class="kv-label">Email</span><span class="kv-val">${esc(c.advisor_email||'—')}</span></div>
-      <div class="kv"><span class="kv-label">Phone</span><span class="kv-val">${esc(c.advisor_phone||'—')}</span></div>
-      <div class="kv"><span class="kv-label">Referred by</span><span class="kv-val">${
-        (c.ref_name||c.ref_code)
-          ? `${c.ref_kind==='staff'?'👤 ':c.ref_kind==='branch'?'🏢 ':''}${esc(c.ref_name||c.ref_code)}${c.ref_code?` <span style="color:var(--nd-text-faint);font-size:.72rem">· ${esc(c.ref_code)}</span>`:''}`
-          : '<span style="color:var(--nd-text-faint)">Direct (no referrer)</span>'
-      }${_role==='super_admin'?` <button class="btn-sm btn-ghost" style="font-size:.7rem;padding:.15rem .5rem;color:var(--nd-cyan-text)" onclick="openClaimReattributeModal(${c.claim_id})" title="Correct who referred this claim">🏷️ Fix</button>`:''}</span></div>
+      <h4 style="display:flex;justify-content:space-between;align-items:center;gap:.5rem">Where this claim came from${(_role==='super_admin'||_role==='sub_super_admin')?`<button class="btn-sm btn-ghost" style="font-size:.72rem;padding:.2rem .55rem;color:var(--nd-cyan-text)" onclick="editAdvisorModal(${c.claim_id})">✏️ Edit</button>`:''}</h4>
+      ${_originBlock(c)}
     </div>
     ${canAssign?`<div data-ord="30" class="drawer-section">
       <h4>Assign To Staff</h4>

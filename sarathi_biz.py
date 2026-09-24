@@ -11276,6 +11276,15 @@ async def ops_get_claim(claim_id: int, request: Request):
         staff.get("role") in ("super_admin", "sub_super_admin"))
     claim["followups"] = await nidaan.get_followups_for_claim(claim_id)
     claim["assignees"] = await nidaan.get_claim_assignees(claim_id)
+    # Where it came from, with NAMES. The claims LIST already resolved a branch code into a human
+    # name; this endpoint never did, so the one screen where somebody actually works a claim was
+    # the one screen that could only show a code. Never allowed to fail the claim itself.
+    try:
+        claim["origin_detail"] = await nidaan.claim_origin(
+            claim_id, lang=(request.query_params.get("lang") or "en"))
+    except Exception as _oe:  # noqa: BLE001
+        logger.info("could not resolve the origin of claim %s: %s", claim_id, _oe)
+        claim["origin_detail"] = {}
     return claim
 
 
