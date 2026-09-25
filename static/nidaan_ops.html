@@ -11810,9 +11810,10 @@ async function loadWorkflowSettings(){
   loadNotificationRegistry();
 }
 
-// ── Every notification this app can send ─────────────────────────────────────
-// The list nobody had. Read-only until the founder answers how the switches should work; a
-// toggle that silently does nothing is worse than no toggle.
+// ── Every notification this app can send, and who wants to hear it ───────────
+// The list nobody had, now with working switches: one tickbox per job per notification.
+// A person or a single claim can also be switched off - those live where the person and the
+// claim are, and beat this screen, because a setting made on a claim is the more specific one.
 async function loadNotificationRegistry(){
   const panel = document.getElementById('panel-settings');
   if (!panel) return;
@@ -11835,6 +11836,7 @@ async function loadNotificationRegistry(){
   }
 
   const ev = d.events || [];
+  _npPrefs = d.prefs || [];
   // Group in the order the server sent them - it is already the order a person looks in.
   const groups = [];
   ev.forEach(function(e){
@@ -11852,41 +11854,111 @@ async function loadNotificationRegistry(){
     + '<div style="font-size:.78rem;color:var(--nd-text-muted);margin-bottom:.7rem">'
     +   '🔒 ' + locked + ' of them cannot be switched off — ' + esc(((d.lock_reason||{}).en)||'') + '<br>'
     +   'Staff are always reached on Telegram and the dashboard bell. Email is used only where '
-    +   'it says so below.</div>'
+    +   'it says so below.<br>'
+    +   '<b>Tick</b> = that job is told. <b>Untick</b> = it is not sent to them at all. '
+    +   'The dashboard bell always keeps the record either way.</div>'
     + groups.map(function(g){
         return '<div style="margin-bottom:.9rem">'
           + '<div style="font-size:.74rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;'
           + 'color:var(--nd-text-faint);margin-bottom:.3rem">' + esc(g.label) + '</div>'
           + '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:.8rem">'
           + '<thead><tr style="background:var(--nd-bg-surface-2)">'
-          + '<th style="padding:.4rem .55rem;text-align:left">What happened</th>'
+          + '<th style="padding:.4rem .55rem;text-align:left;position:sticky;left:0;z-index:2;'
+          + 'background:var(--nd-bg-elev-blur)">What happened</th>'
           + '<th style="padding:.4rem .55rem;text-align:left">Who is told</th>'
           + '<th style="padding:.4rem .55rem;text-align:left">How</th>'
-          + '<th style="padding:.4rem .55rem;text-align:center">Can be turned off</th>'
+          + _NP_ROLES.map(function(r){
+              return '<th style="padding:.4rem .55rem;text-align:center;white-space:nowrap">'
+                   + esc(r.label) + '</th>'; }).join('')
           + '</tr></thead><tbody>'
           + g.rows.map(function(e){
               return '<tr style="border-top:1px solid var(--nd-border)">'
-                + '<td style="padding:.45rem .55rem">' + esc(e.label)
+                + '<td style="padding:.45rem .55rem;position:sticky;left:0;z-index:1;'
+                +   'background:var(--nd-bg-elev-blur)">' + esc(e.label)
                 +   '<div style="font-size:.68rem;color:var(--nd-text-faint);font-family:monospace">'
                 +   esc(e.key) + '</div></td>'
                 + '<td style="padding:.45rem .55rem;color:var(--nd-text-secondary)">' + esc(e.who) + '</td>'
                 + '<td style="padding:.45rem .55rem;color:var(--nd-text-secondary)">' + esc(e.channels) + '</td>'
-                + '<td style="padding:.45rem .55rem;text-align:center">'
-                +   (e.locked
-                      ? '<span title="' + esc(((d.lock_reason||{}).en)||'') + '" style="color:var(--nd-text-faint)">🔒 no</span>'
-                      : '<span style="color:var(--nd-text-muted)">yes</span>')
-                + '</td></tr>';
+                + _NP_ROLES.map(function(r){
+                    // Money, security and system health: no tickbox at all, so there is nothing
+                    // to click that would not take effect.
+                    if (e.locked){
+                      return '<td style="padding:.45rem .55rem;text-align:center;'
+                           + 'color:var(--nd-text-faint)" title="'
+                           + esc(((d.lock_reason||{}).en)||'') + '">🔒</td>';
+                    }
+                    // Ticked unless somebody switched it off: ON is the default, and a box that
+                    // started empty would read as "nobody is being told", which is untrue.
+                    return '<td style="padding:.45rem .55rem;text-align:center">'
+                      + '<input type="checkbox" style="width:1.05rem;height:1.05rem;cursor:pointer"'
+                      + (_npIsOff(e.key, r.key) ? '' : ' checked')
+                      + ' title="' + esc(r.label) + ' — ' + esc(e.label) + '"'
+                      + ' onchange="npToggle(this,&quot;' + esc(e.key) + '&quot;,&quot;'
+                      + esc(r.key) + '&quot;)"></td>';
+                  }).join('')
+                + '</tr>';
             }).join('')
           + '</tbody></table></div></div>';
       }).join('')
     + '<div style="font-size:.74rem;color:var(--nd-text-faint);border-top:1px dashed var(--nd-border);padding-top:.5rem">'
-    +   'The switches are not live yet — two decisions are needed first: whether control is per '
-    +   'notification or per notification <b>per role</b>, and whether anything beyond money, '
-    +   'security and system health should be impossible to switch off. '
+    +   'Unticking a box stops that notification for <b>everyone with that job</b>, on Telegram '
+    +   'and email. One person can also be switched off on their own, or on a single claim: '
+    +   'a claim setting wins over a personal one, and a personal one wins over the job.<br>'
+    +   '🔒 means money, security or system health. Nobody can switch those off — a quiet one '
+    +   'costs real money or real trust.<br>'
     +   'A new notification cannot be added without appearing on this list: the build refuses it.'
     + '</div>';
 }
 window.loadNotificationRegistry = loadNotificationRegistry;
+
+// The jobs this screen switches. Deliberately not every staff member: per-person and per-claim
+// switches exist in the API and belong beside the person and the claim, not in a grid of 75
+// events by every colleague.
+const _NP_ROLES = [
+  {key: 'super_admin',     label: 'Super admins'},
+  {key: 'sub_super_admin', label: 'Sub admins'},
+  {key: 'team_member',     label: 'Team'},
+];
+let _npPrefs = [];
+
+// Is this notification switched OFF for this job? Only job-level switches are read here. A
+// personal or per-claim switch is real and wins at send time, but drawing it in this grid would
+// claim "the whole team is not told" when in fact one person opted out.
+function _npIsOff(eventKey, role){
+  return (_npPrefs || []).some(function(p){
+    if (p.scope !== 'role' || (p.role || '') !== role) return false;
+    if (p.event_key !== eventKey && p.event_key !== '*') return false;
+    return !p.enabled || p.frequency === 'off';
+  });
+}
+
+async function npToggle(el, eventKey, role){
+  const on = !!el.checked;
+  el.disabled = true;
+  try{
+    const r = await API('/notifications/prefs', {method: 'POST', body: JSON.stringify({
+      scope: 'role', role: role, event_key: eventKey, channel: '*',
+      enabled: on, frequency: on ? 'immediate' : 'off'})});
+    const d = await r.json().catch(function(){ return {}; });
+    if (!r.ok){
+      el.checked = !on;                        // put it back: it did not happen
+      ndUI.toast(_extractErr(d, 'Could not save that'), 'error');
+      return;
+    }
+    if (d.ignored_because) ndUI.toast(d.ignored_because, 'error');
+    else ndUI.toast(on ? 'Turned back on for this job ✓' : 'Switched off for this job ✓', 'success');
+    // Keep the copy on screen in step with the server, so the next redraw is not a lie.
+    _npPrefs = (_npPrefs || []).filter(function(p){
+      return !(p.scope === 'role' && (p.role || '') === role && p.event_key === eventKey);
+    });
+    if (!on) _npPrefs.push({scope: 'role', role: role, event_key: eventKey,
+                            channel: '*', enabled: 0, frequency: 'off'});
+  }catch(err){
+    el.checked = !on;
+    ndUI.toast('Could not save that. Nothing was changed.', 'error');
+  }finally{ el.disabled = false; }
+}
+window.npToggle = npToggle;
 
 // ── Payment Links (super-admin generator) ────────────────────────────────────
 function plPurposeChange(){

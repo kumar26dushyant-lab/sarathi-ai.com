@@ -104,6 +104,17 @@ CAPABILITIES: list[dict] = [
                "d": "टास्क मिलने, टैग होने, कमेंट या अप्रूवल पर — टेलीग्राम और ऐप दोनों पर।"},
         "telegram": True, "web": True, "min_role": "team_member",
     },
+    {
+        # Settings → 🔔 Notifications. The whole list, with a tickbox per job on every row.
+        "id": "notification_control",
+        "en": {"t": "Decide who is told what",
+               "d": "Every message the system can send, in one list. Untick a box to stop it for "
+                    "a whole job. Money, security and health cannot be switched off."},
+        "hi": {"t": "तय करें किसे क्या सूचना जाए",
+               "d": "सिस्टम जो भी मैसेज भेज सकता है, सब एक लिस्ट में। किसी रोल के लिए बंद करना हो "
+                    "तो टिक हटा दें। पैसा, सुरक्षा और सिस्टम हेल्थ बंद नहीं हो सकते।"},
+        "telegram": False, "web": True, "min_role": "super_admin",
+    },
     # ── Leave / WFH ───────────────────────────────────────────────────────
     {
         "id": "apply_leave",

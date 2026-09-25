@@ -1263,6 +1263,36 @@ async def init_db():
                 created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
 
+            -- WHO WANTS TO HEAR WHAT. The switches behind the notification register.
+            --
+            -- Founder, 25 Sep: "per event per role and per event per specific user involved, of
+            -- course claim level settings will take precedence" - and the reason, which is the
+            -- real specification: "just so I should not depend on notification thing on you
+            -- every time to do code changes until anything breaks."
+            --
+            -- One row per switch. The UNIQUE key is the precedence address: a scope, whoever it
+            -- is about, the event and the channel. COALESCE in the index because SQLite treats
+            -- every NULL as distinct, so without it "role=team_member, no staff, no claim" would
+            -- insert a second row every time somebody flipped it.
+            CREATE TABLE IF NOT EXISTS nidaan_notify_prefs (
+                pref_id    INTEGER PRIMARY KEY AUTOINCREMENT,
+                scope      TEXT NOT NULL,        -- claim_user | user | role
+                role       TEXT,
+                staff_id   INTEGER,
+                claim_id   INTEGER,
+                event_key  TEXT NOT NULL,        -- an event key, or '*' for all of them
+                channel    TEXT NOT NULL,        -- telegram | email | '*'
+                enabled    INTEGER DEFAULT 1,
+                frequency  TEXT DEFAULT 'immediate',   -- immediate | daily | off
+                updated_by TEXT DEFAULT '',
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_nprefs_addr ON nidaan_notify_prefs
+                (scope, COALESCE(role,''), COALESCE(staff_id,0), COALESCE(claim_id,0),
+                 event_key, channel);
+            CREATE INDEX IF NOT EXISTS idx_nprefs_lookup ON nidaan_notify_prefs
+                (scope, staff_id, claim_id);
+
             -- EVERY query we have ever put to a complainant, one row each.
             --
             -- Founder, 24 Sep: "all history should be recording in this section only just so

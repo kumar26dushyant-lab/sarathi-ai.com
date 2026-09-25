@@ -82,3 +82,22 @@ into `screenshots/`.
 **It refuses to report on an empty screen.** The first version said "0 problems across 6 devices"
 because a SyntaxError meant nothing had rendered at all; it now proves claims are on screen before
 it measures anything.
+
+## notify-switches.js — the notification switches, on a phone
+
+`node notify-switches.js` (from this folder; add `--headed` to watch)
+
+Nothing here touches a server. The ops page is loaded from disk and every API call is answered by
+the test file, so it is safe to run at any hour, including while the team is working.
+
+It proves the things a Python check cannot: that each switchable notification really draws a
+tickbox for all three jobs, that a **locked** one (money, security, health) draws **none** rather
+than a dead control, that a switch somebody already set shows as unticked while the other jobs
+stay ticked, that tapping one sends exactly one save addressed to the right job and notification,
+and that a **refused** save puts the tick back where it was — a tick left standing after a 403
+would tell a super admin they had silenced something they had not.
+
+Then the phone rules: at 390px the page never scrolls sideways (the table scrolls inside its own
+box), the notification's **name stays pinned** when you scroll across to the job columns — without
+that you are ticking a box with no idea which row it belongs to — the tap target is at least 16px,
+and the lock cell keeps a colour of its own in **both** light and dark mode.

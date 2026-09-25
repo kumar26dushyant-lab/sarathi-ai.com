@@ -4,7 +4,7 @@ _Auto-maintained by Claude **every conversation**, alongside `PROJECT_MASTER_CON
 _**Two-terminal workflow:** work 🟦 NidaanPartner items in one VS Code terminal, 🟩 Sarathi items in another. Each app's section is self-contained so both can progress simultaneously without collision._
 _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned · ✅ done_
 
-**Last updated:** 2026-09-23 (evening) — 🟡 two commits built and checked locally, **awaiting deploy approval**.
+**Last updated:** 2026-09-25 (afternoon) — ✅ **the notification controller is built and checked**; the switches on Settings → 🔔 Notifications are live in code. 🟡 **awaiting deploy, after 6pm IST** (founder: no deploying while the team is working).
 
 **Previously:** 2026-09-22 — 🟢 **CUTOVER COMPLETE. NidaanPartner.com and Sarathi-AI.com are LIVE on Oracle Mumbai (161.118.186.201, aarch64).** Contabo parked as rollback, untouched.
 
@@ -607,7 +607,55 @@ until we can say what it was for and who used it.** Proposal to follow, not a un
 
 ### 📋 RAISED 25 Sep — and the two answers I was waiting for
 
-#### 🟢 ANSWERED — the notification switches can now be built
+#### ✅ BUILT 25 Sep — THE NOTIFICATION CONTROLLER (awaiting deploy, after 6pm IST)
+
+The switches are real. Settings → **🔔 Notifications** is no longer a read-only list: every one of
+the **75** notifications has a **tickbox per job** (Super admins · Sub admins · Team). Untick it
+and that job stops being told, on Telegram and email. The dashboard bell keeps the record either
+way — that is the difference between quiet and blind, and this project has paid to learn it once.
+
+| Piece | Where |
+|---|---|
+| The resolver — the precedence chain | `biz_nidaan_notify_prefs.py` (new) |
+| One row per switch, addressed by scope | `nidaan_notify_prefs` + `idx_nprefs_addr` (unique on the COALESCEd address, so a re-flip updates instead of piling up rows) |
+| Both send paths ask it | `biz_nidaan_notifications.py` → `resolve(..., channel=…)` |
+| Set · clear · **explain** | `POST`/`DELETE`/`GET /nidaan/ops/api/notifications/prefs`, `…/explain` |
+| The screen | `static/nidaan_ops.html` → `npToggle()` |
+| In the feature list | `biz_nidaan_capabilities.py` → `notification_control` |
+
+**Decisions worth keeping:**
+- **Money, security and system health draw no tickbox at all** — nothing to click that could not
+  take effect. A switch set against one through the API is *stored and reported*, never silently
+  dropped: the person set it, and hiding that it will not apply is how a screen starts lying.
+- **Roles on this screen, on purpose.** Per-person and per-claim switches exist in the API and in
+  the resolver, and belong beside the person and the claim. 75 events × every colleague is a grid
+  nobody can read, and therefore nobody trusts.
+- **An unreadable preferences table fails towards being told.** The failure people notice is
+  noise; the failure that costs money is the message that never came.
+- **`daily` is accepted but behaves as immediate** — nothing drains a digest yet, so the screen
+  deliberately offers on/off only. A verifier check now *enforces* that, and is the reminder to
+  lift it the day the digest exists.
+- Super-admin only, and every flip is in the audit trail: this is a map of everyone else's
+  attention, and one person quietly silencing a colleague is an outage arranged by accident.
+- **Caught on the phone, not in the code.** The first screenshot at 390px showed the fault: the
+  job columns are only reachable by scrolling sideways, and the notification's *name* went with
+  them — you would be ticking a box with no idea which row it belonged to. The name column is now
+  pinned, and that is a check in the suite, not a note.
+
+**Checked:** 30 precedence checks (`_tools/test_notify_prefs.py`, py -3.14) · 43 routing +
+wiring checks (`deploy/verify-notify-routing.py`) · 13 register checks · `npm run check:all` ·
+`verify-ops-buttons.py` 435 handlers, 0 unreachable · **16 browser checks on a 390px phone in both
+themes** (`uitest/notify-switches.js`, offline — safe to run while the team is working). The wiring checks are the dead-button guard:
+a tickbox that renders, accepts a click and reaches nothing looks identical to one that works, so
+every link — tickbox → POST → route → super-admin gate → audit → resolver — is asserted alone.
+
+🔴 **Still owed on this:** the daily digest (then `daily` can be offered); per-person switches on a
+staff member's page and per-claim switches on the claim, both of which the API already supports;
+`channel='telegram'` is **still never recorded** in `nidaan_notifications`, so there is no delivery
+record for the channel we are standardising on — that is measurement, not control, and it means a
+switch's *effect* cannot yet be proven from the data.
+
+#### 🟢 ANSWERED — what unblocked it
 
 He answered both open questions in one line:
 > *"per event per role and per event per specific user involved, of course claim level settings
@@ -626,8 +674,9 @@ And said why it matters:
 ```
 **Locked events (money · security · system health) ignore all of it** — that was settled on
 24 Sep and the registry already enforces it.
-Also wanted: **frequency** ("which notification, to which, frequency, when").
-🔴 **This is the next build**, ahead of churn analytics, at his explicit request.
+Also wanted: **frequency** ("which notification, to which, frequency, when") — stored, honest
+about not being live, and listed above as still owed.
+✅ **Built 25 Sep**, ahead of churn analytics, at his explicit request. See the section above.
 
 #### 🔴 D1 · "Send the query to the complainant" must become a real tool
 
@@ -753,11 +802,12 @@ big one, on a quiet evening) → 4 → 5 → 6.
    being heavy, surface an intrusion attempt and tell the super-admins).
    - Standing rule proved twice on 22–23 Sep: **a check must read an OUTCOME, not a
      configuration.** "The key is set" is not "email is arriving".
-4. **Notification registry** — 77 event keys across 12 modules, none configurable. New keys should
-   register themselves. Two questions still open for the founder: per-event only or per-event
-   per-role; and whether some events must never be silenceable (money, security, health).
-   - Note: `notify_policy.summary()` claims in its own docstring to be "surfaced in ops so the
-     rules are visible, not folklore" — **it is not wired to anything.**
+4. ~~**Notification registry**~~ — ✅ **CLOSED 25 Sep.** All 75 keys register themselves (the build
+   refuses a new one that does not), both questions answered by the founder, and the switches are
+   real: per event per job on the screen, per person and per claim in the API, claim beating person
+   beating job. See *THE NOTIFICATION CONTROLLER* above for what is still owed (the daily digest,
+   the two narrower screens, and a delivery record for Telegram).
+   - `notify_policy.summary()` is now wired — it is what the register screen reads.
 
 ### ✅ SHIPPED 2026-09-23 (2) — Revenue reads the ledger (it was showing 36% of the money)
 

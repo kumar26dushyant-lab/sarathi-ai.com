@@ -2,7 +2,7 @@
 
 > **Purpose:** Single source of truth for project recovery. If a development session is lost, feed this document to a new session to restore full context instantly.
 >
-> **Last Updated:** Sep 22, 2026. Newest work is at the BOTTOM — read **A99** and **A98** (live testing), then A94–A97 (Level-2 buckets), then **A93**, then A92/A91/A90 backwards for what's current. Older numbered sections 1–73 are the original detailed reference. Also load the memory index: `C:\Users\imdus\.claude\projects\c--sarathi-business\memory\MEMORY.md`.
+> **Last Updated:** Sep 25, 2026. Newest work is at the BOTTOM — read **A112** (who is told what, and who decides) and **A111**, then A99/A98 (live testing), then A94–A97 (Level-2 buckets), then **A93**, then A92/A91/A90 backwards for what's current. Older numbered sections 1–73 are the original detailed reference. Also load the memory index: `C:\Users\imdus\.claude\projects\c--sarathi-business\memory\MEMORY.md`.
 >
 > **Maintainer:** Update this doc after every significant change.
 
@@ -7975,3 +7975,107 @@ exactly the shape of the last two outages.
 The fix is a Cloudflare dashboard action. **There is no Cloudflare API token anywhere in this
 repo**, so it cannot be scripted from the app server — `deploy/RAZORPAY_WEBHOOK_BLOCKED_RUNBOOK.md`
 has the steps, and the rule that it must be proven by outcome, not by reading a setting back.
+
+---
+
+## 🔔 A112 — WHO IS TOLD WHAT, AND WHO DECIDES (Sep 25 2026)
+
+**The founder's ask, and the sentence that is the actual specification:**
+
+> *"before churn analysis I would give preference to notification controlling module, much needed
+> for clarity which notification should go to which, frequency, when what if possible to control,
+> **just so I should not depend on notification thing on you every time to do code changes until
+> anything breaks**. per event per role and per event per specific user involved, of course claim
+> level settings will take precedence."*
+
+That last clause is the whole design. Anything he can only change by asking me to edit code is a
+failure of this module, so it is measured against that and not against feature count.
+
+### The chain — most specific wins, and it carries its reason
+
+```
+1. claim × user    "stop telling ME about claim 200"          ← highest
+2. user            "never send ME claim.status"
+3. role            "team members do not get bucket.move"
+4. notify_policy   what the app does today (Telegram+bell vs email)
+5. on by default   an event nobody has an opinion about is SENT
+```
+
+`biz_nidaan_notify_prefs.py::resolve()` returns `{send, frequency, locked, why}`. `why` is written
+to be shown to a person, because *"why am I not getting these?"* is the question the module exists
+to answer without me. `GET /nidaan/ops/api/notifications/explain` answers it per channel for one
+person on one claim, naming which level of the chain decided.
+
+**Storage.** `nidaan_notify_prefs`, one row per switch. The UNIQUE index is the *precedence
+address* — `(scope, COALESCE(role,''), COALESCE(staff_id,0), COALESCE(claim_id,0), event_key,
+channel)`. The COALESCE matters: SQLite treats every NULL as distinct, so without it a role switch
+with no staff and no claim would insert a **new row every time somebody flipped it**, and the
+resolver would be reading whichever one it happened to sort first.
+
+`event_key='*'` and `channel='*'` are wildcards, and at a given scope an exact event beats `*`
+and an exact channel beats `*` — so "nothing from this app except claim.status" is one row plus
+one, not seventy-five rows.
+
+### Four decisions that are the point, not the implementation
+
+1. **Locked events draw no tickbox at all.** Money, security and system health. The register has
+   held `locked` since 24 Sep; the screen now simply renders 🔒 where the control would be, so
+   there is nothing to click that could not take effect. A switch set against one *through the
+   API* is **stored and reported** (`ignored_because`), never silently dropped — the person set
+   it, and hiding that it will not apply is how a screen starts lying.
+2. **The dashboard bell is never switchable.** Telegram and email interrupt a person; the bell
+   waits to be looked at. Switching it off would delete the *record of having been told* rather
+   than stop an interruption — quiet versus blind, which this project has already paid to learn
+   (§A107, silent success).
+3. **An unreadable preferences table fails towards being told.** If the table will not answer,
+   `resolve()` logs and falls through to the policy. The failure people notice is noise; the
+   failure that costs money is the message that never came.
+4. **`daily` is stored but behaves as immediate, and the screen does not offer it.** There is no
+   digest to hold a message in. A half-made digest would swallow notifications into a queue nobody
+   drains — the exact shape of (2). `deploy/verify-notify-routing.py` now *enforces* that the UI
+   offers no `daily` while `biz_nidaan_notifications.py` contains no `frequency` handling, so the
+   day somebody builds the digest, the failing check is the reminder that the screen may offer it.
+
+### Why roles on the screen and not people
+
+75 events × every colleague is a grid nobody can read, and a screen nobody can read is a screen
+nobody trusts. Per-person and per-claim switches exist in the API and in the resolver and win at
+send time; they belong **beside the person and beside the claim** — a staff member's own page and
+the claim itself. Those two screens are still owed.
+
+Consequence worth knowing: `_npIsOff()` in the page reads **role-scope rows only**. A grid that
+folded personal opt-outs in would show "the whole team is not told" when one person opted out.
+
+### Wiring, and the dead-button guard
+
+Both send paths now ask: `notify_staff_inapp` and `dispatch` (the second is the one that never
+consulted anything — it decided email by asking *"did WhatsApp work?"*, and for staff WhatsApp is
+effectively never up, which is how 550 emails a day happened). Telegram is now switchable too,
+which it never was.
+
+`deploy/verify-notify-routing.py` grew a section that asserts **every link separately**: tickbox →
+`npToggle` → `POST /notifications/prefs` → the route exists at top level → it is super-admin gated
+→ it writes to the audit trail → the registry endpoint returns `prefs` so the screen shows what is
+*set* and not only what the code does. A control that renders, accepts a click and reaches nothing
+looks identical on screen to one that works — see the ops-JS hazard note — so nothing here is
+proven by "the page loads".
+
+**Checked:** 30 precedence checks (`_tools/test_notify_prefs.py`) · 43 routing+wiring checks ·
+13 register checks · `npm run check:all` · `verify-ops-buttons.py` (435 handlers, 0 unreachable).
+
+**Access.** Super-admin only, every flip audited. This is a map of the whole company's attention;
+one person quietly silencing a colleague is an outage arranged by accident.
+
+**Also fixed in passing:** the prefs module asked `db.DB_PATH` once at import. Its neighbour asks
+at call time, and the journey runner and tests repoint `db.DB_PATH` *after* import — so a journey
+run would have consulted the **live** switches while writing to a copy. Now `_db()`, resolved per
+call.
+
+### Still owed
+
+- The **daily digest**, after which `daily` can be offered on screen.
+- **Per-person switches** on a staff member's page, **per-claim switches** on the claim. The API
+  and resolver already support both; only the two screens are missing.
+- **`channel='telegram'` is still never recorded** in `nidaan_notifications` (dashboard 4055 /
+  email 280 / telegram **0**). There is no delivery record for the channel we are standardising
+  on, so a switch's *effect* cannot be proven from the data. Control shipped; measurement did not.

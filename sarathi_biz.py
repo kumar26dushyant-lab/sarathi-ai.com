@@ -14719,13 +14719,119 @@ async def ops_notification_registry(request: Request, lang: str = "en"):
     _require_staff(request, "super_admin")
     import biz_nidaan_notify_registry as _reg
     import biz_nidaan_notify_policy as _pol
+    import biz_nidaan_notify_prefs as _np
     return {"events": _reg.describe(lang),
             "groups": _reg.GROUPS,
             "lock_reason": _reg.LOCK_REASON,
             # The routing rules in the policy's own words - the thing summary() was written for
             # and never connected to anything.
             "policy": _pol.summary(),
-            "editable": False}
+            # The switches somebody has already set, so the screen can show them beside the
+            # events they act on rather than in a separate list nobody cross-references.
+            "prefs": await _prefs_safe(),
+            "scopes": {"role": "everyone with this job",
+                       "user": "one person, everywhere",
+                       "claim_user": "one person, on one claim"},
+            "frequencies": list(_np.FREQUENCIES),
+            "editable": True}
+
+
+async def _prefs_safe() -> list:
+    """Every switch, or an empty list. A preferences table that will not answer must not stop the
+    register being readable — seeing the events matters more than seeing the switches."""
+    try:
+        import biz_nidaan_notify_prefs as _np2
+        return await _np2.list_prefs()
+    except Exception as e:  # noqa: BLE001
+        logger.info("could not list notification preferences: %s", e)
+        return []
+
+
+class _NotifyPrefReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    scope: str = Field(..., pattern=r"^(role|user|claim_user)$")
+    event_key: str = Field("*", max_length=80)
+    channel: str = Field("*", pattern=r"^(telegram|email|\*)$")
+    enabled: bool = True
+    frequency: str = Field("immediate", pattern=r"^(immediate|daily|off)$")
+    role: str = Field("", max_length=40)
+    staff_id: Optional[int] = None
+    claim_id: Optional[int] = None
+
+
+@app.post("/nidaan/ops/api/notifications/prefs")
+@limiter.limit("60/minute")
+async def ops_notify_pref_set(body: _NotifyPrefReq, request: Request):
+    """Turn one notification on or off, for a role, a person, or a person on one claim.
+
+    Super-admin only: this is a map of the whole company's attention, and one person quietly
+    switching off somebody else's alerts is an outage arranged by accident.
+
+    A switch against a LOCKED event (money, security, system health) is accepted and stored — the
+    person set it and pretending otherwise is how a screen starts lying — and the response says
+    plainly that it will not take effect.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "super_admin")
+    import biz_nidaan_notify_prefs as _np3
+    res = await _np3.set_pref(
+        scope=body.scope, event_key=body.event_key, channel=body.channel,
+        enabled=body.enabled, frequency=body.frequency, role=body.role,
+        staff_id=body.staff_id, claim_id=body.claim_id,
+        updated_by=_actor_label(caller))
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("error") or "Could not save that")
+    await _ops_audit(request, "notify.pref_set", "event", body.event_key,
+                     "%s %s=%s freq=%s" % (body.scope, body.channel,
+                                           "on" if body.enabled else "off", body.frequency))
+    return res
+
+
+@app.delete("/nidaan/ops/api/notifications/prefs")
+@limiter.limit("60/minute")
+async def ops_notify_pref_clear(request: Request, scope: str, event_key: str = "*",
+                                channel: str = "*", role: str = "",
+                                staff_id: Optional[int] = None,
+                                claim_id: Optional[int] = None):
+    """Put one switch back to its default so the chain falls through to the next level.
+
+    This removes a SETTING, never a record. The founder's standing rule about deleting data is
+    about claims, payments and documents; a switch returning to default is the only way to say
+    "go back to whatever my role says".
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "super_admin")
+    import biz_nidaan_notify_prefs as _np4
+    res = await _np4.clear_pref(scope=scope, event_key=event_key, channel=channel,
+                                role=role, staff_id=staff_id, claim_id=claim_id)
+    await _ops_audit(request, "notify.pref_clear", "event", event_key,
+                     "%s back to default" % scope)
+    return res
+
+
+@app.get("/nidaan/ops/api/notifications/explain")
+async def ops_notify_explain(request: Request, event_key: str, staff_id: int,
+                             claim_id: Optional[int] = None):
+    """"Why am I (not) getting these?" — answered without asking me.
+
+    Returns the verdict per channel WITH the reason, naming which level of the chain decided it.
+    That question is the whole reason this module exists, so it gets its own endpoint rather than
+    being something only the code knows.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    import biz_nidaan_notify_prefs as _np5
+    import biz_nidaan_notifications as _nn
+    role = await _nn._staff_role(staff_id)
+    out = {}
+    for ch in ("telegram", "email", "bell"):
+        out[ch] = await _np5.resolve(event_key, channel=ch, staff_id=staff_id,
+                                     role=role, claim_id=claim_id)
+    return {"event_key": event_key, "staff_id": staff_id, "role": role,
+            "claim_id": claim_id, "channels": out}
 
 
 @app.post("/nidaan/ops/api/system-flags")

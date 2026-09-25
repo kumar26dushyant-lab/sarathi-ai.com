@@ -1,5 +1,65 @@
 # Staff Announcement Drafts
 
+## 2026-09-25 (1) — Notifications you do not need can now be switched off, without a code change
+
+_For: all staff. Super admins also get a new screen — Settings → 🔔 Notifications._
+
+**Title (EN):**
+🔔 Getting messages you do not need? Tell us — it can now be turned off the same day
+
+**Details (EN):**
+• **Nothing has changed for you today.** You will keep getting exactly the messages you get
+now. This is about what happens when they are wrong.
+
+• **Until now, "I keep getting this and it is not my work" meant a code change.** Every
+notification this app sends is now on one list, with a switch next to it. A super admin can turn
+one off for a whole job — all team members, all admins — in a few seconds.
+
+• **So please tell us.** If a message reaches you that is not yours to act on, say which one.
+A screenshot is enough. The same is true the other way round: if something happens that you
+should have been told about and were not, that is worth reporting.
+
+• **Some messages can never be turned off**, and that is deliberate: anything about **money,
+security, or the app itself being unwell**. A missed payment alert costs real money, so nobody
+can silence it — not even a super admin.
+
+• **Your bell always keeps the record.** Even if a message is switched off for Telegram and
+email, the 🔔 bell on your dashboard still logs it. You will never lose the history of
+something that happened.
+
+• **Coming next:** switching a notification off **for yourself only**, and **for one claim
+only** — so you can stop being pinged about a claim you have finished with, without affecting
+anyone else.
+
+---
+
+**शीर्षक (HI):**
+🔔 गैर-ज़रूरी मेसेज आ रहे हैं? बताइए — अब उसी दिन बंद हो सकते हैं
+
+**विवरण (HI):**
+• **आज आपके लिए कुछ नहीं बदला है।** जो मेसेज अब तक आते हैं, वैसे ही आते रहेंगे।
+यह बात तब की है जब वे गलत हों।
+
+• **पहले "यह मेरा काम नहीं है, फिर मुझे क्यों आ रहा है" का मतलब कोड बदलना
+था।** अब ऐप जितने मेसेज भेज सकता है, सब एक लिस्ट में हैं और हर एक के सामने एक स्विच है।
+सुपर ऐडमिन पूरे रोल के लिए उसे कुछ सेकंड में बंद कर सकते हैं।
+
+• **तो ज़रूर बताइए।** अगर कोई मेसेज आता है जिस पर काम आपका नहीं है, तो बताइए
+कौन सा। स्क्रीनशॉट काफ़ी है। उलटा भी सही है — अगर कुछ ऐसा हुआ जिसकी सूचना
+आपको मिलनी चाहिए थी और नहीं मिली, तो वह भी बताइए।
+
+• **कुछ मेसेज कभी बंद नहीं हो सकते**, और यह जानबूझकर है — **पैसा, सुरक्षा,
+या ऐप की सेहत** से जुड़ा कोई भी। पेमेंट की चूक का अलर्ट सीधा पैसे का नुकसान है,
+इसलिए उसे कोई बंद नहीं कर सकता — सुपर ऐडमिन भी नहीं।
+
+• **रिकॉर्ड आपकी घंटी में हमेशा रहेगा।** अगर कोई मेसेज टेलीग्राम और ईमेल पर
+बंद भी हो, तो भी डैशबोर्ड की 🔔 घंटी में वह दर्ज रहेगा। इतिहास कभी नहीं जाएगा।
+
+• **आगे आ रहा है:** किसी मेसेज को **सिर्फ़ अपने लिए** या **सिर्फ़ एक क्लेम के लिए**
+बंद करना — जिस क्लेम का काम पूरा हो गया, उसकी पिंग बंद, और बाकी किसी पर असर नहीं।
+
+---
+
 ## 2026-09-23 (1) — Claim colours now show what needs you, and a claim can come back from Live Cases
 
 **Title (EN):**

@@ -427,23 +427,47 @@ async def notify_staff_inapp(staff_ids: list, subject: str, body: str,
                 recipient_type=RECIPIENT_STAFF, recipient_id=r["staff_id"],
                 channel=CHANNEL_DASHBOARD, subject=subject, body=body,
                 status="sent", sent_at=ts, require_ack=require_ack, claim_id=claim_id,
-                announce_id=announce_id, cp_id=cp_id, telegram=telegram)
+                announce_id=announce_id, cp_id=cp_id, telegram=_tg_ok)
             sent += 1
         except Exception as e:
             logger.warning("notify_staff_inapp failed for %s: %s", r.get("staff_id"), e)
         # The bell above always fires. The EMAIL leg is decided per recipient, so a super-admin
         # keeps the full picture while a teammate gets internal chatter on Telegram instead of
         # in their inbox. Money, documents and leave are never downgraded.
+        # The PREFERENCES first, then the policy. resolve() falls through to should_email()
+        # when nobody has set a switch, so today's behaviour is still the default and a switch
+        # is the only thing that changes it (founder, 25 Sep: "so I should not depend on
+        # notification thing on you every time to do code changes").
         _email_ok = email
         if email:
             try:
-                import biz_nidaan_notify_policy as _pol
-                _email_ok, _why = _pol.should_email(event_key, role=(r.get("role") or ""))
+                import biz_nidaan_notify_prefs as _np
+                _d = await _np.resolve(event_key, channel="email",
+                                       staff_id=r.get("staff_id"), role=(r.get("role") or ""),
+                                       claim_id=claim_id)
+                _email_ok = bool(_d.get("send"))
                 if not _email_ok:
                     logger.debug("email suppressed for %s (%s): %s",
-                                 r.get("staff_id"), event_key, _why)
+                                 r.get("staff_id"), event_key, _d.get("why"))
             except Exception:
-                _email_ok = email      # policy must never be able to silence a real alert
+                _email_ok = email      # nothing here may be able to silence a real alert
+
+        # TELEGRAM can be switched off too, which it could not be before - it was the one channel
+        # with no way to say "not this one, not for me". The bell is untouched: silencing that
+        # would delete the record of having been told rather than stop an interruption.
+        _tg_ok = telegram
+        if telegram:
+            try:
+                import biz_nidaan_notify_prefs as _np2
+                _dt = await _np2.resolve(event_key, channel="telegram",
+                                         staff_id=r.get("staff_id"), role=(r.get("role") or ""),
+                                         claim_id=claim_id)
+                _tg_ok = bool(_dt.get("send"))
+                if not _tg_ok:
+                    logger.debug("telegram suppressed for %s (%s): %s",
+                                 r.get("staff_id"), event_key, _dt.get("why"))
+            except Exception:
+                _tg_ok = telegram
         if _email_ok and r.get("email"):
             try:
                 await _send_email(to_email=r["email"], subject=f"[Nidaan] {subject}",
@@ -1711,8 +1735,10 @@ async def dispatch(*, event_key: str, priority: str = PRIORITY_P1,
         # them (founder, 22 Sep).
         if should_email and recipient_type == RECIPIENT_STAFF and recipient_id:
             try:
-                import biz_nidaan_notify_policy as _pol
-                _pok, _pwhy = _pol.should_email(event_key, role=await _staff_role(recipient_id))
+                import biz_nidaan_notify_prefs as _pol
+                _pd = await _pol.resolve(event_key, channel="email", staff_id=recipient_id,
+                                         role=await _staff_role(recipient_id), claim_id=claim_id)
+                _pok, _pwhy = bool(_pd.get("send")), _pd.get("why", "")
                 if not _pok:
                     should_email = False
                     email_status = "skipped_by_policy"
