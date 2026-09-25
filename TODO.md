@@ -4,7 +4,8 @@ _Auto-maintained by Claude **every conversation**, alongside `PROJECT_MASTER_CON
 _**Two-terminal workflow:** work 🟦 NidaanPartner items in one VS Code terminal, 🟩 Sarathi items in another. Each app's section is self-contained so both can progress simultaneously without collision._
 _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned · ✅ done_
 
-**Last updated:** 2026-09-26 (01:00 IST) — 🚨 **@NidaanOpsBot is DELETED, not just revoked** — and we were leaking its token to every staff browser (closed, `3b2bbc2`). Needs the founder in BotFather; see below. App-side honesty fix built and committed.
+**Last updated:** 2026-09-26 (02:45 IST) — ✅ **DEPLOYED & VERIFIED** (`83a8545`). The settings leak is closed, proven from outside with a genuine **team_member** session: 49 settings returned, **zero credentials**, `task_create_min_role` and `branch_l2_fee` still delivered. Worker now logs *"❌ Telegram REJECTED the bot token"*; `telegram_poll_active=0`, `telegram_last_error=Unauthorized`, so the panel shows the red banner instead of a green lie. Both products serving correctly, 0 tracebacks.
+🔴 **@NidaanOpsBot is DELETED** — replacement bot still to be created **from a company-owned Telegram account**. Safe to do now that the leak is closed. Needs the founder in BotFather; see below. App-side honesty fix built and committed.
 
 ### 🚨 26 Sep — THE BOT IS GONE, NOT JUST REVOKED. AND WE WERE LEAKING ITS TOKEN
 
