@@ -6716,12 +6716,45 @@ async def get_ops_setting(key: str, default: Optional[str] = None) -> Optional[s
     return default if default is not None else OPS_SETTING_DEFAULTS.get(key)
 
 
-async def get_all_ops_settings() -> dict:
-    out = dict(OPS_SETTING_DEFAULTS)
+# Settings that are CREDENTIALS, not policy. `nidaan_ops_settings` holds both, and
+# get_all_ops_settings() is handed to the browser by several endpoints — one of which any staff
+# member can call. On 26 Sep 2026 that meant the live @NidaanOpsBot token was delivered into the
+# browser of all 23 active staff every time somebody opened the Tasks panel, which needs exactly
+# one value from here: task_create_min_role.
+#
+# So the filter lives in the accessor, not in the endpoints. An endpoint added next year gets it
+# for free, and a new secret is protected by its NAME rather than by whoever writes that endpoint
+# remembering. Anything that reads a credential asks get_ops_setting() for it by name.
+SECRET_OPS_KEYS = {"telegram_bot_token", "doc_share_key"}
+_SECRET_OPS_HINTS = ("token", "secret", "password", "passphrase", "api_key", "apikey",
+                     "private_key", "credential")
+
+
+def is_secret_ops_key(key: str) -> bool:
+    """Would handing this key's value to a browser be handing out a credential?"""
+    k = (key or "").lower()
+    if k in SECRET_OPS_KEYS:
+        return True
+    # A timestamp like telegram_webhook_set_at is not a secret; a *_token is.
+    if k.endswith("_at") or k.endswith("_set_at"):
+        return False
+    return any(h in k for h in _SECRET_OPS_HINTS)
+
+
+async def get_all_ops_settings(include_secrets: bool = False) -> dict:
+    """Every ops setting EXCEPT the credentials, which are never returned by default.
+
+    `include_secrets=True` exists only for server-side callers that genuinely need one; no
+    endpoint should pass it. A missing key is deliberate — a masked value invites somebody to
+    render it, and a mask is still a promise that the secret is there to be asked for.
+    """
+    out = {k: v for k, v in OPS_SETTING_DEFAULTS.items()
+           if include_secrets or not is_secret_ops_key(k)}
     async with aiosqlite.connect(DB_PATH) as conn:
         cur = await conn.execute("SELECT key, value FROM nidaan_ops_settings")
         for k, v in await cur.fetchall():
-            out[k] = v
+            if include_secrets or not is_secret_ops_key(k):
+                out[k] = v
     return out
 
 
