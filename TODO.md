@@ -4,7 +4,62 @@ _Auto-maintained by Claude **every conversation**, alongside `PROJECT_MASTER_CON
 _**Two-terminal workflow:** work 🟦 NidaanPartner items in one VS Code terminal, 🟩 Sarathi items in another. Each app's section is self-contained so both can progress simultaneously without collision._
 _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned · ✅ done_
 
-**Last updated:** 2026-09-26 (00:30 IST) — 🔴 **@NidaanOpsBot is DOWN: Telegram rejects the token (401).** Needs the founder in BotFather; see below. App-side honesty fix built and committed.
+**Last updated:** 2026-09-26 (01:00 IST) — 🚨 **@NidaanOpsBot is DELETED, not just revoked** — and we were leaking its token to every staff browser (closed, `3b2bbc2`). Needs the founder in BotFather; see below. App-side honesty fix built and committed.
+
+### 🚨 26 Sep — THE BOT IS GONE, NOT JUST REVOKED. AND WE WERE LEAKING ITS TOKEN
+
+**The bot account is DELETED.** Telegram shows the @NidaanOpsBot chat as *"Deleted Account"*, and
+the founder's BotFather `/mybots` lists only @GoLuQ_client_bot, @GoLuQ_Bot and @SarathiAIBot —
+**@NidaanOpsBot is not there.** So this is not a rotated token. The bot no longer exists.
+
+**Why it is not in his BotFather.** `nidaan_audit_log` #165: the bot was configured in our app on
+**21 Jul 2026 06:29 UTC by ANNAPURNA KASERA** (staff 19, super_admin), `same_bot=False` — the
+first and only time a bot was set. BotFather lists only the bots owned by the account you message
+it from, so @NidaanOpsBot was almost certainly **created from her personal Telegram account**, not
+the founder's. *Inference from who pasted the token — ask her to confirm.*
+
+**Nothing in our app did it.** Zero audit rows in the whole deletion window (25 Sep 11:00–15:00
+UTC). A bot token grants total control of a bot but **never the right to delete it** — that needs
+the owning Telegram account in BotFather. Deletion and disclosure are separate events.
+
+**🔥 THE GOVERNANCE FAULT, which is the real lesson.** A production bot carrying customer names,
+mobile numbers, disputed amounts, payment alerts and leave requests was owned by **one
+individual's personal Telegram account**. BotFather ownership **cannot be transferred**. So the
+company never controlled its own notification channel and had no recovery path when that account
+or bot went away. **@SarathiBizBot is dead the same way** — 672 criticals in 7 days, and it is
+also absent from his list.
+
+**🚨 AND WE WERE HANDING THE TOKEN OUT (`3b2bbc2`, fixed).** `nidaan_ops_settings` holds policy
+and credentials in one table. `get_all_ops_settings()` returned all of it, and five endpoints hand
+that to the client — including `GET /nidaan/ops/api/ops-settings`, which needs only
+`_require_staff(request)` (**any role**) and which the ops page fetches **whenever anyone opens
+the Tasks panel**, to read one value: `task_create_min_role`.
+→ So the **live bot token was delivered into the browser of all 23 active staff** (7 team members,
+13 sub super admins, 3 super admins), routinely, for as long as that code existed. `doc_share_key`
+went with it. **Disclosure is proven; misuse is not.** The realistic risk is **impersonation** —
+anyone holding it could send messages to all 21 linked staff *as the bot*, with convincing
+approve-style buttons.
+→ Fixed in the **accessor**, not the five endpoints, because the sixth is not written yet.
+Credentials are **omitted**, recognised by NAME so a future secret is covered, while a timestamp
+that merely sounds alarming is not withheld. 11 checks, watched failing on exactly the four that
+count.
+
+**🔴 FOUNDER ACTIONS, in order:**
+1. **Revoke the token visible in your second screenshot** (@GoLuQ_client_bot) — it is in a shared
+   image now. BotFather → that bot → **Revoke current token**. Never paste a token into a chat.
+2. **Create the replacement ops bot from a COMPANY-controlled Telegram account** — a number the
+   business owns, not any individual's. That account's phone number *is* the ownership.
+3. Paste it into ops → **✈️ Telegram Bot**. ⚠️ **This is a different bot, so all 21 staff links
+   are cleared and everyone must reconnect** — unlike a same-bot token swap. That is correct
+   behaviour (a chat_id only means something to the bot that issued it), not a bug.
+4. **Ask Annapurna what happened to the bot** — plainly, not as an accusation. It may be entirely
+   innocent (a deleted account, a changed number, a mis-tapped `/deletebot`).
+5. **Rotate `doc_share_key`** after deploy — it was in the same leak. It gates internal
+   documentation pages only (checked: not claim documents), and rotating **breaks existing share
+   links**, so it is your call.
+
+**Still open:** whether any tenant/firm bot token is reachable the same way (`tg_firm_bots`,
+`SELECT * FROM tenants` helpers) — **not audited yet, not claimed clean**.
 
 ### 🔴 26 Sep — THE OPS TELEGRAM BOT IS DEAD, AND THE SCREEN SAID IT WAS FINE
 
