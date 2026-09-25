@@ -4,7 +4,48 @@ _Auto-maintained by Claude **every conversation**, alongside `PROJECT_MASTER_CON
 _**Two-terminal workflow:** work 🟦 NidaanPartner items in one VS Code terminal, 🟩 Sarathi items in another. Each app's section is self-contained so both can progress simultaneously without collision._
 _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned · ✅ done_
 
-**Last updated:** 2026-09-25 (afternoon) — ✅ **the notification controller is built and checked**; the switches on Settings → 🔔 Notifications are live in code. 🟡 **awaiting deploy, after 6pm IST** (founder: no deploying while the team is working).
+**Last updated:** 2026-09-26 (00:30 IST) — 🔴 **@NidaanOpsBot is DOWN: Telegram rejects the token (401).** Needs the founder in BotFather; see below. App-side honesty fix built and committed.
+
+### 🔴 26 Sep — THE OPS TELEGRAM BOT IS DEAD, AND THE SCREEN SAID IT WAS FINE
+
+**What happened.** Telegram answers **401 Unauthorized** to every call with the stored
+@NidaanOpsBot token. Last healthy health check **25 Sep 13:00:44 UTC**, first failure **13:15:45**
+— so the token was revoked or regenerated in **BotFather at about 18:30–18:45 IST on 25 Sep**.
+
+**Not ours, and checked rather than assumed:** the stored token is well formed, its bot id still
+matches `8728919108`, it is **not** in the repo or in git history, it was **never** printed to the
+journal (`grep -c` = 0), **no deploy ran** in that window, and the ops audit log has **zero** rows
+in it. Nothing in this system touched it.
+
+**🔴 FOUNDER ACTION — one minute, no deploy needed, nobody has to re-link:**
+1. Telegram → **@BotFather** → `/mybots` → **@NidaanOpsBot** → **API Token**
+   (if it only shows a revoked one, press **Revoke current token** to mint a fresh one).
+2. NidaanPartner ops → **✈️ Telegram Bot** → paste it → save.
+The worker picks it up within ~8 seconds. Because the **bot id is unchanged**, all **21 connected
+staff stay connected** — `ops_telegram_save_token` only clears links when the bot *identity*
+changes, and this is the same bot.
+
+**What WAS ours — the silence.** The health monitor did its job: it calls `getMe`, marked it
+**critical**, and emailed once before the throttle correctly took over. The screen is what lied.
+- `run_polling_loop` treated 401 exactly like a timeout — sleep 3s, retry, **log nothing**. Five
+  and a half hours, roughly **six thousand** calls with a dead token, not one line written.
+- `telegram_poll_active` was set to `1` the moment a token was **seen**, never when Telegram
+  **answered**, and never cleared on failure.
+- So **Settings → ✈️ Telegram Bot showed a green "✅ Connected to @NidaanOpsBot"** the entire
+  time. That banner asked whether a token had been *saved* — configuration — and reported it as
+  if it were delivery. Exactly the rule in `CLAUDE.md` §2.
+
+**Fixed (`33f9702`, committed, not deployed):** a 401/403 is told apart from a blip and reported
+**once** with Telegram's own words and the time; the loop backs off to 60s instead of hammering a
+dead token; the flag the screen reads now means *"Telegram answered us"*; the panel shows a red
+banner naming the reason, the fix, and that the connected staff survive. 11 checks in
+`_tools/test_telegram_token_revoked.py`, watched failing before it passed.
+
+**Also visible while looking:** the OTHER critical, **"Master Bot not running"** (the Sarathi
+`@SarathiBizBot`), has been raised **672 times in 7 days and emailed 524 times**. That is the
+source of the health-alert noise, it is the separate known bad token, and it is still open.
+
+**Previously:** 2026-09-25 (afternoon) — ✅ **the notification controller is built and checked**; the switches on Settings → 🔔 Notifications are live in code. 🟡 **awaiting deploy, after 6pm IST** (founder: no deploying while the team is working).
 
 **Previously:** 2026-09-22 — 🟢 **CUTOVER COMPLETE. NidaanPartner.com and Sarathi-AI.com are LIVE on Oracle Mumbai (161.118.186.201, aarch64).** Contabo parked as rollback, untouched.
 
