@@ -605,6 +605,68 @@ better we can manage these statuses/filters without overbuilding but keep things
 come from evidence — which of these is ever clicked — not from my taste. **Nothing gets deleted
 until we can say what it was for and who used it.** Proposal to follow, not a unilateral cut.
 
+### 📋 RAISED 25 Sep — and the two answers I was waiting for
+
+#### 🟢 ANSWERED — the notification switches can now be built
+
+He answered both open questions in one line:
+> *"per event per role and per event per specific user involved, of course claim level settings
+> will take precedence."*
+
+And said why it matters:
+> *"just so I should not depend on notification thing on you every time to do code changes until
+> anything breaks."*
+
+**So the resolution chain is, most specific first:**
+```
+1. claim × user      "stop telling ME about claim 200"      ← highest
+2. user              "never send ME claim.status"
+3. role              "team members do not get bucket.move"
+4. the registry      what the policy does today              ← default
+```
+**Locked events (money · security · system health) ignore all of it** — that was settled on
+24 Sep and the registry already enforces it.
+Also wanted: **frequency** ("which notification, to which, frequency, when").
+🔴 **This is the next build**, ahead of churn analytics, at his explicit request.
+
+#### 🔴 D1 · "Send the query to the complainant" must become a real tool
+
+Currently: one free-text ask, fixed recipients, WhatsApp/Email/one lumped "copy by email"
+tickbox, and only the LAST send visible.
+
+He wants:
+- **Per-RECIPIENT tick boxes** — complainant · branch · subscriber · staff · *any other party on
+  the claim to this point* — not one all-or-nothing "copy to" line.
+- **Per-CHANNEL choice** per recipient: email, WhatsApp, and **internal staff on Telegram only**.
+- **History in the window**: when it was last sent, and how many times.
+  ✅ The store for this shipped 24 Sep (`nidaan_claim_queries`, `970ccab`) and the panel already
+  lists it — what is missing is the per-recipient part and the count.
+- **A schedule option**, the same one the claim already has.
+- **The whole thread recorded inside the claim**, with the rest of its communication history.
+
+→ Deliberately AFTER the notification controller: both answer "who gets what, on which channel",
+and building this first would be the second copy of that rule.
+
+#### 🟡 D2 · WhatsApp automation — HE ASKED TO THINK FIRST, NOT BUILD
+
+> *"all these we need to think first and then move on whatsapp charter."*
+
+What he described, with the numbers from the screen (33 opted in · 412 sent · 138 replies ·
+39 conversations · 9 with a person · 1 waiting):
+
+1. **The missing piece is GUIDANCE, not delivery.** Staff exhaust their WhatsApp attempts, then
+   *phone* the complainant from another number to talk them through sending a document. The bot
+   asks; it does not teach. That call is the real cost and it is invisible to the system.
+2. **Each party must be identifiable** when staff and several parties are all on a claim — today
+   a conversation is a number, not a role on a case.
+3. **Marathi.** Maharashtra complainants and external parties are coming. Today: Hinglish / Hindi
+   / English. Needs to be picked up intelligently, not asked for.
+4. **Staff do not know how to use it.** A training/《how this works》piece, not a code change.
+5. ⚠️ **Verification: EXPIRED** on the live number (+91 91836 86384), Quality GREEN. Worth
+   checking what that limits before volume grows.
+
+→ **Discussion owed before more charter work.** Nothing built beyond what shipped on 25 Sep.
+
 ### ⚡ PERFORMANCE — MEASURED 24 Sep, NOTHING BUILT YET
 
 Founder: *"multiple payments are happening at the same time, the application is busy ... a few
