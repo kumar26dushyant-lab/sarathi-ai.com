@@ -12491,11 +12491,19 @@ async function loadTelegramPanel(){
     admin = `
     <div class="nd-card" style="padding:1rem;margin-bottom:1rem">
       <div style="font-weight:700;font-size:1rem;margin-bottom:.5rem">⚙️ Bot setup <span style="font-size:.75rem;color:var(--nd-text-muted);font-weight:500">(super admin)</span></div>
-      ${bot.configured ? `
+      ${bot.configured && !bot.poll_active ? `
+        <div style="background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.45);border-radius:8px;padding:.7rem .75rem;margin-bottom:.75rem;font-size:.85rem;color:var(--nd-text-primary)">
+          <b>⛔ Telegram is not accepting this bot's token.</b> Nobody is receiving Telegram
+          messages right now — the dashboard 🔔 bell still has everything.
+          ${bot.last_error?`<br><span style="color:var(--nd-text-secondary);font-size:.8rem">Telegram says: ${esc(bot.last_error)}${bot.last_error_at?(' · since '+esc(bot.last_error_at)+' UTC'):''}</span>`:''}
+          <br><span style="font-size:.82rem">This almost always means the token was changed or
+          revoked in <b>@BotFather</b>. Get the token again there and paste it below —
+          <b>the ${d.linked_staff||0} connected staff stay connected</b>, because it is the same bot.</span>
+        </div>` : ''}
+      ${bot.configured && bot.poll_active ? `
         <div style="background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);border-radius:8px;padding:.6rem .7rem;margin-bottom:.75rem;font-size:.85rem">
           ✅ Connected to <b>@${esc(bot.bot_username||'')}</b> · token ${esc(bot.token_hint||'')}
-          ${bot.webhook_set_at?`<br><span style="color:var(--nd-text-muted);font-size:.78rem">Webhook registered ${esc(bot.webhook_set_at)} UTC</span>`:''}
-          <br><span style="color:var(--nd-text-secondary);font-size:.8rem">${d.linked_staff||0} staff member(s) connected.</span>
+          <br><span style="color:var(--nd-text-secondary);font-size:.8rem">Telegram is answering. ${d.linked_staff||0} staff member(s) connected.</span>
         </div>` : ''}
       <details ${bot.configured?'':'open'} style="margin-bottom:.75rem">
         <summary style="cursor:pointer;font-size:.86rem;color:var(--nd-cyan-text);font-weight:600">📖 How to create the bot (one time)</summary>

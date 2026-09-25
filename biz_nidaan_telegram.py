@@ -75,6 +75,11 @@ async def get_config() -> dict:
         "bot_id": await _get_setting("telegram_bot_id", ""),
         "token_hint": (f"…{token[-6:]}" if token else ""),
         "webhook_set_at": await _get_setting("telegram_webhook_set_at", ""),
+        # Configured is not the same as working. These two say whether Telegram is actually
+        # accepting the token right now, which is the only question that matters to staff.
+        "poll_active": (await _get_setting("telegram_poll_active", "0")) == "1",
+        "last_error": await _get_setting("telegram_last_error", ""),
+        "last_error_at": await _get_setting("telegram_last_error_at", ""),
     }
 
 
@@ -172,12 +177,36 @@ async def _publish_bot_commands(token: str) -> None:
         logger.info("setMyCommands failed: %s", e)
 
 
+def _err_text(res: dict) -> str:
+    """Telegram's own words for a failure, whichever shape the reply came back in."""
+    return str(res.get("description") or res.get("error") or "no reason given")
+
+
+def _is_auth_error(res: dict) -> bool:
+    """Is this "your token is no longer valid", rather than a blip worth retrying?
+
+    A revoked or regenerated token answers 401 for ever. Telling that apart from a timeout is
+    the whole difference between a loop that reports an outage and one that hides it.
+    """
+    if res.get("error_code") in (401, 403):
+        return True
+    blob = (str(res.get("description", "")) + " " + str(res.get("error", ""))).lower()
+    return "unauthorized" in blob or "http_401" in blob or "http_403" in blob
+
+
+def _now_utc() -> str:
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
+
 async def run_polling_loop() -> None:
     """Continuously pull + process updates. Self-heals across token changes,
     pause/resume and network blips."""
     global _poll_offset
     import asyncio as _asyncio
     last_token = None
+    last_auth_error = None      # the token we have already complained about, so we say it once
+    last_ok = False             # has Telegram actually answered us since this token appeared?
     logger.info("📡 Telegram polling loop starting")
     while True:
         try:
@@ -191,11 +220,11 @@ async def run_polling_loop() -> None:
                 # so drop any webhook first, and start from a clean offset.
                 await _call("deleteWebhook", {"drop_pending_updates": False}, token=token)
                 await _set_setting("telegram_webhook_set_at", "")
-                await _set_setting("telegram_poll_active", "1")
                 last_token = token
+                last_ok = False          # nothing is proven until Telegram answers
                 _poll_offset = 0
                 await _publish_bot_commands(token)
-                logger.info("📡 Telegram polling active for @%s",
+                logger.info("📡 Telegram polling starting for @%s",
                             await _get_setting("telegram_bot_username", ""))
             res = await _call("getUpdates",
                               {"offset": _poll_offset, "timeout": 25,
@@ -205,8 +234,41 @@ async def run_polling_loop() -> None:
                 # 409 = a webhook is still set somewhere; clear it and retry.
                 if "409" in str(res.get("error", "")) or "conflict" in str(res.get("description", "")).lower():
                     await _call("deleteWebhook", {"drop_pending_updates": False}, token=token)
+                    await _asyncio.sleep(3)
+                    continue
+                # A REVOKED OR CHANGED TOKEN. Telegram answers 401 and will keep answering 401
+                # until somebody pastes a new one, so this is not a blip to retry through: on
+                # 25 Sep 2026 the token was revoked in BotFather at 18:30 IST and this loop
+                # spun every 3 seconds for hours saying nothing, while the ops screen went on
+                # reporting the bot as active. Silence plus a screen that disagrees with
+                # reality is the bug; the revoked token is just the day's news.
+                if _is_auth_error(res):
+                    if last_auth_error != token:
+                        logger.warning(
+                            "❌ Telegram REJECTED the bot token (%s). Nobody is receiving "
+                            "ops notifications on Telegram until a new token is pasted in "
+                            "Settings → Telegram. Staff links are kept.",
+                            _err_text(res))
+                        await _set_setting("telegram_poll_active", "0")
+                        await _set_setting("telegram_last_error", _err_text(res)[:160])
+                        await _set_setting("telegram_last_error_at", _now_utc())
+                        last_auth_error = token
+                    last_ok = False
+                    # Hammering Telegram every 3s with a dead token helps nobody.
+                    await _asyncio.sleep(60)
+                    continue
                 await _asyncio.sleep(3)
                 continue
+            # Telegram answered. THIS is the moment the bot is working, and the only moment
+            # worth recording as such - the flag is read by the ops screen, and a flag set
+            # because a token exists would say "active" about a token nobody has tried.
+            if not last_ok:
+                last_ok = True
+                last_auth_error = None
+                if (await _get_setting("telegram_poll_active", "0")) != "1"                         or await _get_setting("telegram_last_error", ""):
+                    logger.info("✅ Telegram is accepting the token again")
+                await _set_setting("telegram_poll_active", "1")
+                await _set_setting("telegram_last_error", "")
             for u in res.get("result", []):
                 _poll_offset = u.get("update_id", _poll_offset) + 1
                 try:

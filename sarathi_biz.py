@@ -14944,6 +14944,11 @@ async def ops_telegram_save_token(body: _TelegramTokenReq, request: Request):
     await nidaan.set_ops_setting("telegram_bot_username", check.get("username", ""))
     await nidaan.set_ops_setting("telegram_bot_id", new_id)
     await nidaan.set_ops_setting("telegram_enabled", "1")
+    # verify_token() just proved Telegram accepts this one, so record it as working here rather
+    # than leaving the screen showing the previous failure for the few seconds the worker takes
+    # to pick the token up.
+    await nidaan.set_ops_setting("telegram_poll_active", "1")
+    await nidaan.set_ops_setting("telegram_last_error", "")
     # We use long-polling (the worker pulls updates), which is immune to Cloudflare's
     # bot protection that blocks inbound webhooks. Ensure no webhook is set so
     # getUpdates is allowed; the worker's poll loop picks up the new token within ~8s.
