@@ -763,6 +763,7 @@ async def handle_inbound_text(msisdn: str, text: str) -> dict:
     guided document flow, decline once (abuse / off-topic), or hand off to a human."""
     import biz_nidaan_wa_auth as _auth
     import biz_nidaan_wa_brain as _brain
+    import biz_nidaan_wa_charter as _charter
     import biz_nidaan_wa_identity as _ident
 
     claim = await _claim_for_msisdn(msisdn)
@@ -831,6 +832,41 @@ async def handle_inbound_text(msisdn: str, text: str) -> dict:
         if got.get("captured"):
             return got
 
+    # ── the charter ─────────────────────────────────────────────────────────
+    # IS THIS A PERSON? Asked before the model, because reaching the AI is the expensive part and
+    # an automatic reply is what makes flooding worth doing. The message is still logged above
+    # and staff are still told; only the bot stops answering.
+    _flood = await _charter.flood(msisdn)
+    if not _flood.get("ok"):
+        await _activity(claim_id, "wa_flood",
+                        "Stopped replying — %s" % _flood.get("reason", "too much traffic"))
+        # Told once, not per message: an alert per message would simply relay the flood.
+        if not await _recent_outbound(msisdn, 180):
+            await _handoff_to_support(claim, msisdn, text, lang,
+                                      reason="unusual traffic: %s" % _flood.get("reason", ""),
+                                      identity=ident)
+            await _touch_outbound(msisdn)
+        return {"ok": True, "action": "flood_guard", "reason": _flood.get("reason")}
+
+    # WHAT MAY THIS CONVERSATION RECEIVE? Past document collection the bot is not a document
+    # collector any more, and nothing about the claim goes out over WhatsApp - except an answer
+    # to a question we asked (founder: "after consolidation we also have questions/queries ...
+    # those communication should not be restricted").
+    _st = await _charter.stance(claim_id, verified=verified)
+    if _st["stance"] == _charter.STANCE_QUIET and claim:
+        # There IS a claim and they are verified, but the bot has no business discussing it.
+        # Acknowledge and put a person on it rather than going silent - silence is what
+        # dead-ended the conversation the founder complained about on 23 Sep.
+        await _activity(claim_id, "wa_inbound", f"Customer: {(text or '')[:120]}", direction="in")
+        await _tell_staff_inbound(claim_id, msisdn, text)
+        if not await _recent_outbound(msisdn, 120):
+            await _wa.send_text(msisdn, _msg.compose("human_followup", lang, {}))
+            await _touch_outbound(msisdn)
+        await _handoff_to_support(claim, msisdn, text, lang,
+                                  reason="charter: %s" % _st["reason"], identity=ident)
+        await _activity(claim_id, "wa_charter", "Bot held back — %s" % _st["reason"])
+        return {"ok": True, "action": "charter_quiet", "reason": _st["reason"]}
+
     # WHAT WAS ALREADY SAID. `decide()` has always accepted history and this call never passed
     # any, so every message was answered as if it were the first one. The founder sent "Hi",
     # "Hi", "Hello" on 23 Sep and was introduced to the company three times, in three different
@@ -856,6 +892,12 @@ async def handle_inbound_text(msisdn: str, text: str) -> dict:
     await _tell_staff_inbound(claim_id, msisdn, text)
 
     if action == "continue_docs" and claim:
+        # Only where the charter allows documents. The model can be talked into "send me your
+        # papers" on a claim that finished collecting months ago.
+        if not _st.get("may_send_docs"):
+            await _activity(claim_id, "wa_charter",
+                            "Did not ask for documents — %s" % _st["reason"])
+            return {"ok": True, "action": "charter_quiet", "reason": _st["reason"]}
         # They're ready to send — always re-state the exact document (force past the throttle).
         return await start_or_continue(msisdn, force_ask=True)
 
@@ -893,7 +935,8 @@ async def handle_inbound_text(msisdn: str, text: str) -> dict:
     await _activity(claim_id, "wa_answer", f"Answered: {reply[:120]}")
     if not claim:
         return {"ok": True, "action": "answer", "role": ident.get("role")}
-    await ask_next(claim_id, msisdn)          # throttled — won't repeat if just asked
+    if _st.get("may_send_docs"):
+        await ask_next(claim_id, msisdn)      # throttled — won't repeat if just asked
     return {"ok": True, "action": "answer"}
 
 
