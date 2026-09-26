@@ -6,6 +6,56 @@ _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned ·
 
 **Last updated:** 2026-09-26 (afternoon) — ✅ New bot **@NidaanPartnerOpsBot** live and verified (`getMe` 200, `poll_active=1`). **"Ask everyone to connect" deployed** — 23 pending, 23 reachable. ✅ **All six Telegram pieces built and tested** — claim authorisation, rate limits + audit, document upload, bot wiring, splitter, Hinglish. 🔴 **Not deployed.**
 
+### 💰 26 Sep — REVENUE WAS Rs 11,776 TOO HIGH (`da50597`, built, NOT deployed)
+
+Founder asked why he keeps getting "One payment recorded twice" emails. **The email he
+screenshotted was a false alarm. What it was mixed in with was not.**
+
+| | |
+|---|---|
+| Revenue shown | ₹ 86,377.98 |
+| Actually collected | ₹ 74,601.98 |
+| **Phantom** | **₹ 11,776.00 (13.6%)** |
+| Customers charged twice | **none** — Razorpay reports `paid_count=1` for all 14 |
+
+**The false one (#127/#128):** Razorpay confirms two *different* captured UPI payments, claims
+**214** and **213**, a branch clearing two claims 29 seconds apart. The rule matched on
+account + source + 10 minutes and never looked at the claim or the payment id.
+
+**Cause of the real one:** `record_payment()` is idempotent on `dedup_key`, and the subscription
+path built it as `(razorpay_payment_id or razorpay_subscription_id)` — so the key depended on
+*which id that code path happened to hold*. Activation writes `sub_xxx`, webhook writes
+`pay_yyy`, neither finds the other. Three key shapes for one event.
+
+**Two things worth keeping from how this was fixed:**
+- **Not fixed by changing the key shape.** That would orphan every existing row and the next late
+  webhook would write a *third*. The keys stay; the existence check got smarter.
+- **The first version of the fix was wrong**, caught by running it against live data before
+  believing it: matching on `source` found only 9 of 14, because five were a `subscription` row
+  and a `subscription_renewal` row **four seconds apart**. A renewal four seconds after
+  activation is not a renewal. The real invariant is simpler — *every real charge has a Razorpay
+  payment id*, and a row without one is a placeholder. The real payment now **completes** it in
+  place rather than being refused (refusing would keep the row with no payment id and the rounded
+  ₹589.00 where the charge was ₹588.82).
+
+🔴 **AWAITING THE FOUNDER:** the 14 phantom rows are still live. Marking them
+`status='duplicate'` excludes them from Revenue, deletes nothing, and is reversible — but it is
+financial data, so it is his call. Revenue will **drop by ₹11,776**, which is the true number.
+
+### 🗓️ UPCOMING — flagged by the founder 26 Sep, for the foundation-strong programme
+
+1. **🟢 Lokpal bucket, end to end** — internal statuses, query-raising mechanics like the other
+   buckets, and the path through to settlement. Building next week.
+2. **🟢 /superadmin ops needs organising** — "too messy, not user-friendly". Align it, remove or
+   merge features, make it feel like a modern, elite app rather than an accumulation of screens.
+   *After* end-to-end is built.
+3. **🟢 A team of bots on auto-pilot** — watching each department the way a person would: are
+   logins working, are payments completing correctly, is the L2 claim queue moving as expected.
+   Alert only when a human is actually needed. Discussion to open.
+4. **🟡 Legal + DPDP compliance pages** — Terms, Privacy, Cookie Policy, and being genuinely
+   DPDP-compliant rather than only claiming it. **Discussion first, founder finalises, then
+   execute.** See the compliance note below.
+
 ### 📦 26 Sep — TELEGRAM: DOCUMENT UPLOAD, SPLITTER, HINGLISH
 
 **The finding that saved the most work: the bot did not need rebuilding.** Only the Telegram-side
