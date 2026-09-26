@@ -122,6 +122,32 @@ async def main():
     check("a refused file is reported without blaming whoever sent it",
           "reported" in c_body and "blame the person" in c_body)
 
+    # ── 8. and it is WIRED. Logic nobody calls is logic that does not exist. ────
+    bot = io.open(os.path.join(ROOT, "biz_nidaan_telegram.py"), encoding="utf-8").read()
+    print()
+    check("the menu offers it", '"callback_data": "dc:start"' in bot)
+    check("asking for the claim number is a real step", 'act == "doc_claim"' in bot)
+    check("...and the claim is authorised THERE too, before anything is shown",
+          "assert_claim_access(staff, cid)" in bot)
+    check("...and a refused claim number is recorded", 'detail="doc upload' in bot)
+    check("a photo or PDF is picked up at all", 'msg.get("document")' in bot
+          and 'msg.get("photo")' in bot)
+    check("...BEFORE the 'no text, give up' line, or a file would be dropped in silence",
+          bot.index('doc = msg.get("document")') < bot.index("        if not text:\n            return"))
+    check("...and the largest photo size is used, not the thumbnail", "photos[-1]" in bot)
+    check("the upload limit is applied to files", '_g.allow(staff.get("staff_id"), "upload")' in bot)
+    check("...and the size gate before any AI is spent on it",
+          bot.index("check_file(fname, data)") < bot.index("_bdocs.inspect("))
+    check("the save only happens on an explicit yes", 'data.startswith("dcc:yes")' in bot)
+    check("...and it calls commit(), not the intake directly",
+          "_bdocs.commit(" in bot and "intake.accept(" not in bot)
+    check("after saving it stays on the claim, so the next file is one step",
+          '{"a": "doc_wait", "claim_id": pend.get("claim_id")}' in bot)
+    check("every new word exists in BOTH languages",
+          all(('"%s":' % k) in bot for k in
+              ("b_docs", "dc_ask", "dc_badnum", "dc_send_now", "dc_confirm",
+               "dc_yes", "dc_no", "dc_no_file", "dc_dl_fail", "dc_reading")))
+
     print("\n" + ("%d failed" % FAILED if FAILED
                   else "it looks, it warns, it waits - and it re-asks who you are before it writes"))
 

@@ -650,6 +650,26 @@ _BOT_TXT: dict = {
     "st_open":      {"en": "Open claims", "hi": "खुले दावे"},
     "st_l2":        {"en": "L2 (reviewed-GO) claims", "hi": "L2 (समीक्षा-GO) दावे"},
     "st_mytasks":   {"en": "Tasks pending with me", "hi": "मेरे पेंडिंग टास्क"},
+    "b_docs":       {"en": "📎 Send claim documents",
+                     "hi": "📎 क्लेम के डॉक्यूमेंट भेजें"},
+    "dc_ask":       {"en": "📎 *Send claim documents*\n\nWhich claim? Send the claim "
+                           "number only — for example *217*.",
+                     "hi": "📎 *क्लेम के डॉक्यूमेंट भेजें*\n\nकौन सा क्लेम? सिर्फ़ "
+                           "क्लेम नंबर भेजें — जैसे *217*।"},
+    "dc_badnum":    {"en": "Please send just the claim number, like *217*.",
+                     "hi": "कृपया सिर्फ़ क्लेम नंबर भेजें, जैसे *217*।"},
+    "dc_send_now":  {"en": "\n📤 Now send the document — photo or PDF. One at a time.",
+                     "hi": "\n📤 अब डॉक्यूमेंट भेजें — फ़ोटो या PDF। एक बार में एक।"},
+    "dc_reading":   {"en": "⏳ Reading it…",
+                     "hi": "⏳ देख रहे हैं…"},
+    "dc_confirm":   {"en": "\n❓ *Save this to claim #{id}?*",
+                     "hi": "\n❓ *क्या इसे क्लेम #{id} में सेव करें?*"},
+    "dc_yes":       {"en": "✅ Yes, save it", "hi": "✅ हाँ, सेव करें"},
+    "dc_no":        {"en": "❌ No, cancel", "hi": "❌ नहीं, रहने दें"},
+    "dc_no_file":   {"en": "Please send the document as a photo or a PDF.",
+                     "hi": "कृपया डॉक्यूमेंट फ़ोटो या PDF की तरह भेजें।"},
+    "dc_dl_fail":   {"en": "That file did not come through. Please send it again.",
+                     "hi": "फ़ाइल हम तक नहीं पहुँची। कृपया दोबारा भेजें।"},
     "b_help":       {"en": "❓ Help", "hi": "❓ मदद"},
     "b_lang":       {"en": "🌐 हिंदी", "hi": "🌐 English"},
     "b_menu":       {"en": "⬅️ Menu", "hi": "⬅️ मेन्यू"},
@@ -875,6 +895,7 @@ def _main_menu(staff: dict) -> tuple[str, list]:
         [{"text": T(lang, "b_approvals"), "callback_data": "ap:list"}] if admin else None,
         [{"text": T(lang, "b_leave"), "callback_data": "lv:new:leave"},
          {"text": T(lang, "b_wfh"), "callback_data": "lv:new:wfh"}],
+        [{"text": T(lang, "b_docs"), "callback_data": "dc:start"}],
         [{"text": T(lang, "b_ai"), "callback_data": "ai:ask"}],
         [{"text": T(lang, "b_broadcast"), "callback_data": "bc:new"}] if sa else None,
         [{"text": T(lang, "b_help"), "callback_data": "h:help"},
@@ -1142,6 +1163,13 @@ async def handle_update(update: dict) -> None:
                 await send_message(str(chat_id), _g["reason"]); return
             await _handle_voice(staff, voice, chat_id); return
 
+        # A photo or a PDF, when we are waiting for one on a claim.
+        doc = msg.get("document")
+        photos = msg.get("photo") or []
+        if (doc or photos) and staff:
+            await _handle_claim_file(staff, doc, photos, chat_id)
+            return
+
         if not text:
             return
 
@@ -1259,6 +1287,38 @@ async def _process_message_text(staff: dict, text: str, chat_id) -> None:
             _kb([[{"text": T(lang, "b_confirm_yes"), "callback_data": f"clnc:yes:{cid}"},
                   {"text": T(lang, "b_confirm_no"), "callback_data": "clnc:no"}]]))
         return
+    if act == "doc_claim":
+        import re as _re
+        m = _re.search(r"\d{1,9}", text or "")
+        if not m:
+            await send_message(str(chat_id), T(lang, "dc_badnum")); return
+        cid = int(m.group(0))
+        g = _guard.allow(staff.get("staff_id"), "claim")
+        if not g["ok"]:
+            await send_message(str(chat_id), g["reason"]); return
+        import biz_nidaan_bot_docs as _bdocs
+        import biz_nidaan_claim_access as _access
+        ok = await _access.assert_claim_access(staff, cid)
+        if not ok["allowed"]:
+            import biz_nidaan_bot_guard as _g2
+            await _g2.record(staff, "claim", claim_id=cid, allowed=False,
+                             detail="doc upload: %s" % ok["basis"])
+            await _set_pending(staff["staff_id"], None)
+            await send_message(str(chat_id), ok["reason"],
+                _kb([[{"text": T(lang, "b_menu"), "callback_data": "m:home"}]]))
+            return
+        st = await _bdocs.claim_doc_status(cid, lang=lang)
+        if not st.get("ok"):
+            await send_message(str(chat_id), st.get("text") or T(lang, "cl_none")); return
+        await _set_pending(staff["staff_id"], {"a": "doc_wait", "claim_id": cid})
+        await send_message(str(chat_id), st["text"] + "\n" + T(lang, "dc_send_now"))
+        return
+
+    if act == "doc_wait":
+        # They are on the claim but sent words instead of a file.
+        await send_message(str(chat_id), T(lang, "dc_no_file"))
+        return
+
     if act == "claim_search":
         await _set_pending(staff["staff_id"], None)
         if not _can(staff, "sub_super_admin"):
@@ -1301,6 +1361,64 @@ async def _process_message_text(staff: dict, text: str, chat_id) -> None:
 
 
 # ── Voice notes: download → transcribe + assess (clarity/safety) → route ─────
+async def _handle_claim_file(staff: dict, doc: Optional[dict], photos: list, chat_id) -> None:
+    """A document or photo arrived. Only meaningful when they are mid-flow on a claim.
+
+    Every gate is crossed here in the order that costs least first: are we expecting a file at
+    all, may they push this hard, did it arrive, is it a sane size - and only then do we spend a
+    Gemini call working out what it is.
+    """
+    import json as _json
+    import biz_nidaan_bot_guard as _g
+    lang = _lang(staff)
+    try:
+        pend = _json.loads(staff.get("telegram_pending") or "{}")
+    except Exception:
+        pend = {}
+    if pend.get("a") not in ("doc_wait", "doc_confirm") or not pend.get("claim_id"):
+        # Not mid-flow: say how to start rather than silently ignoring them.
+        await send_message(str(chat_id), T(lang, "dc_ask"))
+        await _set_pending(staff["staff_id"], {"a": "doc_claim"})
+        return
+    cid = int(pend["claim_id"])
+
+    g = _g.allow(staff.get("staff_id"), "upload")
+    if not g["ok"]:
+        await send_message(str(chat_id), g["reason"]); return
+
+    if doc:
+        file_id = doc.get("file_id")
+        fname = doc.get("file_name") or "upload.pdf"
+    else:
+        # Telegram sends several sizes; the last is the largest.
+        largest = photos[-1] if photos else {}
+        file_id = largest.get("file_id")
+        fname = "upload.jpg"
+    if not file_id:
+        await send_message(str(chat_id), T(lang, "dc_no_file")); return
+
+    await send_message(str(chat_id), T(lang, "dc_reading"))
+    data = await _download_file(file_id)
+    if not data:
+        await send_message(str(chat_id), T(lang, "dc_dl_fail")); return
+    sized = _g.check_file(fname, data)
+    if not sized["ok"]:
+        await send_message(str(chat_id), sized["reason"]); return
+
+    import biz_nidaan_bot_docs as _bdocs
+    look = await _bdocs.inspect(cid, fname, data, lang=lang)
+    if not look.get("ok"):
+        await send_message(str(chat_id), look.get("text") or T(lang, "dc_dl_fail")); return
+
+    # Held, not stored. The claim is re-authorised inside commit(), never trusted from here.
+    await _set_pending(staff["staff_id"],
+                       {"a": "doc_confirm", "claim_id": cid, "job": look["job"]})
+    await send_message(
+        str(chat_id), look["text"] + "\n" + T(lang, "dc_confirm", id=cid),
+        _kb([[{"text": T(lang, "dc_yes"), "callback_data": "dcc:yes"},
+              {"text": T(lang, "dc_no"), "callback_data": "dcc:no"}]]))
+
+
 async def _download_file(file_id: str) -> Optional[bytes]:
     """Fetch a Telegram file's bytes via getFile + the file download endpoint."""
     token = await get_bot_token()
@@ -1860,6 +1978,33 @@ async def _handle_callback(cq: dict) -> None:
         if data.startswith("cr:"):
             await _create_callback(staff, data, chat_id, ack)
             return
+
+        if data == "dc:start":
+            await _set_pending(staff["staff_id"], {"a": "doc_claim"})
+            await send_message(str(chat_id), T(lang, "dc_ask"))
+            await ack(); return
+
+        if data.startswith("dcc:"):
+            import json as _json
+            try:
+                pend = _json.loads(staff.get("telegram_pending") or "{}")
+            except Exception:
+                pend = {}
+            if data.startswith("dcc:yes") and pend.get("a") == "doc_confirm" and pend.get("job"):
+                import biz_nidaan_bot_docs as _bdocs
+                res = await _bdocs.commit(staff, int(pend.get("claim_id") or 0), pend.get("job"))
+                # Stay on the claim after a save, so sending the next document is one step,
+                # not five. Cleared only when they leave.
+                await _set_pending(staff["staff_id"],
+                                   {"a": "doc_wait", "claim_id": pend.get("claim_id")}
+                                   if res.get("ok") else None)
+                await send_message(str(chat_id), res.get("text", ""),
+                    _kb([[{"text": T(lang, "b_menu"), "callback_data": "m:home"}]]))
+            else:
+                await _set_pending(staff["staff_id"], None)
+                await send_message(str(chat_id), T(lang, "cancelled"),
+                    _kb([[{"text": T(lang, "b_menu"), "callback_data": "m:home"}]]))
+            await ack(); return
 
         if data == "ai:ask":
             _g = _guard.allow(staff.get("staff_id"), "ai")
