@@ -4,7 +4,54 @@ _Auto-maintained by Claude **every conversation**, alongside `PROJECT_MASTER_CON
 _**Two-terminal workflow:** work 🟦 NidaanPartner items in one VS Code terminal, 🟩 Sarathi items in another. Each app's section is self-contained so both can progress simultaneously without collision._
 _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned · ✅ done_
 
-**Last updated:** 2026-09-26 (02:45 IST) — ✅ **DEPLOYED & VERIFIED** (`83a8545`). The settings leak is closed, proven from outside with a genuine **team_member** session: 49 settings returned, **zero credentials**, `task_create_min_role` and `branch_l2_fee` still delivered. Worker now logs *"❌ Telegram REJECTED the bot token"*; `telegram_poll_active=0`, `telegram_last_error=Unauthorized`, so the panel shows the red banner instead of a green lie. Both products serving correctly, 0 tracebacks.
+**Last updated:** 2026-09-26 (afternoon) — ✅ New bot **@NidaanPartnerOpsBot** live and verified (`getMe` 200, `poll_active=1`). **"Ask everyone to connect" deployed** — 23 pending, 23 reachable. 🟡 Telegram document-upload work underway; security foundation built and tested, bot wiring next.
+
+### 📦 26 Sep — TELEGRAM: DOCUMENT UPLOAD, SPLITTER, HINGLISH
+
+**The finding that saved the most work: the bot did not need rebuilding.** Only the Telegram-side
+bot was deleted; all 2,277 lines survived. It already does tasks (pending/by me/involved/archived/
+create), find claim, claim notes, stage changes with confirmation, approvals, leave, WFH, AI ask,
+broadcast, audio guide, **voice notes transcribed and routed like typed text**, and **133
+translated strings** EN/HI with role-aware menus. It needed the 23 staff reconnected, not a rewrite.
+
+**Decisions taken with the founder (26 Sep):** team members may upload only to claims they are
+**on**; the bot **shows the claim's current document status and waits for a yes** before saving;
+**security foundation first**, then upload, then splitter, then Hinglish.
+
+| # | Piece | State |
+|---|---|---|
+| 1 | `biz_nidaan_claim_access.py` — "may this person touch this claim" | ✅ `daec213`, 20 checks |
+| 2 | `biz_nidaan_bot_guard.py` — rate limits + audit trail | ✅ `ceb6508`, 34 checks |
+| 3 | `biz_nidaan_bot_docs.py` — look, warn, wait, save | ✅ `45239b5`, 21 checks |
+| 4 | Bot wiring: menu, claim number, file, confirm | 🟡 next |
+| 5 | Doc splitter via bot | 🟢 planned |
+| 6 | Hinglish (133 strings × third variant + 3-way picker) | 🟢 planned |
+
+**What the foundation work actually found, none of it theoretical:**
+- **Nothing in this codebase could answer "may this person touch this claim?"** Web and bot both
+  decided by role alone; a claim id was never checked against the person holding it. Fine while
+  every door was a signed-in browser; not fine once a phone can attach a file by typing a number.
+- **The bot had NO rate limiting of any kind.** Every HTTP route sits behind slowapi; the bot is
+  a long-polling loop, so none of it applied. A linked phone could ask Gemini a thousand
+  questions or walk claim numbers one by one, unthrottled and unrecorded.
+- **`clnc:` (claim note confirm) had no role check**, leaning entirely on server-side pending
+  state, while its sibling `clsc:` always had one. Protection by state is one code path away
+  from no protection.
+- **`commit()` imported the PDF library before checking authorisation** — so refusing someone
+  depended on an unrelated dependency importing. The cheapest answer (no) must never be the one
+  most likely to fail.
+
+**Design rules now written into the code**, for the AI-driven rebuild to inherit:
+- Authorisation **fails CLOSED**; notification routing **fails OPEN**. Opposite on purpose: a
+  wrong yes is somebody's medical file, a wrong yes there is a noisy phone.
+- Bot **navigation** fails open (a broken limiter must not take the bot down over menu taps);
+  **money, files and claim lookups** fail closed.
+- "That claim is not yours" reads **identically** to "no such claim" — otherwise the bot is a
+  way to enumerate real claim numbers from a phone.
+- Refusals are audited as well as successes; a trail holding only successes cannot show an attempt.
+- Telegram is a **door onto** `doc_intake.accept()`, never a second intake.
+
+**Previously:** 2026-09-26 (02:45 IST) — ✅ **DEPLOYED & VERIFIED** (`83a8545`). The settings leak is closed, proven from outside with a genuine **team_member** session: 49 settings returned, **zero credentials**, `task_create_min_role` and `branch_l2_fee` still delivered. Worker now logs *"❌ Telegram REJECTED the bot token"*; `telegram_poll_active=0`, `telegram_last_error=Unauthorized`, so the panel shows the red banner instead of a green lie. Both products serving correctly, 0 tracebacks.
 🔴 **@NidaanOpsBot is DELETED** — replacement bot still to be created **from a company-owned Telegram account**. Safe to do now that the leak is closed. Needs the founder in BotFather; see below. App-side honesty fix built and committed.
 
 ### 🚨 26 Sep — THE BOT IS GONE, NOT JUST REVOKED. AND WE WERE LEAKING ITS TOKEN
