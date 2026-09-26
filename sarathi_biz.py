@@ -20545,16 +20545,29 @@ async def llms_txt():
     )
 
 @app.get("/privacy", response_class=HTMLResponse)
-async def privacy_page():
-    """Serve the privacy policy page."""
+async def privacy_page(request: Request):
+    """The privacy policy for WHICHEVER product was asked.
+
+    These two routes had no host check, so nidaanpartner.com/privacy answered with Sarathi-AI
+    Business Technologies' policy - a different legal entity - to people about to hand over
+    medical records to a legal-services LLP. The Nidaan pages existed at /nidaan/privacy the
+    whole time; nothing sent anyone there, and the obvious address won.
+
+    A privacy policy names the party accepting the legal obligation. Serving the wrong one is
+    not a broken link.
+    """
+    if _is_nidaan_host(request):
+        return _nidaan_page("nidaan_privacy.html", request)
     pf = static_dir / "privacy.html"
     if pf.exists():
         return HTMLResponse(pf.read_text(encoding="utf-8"))
     return HTMLResponse("<h1>Privacy policy not found</h1>", status_code=404)
 
 @app.get("/terms", response_class=HTMLResponse)
-async def terms_page():
-    """Serve the terms of service page."""
+async def terms_page(request: Request):
+    """The terms for whichever product was asked - see the note on /privacy."""
+    if _is_nidaan_host(request):
+        return _nidaan_page("nidaan_terms.html", request)
     tf = static_dir / "terms.html"
     if tf.exists():
         return HTMLResponse(tf.read_text(encoding="utf-8"))
