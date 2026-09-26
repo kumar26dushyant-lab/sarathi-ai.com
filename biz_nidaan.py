@@ -6493,6 +6493,70 @@ async def record_payment(*, source: str, total_paise: int, dedup_key: str = "",
                 "SELECT 1 FROM nidaan_payments WHERE dedup_key=?", (_key,))).fetchone()
             if ex:
                 return False
+            # ...and the same question again, asked of the EVENT rather than the key.
+            #
+            # A key only makes this idempotent when every road to the same money computes the
+            # same key, and they did not: a subscription activation arriving by webhook keyed
+            # itself on the payment id, and the same activation arriving by api_fetch keyed
+            # itself on the subscription id. Fourteen subscriptions ended up with two rows each
+            # and Revenue read Rs 11,776 too high, while Razorpay said paid_count=1 for every
+            # one of them.
+            #
+            # Deliberately NOT fixed by changing the key shape: that would leave every existing
+            # row unmatched and the next late webhook would write a third. The keys stay; the
+            # check gets smarter.
+            _dup_sql, _dup_args = "", ()
+            _live = "COALESCE(status,'') NOT IN ('duplicate','failed','refunded')"
+            _sub = (razorpay_subscription_id or "").strip()
+            if _sub and source in ("subscription", "subscription_renewal"):
+                # A subscription's FIRST charge reaches us twice: once from the activation path,
+                # which knows only the subscription id and writes a row with NO payment id and a
+                # rounded GST figure, and once from the webhook, which knows the real payment.
+                # Source cannot tell them apart - five of the fourteen live duplicates were a
+                # `subscription` row and a `subscription_renewal` row four seconds apart.
+                #
+                # What IS true: every real charge has a Razorpay payment id. A row without one is
+                # a placeholder for a payment we had not seen yet.
+                _ph = await (await conn.execute(
+                    "SELECT pay_id FROM nidaan_payments WHERE razorpay_subscription_id=? "
+                    "AND COALESCE(razorpay_payment_id,'')='' AND " + _live +
+                    " ORDER BY pay_id LIMIT 1", (_sub,))).fetchone()
+                if _ph:
+                    if (razorpay_payment_id or "").strip():
+                        # COMPLETE the placeholder rather than refusing the real payment -
+                        # refusing would keep the row with no payment id and the wrong amount.
+                        await conn.execute(
+                            "UPDATE nidaan_payments SET razorpay_payment_id=?, dedup_key=?, "
+                            "base_paise=?, gst_paise=?, total_paise=?, verified=?, "
+                            "verify_method=?, source=? WHERE pay_id=?",
+                            (razorpay_payment_id.strip(), _key, int(base_paise or 0),
+                             int(gst_paise or 0), int(total_paise or 0), 1 if verified else 0,
+                             verify_method or "", source, _ph[0]))
+                        await conn.commit()
+                        logger.info("record_payment: completed placeholder row #%s with %s "
+                                    "(one charge, one row)", _ph[0], razorpay_payment_id.strip())
+                    else:
+                        logger.info("record_payment: subscription %s already has placeholder "
+                                    "row #%s - not writing a second", _sub, _ph[0])
+                    return False
+                if source == "subscription":
+                    # And still one ACTIVATION per subscription. Renewals recur by design.
+                    _dup_sql = ("SELECT pay_id FROM nidaan_payments WHERE source='subscription' "
+                                "AND razorpay_subscription_id=? AND " + _live)
+                    _dup_args = (_sub,)
+            elif source in ("branch_l2", "per_claim_review") and claim_id:
+                # One Level-2 acceptance fee, and one Rs499 review, per claim.
+                _dup_sql = ("SELECT pay_id FROM nidaan_payments WHERE source=? AND claim_id=? "
+                            "AND " + _live)
+                _dup_args = (source, int(claim_id))
+            if _dup_sql:
+                _seen = await (await conn.execute(_dup_sql, _dup_args)).fetchone()
+                if _seen:
+                    logger.info(
+                        "record_payment: %s already recorded as row #%s - not writing a second "
+                        "row for the same event (key would have been %s)",
+                        source, _seen[0], _key)
+                    return False
             await conn.execute(
                 """INSERT INTO nidaan_payments
                    (dedup_key, source, gateway, razorpay_payment_id, razorpay_order_id,

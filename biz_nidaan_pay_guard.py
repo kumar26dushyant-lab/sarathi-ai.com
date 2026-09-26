@@ -870,26 +870,62 @@ async def _check_effects_and_duplicates(findings: list, ran: set) -> None:
                     "detail": "Ledger row #%s (%s, %s) has no 'Payment RECEIVED' alert beside it."
                               % (pid, r["source"], r["created_at"])})
 
-        # 5 - the same charge twice
+        # 5 - the same charge twice.
+        #
+        # WHAT COUNTS AS "the same payment" is these three, and nothing else. They are the same
+        # three identities record_payment() now refuses to write twice, and they have to stay
+        # the same: this check exists to catch what that guard misses, and two different
+        # opinions about what a duplicate is would mean neither could be trusted.
+        #
+        #     the same Razorpay payment id      recorded twice by any route
+        #     a subscription carrying a row with NO payment id beside another row - that row
+        #       is the activation path's placeholder, standing in for a charge it had not seen,
+        #       and it should have been completed rather than left. Genuine monthly renewals
+        #       each carry their own payment id and are NOT flagged.
+        #     one L2 fee / one Rs499 per claim
+        #
+        # Matching on `source` was tried and is wrong: five of the fourteen live duplicates were
+        # a 'subscription' row and a 'subscription_renewal' row FOUR SECONDS apart. A renewal
+        # four seconds after activation is not a renewal.
+        #
+        # It used to match on account + source + 10 minutes as well. That flagged a branch
+        # paying the Level-2 fee on two different claims 29 seconds apart - three times out of
+        # three - while the fourteen real ones it found were all caught by the subscription
+        # rule anyway. The time window is gone too: a duplicate written by a webhook that
+        # arrives hours late is still a duplicate, and the old window would have missed it.
+        _live = "COALESCE(%s.status,'') NOT IN ('duplicate','failed','refunded')"
         dups = [dict(r) for r in await (await c.execute(
             "SELECT a.pay_id a_id, b.pay_id b_id, a.account_id, a.source a_src, b.source b_src, "
-            "       a.total_paise a_amt, b.total_paise b_amt, a.created_at "
+            "       a.total_paise a_amt, b.total_paise b_amt, a.created_at, "
+            "       COALESCE(a.claim_id, b.claim_id) claim_id, "
+            "       COALESCE(a.razorpay_subscription_id,'') sub_id "
             "FROM nidaan_payments a JOIN nidaan_payments b "
-            "  ON a.pay_id < b.pay_id AND a.status<>'duplicate' AND b.status<>'duplicate' "
-            " AND ((a.razorpay_subscription_id <> '' AND a.razorpay_subscription_id = b.razorpay_subscription_id) "
-            "      OR (a.account_id IS NOT NULL AND a.account_id = b.account_id AND a.source = b.source)) "
-            " AND abs(strftime('%s', a.created_at) - strftime('%s', b.created_at)) < 600 "
+            "  ON a.pay_id < b.pay_id AND " + (_live % "a") + " AND " + (_live % "b") +
+            " AND ( (COALESCE(a.razorpay_payment_id,'') <> '' "
+            "        AND a.razorpay_payment_id = b.razorpay_payment_id) "
+            "    OR (COALESCE(a.razorpay_subscription_id,'') <> '' "
+            "        AND a.razorpay_subscription_id = b.razorpay_subscription_id "
+            "        AND (COALESCE(a.razorpay_payment_id,'') = '' "
+            "             OR COALESCE(b.razorpay_payment_id,'') = '')) "
+            "    OR (a.source = b.source AND a.source IN ('branch_l2','per_claim_review') "
+            "        AND a.claim_id IS NOT NULL AND a.claim_id = b.claim_id) ) "
             "WHERE a.created_at >= ?", (since,))).fetchall()]
         for d in dups:
+            # Say WHICH thing was paid for twice. "Account #130" was never enough to judge it
+            # without opening the database, which is why nobody did.
+            what = ("subscription %s" % d["sub_id"][:24]) if d["sub_id"] else (
+                "claim NP-%s" % d["claim_id"] if d["claim_id"] else "account #%s" % d.get("account_id"))
             findings.append({
                 "key": "duplicate_row:%s:%s" % (d["a_id"], d["b_id"]), "check": "duplicate",
                 "severity": "critical", "account_id": d.get("account_id"),
-                "title": "One payment recorded twice — rows #%s and #%s" % (d["a_id"], d["b_id"]),
+                "claim_id": d.get("claim_id"),
+                "title": "One payment recorded twice — %s" % what,
                 "amount_paise": d["a_amt"],
-                "detail": "%s ₹%s and %s ₹%s for account #%s within 10 minutes (%s). Revenue is "
-                          "overstated until one is marked duplicate."
-                          % (d["a_src"], d["a_amt"] / 100, d["b_src"], d["b_amt"] / 100,
-                             d.get("account_id"), d["created_at"])})
+                "detail": "Rows #%s and #%s are both %s for %s (₹%s and ₹%s, first at %s). "
+                          "The customer was charged once; Revenue counts it twice until one row "
+                          "is marked duplicate."
+                          % (d["a_id"], d["b_id"], d["a_src"], what,
+                             d["a_amt"] / 100, d["b_amt"] / 100, d["created_at"])})
 
         # 8 - an active plan past its end with no renewal
         late = [dict(r) for r in await (await c.execute(
