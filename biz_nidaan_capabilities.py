@@ -105,6 +105,17 @@ CAPABILITIES: list[dict] = [
         "telegram": True, "web": True, "min_role": "team_member",
     },
     {
+        # ✈️ Telegram Bot → one button, everyone who has not connected yet is asked to.
+        "id": "telegram_invite_all",
+        "en": {"t": "Ask everyone to connect Telegram",
+               "d": "One button tells every colleague who has not connected yet how to, on "
+                    "their bell and by email, in English and Hindi. Needed after the bot changes."},
+        "hi": {"t": "सबको टेलीग्राम जोड़ने को कहें",
+               "d": "एक बटन से उन सब को सूचना जाती है जिन्होंने अभी टेलीग्राम "
+                    "नहीं जोड़ा — घंटी और ईमेल पर, हिंदी और अंग्रेज़ी दोनों में।"},
+        "telegram": False, "web": True, "min_role": "super_admin",
+    },
+    {
         # Settings → 🔔 Notifications. The whole list, with a tickbox per job on every row.
         "id": "notification_control",
         "en": {"t": "Decide who is told what",

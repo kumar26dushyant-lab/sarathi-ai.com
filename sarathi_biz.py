@@ -15010,24 +15010,70 @@ async def ops_telegram_disconnect(request: Request):
     return {"ok": True, "links_kept": await tg.linked_staff_count()}
 
 
+@app.get("/nidaan/ops/api/telegram/pending-count")
+async def ops_telegram_pending_count(request: Request):
+    """How many people the invite would actually reach - shown on the button BEFORE it is
+    pressed, so nobody sends to everyone meaning to send to nobody."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request, "super_admin")
+    pending = await tg.list_unlinked_staff()
+    return {"pending": len(pending),
+            "reachable": len([p for p in pending if (p.get("email") or "").strip()]),
+            "unreachable": [p["name"] for p in pending if not (p.get("email") or "").strip()],
+            "bot_username": await tg._get_setting("telegram_bot_username", "")}
+
+
 @app.post("/nidaan/ops/api/telegram/remind-unlinked")
 async def ops_telegram_remind_unlinked(request: Request):
-    """Nudge every staffer who hasn't connected yet — via their dashboard bell, app
-    push and email (never Telegram, since that's the thing they're missing)."""
+    """Ask everyone who has not connected yet to connect - on their dashboard bell, app push
+    and email. Never on Telegram, which is the thing they are missing.
+
+    WHAT THIS DELIBERATELY DOES NOT SEND: the person's connect CODE. That code is a bearer
+    credential - whoever opens it links THEIR Telegram to that staff account and then receives
+    that person's claim notifications. It lives 15 minutes and is single-use for exactly that
+    reason, which also makes it useless in an email nobody opens for an hour. So the message
+    carries an ordinary link to the portal instead: signing in is the check, and the
+    short-lived code is minted on the page, in front of the person it belongs to.
+    """
     if not _is_nidaan_host(request): raise HTTPException(404)
     _require_staff(request, "super_admin")
     pending = await tg.list_unlinked_staff()
     if not pending:
-        return {"ok": True, "notified": 0}
+        return {"ok": True, "notified": 0, "pending": 0}
+    bot_name = await tg._get_setting("telegram_bot_username", "")
+    link = f"{NIDAAN_BASE_URL}/nidaan/ops?connect=telegram"
+    # Both languages in the one message: it goes to everybody at once, and nobody should have
+    # to read past a language they do not use to find their own.
+    body = (
+        "Connect Telegram to get your work updates\n"
+        "----------------------------------------\n"
+        "Work given to you, your name mentioned, approvals and claim updates will come to "
+        "you on Telegram. Two taps, once.\n\n"
+        "1. Open this link and sign in:\n"
+        f"   {link}\n"
+        "2. The page opens on Telegram Bot. Tap the blue button.\n"
+        f"3. Telegram opens on @{bot_name}. Press START.\n\n"
+        "You will see 'Verified & connected'. That is all.\n\n"
+        "----------------------------------------\n"
+        "\u091f\u0947\u0932\u0940\u0917\u094d\u0930\u093e\u092e \u091c\u094b\u0921\u093c\u0947\u0902, \u0924\u093e\u0915\u093f \u0915\u093e\u092e \u0915\u0947 \u0905\u092a\u0921\u0947\u091f \u0906\u092a\u0915\u094b \u092e\u093f\u0932\u0947\u0902\n"
+        "----------------------------------------\n"
+        "\u0906\u092a\u0915\u094b \u092e\u093f\u0932\u093e \u0915\u093e\u092e, \u0906\u092a\u0915\u093e \u0928\u093e\u092e \u0932\u093f\u0916\u0947 \u091c\u093e\u0928\u0947 \u092a\u0930, \u0905\u092a\u094d\u0930\u0942\u0935\u0932 \u0914\u0930 "
+        "\u0915\u094d\u0932\u0947\u092e \u0915\u0947 \u0905\u092a\u0921\u0947\u091f - \u0938\u092c \u091f\u0947\u0932\u0940\u0917\u094d\u0930\u093e\u092e \u092a\u0930 \u0906\u090f\u0902\u0917\u0947\u0964 "
+        "\u0938\u093f\u0930\u094d\u095e \u0926\u094b \u091f\u0948\u092a, \u090f\u0915 \u0939\u0940 \u092c\u093e\u0930\u0964\n\n"
+        "1. \u092f\u0939 \u0932\u093f\u0902\u0915 \u0916\u094b\u0932\u0947\u0902 \u0914\u0930 \u0932\u0949\u0917\u093f\u0928 \u0915\u0930\u0947\u0902:\n"
+        f"   {link}\n"
+        "2. \u092a\u0947\u091c 'Telegram Bot' \u092a\u0930 \u0916\u0941\u0932\u0947\u0917\u093e\u0964 \u0928\u0940\u0932\u0947 \u092c\u091f\u0928 \u092a\u0930 \u091f\u0948\u092a \u0915\u0930\u0947\u0902\u0964\n"
+        f"3. \u091f\u0947\u0932\u0940\u0917\u094d\u0930\u093e\u092e \u092e\u0947\u0902 @{bot_name} \u0916\u0941\u0932\u0947\u0917\u093e\u0964 START \u0926\u092c\u093e\u090f\u0902\u0964\n\n"
+        "'Verified & connected' \u0926\u093f\u0916\u0947\u0917\u093e\u0964 \u092c\u0938 \u0907\u0924\u0928\u093e \u0939\u0940\u0964\n")
     n = await nnot.notify_staff_inapp(
         [p["staff_id"] for p in pending],
-        subject="Connect your Telegram for instant updates",
-        body=("Your NidaanPartner task alerts, mentions and approvals can now reach you "
-              "on Telegram.\n\nOpen the portal → ✈️ Telegram Bot → tap “Connect my "
-              "Telegram” → press Start. It takes two taps and only needs doing once.\n\n"
-              f"{NIDAAN_BASE_URL}/admin"),
+        subject=("Connect your Telegram \u00b7 "
+                 "\u091f\u0947\u0932\u0940\u0917\u094d\u0930\u093e\u092e \u091c\u094b\u0921\u093c\u0947\u0902"),
+        body=body,
         event_key="telegram.connect_reminder")
-    return {"ok": True, "notified": n}
+    await _ops_audit(request, "telegram.invite_all", "telegram", 0,
+                     f"asked {n} of {len(pending)} unconnected staff to connect to @{bot_name}")
+    return {"ok": True, "notified": n, "pending": len(pending), "bot_username": bot_name}
 
 
 @app.post("/nidaan/ops/api/telegram/toggle")
