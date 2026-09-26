@@ -598,8 +598,14 @@ async def _prune_chat(chat_id: str) -> None:
         await conn.commit()
 
 
+# The three the bot speaks. "hinglish" is Hindi in Roman letters - what most of the team
+# actually types - and the word is spelled the way biz_nidaan_daily_summary.py has always
+# spelled it, so one setting cannot come to mean two things in two modules.
+LANGS = ("en", "hi", "hinglish")
+
+
 async def set_staff_lang(staff_id: int, lang: str) -> None:
-    lang = "hi" if lang == "hi" else "en"
+    lang = lang if lang in LANGS else "en"
     async with aiosqlite.connect(db.DB_PATH) as conn:
         await conn.execute("UPDATE nidaan_staff SET telegram_lang=? WHERE staff_id=?",
                            (lang, staff_id))
@@ -608,236 +614,771 @@ async def set_staff_lang(staff_id: int, lang: str) -> None:
 
 def _lang(staff: Optional[dict]) -> str:
     l = (staff or {}).get("telegram_lang", "en")
-    return "hi" if l == "hi" else "en"
+    return l if l in LANGS else "en"
 
 
 # ── Bot string translations (fixed text — zero mistranslation risk) ──────────
 # {key: {"en": ..., "hi": ...}}. Use T(lang, key, **fmt). Task CONTENT (titles,
 # comments) is user data and is shown as-is; only the bot's own chrome is translated.
 _BOT_TXT: dict = {
-    "menu_title":   {"en": "🏢 *NidaanPartner Ops*", "hi": "🏢 *निदान पार्टनर ऑफिस*"},
-    "menu_hi":      {"en": "Hi {name} — {role}", "hi": "नमस्ते {name} — {role}"},
-    "menu_pick":    {"en": "Run your day right here. Pick anything below 👇",
-                     "hi": "अपना पूरा काम यहीं से करें। नीचे से कुछ भी चुनें 👇"},
-    "b_pending":    {"en": "📥 Pending with me", "hi": "📥 मेरे पेंडिंग"},
-    "b_byme":       {"en": "📤 Assigned by me", "hi": "📤 मेरे दिए हुए"},
-    "b_involved":   {"en": "🏷️ I'm involved", "hi": "🏷️ मैं शामिल हूँ"},
-    "b_archived":   {"en": "🗄️ Archived", "hi": "🗄️ आर्काइव"},
-    "b_approvals":  {"en": "⏳ Approvals", "hi": "⏳ अप्रूवल"},
-    "b_leave":      {"en": "🌴 Apply leave", "hi": "🌴 छुट्टी"},
-    "b_wfh":        {"en": "🏠 Apply WFH", "hi": "🏠 वर्क फ्रॉम होम"},
-    "b_ai":         {"en": "🤖 Ask AI", "hi": "🤖 AI से पूछें"},
-    "b_broadcast":  {"en": "📣 Broadcast", "hi": "📣 ब्रॉडकास्ट"},
-    "b_findclaim":  {"en": "🔎 Find a claim", "hi": "🔎 दावा खोजें"},
-    "cl_ask":       {"en": "🔎 Type a *claim number*, *customer name*, or *phone* to find a claim.",
-                     "hi": "🔎 दावा खोजने के लिए *दावा नंबर*, *ग्राहक का नाम*, या *फ़ोन* लिखें।"},
-    "cl_none":      {"en": "No matching claim found. Try a claim number, name, or phone.",
-                     "hi": "कोई मिलता-जुलता दावा नहीं मिला। दावा नंबर, नाम या फ़ोन आज़माएँ।"},
-    "cl_matches":   {"en": "Found {n} claim(s) — tap to view:", "hi": "{n} दावे मिले — देखने के लिए टैप करें:"},
-    "admin_only":   {"en": "This is for admins only.", "hi": "यह केवल एडमिन के लिए है।"},
-    "b_addnote":    {"en": "💬 Add note", "hi": "💬 नोट जोड़ें"},
-    "b_movestage":  {"en": "➡️ Move stage", "hi": "➡️ चरण बदलें"},
-    "cln_ask":      {"en": "💬 Type the note to add to claim #{id}.", "hi": "💬 दावा #{id} के लिए नोट लिखें।"},
-    "cln_confirm":  {"en": "Add this note to claim #{id}?\n\n_{text}_", "hi": "यह नोट दावा #{id} में जोड़ें?\n\n_{text}_"},
-    "cln_saved":    {"en": "✓ Note saved on claim #{id}.", "hi": "✓ दावा #{id} में नोट सहेजा गया।"},
-    "cls_pick":     {"en": "➡️ Move claim #{id} to which stage?", "hi": "➡️ दावा #{id} को किस चरण में ले जाएँ?"},
-    "cls_confirm":  {"en": "Move claim #{id} to *{stage}*?", "hi": "दावा #{id} को *{stage}* में ले जाएँ?"},
-    "cls_done":     {"en": "✓ Claim #{id} moved to {stage}.", "hi": "✓ दावा #{id} को {stage} में ले जाया गया।"},
-    "cancelled":    {"en": "Cancelled.", "hi": "रद्द कर दिया।"},
-    "b_mynumbers":  {"en": "📊 My numbers", "hi": "📊 मेरे आँकड़े"},
-    "stats_title":  {"en": "📊 *Today's numbers*", "hi": "📊 *आज के आँकड़े*"},
-    "st_today":     {"en": "New claims today", "hi": "आज नए दावे"},
-    "st_open":      {"en": "Open claims", "hi": "खुले दावे"},
-    "st_l2":        {"en": "L2 (reviewed-GO) claims", "hi": "L2 (समीक्षा-GO) दावे"},
-    "st_mytasks":   {"en": "Tasks pending with me", "hi": "मेरे पेंडिंग टास्क"},
-    "b_docs":       {"en": "📎 Send claim documents",
-                     "hi": "📎 क्लेम के डॉक्यूमेंट भेजें"},
-    "dc_ask":       {"en": "📎 *Send claim documents*\n\nWhich claim? Send the claim "
-                           "number only — for example *217*.",
-                     "hi": "📎 *क्लेम के डॉक्यूमेंट भेजें*\n\nकौन सा क्लेम? सिर्फ़ "
-                           "क्लेम नंबर भेजें — जैसे *217*।"},
-    "dc_badnum":    {"en": "Please send just the claim number, like *217*.",
-                     "hi": "कृपया सिर्फ़ क्लेम नंबर भेजें, जैसे *217*।"},
-    "dc_send_now":  {"en": "\n📤 Now send the document — photo or PDF. One at a time.",
-                     "hi": "\n📤 अब डॉक्यूमेंट भेजें — फ़ोटो या PDF। एक बार में एक।"},
-    "dc_reading":   {"en": "⏳ Reading it…",
-                     "hi": "⏳ देख रहे हैं…"},
-    "dc_confirm":   {"en": "\n❓ *Save this to claim #{id}?*",
-                     "hi": "\n❓ *क्या इसे क्लेम #{id} में सेव करें?*"},
-    "dc_yes":       {"en": "✅ Yes, save it", "hi": "✅ हाँ, सेव करें"},
-    "dc_no":        {"en": "❌ No, cancel", "hi": "❌ नहीं, रहने दें"},
-    "dc_no_file":   {"en": "Please send the document as a photo or a PDF.",
-                     "hi": "कृपया डॉक्यूमेंट फ़ोटो या PDF की तरह भेजें।"},
-    "dc_dl_fail":   {"en": "That file did not come through. Please send it again.",
-                     "hi": "फ़ाइल हम तक नहीं पहुँची। कृपया दोबारा भेजें।"},
-    "b_split":      {"en": "✂️ Split a mixed PDF",
-                     "hi": "✂️ मिले-जुले PDF को अलग करें"},
-    "ds_ask":       {"en": "✂️ *Split a mixed PDF*\n\nSend one PDF that has several "
-                           "documents in it. I will separate them and send each one back, named. "
-                           "Nothing is saved to any claim — you check them first.",
-                     "hi": "✂️ *मिले-जुले PDF को अलग करें*\n\nएक ऐसी PDF भेजें जिसमें "
-                           "कई डॉक्यूमेंट हों। मैं उन्हें अलग करके, नाम के साथ वापस भेजूंगा। "
-                           "किसी क्लेम में कुछ सेव नहीं होगा — पहले आप देख लें।"},
-    "ds_working":   {"en": "⏳ Separating the documents… this can take a minute.",
-                     "hi": "⏳ डॉक्यूमेंट अलग कर रहे हैं… एक मिनट लग सकता है।"},
-    "ds_pdf_only":  {"en": "Please send it as a *PDF*. A photo cannot be split.",
-                     "hi": "कृपया इसे *PDF* की तरह भेजें। फ़ोटो को अलग नहीं किया जा सकता।"},
-    "ds_one_only":  {"en": "ℹ️ This looks like a single document, so there is nothing to "
-                           "separate. Send it with 📎 *Send claim documents* instead.",
-                     "hi": "ℹ️ यह एक ही डॉक्यूमेंट लगता है, अलग करने को कुछ नहीं है। "
-                           "इसे 📎 *क्लेम के डॉक्यूमेंट भेजें* से भेजें।"},
-    "ds_done":      {"en": "✅ Found *{n}* documents. Each one is above.\n\nTo put one on a "
-                           "claim, use 📎 *Send claim documents* and forward it there.",
-                     "hi": "✅ *{n}* डॉक्यूमेंट मिले। सभी ऊपर हैं।\n\nकिसी को क्लेम में "
-                           "लगाना हो तो 📎 *क्लेम के डॉक्यूमेंट भेजें* से वहीं भेज दें।"},
-    "ds_failed":    {"en": "Could not separate that one. Please try the portal’s splitter.",
-                     "hi": "इसे अलग नहीं कर पाए। कृपया पोर्टल का स्प्लिटर इस्तेमाल करें।"},
-    "b_help":       {"en": "❓ Help", "hi": "❓ मदद"},
-    "b_lang":       {"en": "🌐 हिंदी", "hi": "🌐 English"},
-    "b_menu":       {"en": "⬅️ Menu", "hi": "⬅️ मेन्यू"},
-    "b_start":      {"en": "▶️ Start", "hi": "▶️ शुरू करें"},
-    "b_done":       {"en": "✅ Mark done", "hi": "✅ पूरा करें"},
-    "b_reopen":     {"en": "↺ Reopen", "hi": "↺ दोबारा खोलें"},
-    "b_comment":    {"en": "💬 Add comment", "hi": "💬 कमेंट जोड़ें"},
-    "b_open_portal":{"en": "🔗 Open in portal", "hi": "🔗 पोर्टल में खोलें"},
-    "b_approve":    {"en": "✅ Approve #{id}", "hi": "✅ अप्रूव #{id}"},
-    "b_reject":     {"en": "❌ Reject #{id}", "hi": "❌ रिजेक्ट #{id}"},
-    "b_ask_again":  {"en": "🤖 Ask again", "hi": "🤖 फिर पूछें"},
-    "nothing_here": {"en": "*{head}*\n\nNothing here right now ✓",
-                     "hi": "*{head}*\n\nअभी यहाँ कुछ नहीं है ✓"},
-    "list_shown":   {"en": "*{head}* — {n} shown", "hi": "*{head}* — {n} दिख रहे हैं"},
-    "h_pending":    {"en": "📥 Pending with me", "hi": "📥 मेरे पेंडिंग"},
-    "h_byme":       {"en": "📤 Assigned by me", "hi": "📤 मेरे दिए हुए"},
-    "h_involved":   {"en": "🏷️ I'm involved", "hi": "🏷️ मैं शामिल हूँ"},
-    "h_archived":   {"en": "🗄️ Archived", "hi": "🗄️ आर्काइव"},
-    "task_hdr":     {"en": "Task #{id}", "hi": "टास्क #{id}"},
-    "l_status":     {"en": "Status", "hi": "स्थिति"},
-    "l_priority":   {"en": "Priority", "hi": "प्राथमिकता"},
-    "l_category":   {"en": "Category", "hi": "कैटेगरी"},
-    "l_assignee":   {"en": "Assignee", "hi": "असाइनी"},
-    "l_creator":    {"en": "Created by", "hi": "बनाया"},
-    "l_due":        {"en": "Due", "hi": "ड्यू"},
-    "l_complainant":{"en": "Complainant", "hi": "शिकायतकर्ता"},
-    "latest_comments":{"en": "💬 *Latest comments*", "hi": "💬 *ताज़ा कमेंट*"},
-    "no_access":    {"en": "🔒 You don't have access to this task.",
-                     "hi": "🔒 इस टास्क का एक्सेस आपके पास नहीं है।"},
-    "task_notfound":{"en": "Task not found.", "hi": "टास्क नहीं मिला।"},
-    "appr_none":    {"en": "*⏳ Approvals*\n\nNothing awaiting your approval ✓",
-                     "hi": "*⏳ अप्रूवल*\n\nआपके अप्रूवल के लिए कुछ नहीं ✓"},
-    "appr_hdr":     {"en": "*⏳ Awaiting your approval*", "hi": "*⏳ आपके अप्रूवल का इंतज़ार*"},
-    "appr_by":      {"en": "by {name}", "hi": "द्वारा {name}"},
-    "ask_comment":  {"en": "💬 Type your comment for *task #{id}* — or send a 🎤 voice note.\nYou'll confirm it before it's saved. _Everyone involved will be notified._",
-                     "hi": "💬 *टास्क #{id}* के लिए कमेंट टाइप करें — या 🎤 वॉइस नोट भेजें।\nसेव होने से पहले आप पुष्टि करेंगे। _सभी संबंधित लोगों को सूचना जाएगी।_"},
-    "ask_ai":       {"en": "🤖 *Ask me anything about your work*\n\nFor example:\n• _what's pending with me?_\n• _which tasks are overdue?_\n• _status of task 55_\n\nType your question — or send a 🎤 voice note 👇",
-                     "hi": "🤖 *अपने काम के बारे में कुछ भी पूछें*\n\nजैसे:\n• _मेरे पास क्या पेंडिंग है?_\n• _कौन से टास्क ओवरड्यू हैं?_\n• _टास्क 55 की स्थिति_\n\nसवाल टाइप करें — या 🎤 वॉइस नोट भेजें 👇"},
-    "thinking":     {"en": "🤖 Thinking…", "hi": "🤖 सोच रहा हूँ…"},
-    "ask_leave":    {"en": "{icon} *Apply for {label}*\n\nReply with the dates and reason, e.g.\n`2026-07-25 to 2026-07-26 family function`\nor `2026-07-25 personal work` for a single day.",
-                     "hi": "{icon} *{label} के लिए आवेदन*\n\nतारीख़ और कारण भेजें, जैसे\n`2026-07-25 to 2026-07-26 पारिवारिक कार्यक्रम`\nया एक दिन के लिए `2026-07-25 निजी काम`।"},
-    "ask_broadcast":{"en": "📣 *Broadcast to all staff*\n\nType the message to send to everyone's bell.",
-                     "hi": "📣 *सभी स्टाफ को ब्रॉडकास्ट*\n\nसबकी बेल पर भेजने के लिए संदेश टाइप करें।"},
-    "leave_label":  {"en": "Leave", "hi": "छुट्टी"},
-    "wfh_label":    {"en": "Work From Home", "hi": "वर्क फ्रॉम होम"},
-    "comment_added":{"en": "✅ Comment added to task #{id}. Everyone involved was notified.",
-                     "hi": "✅ टास्क #{id} में कमेंट जुड़ गया। सभी संबंधित लोगों को सूचना दे दी गई।"},
-    "b_open_task":  {"en": "📄 Open #{id}", "hi": "📄 खोलें #{id}"},
-    "leave_sent":   {"en": "✅ *{label} request sent*\n{start} → {end}\nReason: {reason}\n\nAdmins have been notified.",
-                     "hi": "✅ *{label} रिक्वेस्ट भेजी गई*\n{start} → {end}\nकारण: {reason}\n\nएडमिन को सूचना दे दी गई।"},
-    "leave_nodate": {"en": "I couldn't find a date. Please use `YYYY-MM-DD`, e.g. `2026-07-25 personal work`.",
-                     "hi": "तारीख़ नहीं मिली। कृपया `YYYY-MM-DD` लिखें, जैसे `2026-07-25 निजी काम`।"},
-    "bcast_sent":   {"en": "📣 Broadcast sent to {n} staff member(s).",
-                     "hi": "📣 {n} स्टाफ को ब्रॉडकास्ट भेजा गया।"},
-    "connected":    {"en": "✅ Verified & connected, {name}!", "hi": "✅ सत्यापित और कनेक्ट हो गया, {name}!"},
-    "not_staff":    {"en": "🔒 *Not connected.*\n\nThis Telegram number is not registered for any staff member. Ask your admin to check the mobile number on your staff profile, then try again from the correct Telegram account.",
-                     "hi": "🔒 *कनेक्ट नहीं हुआ।*\n\nयह टेलीग्राम नंबर किसी स्टाफ के रूप में रजिस्टर्ड नहीं है। अपने एडमिन से स्टाफ प्रोफ़ाइल का मोबाइल नंबर जँचवाएँ, फिर सही टेलीग्राम अकाउंट से दोबारा कोशिश करें।"},
-    "share_own":    {"en": "⚠️ Please tap the *📱 Share my phone number* button to share YOUR OWN number — a forwarded contact won't work.",
-                     "hi": "⚠️ कृपया *📱 अपना फ़ोन नंबर शेयर करें* बटन दबाकर अपना ही नंबर शेयर करें — फ़ॉरवर्ड किया गया कॉन्टैक्ट नहीं चलेगा।"},
-    "connect_secure":{"en": "🔐 *Connect securely*\n\nTo receive your NidaanPartner notifications, tap the button below to share your phone number.\n\nIt must match the mobile number registered for you in the office system — Telegram verifies it, so nobody can connect using someone else's number.",
-                     "hi": "🔐 *सुरक्षित कनेक्ट करें*\n\nअपने निदान पार्टनर नोटिफिकेशन पाने के लिए नीचे बटन दबाकर अपना फ़ोन नंबर शेयर करें।\n\nयह ऑफिस सिस्टम में आपके रजिस्टर्ड मोबाइल नंबर से मेल खाना चाहिए — टेलीग्राम इसे सत्यापित करता है, इसलिए कोई और किसी के नंबर से कनेक्ट नहीं कर सकता।"},
-    "share_btn":    {"en": "📱 Share my phone number", "hi": "📱 अपना फ़ोन नंबर शेयर करें"},
-    "not_linked_tap":{"en": "🔒 This Telegram isn't linked yet.\n\nTap the button below to connect with your registered mobile number.",
-                     "hi": "🔒 यह टेलीग्राम अभी लिंक नहीं है।\n\nअपने रजिस्टर्ड मोबाइल नंबर से कनेक्ट करने के लिए नीचे बटन दबाएँ।"},
-    "not_allowed":  {"en": "Not allowed", "hi": "अनुमति नहीं"},
-    "admins_only":  {"en": "Admins only", "hi": "सिर्फ़ एडमिन"},
-    "sa_only":      {"en": "Super admin only", "hi": "सिर्फ़ सुपर एडमिन"},
-    "updated_ok":   {"en": "Updated ✓", "hi": "अपडेट हो गया ✓"},
-    "done_ok":      {"en": "Done ✓", "hi": "हो गया ✓"},
-    "failed":       {"en": "Failed", "hi": "विफल"},
-    "lang_set":     {"en": "Language set to English", "hi": "भाषा हिंदी कर दी गई"},
-    "confirm_comment":{"en": "Add this comment to *#{id} — {title}*?\n\n“{text}”",
-                       "hi": "यह कमेंट *#{id} — {title}* में जोड़ें?\n\n“{text}”"},
-    "b_confirm_yes":{"en": "✅ Yes, add", "hi": "✅ हाँ, जोड़ें"},
-    "b_confirm_no": {"en": "✕ Cancel", "hi": "✕ रद्द करें"},
-    "ask_claim_reply":{"en": "💬 Type your reply to the customer for claim #{id} — or send a 🎤 voice note. You'll confirm before it's sent.",
-                       "hi": "💬 क्लेम #{id} के ग्राहक को अपना जवाब लिखें — या 🎤 वॉइस नोट भेजें। भेजने से पहले पुष्टि करेंगे।"},
-    "confirm_claim_reply":{"en": "Send this reply to the customer on claim #{id}?\n\n“{text}”",
-                       "hi": "क्लेम #{id} पर ग्राहक को यह जवाब भेजें?\n\n“{text}”"},
-    "b_send_yes":   {"en": "✅ Yes, send", "hi": "✅ हाँ, भेजें"},
-    "claim_reply_ok":{"en": "✅ Reply sent to the customer on claim #{id}.", "hi": "✅ क्लेम #{id} पर ग्राहक को जवाब भेज दिया गया।"},
-    "claim_reply_fail":{"en": "⚠️ Could not send the reply. Please try from the dashboard.", "hi": "⚠️ जवाब नहीं भेजा जा सका। कृपया डैशबोर्ड से भेजें।"},
-    "cancelled":    {"en": "Cancelled — nothing was saved.", "hi": "रद्द — कुछ सेव नहीं हुआ।"},
-    "voice_listening":{"en": "🎧 Listening to your voice note…", "hi": "🎧 आपका वॉइस नोट सुन रहा हूँ…"},
-    "voice_heard":  {"en": "🗣️ I heard: “{text}”", "hi": "🗣️ मैंने सुना: “{text}”"},
-    "voice_failed": {"en": "⚠️ I couldn't process that audio. Please try again, or type your message.",
-                     "hi": "⚠️ यह ऑडियो प्रोसेस नहीं हो पाया। दोबारा भेजें या टाइप करके भेजें।"},
-    "voice_too_long":{"en": "⏱️ That voice note is a bit long. Please keep it under ~2 minutes and try again.",
-                     "hi": "⏱️ यह वॉइस नोट थोड़ा लंबा है। कृपया ~2 मिनट के अंदर रखकर दोबारा भेजें।"},
-    "voice_unclear":{"en": "🙉 I couldn't catch that clearly. Please re-record and speak a little slower and clearer.",
-                     "hi": "🙉 साफ़ समझ नहीं आया। कृपया थोड़ा धीरे और साफ़ बोलकर दोबारा रिकॉर्ड करें।"},
-    "voice_noisy":  {"en": "🔊 There's a lot of background noise. Please move to a quieter place and record again.",
-                     "hi": "🔊 पीछे बहुत शोर है। कृपया किसी शांत जगह जाकर दोबारा रिकॉर्ड करें।"},
-    "voice_silent": {"en": "🤫 I didn't hear any speech. Please record again and speak close to the mic.",
-                     "hi": "🤫 कोई आवाज़ नहीं सुनाई दी। कृपया माइक के पास बोलकर दोबारा रिकॉर्ड करें।"},
-    "voice_abusive":{"en": "🙏 Let's keep it professional. Please rephrase without inappropriate language.",
-                     "hi": "🙏 कृपया शिष्ट भाषा में बात करें। अनुचित शब्दों के बिना दोबारा कहें।"},
-    "voice_nonsense":{"en": "🤔 I couldn't make out a clear request. Try saying e.g. “what's pending with me” or tap 💬 Add comment first.",
-                     "hi": "🤔 साफ़ अनुरोध समझ नहीं आया। जैसे कहें “मेरे पास क्या पेंडिंग है”, या पहले 💬 कमेंट जोड़ें दबाएँ।"},
-    # ── New-task creation flow ──
-    "b_newtask":    {"en": "➕ New task", "hi": "➕ नया टास्क"},
-    "nt_title":     {"en": "➕ *New task*\n\nSpeak or type the *title* — what needs doing?",
-                     "hi": "➕ *नया टास्क*\n\n*टाइटल* बोलें या टाइप करें — क्या करना है?"},
-    "nt_need_title":{"en": "Please give a short title first (speak or type).",
-                     "hi": "पहले एक छोटा टाइटल दें (बोलें या टाइप करें)।"},
-    "nt_cat":       {"en": "📂 Pick a *category*:", "hi": "📂 *कैटेगरी* चुनें:"},
-    "b_cat_none":   {"en": "— No category —", "hi": "— कोई कैटेगरी नहीं —"},
-    "nt_comp_name": {"en": "🧾 This category needs complainant details.\n\nSpeak or type the *complainant's name*:",
-                     "hi": "🧾 इस कैटेगरी के लिए शिकायतकर्ता की जानकारी चाहिए।\n\n*शिकायतकर्ता का नाम* बोलें या टाइप करें:"},
-    "nt_comp_phone":{"en": "📱 Now the complainant's *mobile number* (10 digits):",
-                     "hi": "📱 अब शिकायतकर्ता का *मोबाइल नंबर* (10 अंक):"},
-    "nt_bad_phone": {"en": "That's not a valid 10-digit mobile number — please say/type it again.",
-                     "hi": "यह सही 10-अंकों का मोबाइल नंबर नहीं है — दोबारा बोलें/टाइप करें।"},
-    "nt_assignee":  {"en": "👤 *Assign to* (or leave unassigned):", "hi": "👤 *किसे सौंपें* (या बिना असाइन):"},
-    "nt_suggest":   {"en": "👤 *Suggest who should handle it* (this goes as a request):",
-                     "hi": "👤 *किसे संभालना चाहिए, सुझाएँ* (यह रिक्वेस्ट के रूप में जाएगा):"},
-    "b_unassigned": {"en": "— Unassigned —", "hi": "— बिना असाइन —"},
-    "nt_priority":  {"en": "🎚️ Pick the *priority*:", "hi": "🎚️ *प्राथमिकता* चुनें:"},
-    "nt_due":       {"en": "📅 *Due date*?", "hi": "📅 *ड्यू डेट*?"},
-    "b_due_today":  {"en": "Today", "hi": "आज"},
-    "b_due_tmrw":   {"en": "Tomorrow", "hi": "कल"},
-    "b_due_none":   {"en": "No due date", "hi": "कोई ड्यू डेट नहीं"},
-    "b_due_type":   {"en": "Type a date", "hi": "तारीख़ टाइप करें"},
-    "nt_due_type":  {"en": "Type the due date as YYYY-MM-DD (e.g. 2026-07-30):",
-                     "hi": "ड्यू डेट YYYY-MM-DD में टाइप करें (जैसे 2026-07-30):"},
-    "nt_bad_date":  {"en": "Please use the format YYYY-MM-DD.", "hi": "कृपया YYYY-MM-DD फ़ॉर्मैट में लिखें।"},
-    "b_create":     {"en": "✅ Create task", "hi": "✅ टास्क बनाएँ"},
-    "nt_review":    {"en": "🔎 *Review — create this task?*\n\n*Title:* {title}\n*Category:* {cat}\n*Assign:* {asg}\n*Priority:* {prio}\n*Due:* {due}{comp}\n\n_After it's created, any corrections are done on the web/app._",
-                     "hi": "🔎 *जाँचें — यह टास्क बनाएँ?*\n\n*टाइटल:* {title}\n*कैटेगरी:* {cat}\n*असाइन:* {asg}\n*प्राथमिकता:* {prio}\n*ड्यू:* {due}{comp}\n\n_बनने के बाद सुधार वेब/ऐप पर ही होंगे।_"},
-    "nt_created":   {"en": "✅ *Task #{id} created!*\nEveryone involved has been notified.",
-                     "hi": "✅ *टास्क #{id} बन गया!*\nसभी संबंधित लोगों को सूचना दे दी गई।"},
-    "nt_created_req":{"en": "✅ *Request #{id} raised* — sent to the admins for assignment.",
-                     "hi": "✅ *रिक्वेस्ट #{id} भेजी गई* — असाइनमेंट के लिए एडमिन को।"},
-    "b_open_task2": {"en": "📄 Open #{id}", "hi": "📄 खोलें #{id}"},
-    "nt_use_buttons":{"en": "👆 Please tap one of the buttons above to continue.",
-                     "hi": "👆 आगे बढ़ने के लिए ऊपर दिए बटनों में से एक दबाएँ।"},
-    "code_bad":     {"en": "⚠️ That code is invalid or has expired.\n\nOpen the NidaanPartner portal → *Telegram Bot* → tap *Connect*, and use the fresh code (or the Connect button).",
-                     "hi": "⚠️ यह कोड ग़लत है या समय समाप्त हो गया।\n\nनिदान पार्टनर पोर्टल → *Telegram Bot* → *Connect* दबाएँ, और नया कोड इस्तेमाल करें।"},
-    "connect_howto":{"en": "🔐 *This Telegram account isn't connected yet.*\n\n1️⃣ Open the NidaanPartner portal *on this device*\n2️⃣ Go to *Telegram Bot* (left menu)\n3️⃣ Tap *Open Telegram & connect* → press *Start*\n4️⃣ Done — you'll get a ✅ confirmation\n\n💡 Already connected elsewhere? That was a *different* Telegram account — each account connects once.\n\n_Your code is only for you and expires in 15 minutes._",
-                     "hi": "🔐 *यह टेलीग्राम अकाउंट अभी कनेक्ट नहीं है।*\n\n1️⃣ इसी डिवाइस पर निदान पार्टनर पोर्टल खोलें\n2️⃣ बाएँ मेन्यू में *Telegram Bot* पर जाएँ\n3️⃣ *Open Telegram & connect* दबाएँ → *Start* दबाएँ\n4️⃣ हो गया — ✅ पुष्टि मिलेगी\n\n💡 किसी और डिवाइस पर कनेक्ट है? वह अलग टेलीग्राम अकाउंट था — हर अकाउंट एक बार कनेक्ट होता है।\n\n_आपका कोड सिर्फ़ आपके लिए है और 15 मिनट में समाप्त होता है।_"},
+    'lang_pick': {
+        'en': '\U0001f310 *Choose your language*',
+        'hi': '\U0001f310 *\u0905\u092a\u0928\u0940 \u092d\u093e\u0937\u093e \u091a\u0941\u0928\u0947\u0902*',
+        'hinglish': '\U0001f310 *Apni bhasha chuniye*',
+    },
+    'menu_title': {
+        'en': '🏢 *NidaanPartner Ops*',
+        'hi': '🏢 *निदान पार्टनर ऑफिस*',
+        'hinglish': '🏢 *NidaanPartner Ops*',
+    },
+    'menu_hi': {
+        'en': 'Hi {name} — {role}',
+        'hi': 'नमस्ते {name} — {role}',
+        'hinglish': 'Namaste {name} — {role}',
+    },
+    'menu_pick': {
+        'en': 'Run your day right here. Pick anything below 👇',
+        'hi': 'अपना पूरा काम यहीं से करें। नीचे से कुछ भी चुनें 👇',
+        'hinglish': 'Apna poora kaam yahin se kariye. Neeche se kuch bhi chuniye 👇',
+    },
+    'b_pending': {
+        'en': '📥 Pending with me',
+        'hi': '📥 मेरे पेंडिंग',
+        'hinglish': '📥 Mere paas pending',
+    },
+    'b_byme': {
+        'en': '📤 Assigned by me',
+        'hi': '📤 मेरे दिए हुए',
+        'hinglish': '📤 Maine diye hue',
+    },
+    'b_involved': {
+        'en': "🏷️ I'm involved",
+        'hi': '🏷️ मैं शामिल हूँ',
+        'hinglish': '🏷️ Jisme main hoon',
+    },
+    'b_archived': {
+        'en': '🗄️ Archived',
+        'hi': '🗄️ आर्काइव',
+        'hinglish': '🗄️ Archived',
+    },
+    'b_approvals': {
+        'en': '⏳ Approvals',
+        'hi': '⏳ अप्रूवल',
+        'hinglish': '⏳ Approvals',
+    },
+    'b_leave': {
+        'en': '🌴 Apply leave',
+        'hi': '🌴 छुट्टी',
+        'hinglish': '🌴 Chhutti ki request',
+    },
+    'b_wfh': {
+        'en': '🏠 Apply WFH',
+        'hi': '🏠 वर्क फ्रॉम होम',
+        'hinglish': '🏠 Ghar se kaam (WFH)',
+    },
+    'b_ai': {
+        'en': '🤖 Ask AI',
+        'hi': '🤖 AI से पूछें',
+        'hinglish': '🤖 AI se poochhiye',
+    },
+    'b_broadcast': {
+        'en': '📣 Broadcast',
+        'hi': '📣 ब्रॉडकास्ट',
+        'hinglish': '📣 Sabko message',
+    },
+    'b_findclaim': {
+        'en': '🔎 Find a claim',
+        'hi': '🔎 दावा खोजें',
+        'hinglish': '🔎 Claim dhoondhiye',
+    },
+    'cl_ask': {
+        'en': '🔎 Type a *claim number*, *customer name*, or *phone* to find a claim.',
+        'hi': '🔎 दावा खोजने के लिए *दावा नंबर*, *ग्राहक का नाम*, या *फ़ोन* लिखें।',
+        'hinglish': '🔎 *Claim number*, *customer ka naam*, ya *phone* likhiye — claim mil jayega.',
+    },
+    'cl_none': {
+        'en': 'No matching claim found. Try a claim number, name, or phone.',
+        'hi': 'कोई मिलता-जुलता दावा नहीं मिला। दावा नंबर, नाम या फ़ोन आज़माएँ।',
+        'hinglish': 'Koi claim nahi mila. Claim number, naam ya phone se try kariye.',
+    },
+    'cl_matches': {
+        'en': 'Found {n} claim(s) — tap to view:',
+        'hi': '{n} दावे मिले — देखने के लिए टैप करें:',
+        'hinglish': '{n} claim mile — dekhne ke liye tap kariye:',
+    },
+    'admin_only': {
+        'en': 'This is for admins only.',
+        'hi': 'यह केवल एडमिन के लिए है।',
+        'hinglish': 'Yeh sirf admin ke liye hai.',
+    },
+    'b_addnote': {
+        'en': '💬 Add note',
+        'hi': '💬 नोट जोड़ें',
+        'hinglish': '💬 Note likhiye',
+    },
+    'b_movestage': {
+        'en': '➡️ Move stage',
+        'hi': '➡️ चरण बदलें',
+        'hinglish': '➡️ Stage badliye',
+    },
+    'cln_ask': {
+        'en': '💬 Type the note to add to claim #{id}.',
+        'hi': '💬 दावा #{id} के लिए नोट लिखें।',
+        'hinglish': '💬 Claim #{id} ke liye note likhiye.',
+    },
+    'cln_confirm': {
+        'en': 'Add this note to claim #{id}?\n\n_{text}_',
+        'hi': 'यह नोट दावा #{id} में जोड़ें?\n\n_{text}_',
+        'hinglish': 'Yeh note claim #{id} me daal dein?\n\n_{text}_',
+    },
+    'cln_saved': {
+        'en': '✓ Note saved on claim #{id}.',
+        'hi': '✓ दावा #{id} में नोट सहेजा गया।',
+        'hinglish': '✓ Note claim #{id} me save ho gaya.',
+    },
+    'cls_pick': {
+        'en': '➡️ Move claim #{id} to which stage?',
+        'hi': '➡️ दावा #{id} को किस चरण में ले जाएँ?',
+        'hinglish': '➡️ Claim #{id} ko kis stage me le jaana hai?',
+    },
+    'cls_confirm': {
+        'en': 'Move claim #{id} to *{stage}*?',
+        'hi': 'दावा #{id} को *{stage}* में ले जाएँ?',
+        'hinglish': 'Claim #{id} ko *{stage}* me le jaayein?',
+    },
+    'cls_done': {
+        'en': '✓ Claim #{id} moved to {stage}.',
+        'hi': '✓ दावा #{id} को {stage} में ले जाया गया।',
+        'hinglish': '✓ Claim #{id} ab {stage} me hai.',
+    },
+    'cancelled': {
+        'en': 'Cancelled — nothing was saved.',
+        'hi': 'रद्द — कुछ सेव नहीं हुआ।',
+        'hinglish': 'Cancel kiya — kuch save nahi hua.',
+    },
+    'b_mynumbers': {
+        'en': '📊 My numbers',
+        'hi': '📊 मेरे आँकड़े',
+        'hinglish': '📊 Mere numbers',
+    },
+    'stats_title': {
+        'en': "📊 *Today's numbers*",
+        'hi': '📊 *आज के आँकड़े*',
+        'hinglish': '📊 *Aaj ke numbers*',
+    },
+    'st_today': {
+        'en': 'New claims today',
+        'hi': 'आज नए दावे',
+        'hinglish': 'Aaj ke naye claim',
+    },
+    'st_open': {
+        'en': 'Open claims',
+        'hi': 'खुले दावे',
+        'hinglish': 'Khule claim',
+    },
+    'st_l2': {
+        'en': 'L2 (reviewed-GO) claims',
+        'hi': 'L2 (समीक्षा-GO) दावे',
+        'hinglish': 'L2 (reviewed-GO) claim',
+    },
+    'st_mytasks': {
+        'en': 'Tasks pending with me',
+        'hi': 'मेरे पेंडिंग टास्क',
+        'hinglish': 'Mere paas pending task',
+    },
+    'b_docs': {
+        'en': '📎 Send claim documents',
+        'hi': '📎 क्लेम के डॉक्यूमेंट भेजें',
+        'hinglish': '📎 Claim ke document bhejein',
+    },
+    'dc_ask': {
+        'en': '📎 *Send claim documents*\n\nWhich claim? Send the claim number only — for example *217*.',
+        'hi': '📎 *क्लेम के डॉक्यूमेंट भेजें*\n\nकौन सा क्लेम? सिर्फ़ क्लेम नंबर भेजें — जैसे *217*।',
+        'hinglish': '📎 *Claim ke document bhejein*\n\nKaun sa claim? Sirf claim number bhejiye — jaise *217*.',
+    },
+    'dc_badnum': {
+        'en': 'Please send just the claim number, like *217*.',
+        'hi': 'कृपया सिर्फ़ क्लेम नंबर भेजें, जैसे *217*।',
+        'hinglish': 'Kripya sirf claim number bhejiye, jaise *217*.',
+    },
+    'dc_send_now': {
+        'en': '\n📤 Now send the document — photo or PDF. One at a time.',
+        'hi': '\n📤 अब डॉक्यूमेंट भेजें — फ़ोटो या PDF। एक बार में एक।',
+        'hinglish': '\n📤 Ab document bhejiye — photo ya PDF. Ek baar me ek.',
+    },
+    'dc_reading': {
+        'en': '⏳ Reading it…',
+        'hi': '⏳ देख रहे हैं…',
+        'hinglish': '⏳ Dekh rahe hain…',
+    },
+    'dc_confirm': {
+        'en': '\n❓ *Save this to claim #{id}?*',
+        'hi': '\n❓ *क्या इसे क्लेम #{id} में सेव करें?*',
+        'hinglish': '\n❓ *Ise claim #{id} me save karein?*',
+    },
+    'dc_yes': {
+        'en': '✅ Yes, save it',
+        'hi': '✅ हाँ, सेव करें',
+        'hinglish': '✅ Haan, save kariye',
+    },
+    'dc_no': {
+        'en': '❌ No, cancel',
+        'hi': '❌ नहीं, रहने दें',
+        'hinglish': '❌ Nahi, rehne dijiye',
+    },
+    'dc_no_file': {
+        'en': 'Please send the document as a photo or a PDF.',
+        'hi': 'कृपया डॉक्यूमेंट फ़ोटो या PDF की तरह भेजें।',
+        'hinglish': 'Kripya document photo ya PDF ki tarah bhejiye.',
+    },
+    'dc_dl_fail': {
+        'en': 'That file did not come through. Please send it again.',
+        'hi': 'फ़ाइल हम तक नहीं पहुँची। कृपया दोबारा भेजें।',
+        'hinglish': 'File hum tak nahi pahunchi. Kripya dobara bhejiye.',
+    },
+    'b_split': {
+        'en': '✂️ Split a mixed PDF',
+        'hi': '✂️ मिले-जुले PDF को अलग करें',
+        'hinglish': '✂️ Mile-jule PDF ko alag kariye',
+    },
+    'ds_ask': {
+        'en': '✂️ *Split a mixed PDF*\n\nSend one PDF that has several documents in it. I will separate them and send each one back, named. Nothing is saved to any claim — you check them first.',
+        'hi': '✂️ *मिले-जुले PDF को अलग करें*\n\nएक ऐसी PDF भेजें जिसमें कई डॉक्यूमेंट हों। मैं उन्हें अलग करके, नाम के साथ वापस भेजूंगा। किसी क्लेम में कुछ सेव नहीं होगा — पहले आप देख लें।',
+        'hinglish': '✂️ *Mile-jule PDF ko alag kariye*\n\nEk aisi PDF bhejiye jisme kai document hon. Main unhe alag karke, naam ke saath wapas bhej doonga. Kisi claim me kuch save nahi hoga — pehle aap dekh lijiye.',
+    },
+    'ds_working': {
+        'en': '⏳ Separating the documents… this can take a minute.',
+        'hi': '⏳ डॉक्यूमेंट अलग कर रहे हैं… एक मिनट लग सकता है।',
+        'hinglish': '⏳ Document alag kar rahe hain… ek minute lag sakta hai.',
+    },
+    'ds_pdf_only': {
+        'en': 'Please send it as a *PDF*. A photo cannot be split.',
+        'hi': 'कृपया इसे *PDF* की तरह भेजें। फ़ोटो को अलग नहीं किया जा सकता।',
+        'hinglish': 'Kripya ise *PDF* ki tarah bhejiye. Photo ko alag nahi kiya ja sakta.',
+    },
+    'ds_one_only': {
+        'en': 'ℹ️ This looks like a single document, so there is nothing to separate. Send it with 📎 *Send claim documents* instead.',
+        'hi': 'ℹ️ यह एक ही डॉक्यूमेंट लगता है, अलग करने को कुछ नहीं है। इसे 📎 *क्लेम के डॉक्यूमेंट भेजें* से भेजें।',
+        'hinglish': 'ℹ️ Yeh ek hi document lagta hai, alag karne ko kuch nahi hai. Ise 📎 *Claim ke document bhejein* se bhejiye.',
+    },
+    'ds_done': {
+        'en': '✅ Found *{n}* documents. Each one is above.\n\nTo put one on a claim, use 📎 *Send claim documents* and forward it there.',
+        'hi': '✅ *{n}* डॉक्यूमेंट मिले। सभी ऊपर हैं।\n\nकिसी को क्लेम में लगाना हो तो 📎 *क्लेम के डॉक्यूमेंट भेजें* से वहीं भेज दें।',
+        'hinglish': '✅ *{n}* document mile. Sab upar hain.\n\nKisi ko claim me lagana ho to 📎 *Claim ke document bhejein* se wahin bhej dijiye.',
+    },
+    'ds_failed': {
+        'en': 'Could not separate that one. Please try the portal’s splitter.',
+        'hi': 'इसे अलग नहीं कर पाए। कृपया पोर्टल का स्प्लिटर इस्तेमाल करें।',
+        'hinglish': 'Ise alag nahi kar paaye. Kripya portal ka splitter use kariye.',
+    },
+    'b_help': {
+        'en': '❓ Help',
+        'hi': '❓ मदद',
+        'hinglish': '❓ Madad',
+    },
+    'b_lang': {
+        'en': '🌐 हिंदी',
+        'hi': '🌐 English',
+        'hinglish': '🌐 Bhasha',
+    },
+    'b_menu': {
+        'en': '⬅️ Menu',
+        'hi': '⬅️ मेन्यू',
+        'hinglish': '⬅️ Menu',
+    },
+    'b_start': {
+        'en': '▶️ Start',
+        'hi': '▶️ शुरू करें',
+        'hinglish': '▶️ Shuru kariye',
+    },
+    'b_done': {
+        'en': '✅ Mark done',
+        'hi': '✅ पूरा करें',
+        'hinglish': '✅ Poora hua',
+    },
+    'b_reopen': {
+        'en': '↺ Reopen',
+        'hi': '↺ दोबारा खोलें',
+        'hinglish': '↺ Dobara kholiye',
+    },
+    'b_comment': {
+        'en': '💬 Add comment',
+        'hi': '💬 कमेंट जोड़ें',
+        'hinglish': '💬 Comment likhiye',
+    },
+    'b_open_portal': {
+        'en': '🔗 Open in portal',
+        'hi': '🔗 पोर्टल में खोलें',
+        'hinglish': '🔗 Portal me kholiye',
+    },
+    'b_approve': {
+        'en': '✅ Approve #{id}',
+        'hi': '✅ अप्रूव #{id}',
+        'hinglish': '✅ Approve #{id}',
+    },
+    'b_reject': {
+        'en': '❌ Reject #{id}',
+        'hi': '❌ रिजेक्ट #{id}',
+        'hinglish': '❌ Reject #{id}',
+    },
+    'b_ask_again': {
+        'en': '🤖 Ask again',
+        'hi': '🤖 फिर पूछें',
+        'hinglish': '🤖 Phir se poochhiye',
+    },
+    'nothing_here': {
+        'en': '*{head}*\n\nNothing here right now ✓',
+        'hi': '*{head}*\n\nअभी यहाँ कुछ नहीं है ✓',
+        'hinglish': '*{head}*\n\nAbhi yahan kuch nahi hai ✓',
+    },
+    'list_shown': {
+        'en': '*{head}* — {n} shown',
+        'hi': '*{head}* — {n} दिख रहे हैं',
+        'hinglish': '*{head}* — {n} dikhaye gaye',
+    },
+    'h_pending': {
+        'en': '📥 Pending with me',
+        'hi': '📥 मेरे पेंडिंग',
+        'hinglish': '📥 Mere paas pending',
+    },
+    'h_byme': {
+        'en': '📤 Assigned by me',
+        'hi': '📤 मेरे दिए हुए',
+        'hinglish': '📤 Maine diye hue',
+    },
+    'h_involved': {
+        'en': "🏷️ I'm involved",
+        'hi': '🏷️ मैं शामिल हूँ',
+        'hinglish': '🏷️ Jisme main hoon',
+    },
+    'h_archived': {
+        'en': '🗄️ Archived',
+        'hi': '🗄️ आर्काइव',
+        'hinglish': '🗄️ Archived',
+    },
+    'task_hdr': {
+        'en': 'Task #{id}',
+        'hi': 'टास्क #{id}',
+        'hinglish': 'Task #{id}',
+    },
+    'l_status': {
+        'en': 'Status',
+        'hi': 'स्थिति',
+        'hinglish': 'Status',
+    },
+    'l_priority': {
+        'en': 'Priority',
+        'hi': 'प्राथमिकता',
+        'hinglish': 'Priority',
+    },
+    'l_category': {
+        'en': 'Category',
+        'hi': 'कैटेगरी',
+        'hinglish': 'Category',
+    },
+    'l_assignee': {
+        'en': 'Assignee',
+        'hi': 'असाइनी',
+        'hinglish': 'Kisko diya',
+    },
+    'l_creator': {
+        'en': 'Created by',
+        'hi': 'बनाया',
+        'hinglish': 'Kisne banaya',
+    },
+    'l_due': {
+        'en': 'Due',
+        'hi': 'ड्यू',
+        'hinglish': 'Kab tak',
+    },
+    'l_complainant': {
+        'en': 'Complainant',
+        'hi': 'शिकायतकर्ता',
+        'hinglish': 'Complainant',
+    },
+    'latest_comments': {
+        'en': '💬 *Latest comments*',
+        'hi': '💬 *ताज़ा कमेंट*',
+        'hinglish': '💬 *Naye comment*',
+    },
+    'no_access': {
+        'en': "🔒 You don't have access to this task.",
+        'hi': '🔒 इस टास्क का एक्सेस आपके पास नहीं है।',
+        'hinglish': '🔒 Is task ka access aapke paas nahi hai.',
+    },
+    'task_notfound': {
+        'en': 'Task not found.',
+        'hi': 'टास्क नहीं मिला।',
+        'hinglish': 'Task nahi mila.',
+    },
+    'appr_none': {
+        'en': '*⏳ Approvals*\n\nNothing awaiting your approval ✓',
+        'hi': '*⏳ अप्रूवल*\n\nआपके अप्रूवल के लिए कुछ नहीं ✓',
+        'hinglish': '*⏳ Approvals*\n\nAapke approval ka kuch baaki nahi hai ✓',
+    },
+    'appr_hdr': {
+        'en': '*⏳ Awaiting your approval*',
+        'hi': '*⏳ आपके अप्रूवल का इंतज़ार*',
+        'hinglish': '*⏳ Aapke approval ka intezaar*',
+    },
+    'appr_by': {
+        'en': 'by {name}',
+        'hi': 'द्वारा {name}',
+        'hinglish': '{name} dwara',
+    },
+    'ask_comment': {
+        'en': "💬 Type your comment for *task #{id}* — or send a 🎤 voice note.\nYou'll confirm it before it's saved. _Everyone involved will be notified._",
+        'hi': '💬 *टास्क #{id}* के लिए कमेंट टाइप करें — या 🎤 वॉइस नोट भेजें।\nसेव होने से पहले आप पुष्टि करेंगे। _सभी संबंधित लोगों को सूचना जाएगी।_',
+        'hinglish': '💬 *Task #{id}* ke liye apna comment likhiye — ya 🎤 voice note bhejiye.\nSave hone se pehle aap confirm karenge. _Jo log isme hain sabko pata chal jayega._',
+    },
+    'ask_ai': {
+        'en': "🤖 *Ask me anything about your work*\n\nFor example:\n• _what's pending with me?_\n• _which tasks are overdue?_\n• _status of task 55_\n\nType your question — or send a 🎤 voice note 👇",
+        'hi': '🤖 *अपने काम के बारे में कुछ भी पूछें*\n\nजैसे:\n• _मेरे पास क्या पेंडिंग है?_\n• _कौन से टास्क ओवरड्यू हैं?_\n• _टास्क 55 की स्थिति_\n\nसवाल टाइप करें — या 🎤 वॉइस नोट भेजें 👇',
+        'hinglish': '🤖 *Apne kaam ke baare me kuch bhi poochhiye*\n\nJaise:\n• _mere paas kya pending hai?_\n• _kaun se task late ho gaye?_\n• _task 55 ka status_\n\nApna sawaal likhiye — ya 🎤 voice note bhejiye 👇',
+    },
+    'thinking': {
+        'en': '🤖 Thinking…',
+        'hi': '🤖 सोच रहा हूँ…',
+        'hinglish': '🤖 Soch raha hoon…',
+    },
+    'ask_leave': {
+        'en': '{icon} *Apply for {label}*\n\nReply with the dates and reason, e.g.\n`2026-07-25 to 2026-07-26 family function`\nor `2026-07-25 personal work` for a single day.',
+        'hi': '{icon} *{label} के लिए आवेदन*\n\nतारीख़ और कारण भेजें, जैसे\n`2026-07-25 to 2026-07-26 पारिवारिक कार्यक्रम`\nया एक दिन के लिए `2026-07-25 निजी काम`।',
+        'hinglish': '{icon} *{label} ke liye request*\n\nTareekh aur wajah likhiye, jaise\n`2026-07-25 to 2026-07-26 family function`\nya ek din ke liye `2026-07-25 personal work`.',
+    },
+    'ask_broadcast': {
+        'en': "📣 *Broadcast to all staff*\n\nType the message to send to everyone's bell.",
+        'hi': '📣 *सभी स्टाफ को ब्रॉडकास्ट*\n\nसबकी बेल पर भेजने के लिए संदेश टाइप करें।',
+        'hinglish': '📣 *Sabhi staff ko message*\n\nJo message sabki ghanti par bhejna hai, wo likhiye.',
+    },
+    'leave_label': {
+        'en': 'Leave',
+        'hi': 'छुट्टी',
+        'hinglish': 'Chhutti',
+    },
+    'wfh_label': {
+        'en': 'Work From Home',
+        'hi': 'वर्क फ्रॉम होम',
+        'hinglish': 'Ghar se kaam',
+    },
+    'comment_added': {
+        'en': '✅ Comment added to task #{id}. Everyone involved was notified.',
+        'hi': '✅ टास्क #{id} में कमेंट जुड़ गया। सभी संबंधित लोगों को सूचना दे दी गई।',
+        'hinglish': '✅ Task #{id} me comment jud gaya. Jo log isme hain sabko bata diya gaya.',
+    },
+    'b_open_task': {
+        'en': '📄 Open #{id}',
+        'hi': '📄 खोलें #{id}',
+        'hinglish': '📄 Kholiye #{id}',
+    },
+    'leave_sent': {
+        'en': '✅ *{label} request sent*\n{start} → {end}\nReason: {reason}\n\nAdmins have been notified.',
+        'hi': '✅ *{label} रिक्वेस्ट भेजी गई*\n{start} → {end}\nकारण: {reason}\n\nएडमिन को सूचना दे दी गई।',
+        'hinglish': '✅ *{label} ki request bhej di gayi*\n{start} → {end}\nWajah: {reason}\n\nAdmin ko bata diya gaya hai.',
+    },
+    'leave_nodate': {
+        'en': "I couldn't find a date. Please use `YYYY-MM-DD`, e.g. `2026-07-25 personal work`.",
+        'hi': 'तारीख़ नहीं मिली। कृपया `YYYY-MM-DD` लिखें, जैसे `2026-07-25 निजी काम`।',
+        'hinglish': 'Tareekh nahi mili. Kripya `YYYY-MM-DD` likhiye, jaise `2026-07-25 personal work`.',
+    },
+    'bcast_sent': {
+        'en': '📣 Broadcast sent to {n} staff member(s).',
+        'hi': '📣 {n} स्टाफ को ब्रॉडकास्ट भेजा गया।',
+        'hinglish': '📣 {n} staff ko message bhej diya gaya.',
+    },
+    'connected': {
+        'en': '✅ Verified & connected, {name}!',
+        'hi': '✅ सत्यापित और कनेक्ट हो गया, {name}!',
+        'hinglish': '✅ Verify ho gaya aur jud gaya, {name}!',
+    },
+    'not_staff': {
+        'en': '🔒 *Not connected.*\n\nThis Telegram number is not registered for any staff member. Ask your admin to check the mobile number on your staff profile, then try again from the correct Telegram account.',
+        'hi': '🔒 *कनेक्ट नहीं हुआ।*\n\nयह टेलीग्राम नंबर किसी स्टाफ के रूप में रजिस्टर्ड नहीं है। अपने एडमिन से स्टाफ प्रोफ़ाइल का मोबाइल नंबर जँचवाएँ, फिर सही टेलीग्राम अकाउंट से दोबारा कोशिश करें।',
+        'hinglish': '🔒 *Juda nahi hai.*\n\nYeh Telegram number kisi staff ke naam par registered nahi hai. Apne admin se kahiye ki aapki staff profile me mobile number check karein, phir sahi Telegram account se dobara try kariye.',
+    },
+    'share_own': {
+        'en': "⚠️ Please tap the *📱 Share my phone number* button to share YOUR OWN number — a forwarded contact won't work.",
+        'hi': '⚠️ कृपया *📱 अपना फ़ोन नंबर शेयर करें* बटन दबाकर अपना ही नंबर शेयर करें — फ़ॉरवर्ड किया गया कॉन्टैक्ट नहीं चलेगा।',
+        'hinglish': '⚠️ Kripya *📱 Apna phone number bhejiye* button dabakar APNA HI number bhejiye — kisi aur ka contact forward karne se kaam nahi chalega.',
+    },
+    'connect_secure': {
+        'en': "🔐 *Connect securely*\n\nTo receive your NidaanPartner notifications, tap the button below to share your phone number.\n\nIt must match the mobile number registered for you in the office system — Telegram verifies it, so nobody can connect using someone else's number.",
+        'hi': '🔐 *सुरक्षित कनेक्ट करें*\n\nअपने निदान पार्टनर नोटिफिकेशन पाने के लिए नीचे बटन दबाकर अपना फ़ोन नंबर शेयर करें।\n\nयह ऑफिस सिस्टम में आपके रजिस्टर्ड मोबाइल नंबर से मेल खाना चाहिए — टेलीग्राम इसे सत्यापित करता है, इसलिए कोई और किसी के नंबर से कनेक्ट नहीं कर सकता।',
+        'hinglish': '🔐 *Surakshit tareeke se judiye*\n\nApne NidaanPartner ke notification paane ke liye, neeche button dabakar apna phone number bhejiye.\n\nYeh wahi mobile number hona chahiye jo office system me aapke naam par hai — Telegram khud verify karta hai, isliye koi aur ke number se nahi jud sakta.',
+    },
+    'share_btn': {
+        'en': '📱 Share my phone number',
+        'hi': '📱 अपना फ़ोन नंबर शेयर करें',
+        'hinglish': '📱 Apna phone number bhejiye',
+    },
+    'not_linked_tap': {
+        'en': "🔒 This Telegram isn't linked yet.\n\nTap the button below to connect with your registered mobile number.",
+        'hi': '🔒 यह टेलीग्राम अभी लिंक नहीं है।\n\nअपने रजिस्टर्ड मोबाइल नंबर से कनेक्ट करने के लिए नीचे बटन दबाएँ।',
+        'hinglish': '🔒 Yeh Telegram abhi juda nahi hai.\n\nNeeche button dabakar apne registered mobile number se judiye.',
+    },
+    'not_allowed': {
+        'en': 'Not allowed',
+        'hi': 'अनुमति नहीं',
+        'hinglish': 'Ijazat nahi hai',
+    },
+    'admins_only': {
+        'en': 'Admins only',
+        'hi': 'सिर्फ़ एडमिन',
+        'hinglish': 'Sirf admin',
+    },
+    'sa_only': {
+        'en': 'Super admin only',
+        'hi': 'सिर्फ़ सुपर एडमिन',
+        'hinglish': 'Sirf super admin',
+    },
+    'updated_ok': {
+        'en': 'Updated ✓',
+        'hi': 'अपडेट हो गया ✓',
+        'hinglish': 'Update ho gaya ✓',
+    },
+    'done_ok': {
+        'en': 'Done ✓',
+        'hi': 'हो गया ✓',
+        'hinglish': 'Ho gaya ✓',
+    },
+    'failed': {
+        'en': 'Failed',
+        'hi': 'विफल',
+        'hinglish': 'Nahi ho paya',
+    },
+    'lang_set': {
+        'en': 'Language set to English',
+        'hi': 'भाषा हिंदी कर दी गई',
+        'hinglish': 'Bhasha Hinglish kar di gayi',
+    },
+    'confirm_comment': {
+        'en': 'Add this comment to *#{id} — {title}*?\n\n“{text}”',
+        'hi': 'यह कमेंट *#{id} — {title}* में जोड़ें?\n\n“{text}”',
+        'hinglish': 'Yeh comment *#{id} — {title}* me daal dein?\n\n“{text}”',
+    },
+    'b_confirm_yes': {
+        'en': '✅ Yes, add',
+        'hi': '✅ हाँ, जोड़ें',
+        'hinglish': '✅ Haan, daaliye',
+    },
+    'b_confirm_no': {
+        'en': '✕ Cancel',
+        'hi': '✕ रद्द करें',
+        'hinglish': '✕ Cancel',
+    },
+    'ask_claim_reply': {
+        'en': "💬 Type your reply to the customer for claim #{id} — or send a 🎤 voice note. You'll confirm before it's sent.",
+        'hi': '💬 क्लेम #{id} के ग्राहक को अपना जवाब लिखें — या 🎤 वॉइस नोट भेजें। भेजने से पहले पुष्टि करेंगे।',
+        'hinglish': '💬 Claim #{id} par customer ko apna jawab likhiye — ya 🎤 voice note bhejiye. Bhejne se pehle aap confirm karenge.',
+    },
+    'confirm_claim_reply': {
+        'en': 'Send this reply to the customer on claim #{id}?\n\n“{text}”',
+        'hi': 'क्लेम #{id} पर ग्राहक को यह जवाब भेजें?\n\n“{text}”',
+        'hinglish': 'Claim #{id} par customer ko yeh jawab bhej dein?\n\n“{text}”',
+    },
+    'b_send_yes': {
+        'en': '✅ Yes, send',
+        'hi': '✅ हाँ, भेजें',
+        'hinglish': '✅ Haan, bhejiye',
+    },
+    'claim_reply_ok': {
+        'en': '✅ Reply sent to the customer on claim #{id}.',
+        'hi': '✅ क्लेम #{id} पर ग्राहक को जवाब भेज दिया गया।',
+        'hinglish': '✅ Claim #{id} par customer ko jawab bhej diya gaya.',
+    },
+    'claim_reply_fail': {
+        'en': '⚠️ Could not send the reply. Please try from the dashboard.',
+        'hi': '⚠️ जवाब नहीं भेजा जा सका। कृपया डैशबोर्ड से भेजें।',
+        'hinglish': '⚠️ Jawab nahi bhej paaye. Kripya dashboard se try kariye.',
+    },
+    'voice_listening': {
+        'en': '🎧 Listening to your voice note…',
+        'hi': '🎧 आपका वॉइस नोट सुन रहा हूँ…',
+        'hinglish': '🎧 Aapka voice note sun rahe hain…',
+    },
+    'voice_heard': {
+        'en': '🗣️ I heard: “{text}”',
+        'hi': '🗣️ मैंने सुना: “{text}”',
+        'hinglish': '🗣️ Maine suna: “{text}”',
+    },
+    'voice_failed': {
+        'en': "⚠️ I couldn't process that audio. Please try again, or type your message.",
+        'hi': '⚠️ यह ऑडियो प्रोसेस नहीं हो पाया। दोबारा भेजें या टाइप करके भेजें।',
+        'hinglish': '⚠️ Yeh audio samajh nahi paaye. Dobara try kariye, ya message likh dijiye.',
+    },
+    'voice_too_long': {
+        'en': '⏱️ That voice note is a bit long. Please keep it under ~2 minutes and try again.',
+        'hi': '⏱️ यह वॉइस नोट थोड़ा लंबा है। कृपया ~2 मिनट के अंदर रखकर दोबारा भेजें।',
+        'hinglish': '⏱️ Voice note thoda lamba hai. Kripya ~2 minute ke andar rakhiye aur dobara bhejiye.',
+    },
+    'voice_unclear': {
+        'en': "🙉 I couldn't catch that clearly. Please re-record and speak a little slower and clearer.",
+        'hi': '🙉 साफ़ समझ नहीं आया। कृपया थोड़ा धीरे और साफ़ बोलकर दोबारा रिकॉर्ड करें।',
+        'hinglish': '🙉 Saaf sunai nahi diya. Kripya dobara record kariye aur thoda dheere aur saaf boliye.',
+    },
+    'voice_noisy': {
+        'en': "🔊 There's a lot of background noise. Please move to a quieter place and record again.",
+        'hi': '🔊 पीछे बहुत शोर है। कृपया किसी शांत जगह जाकर दोबारा रिकॉर्ड करें।',
+        'hinglish': '🔊 Peeche bahut shor hai. Kripya shaant jagah par jaakar dobara record kariye.',
+    },
+    'voice_silent': {
+        'en': "🤫 I didn't hear any speech. Please record again and speak close to the mic.",
+        'hi': '🤫 कोई आवाज़ नहीं सुनाई दी। कृपया माइक के पास बोलकर दोबारा रिकॉर्ड करें।',
+        'hinglish': '🤫 Koi awaaz sunai nahi di. Kripya dobara record kariye aur mic ke paas boliye.',
+    },
+    'voice_abusive': {
+        'en': "🙏 Let's keep it professional. Please rephrase without inappropriate language.",
+        'hi': '🙏 कृपया शिष्ट भाषा में बात करें। अनुचित शब्दों के बिना दोबारा कहें।',
+        'hinglish': '🙏 Baat professional rakhte hain. Kripya bina galat shabdon ke dobara kahiye.',
+    },
+    'voice_nonsense': {
+        'en': "🤔 I couldn't make out a clear request. Try saying e.g. “what's pending with me” or tap 💬 Add comment first.",
+        'hi': '🤔 साफ़ अनुरोध समझ नहीं आया। जैसे कहें “मेरे पास क्या पेंडिंग है”, या पहले 💬 कमेंट जोड़ें दबाएँ।',
+        'hinglish': '🤔 Saaf request samajh nahi aayi. Jaise kahiye “mere paas kya pending hai” ya pehle 💬 Comment likhiye dabaiye.',
+    },
+    'b_newtask': {
+        'en': '➕ New task',
+        'hi': '➕ नया टास्क',
+        'hinglish': '➕ Naya task',
+    },
+    'nt_title': {
+        'en': '➕ *New task*\n\nSpeak or type the *title* — what needs doing?',
+        'hi': '➕ *नया टास्क*\n\n*टाइटल* बोलें या टाइप करें — क्या करना है?',
+        'hinglish': '➕ *Naya task*\n\n*Title* boliye ya likhiye — karna kya hai?',
+    },
+    'nt_need_title': {
+        'en': 'Please give a short title first (speak or type).',
+        'hi': 'पहले एक छोटा टाइटल दें (बोलें या टाइप करें)।',
+        'hinglish': 'Pehle ek chhota title dijiye (bolkar ya likhkar).',
+    },
+    'nt_cat': {
+        'en': '📂 Pick a *category*:',
+        'hi': '📂 *कैटेगरी* चुनें:',
+        'hinglish': '📂 *Category* chuniye:',
+    },
+    'b_cat_none': {
+        'en': '— No category —',
+        'hi': '— कोई कैटेगरी नहीं —',
+        'hinglish': '— Koi category nahi —',
+    },
+    'nt_comp_name': {
+        'en': "🧾 This category needs complainant details.\n\nSpeak or type the *complainant's name*:",
+        'hi': '🧾 इस कैटेगरी के लिए शिकायतकर्ता की जानकारी चाहिए।\n\n*शिकायतकर्ता का नाम* बोलें या टाइप करें:',
+        'hinglish': '🧾 Is category me complainant ki detail chahiye.\n\n*Complainant ka naam* boliye ya likhiye:',
+    },
+    'nt_comp_phone': {
+        'en': "📱 Now the complainant's *mobile number* (10 digits):",
+        'hi': '📱 अब शिकायतकर्ता का *मोबाइल नंबर* (10 अंक):',
+        'hinglish': '📱 Ab complainant ka *mobile number* (10 digit):',
+    },
+    'nt_bad_phone': {
+        'en': "That's not a valid 10-digit mobile number — please say/type it again.",
+        'hi': 'यह सही 10-अंकों का मोबाइल नंबर नहीं है — दोबारा बोलें/टाइप करें।',
+        'hinglish': 'Yeh sahi 10-digit mobile number nahi hai — kripya dobara boliye ya likhiye.',
+    },
+    'nt_assignee': {
+        'en': '👤 *Assign to* (or leave unassigned):',
+        'hi': '👤 *किसे सौंपें* (या बिना असाइन):',
+        'hinglish': '👤 *Kisko dena hai* (ya khaali chhod dijiye):',
+    },
+    'nt_suggest': {
+        'en': '👤 *Suggest who should handle it* (this goes as a request):',
+        'hi': '👤 *किसे संभालना चाहिए, सुझाएँ* (यह रिक्वेस्ट के रूप में जाएगा):',
+        'hinglish': '👤 *Bataiye kisko karna chahiye* (yeh request ki tarah jayega):',
+    },
+    'b_unassigned': {
+        'en': '— Unassigned —',
+        'hi': '— बिना असाइन —',
+        'hinglish': '— Kisi ko nahi —',
+    },
+    'nt_priority': {
+        'en': '🎚️ Pick the *priority*:',
+        'hi': '🎚️ *प्राथमिकता* चुनें:',
+        'hinglish': '🎚️ *Priority* chuniye:',
+    },
+    'nt_due': {
+        'en': '📅 *Due date*?',
+        'hi': '📅 *ड्यू डेट*?',
+        'hinglish': '📅 *Kab tak*?',
+    },
+    'b_due_today': {
+        'en': 'Today',
+        'hi': 'आज',
+        'hinglish': 'Aaj',
+    },
+    'b_due_tmrw': {
+        'en': 'Tomorrow',
+        'hi': 'कल',
+        'hinglish': 'Kal',
+    },
+    'b_due_none': {
+        'en': 'No due date',
+        'hi': 'कोई ड्यू डेट नहीं',
+        'hinglish': 'Koi date nahi',
+    },
+    'b_due_type': {
+        'en': 'Type a date',
+        'hi': 'तारीख़ टाइप करें',
+        'hinglish': 'Date likhiye',
+    },
+    'nt_due_type': {
+        'en': 'Type the due date as YYYY-MM-DD (e.g. 2026-07-30):',
+        'hi': 'ड्यू डेट YYYY-MM-DD में टाइप करें (जैसे 2026-07-30):',
+        'hinglish': 'Due date YYYY-MM-DD me likhiye (jaise 2026-07-30):',
+    },
+    'nt_bad_date': {
+        'en': 'Please use the format YYYY-MM-DD.',
+        'hi': 'कृपया YYYY-MM-DD फ़ॉर्मैट में लिखें।',
+        'hinglish': 'Kripya YYYY-MM-DD format me likhiye.',
+    },
+    'b_create': {
+        'en': '✅ Create task',
+        'hi': '✅ टास्क बनाएँ',
+        'hinglish': '✅ Task banaiye',
+    },
+    'nt_review': {
+        'en': "🔎 *Review — create this task?*\n\n*Title:* {title}\n*Category:* {cat}\n*Assign:* {asg}\n*Priority:* {prio}\n*Due:* {due}{comp}\n\n_After it's created, any corrections are done on the web/app._",
+        'hi': '🔎 *जाँचें — यह टास्क बनाएँ?*\n\n*टाइटल:* {title}\n*कैटेगरी:* {cat}\n*असाइन:* {asg}\n*प्राथमिकता:* {prio}\n*ड्यू:* {due}{comp}\n\n_बनने के बाद सुधार वेब/ऐप पर ही होंगे।_',
+        'hinglish': '🔎 *Dekh lijiye — yeh task bana dein?*\n\n*Title:* {title}\n*Category:* {cat}\n*Kisko:* {asg}\n*Priority:* {prio}\n*Kab tak:* {due}{comp}\n\n_Ban jaane ke baad sudhaar web/app par hote hain._',
+    },
+    'nt_created': {
+        'en': '✅ *Task #{id} created!*\nEveryone involved has been notified.',
+        'hi': '✅ *टास्क #{id} बन गया!*\nसभी संबंधित लोगों को सूचना दे दी गई।',
+        'hinglish': '✅ *Task #{id} ban gaya!*\nJo log isme hain sabko bata diya gaya hai.',
+    },
+    'nt_created_req': {
+        'en': '✅ *Request #{id} raised* — sent to the admins for assignment.',
+        'hi': '✅ *रिक्वेस्ट #{id} भेजी गई* — असाइनमेंट के लिए एडमिन को।',
+        'hinglish': '✅ *Request #{id} bhej di gayi* — admin ko assign karne ke liye.',
+    },
+    'b_open_task2': {
+        'en': '📄 Open #{id}',
+        'hi': '📄 खोलें #{id}',
+        'hinglish': '📄 Kholiye #{id}',
+    },
+    'nt_use_buttons': {
+        'en': '👆 Please tap one of the buttons above to continue.',
+        'hi': '👆 आगे बढ़ने के लिए ऊपर दिए बटनों में से एक दबाएँ।',
+        'hinglish': '👆 Aage badhne ke liye kripya upar ke kisi button ko dabaiye.',
+    },
+    'code_bad': {
+        'en': '⚠️ That code is invalid or has expired.\n\nOpen the NidaanPartner portal → *Telegram Bot* → tap *Connect*, and use the fresh code (or the Connect button).',
+        'hi': '⚠️ यह कोड ग़लत है या समय समाप्त हो गया।\n\nनिदान पार्टनर पोर्टल → *Telegram Bot* → *Connect* दबाएँ, और नया कोड इस्तेमाल करें।',
+        'hinglish': '⚠️ Yeh code galat hai ya expire ho gaya hai.\n\nNidaanPartner portal kholiye → *Telegram Bot* → *Connect* dabaiye, aur naya code (ya Connect button) use kariye.',
+    },
+    'connect_howto': {
+        'en': "🔐 *This Telegram account isn't connected yet.*\n\n1️⃣ Open the NidaanPartner portal *on this device*\n2️⃣ Go to *Telegram Bot* (left menu)\n3️⃣ Tap *Open Telegram & connect* → press *Start*\n4️⃣ Done — you'll get a ✅ confirmation\n\n💡 Already connected elsewhere? That was a *different* Telegram account — each account connects once.\n\n_Your code is only for you and expires in 15 minutes._",
+        'hi': '🔐 *यह टेलीग्राम अकाउंट अभी कनेक्ट नहीं है।*\n\n1️⃣ इसी डिवाइस पर निदान पार्टनर पोर्टल खोलें\n2️⃣ बाएँ मेन्यू में *Telegram Bot* पर जाएँ\n3️⃣ *Open Telegram & connect* दबाएँ → *Start* दबाएँ\n4️⃣ हो गया — ✅ पुष्टि मिलेगी\n\n💡 किसी और डिवाइस पर कनेक्ट है? वह अलग टेलीग्राम अकाउंट था — हर अकाउंट एक बार कनेक्ट होता है।\n\n_आपका कोड सिर्फ़ आपके लिए है और 15 मिनट में समाप्त होता है।_',
+        'hinglish': '🔐 *Yeh Telegram account abhi juda nahi hai.*\n\n1️⃣ *Isi device par* NidaanPartner portal kholiye\n2️⃣ *Telegram Bot* par jaiye (baayein menu me)\n3️⃣ *Open Telegram & connect* dabaiye → *Start* dabaiye\n4️⃣ Ho gaya — aapko ✅ confirmation milega\n\n💡 Kahin aur se juda hua hai? Wo *alag* Telegram account tha — har account ek hi baar judta hai.\n\n_Aapka code sirf aapke liye hai aur 15 minute me expire ho jata hai._',
+    },
 }
 
 
 def T(lang: str, key: str, **fmt) -> str:
     entry = _BOT_TXT.get(key, {})
-    s = entry.get("hi" if lang == "hi" else "en") or entry.get("en") or key
+    # Falls back to ENGLISH, never to the other Indian language: somebody who chose Hinglish
+    # because they do not read Devanagari must not be shown Devanagari when a string is missing.
+    s = entry.get(lang if lang in LANGS else "en") or entry.get("en") or key
     if fmt:
         try:
             s = s.format(**fmt)
@@ -1819,7 +2360,22 @@ async def _handle_callback(cq: dict) -> None:
             t, kb = _main_menu(staff); await _edit(chat_id, message_id, t, kb); await ack(); return
 
         if data == "lang:toggle":
-            new_lang = "hi" if lang == "en" else "en"
+            # Three languages will not fit on a toggle, so it asks. The name of each is written
+            # IN that language - somebody looking for their own does not have to read the others.
+            await _edit(chat_id, message_id, T(lang, "lang_pick"), _kb([
+                [{"text": ("\u2713 " if lang == "en" else "") + "English",
+                  "callback_data": "lang:set:en"}],
+                [{"text": ("\u2713 " if lang == "hi" else "") + "\u0939\u093f\u0902\u0926\u0940",
+                  "callback_data": "lang:set:hi"}],
+                [{"text": ("\u2713 " if lang == "hinglish" else "") + "Hinglish",
+                  "callback_data": "lang:set:hinglish"}],
+                [{"text": T(lang, "b_menu"), "callback_data": "m:home"}]]))
+            await ack(); return
+
+        if data.startswith("lang:set:"):
+            new_lang = data.split(":")[2]
+            if new_lang not in LANGS:
+                await ack(); return
             await set_staff_lang(staff["staff_id"], new_lang)
             staff["telegram_lang"] = new_lang
             t, kb = _main_menu(staff)

@@ -9861,7 +9861,7 @@ async def ops_me_profile_pic(request: Request, file: UploadFile = File(...)):
 
 class _MeLangReq(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    lang: str = Field(pattern=r"^(en|hi)$")
+    lang: str = Field(pattern=r"^(en|hi|hinglish)$")
 
 
 @app.post("/nidaan/ops/api/me/language")

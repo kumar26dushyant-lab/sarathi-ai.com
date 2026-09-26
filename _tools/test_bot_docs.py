@@ -143,10 +143,19 @@ async def main():
           "_bdocs.commit(" in bot and "intake.accept(" not in bot)
     check("after saving it stays on the claim, so the next file is one step",
           '{"a": "doc_wait", "claim_id": pend.get("claim_id")}' in bot)
-    check("every new word exists in BOTH languages",
-          all(('"%s":' % k) in bot for k in
-              ("b_docs", "dc_ask", "dc_badnum", "dc_send_now", "dc_confirm",
-               "dc_yes", "dc_no", "dc_no_file", "dc_dl_fail", "dc_reading")))
+    # Parsed, not grepped: quoting style is not the thing under test, and a check that breaks
+    # when somebody reformats the table teaches people to ignore it.
+    import ast as _ast
+    txt = None
+    for _n in _ast.walk(_ast.parse(bot)):
+        if isinstance(_n, _ast.AnnAssign) and getattr(_n.target, "id", "") == "_BOT_TXT":
+            txt = _ast.literal_eval(_n.value)
+    want = ("b_docs", "dc_ask", "dc_badnum", "dc_send_now", "dc_confirm",
+            "dc_yes", "dc_no", "dc_no_file", "dc_dl_fail", "dc_reading")
+    check("every new word exists in EVERY language the bot speaks",
+          all(txt.get(k, {}).get(L) for k in want for L in ("en", "hi", "hinglish")),
+          [k for k in want if not all(txt.get(k, {}).get(L)
+                                      for L in ("en", "hi", "hinglish"))])
 
     print("\n" + ("%d failed" % FAILED if FAILED
                   else "it looks, it warns, it waits - and it re-asks who you are before it writes"))
