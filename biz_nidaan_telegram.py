@@ -1777,6 +1777,11 @@ async def _handle_callback(cq: dict) -> None:
             await ack(); return
 
         if data.startswith("clnc:"):  # note confirm yes/no
+            # The role is re-checked HERE, not only on the step that started this. Its sibling
+            # clsc: (stage confirm) always did; this one leaned on the pending state alone, so
+            # it was one future code path away from being writable by anyone linked.
+            if not _can(staff, "sub_super_admin"):
+                await ack(T(lang, "admin_only")); return
             import json as _json
             try:
                 pend = _json.loads(staff.get("telegram_pending") or "{}")
