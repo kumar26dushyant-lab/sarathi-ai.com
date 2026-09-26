@@ -37,6 +37,8 @@ import biz_database as db
 
 logger = logging.getLogger("sarathi.nidaan.telegram")
 
+import biz_nidaan_bot_guard as _guard
+
 API_BASE = "https://api.telegram.org/bot{token}/{method}"
 _TIMEOUT = 20.0
 
@@ -1132,6 +1134,12 @@ async def handle_update(update: dict) -> None:
         if voice:
             if not staff:
                 await send_message(str(chat_id), T("en", "connect_howto")); return
+            # Counted against the SAME allowance as a typed AI question: it is the same
+            # Gemini call and the same bill, and a limit that a voice note walks around is
+            # not a limit.
+            _g = _guard.allow(staff.get("staff_id"), "ai")
+            if not _g["ok"]:
+                await send_message(str(chat_id), _g["reason"]); return
             await _handle_voice(staff, voice, chat_id); return
 
         if not text:
@@ -1732,6 +1740,9 @@ async def _handle_callback(cq: dict) -> None:
             return
 
         if data == "nt:new":
+            _g = _guard.allow(staff.get("staff_id"), "write")
+            if not _g["ok"]:
+                await ack(_g["reason"][:190]); return
             await _set_pending(staff["staff_id"], {"a": "create", "step": "title", "data": {}})
             await send_message(str(chat_id), T(lang, "nt_title"))
             await ack(); return
@@ -1746,6 +1757,9 @@ async def _handle_callback(cq: dict) -> None:
         if data == "cl:find":
             if not _can(staff, "sub_super_admin"):
                 await ack(T(lang, "admin_only")); return
+            _g = _guard.allow(staff.get("staff_id"), "claim")
+            if not _g["ok"]:
+                await ack(_g["reason"][:190]); return
             await _set_pending(staff["staff_id"], {"a": "claim_search"})
             await send_message(str(chat_id), T(lang, "cl_ask"))
             await ack(); return
@@ -1753,6 +1767,9 @@ async def _handle_callback(cq: dict) -> None:
         if data.startswith("cl:v:"):
             if not _can(staff, "sub_super_admin"):
                 await ack(T(lang, "admin_only")); return
+            _g = _guard.allow(staff.get("staff_id"), "claim")
+            if not _g["ok"]:
+                await ack(_g["reason"][:190]); return
             try:
                 _cid = int(data.split(":")[2])
             except Exception:
@@ -1845,6 +1862,9 @@ async def _handle_callback(cq: dict) -> None:
             return
 
         if data == "ai:ask":
+            _g = _guard.allow(staff.get("staff_id"), "ai")
+            if not _g["ok"]:
+                await ack(_g["reason"][:190]); return
             await _set_pending(staff["staff_id"], {"a": "ai"})
             await send_message(str(chat_id), T(lang, "ask_ai"))
             await ack(); return
@@ -1858,6 +1878,9 @@ async def _handle_callback(cq: dict) -> None:
             await ack(); return
 
         if data == "bc:new":
+            _g = _guard.allow(staff.get("staff_id"), "write")
+            if not _g["ok"]:
+                await ack(_g["reason"][:190]); return
             if not _can(staff, "super_admin"):
                 await ack(T(lang, "sa_only")); return
             await _set_pending(staff["staff_id"], {"a": "broadcast"})
