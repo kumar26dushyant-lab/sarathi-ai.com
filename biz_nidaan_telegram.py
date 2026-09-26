@@ -670,6 +670,28 @@ _BOT_TXT: dict = {
                      "hi": "कृपया डॉक्यूमेंट फ़ोटो या PDF की तरह भेजें।"},
     "dc_dl_fail":   {"en": "That file did not come through. Please send it again.",
                      "hi": "फ़ाइल हम तक नहीं पहुँची। कृपया दोबारा भेजें।"},
+    "b_split":      {"en": "✂️ Split a mixed PDF",
+                     "hi": "✂️ मिले-जुले PDF को अलग करें"},
+    "ds_ask":       {"en": "✂️ *Split a mixed PDF*\n\nSend one PDF that has several "
+                           "documents in it. I will separate them and send each one back, named. "
+                           "Nothing is saved to any claim — you check them first.",
+                     "hi": "✂️ *मिले-जुले PDF को अलग करें*\n\nएक ऐसी PDF भेजें जिसमें "
+                           "कई डॉक्यूमेंट हों। मैं उन्हें अलग करके, नाम के साथ वापस भेजूंगा। "
+                           "किसी क्लेम में कुछ सेव नहीं होगा — पहले आप देख लें।"},
+    "ds_working":   {"en": "⏳ Separating the documents… this can take a minute.",
+                     "hi": "⏳ डॉक्यूमेंट अलग कर रहे हैं… एक मिनट लग सकता है।"},
+    "ds_pdf_only":  {"en": "Please send it as a *PDF*. A photo cannot be split.",
+                     "hi": "कृपया इसे *PDF* की तरह भेजें। फ़ोटो को अलग नहीं किया जा सकता।"},
+    "ds_one_only":  {"en": "ℹ️ This looks like a single document, so there is nothing to "
+                           "separate. Send it with 📎 *Send claim documents* instead.",
+                     "hi": "ℹ️ यह एक ही डॉक्यूमेंट लगता है, अलग करने को कुछ नहीं है। "
+                           "इसे 📎 *क्लेम के डॉक्यूमेंट भेजें* से भेजें।"},
+    "ds_done":      {"en": "✅ Found *{n}* documents. Each one is above.\n\nTo put one on a "
+                           "claim, use 📎 *Send claim documents* and forward it there.",
+                     "hi": "✅ *{n}* डॉक्यूमेंट मिले। सभी ऊपर हैं।\n\nकिसी को क्लेम में "
+                           "लगाना हो तो 📎 *क्लेम के डॉक्यूमेंट भेजें* से वहीं भेज दें।"},
+    "ds_failed":    {"en": "Could not separate that one. Please try the portal’s splitter.",
+                     "hi": "इसे अलग नहीं कर पाए। कृपया पोर्टल का स्प्लिटर इस्तेमाल करें।"},
     "b_help":       {"en": "❓ Help", "hi": "❓ मदद"},
     "b_lang":       {"en": "🌐 हिंदी", "hi": "🌐 English"},
     "b_menu":       {"en": "⬅️ Menu", "hi": "⬅️ मेन्यू"},
@@ -896,6 +918,7 @@ def _main_menu(staff: dict) -> tuple[str, list]:
         [{"text": T(lang, "b_leave"), "callback_data": "lv:new:leave"},
          {"text": T(lang, "b_wfh"), "callback_data": "lv:new:wfh"}],
         [{"text": T(lang, "b_docs"), "callback_data": "dc:start"}],
+        [{"text": T(lang, "b_split"), "callback_data": "ds:start"}],
         [{"text": T(lang, "b_ai"), "callback_data": "ai:ask"}],
         [{"text": T(lang, "b_broadcast"), "callback_data": "bc:new"}] if sa else None,
         [{"text": T(lang, "b_help"), "callback_data": "h:help"},
@@ -1314,6 +1337,10 @@ async def _process_message_text(staff: dict, text: str, chat_id) -> None:
         await send_message(str(chat_id), st["text"] + "\n" + T(lang, "dc_send_now"))
         return
 
+    if act == "split_wait":
+        await send_message(str(chat_id), T(lang, "ds_pdf_only"))
+        return
+
     if act == "doc_wait":
         # They are on the claim but sent words instead of a file.
         await send_message(str(chat_id), T(lang, "dc_no_file"))
@@ -1375,6 +1402,9 @@ async def _handle_claim_file(staff: dict, doc: Optional[dict], photos: list, cha
         pend = _json.loads(staff.get("telegram_pending") or "{}")
     except Exception:
         pend = {}
+    if pend.get("a") == "split_wait":
+        await _handle_split_file(staff, doc, photos, chat_id)
+        return
     if pend.get("a") not in ("doc_wait", "doc_confirm") or not pend.get("claim_id"):
         # Not mid-flow: say how to start rather than silently ignoring them.
         await send_message(str(chat_id), T(lang, "dc_ask"))
@@ -1417,6 +1447,86 @@ async def _handle_claim_file(staff: dict, doc: Optional[dict], photos: list, cha
         str(chat_id), look["text"] + "\n" + T(lang, "dc_confirm", id=cid),
         _kb([[{"text": T(lang, "dc_yes"), "callback_data": "dcc:yes"},
               {"text": T(lang, "dc_no"), "callback_data": "dcc:no"}]]))
+
+
+async def _handle_split_file(staff: dict, doc: Optional[dict], photos: list, chat_id) -> None:
+    """One mixed PDF in, the separate documents back out, named.
+
+    No claim is involved, so there is no claim to authorise - nothing is read from one and
+    nothing is written to one. The rate limit still applies: this is a Gemini call and a PDF
+    render every time.
+    """
+    import biz_nidaan_bot_guard as _g
+    lang = _lang(staff)
+    if not doc:
+        await send_message(str(chat_id), T(lang, "ds_pdf_only")); return
+    fname = doc.get("file_name") or "upload.pdf"
+    if not fname.lower().endswith(".pdf"):
+        await send_message(str(chat_id), T(lang, "ds_pdf_only")); return
+
+    g = _g.allow(staff.get("staff_id"), "upload")
+    if not g["ok"]:
+        await send_message(str(chat_id), g["reason"]); return
+
+    data = await _download_file(doc.get("file_id"))
+    if not data:
+        await send_message(str(chat_id), T(lang, "dc_dl_fail")); return
+    sized = _g.check_file(fname, data)
+    if not sized["ok"]:
+        await send_message(str(chat_id), sized["reason"]); return
+
+    await send_message(str(chat_id), T(lang, "ds_working"))
+    try:
+        import biz_doc_splitter as splitter
+        pdf, pages, _notes = splitter.normalize_to_pdf([(fname, data)])
+        if not pdf:
+            await send_message(str(chat_id), T(lang, "ds_failed")); return
+        docs = await splitter.segment(pdf, pages)
+        if len(docs) <= 1:
+            await send_message(str(chat_id), T(lang, "ds_one_only")); return
+        pieces = splitter.extract(pdf, docs)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("bot split failed: %s", e)
+        await send_message(str(chat_id), T(lang, "ds_failed")); return
+
+    sent = 0
+    for i, (piece_name, piece_bytes) in enumerate(pieces, 1):
+        d = docs[i - 1] if i - 1 < len(docs) else {}
+        span = ""
+        try:
+            span = " · p%s-%s" % (d.get("start"), d.get("end"))
+        except Exception:
+            pass
+        ok, _why = await send_document(str(chat_id), piece_name, piece_bytes,
+                                       caption="%d — %s%s" % (i, (d.get("name") or piece_name)[:60], span))
+        if ok:
+            sent += 1
+    await _g.record(staff, "split", detail="%d pages -> %d documents, %d sent"
+                                           % (pages, len(pieces), sent))
+    await _set_pending(staff["staff_id"], None)
+    await send_message(str(chat_id), T(lang, "ds_done", n=sent),
+        _kb([[{"text": T(lang, "b_docs"), "callback_data": "dc:start"}],
+             [{"text": T(lang, "b_menu"), "callback_data": "m:home"}]]))
+
+
+async def send_document(chat_id: str, filename: str, content: bytes,
+                        caption: str = "") -> tuple:
+    """Send a file back into the chat. Used by the splitter; nothing here touches a claim."""
+    tok = await get_bot_token()
+    if not tok or not chat_id or not content:
+        return (False, "missing")
+    url = API_BASE.format(token=tok, method="sendDocument")
+    data = {"chat_id": str(chat_id)}
+    if caption:
+        data["caption"] = caption[:1000]
+    try:
+        async with httpx.AsyncClient(timeout=120) as client:
+            r = await client.post(url, data=data,
+                                  files={"document": (filename, content, "application/pdf")})
+        j = r.json() if r.content else {}
+        return (bool(j.get("ok")), "" if j.get("ok") else str(j)[:180])
+    except Exception as e:  # noqa: BLE001
+        return (False, str(e)[:180])
 
 
 async def _download_file(file_id: str) -> Optional[bytes]:
@@ -1978,6 +2088,11 @@ async def _handle_callback(cq: dict) -> None:
         if data.startswith("cr:"):
             await _create_callback(staff, data, chat_id, ack)
             return
+
+        if data == "ds:start":
+            await _set_pending(staff["staff_id"], {"a": "split_wait"})
+            await send_message(str(chat_id), T(lang, "ds_ask"))
+            await ack(); return
 
         if data == "dc:start":
             await _set_pending(staff["staff_id"], {"a": "doc_claim"})
