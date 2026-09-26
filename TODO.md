@@ -4,7 +4,7 @@ _Auto-maintained by Claude **every conversation**, alongside `PROJECT_MASTER_CON
 _**Two-terminal workflow:** work 🟦 NidaanPartner items in one VS Code terminal, 🟩 Sarathi items in another. Each app's section is self-contained so both can progress simultaneously without collision._
 _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned · ✅ done_
 
-**Last updated:** 2026-09-26 (afternoon) — ✅ New bot **@NidaanPartnerOpsBot** live and verified (`getMe` 200, `poll_active=1`). **"Ask everyone to connect" deployed** — 23 pending, 23 reachable. 🟡 Telegram document-upload work underway; security foundation built and tested, bot wiring next.
+**Last updated:** 2026-09-26 (afternoon) — ✅ New bot **@NidaanPartnerOpsBot** live and verified (`getMe` 200, `poll_active=1`). **"Ask everyone to connect" deployed** — 23 pending, 23 reachable. ✅ **All six Telegram pieces built and tested** — claim authorisation, rate limits + audit, document upload, bot wiring, splitter, Hinglish. 🔴 **Not deployed.**
 
 ### 📦 26 Sep — TELEGRAM: DOCUMENT UPLOAD, SPLITTER, HINGLISH
 
@@ -23,9 +23,20 @@ translated strings** EN/HI with role-aware menus. It needed the 23 staff reconne
 | 1 | `biz_nidaan_claim_access.py` — "may this person touch this claim" | ✅ `daec213`, 20 checks |
 | 2 | `biz_nidaan_bot_guard.py` — rate limits + audit trail | ✅ `ceb6508`, 34 checks |
 | 3 | `biz_nidaan_bot_docs.py` — look, warn, wait, save | ✅ `45239b5`, 21 checks |
-| 4 | Bot wiring: menu, claim number, file, confirm | 🟡 next |
-| 5 | Doc splitter via bot | 🟢 planned |
-| 6 | Hinglish (133 strings × third variant + 3-way picker) | 🟢 planned |
+| 4 | Bot wiring: menu, claim number, file, confirm | ✅ `430893c`, 34 checks |
+| 5 | Doc splitter via bot | ✅ `0191160`, 21 checks |
+| 6 | Hinglish — all 150 strings + 3-way picker | ✅ `2f380f5`, 22 checks |
+| 7 | Capabilities registered (upload / split / language) | ✅ 76 total |
+
+**🔴 ALL SIX BUILT, NOTHING DEPLOYED SINCE `04cc829`.** Awaiting the founder's go.
+
+**Decisions he took on the way:** Hinglish = **Hindi in Roman letters** (not English with Hindi words); the splitter **sends pieces back to check** rather than attaching them straight to a claim — a wrong split on a real case is unpicked by hand.
+
+**What the last three pieces found:**
+- The file check had to sit **before** the "no text, give up" line — a document message carries no text, so behind it every photo anybody sent would have vanished in silence.
+- `telegram_lang` is **shared with the web profile and the daily summary**, so Hinglish had to land in the endpoint pattern and the profile buttons too, not just the bot.
+- `biz_nidaan_daily_summary.py` already used the word **"hinglish"** — so that is the value, rather than a shorter code invented here that would mean two things in two modules.
+- A check in `test_bot_docs` grepped for `"key":` and broke when the table was rewritten with single quotes. The code was fine; the check's assumption was not. It parses now.
 
 **What the foundation work actually found, none of it theoretical:**
 - **Nothing in this codebase could answer "may this person touch this claim?"** Web and bot both

@@ -105,6 +105,42 @@ CAPABILITIES: list[dict] = [
         "telegram": True, "web": True, "min_role": "team_member",
     },
     {
+        # Telegram → 📎 Send claim documents. Reuses the same intake as the web and
+        # WhatsApp, so a document sent from a phone is checked exactly as strictly.
+        "id": "telegram_doc_upload",
+        "en": {"t": "Send claim documents from Telegram",
+               "d": "Send the claim number, then the photo or PDF. The bot shows what the claim "
+                    "already has, warns if it looks like a duplicate or is hard to read, and "
+                    "waits for your yes before saving."},
+        "hi": {"t": "टेलीग्राम से क्लेम के डॉक्यूमेंट भेजें",
+               "d": "क्लेम नंबर भेजें, फिर फ़ोटो या PDF। बॉट बताएगा कि क्लेम "
+                    "में क्या पहले से है, डुप्लिकेट या धुंधला होने पर चेताएगा, और "
+                    "सेव करने से पहले आपसे पूछेगा।"},
+        "telegram": True, "web": False, "min_role": "team_member",
+    },
+    {
+        # Telegram → ✂️ Split a mixed PDF. Nothing is saved to a claim by this.
+        "id": "telegram_doc_split",
+        "en": {"t": "Split a mixed PDF on Telegram",
+               "d": "Send one PDF holding several documents and the bot separates them, names "
+                    "each one and sends them back to check. Nothing is saved to any claim."},
+        "hi": {"t": "टेलीग्राम पर मिले-जुले PDF को अलग करें",
+               "d": "एक PDF भेजें जिसमें कई डॉक्यूमेंट हों — बॉट उन्हें अलग करके, "
+                    "नाम के साथ वापस भेजेगा। किसी क्लेम में कुछ सेव नहीं होता।"},
+        "telegram": True, "web": False, "min_role": "team_member",
+    },
+    {
+        # Telegram → 🌐 Bhasha, and the same setting on the web profile.
+        "id": "telegram_language_choice",
+        "en": {"t": "Use the bot in English, Hindi or Hinglish",
+               "d": "Pick your language and every message changes with it — including "
+                    "Hinglish, which is Hindi in Roman letters, so no Hindi keyboard is needed."},
+        "hi": {"t": "बॉट को अंग्रेज़ी, हिंदी या हिंग्लिश में चलाएं",
+               "d": "अपनी भाषा चुनिए — सारे मैसेज उसी में आएंगे। हिंग्लिश यानी "
+                    "रोमन अक्षरों में हिंदी — हिंदी कीबोर्ड की ज़रूरत नहीं।"},
+        "telegram": True, "web": True, "min_role": "team_member",
+    },
+    {
         # ✈️ Telegram Bot → one button, everyone who has not connected yet is asked to.
         "id": "telegram_invite_all",
         "en": {"t": "Ask everyone to connect Telegram",
