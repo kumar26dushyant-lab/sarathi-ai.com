@@ -137,7 +137,12 @@ _SUBSTATES = {
         ("ann5_replied", "Annexure 5 Replied", "Annexure 5 भेजा", 0, None, None, "lokpal"),
         ("ann6_pending", "Annexure 6 Pending", "Annexure 6 बाकी", 0, 5, 8, "internal"),
         ("ann6_replied", "Annexure 6 Replied", "Annexure 6 भेजा", 0, None, None, "lokpal"),
-        ("hearing", "Hearing", "सुनवाई", 0, None, None, "lokpal")],
+        ("hearing", "Hearing", "सुनवाई", 0, None, None, "lokpal"),
+        # A case leaves Lokpal EITHER through a hearing OR by consent - the founder's
+        # drawing shows them as two routes to the same place, not two steps. Neither is
+        # required, and a case must never be forced through both to be marked complete.
+        ("consent", "Consent given", "सहमति मिली", 0, None, None, "lokpal"),
+        ("award", "Award received", "अवॉर्ड मिला", 0, 7, 15, "lokpal")],
     "completed": [
         ("hearing", "Hearing", "सुनवाई से", 1, None, None, "internal"),
         ("escalation_settlement", "Escalation Settlement", "एस्केलेशन में सेटल", 0, None, None, "internal"),
@@ -209,13 +214,24 @@ _FIELDS = {
         ("esc_reminder_3", "3rd reminder sent on", "तीसरा रिमाइंडर भेजा", "date", 0, ""),
     ],
     "lokpal": [
-        ("bhp_number", "BHP number", "BHP नंबर", "text", 1, ""),
+        # BHP keeps the name staff already use; the bracket says what it is for anyone new.
+        ("bhp_number", "BHP number (Lokpal registration no.)", "BHP नंबर (लोकपाल रजिस्ट्रेशन नं.)", "text", 1, ""),
         ("lokpal_registered_on", "Registration date", "दर्ज होने की तारीख़", "date", 0, ""),
+        # The number as well as the date: a staffer chasing the Ombudsman quotes the number.
+        ("ann5_no", "Annexure 5 number", "Annexure 5 नंबर", "text", 0, ""),
         ("ann5_date", "Annexure 5 received", "Annexure 5 मिला", "date", 0, ""),
         ("ann5_reply_date", "Annexure 5 replied", "Annexure 5 भेजा", "date", 0, ""),
+        ("ann6_no", "Annexure 6 number", "Annexure 6 नंबर", "text", 0, ""),
         ("ann6_date", "Annexure 6 received", "Annexure 6 मिला", "date", 0, ""),
         ("ann6_reply_date", "Annexure 6 replied", "Annexure 6 भेजा", "date", 0, ""),
         ("hearing_date", "Hearing date", "सुनवाई की तारीख़", "date", 0, ""),
+        # Either of these two is how a case leaves Lokpal - never both required.
+        ("consent_date", "Consent date", "सहमति की तारीख़", "date", 0, ""),
+        # The award, in three parts. The amount AWARDED is not always the amount that
+        # arrives, and the gap between this and the settlement is the thing to chase.
+        ("award_no", "Award number", "अवॉर्ड नंबर", "text", 0, ""),
+        ("award_date", "Award date", "अवॉर्ड की तारीख़", "date", 0, ""),
+        ("award_amount", "Award amount", "अवॉर्ड राशि", "money", 0, ""),
         ("dispatch_pod", "Dispatch POD no.", "डिस्पैच POD नं.", "text", 0, ""),
     ],
     "completed": [
