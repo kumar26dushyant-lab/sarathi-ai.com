@@ -1307,7 +1307,21 @@ async def send_nidaan_renewal_reminder(
     renew_url: str = "https://nidaanpartner.com/nidaan/dashboard",
 ) -> bool:
     """Send renewal reminder 7 days or 1 day before Nidaan subscription expires."""
-    info = PLAN_FEATURES.get(plan.replace("_annual", ""), {"label": plan.title(), "quota": "—", "support": "—"})
+    base_plan = str(plan or "").replace("_annual", "")
+    info = PLAN_FEATURES.get(base_plan, {"label": base_plan.title() or "Plan", "support": "—"})
+    # Quota comes from the LIVE plan config, exactly as send_nidaan_subscription_email does.
+    # PLAN_FEATURES stopped carrying it so the number could not drift; the sibling was updated
+    # and this one was not, so every KNOWN plan raised KeyError here and sent nothing - while an
+    # unknown plan, which still had a quota in its fallback, sent fine. Backwards, and silent.
+    quota = "—"
+    try:
+        import biz_nidaan as _n
+        _lim = _n.PLAN_LIMITS.get(plan) or _n.PLAN_LIMITS.get(base_plan) or {}
+        _cpm = _lim.get("claims_per_month")
+        quota = "Unlimited claims" if _cpm is None else f"{_cpm} claims / month"
+    except Exception:
+        pass
+    info = {**info, "quota": quota}
     price = _NIDAAN_PLAN_PRICES.get(plan, "—")
     greeting = f"Hi {owner_name}," if owner_name else "Hi,"
     urgency = "⏰ Renewing Soon" if days_left > 1 else "🚨 Last Day!"
