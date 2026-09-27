@@ -1,157 +1,133 @@
-# Separating NidaanPartner from Sarathi — risk first, then the route
+# Separating NidaanPartner from Sarathi
 
-**Written for:** the founder, deciding whether and how to proceed.
-**Date:** 27 September 2026.
-**Goal he set:** *"genuinely two apps, two deploys, eventually two databases"* — and
-*"without disturbing a single even small function"*.
+**Written for:** the founder, and whoever reviews this before stage 2.
+**Revised:** 27 September 2026, after he said the thing that changes everything.
 
-Nothing here has been done. This is the assessment he asked for before anything moves.
+> *"I am not worried about sarathi-ai.com if anything breaks... but nidaanpartner.com is
+> critical."*
 
----
-
-## The honest headline
-
-**This is more separable than it looks, and the danger is not where you would expect.**
-
-Measured, not guessed:
-
-| | |
-|---|---|
-| Routes in `sarathi_biz.py` | **854** — 460 `/nidaan/*`, 357 `/api/*` (Sarathi), 37 shared |
-| `nidaan_*` tables | 45 |
-| **Foreign keys crossing the products** | **one** — `product_link.sarathi_tenant_id → tenants` |
-| Nidaan modules importing Sarathi code | **4**, one of which is the deliberate bridge |
-| Live database | 23 MB |
-| Uploaded documents | **1.5 GB** |
-| Processes serving both today | `sarathi-web@1`, `sarathi-web@2`, `sarathi-worker` |
-
-The two products were built with a boundary in mind, and it largely held. The path prefixes
-are clean. The tables are clean. **The data is already separable.**
-
-**The risk is concentrated in one file:** `sarathi_biz.py`, 30,029 lines, holding both products'
-routes and 465 `_is_nidaan_host()` decisions. That file is the entanglement.
+That single sentence inverts the plan, and makes it far safer.
 
 ---
 
-## The risks, worst first
+## The inversion
 
-### 🔴 R1 — A route that silently stops existing
+My first draft moved **Nidaan out** and left Sarathi in place. That was wrong, and I had it
+backwards for a reason worth stating: I assumed the thing being separated is the thing that
+moves. It is not. **The thing that moves is the thing you can afford to break.**
 
-854 routes. If the split misses one, nothing errors at deploy: the route is simply gone, and you
-find out when a staff member says "the button does nothing" — possibly weeks later, possibly on
-a payment path.
+So:
 
-*This is the one that actually bites.* It is invisible to tests that only check what exists.
+### NidaanPartner does not move. Sarathi is extracted from around it.
 
-**Mitigation:** capture all 854 route signatures **before** anything moves, and assert after each
-step that every Nidaan route still answers and still returns the same shape. A route census, run
-as a check, not as a memory.
+| | NidaanPartner (critical) | Sarathi (no active users) |
+|---|---|---|
+| Folder | **stays** | moves out |
+| Database | **stays** `sarathi_biz.db` | new `sarathi.db` |
+| 1.5 GB of claim documents | **never moves** | n/a |
+| systemd units, ports | **unchanged** | new units |
+| nginx routing | **untouched** | repointed |
+| 461 routes | **stay exactly where they are** | 357 move |
+| Deploy | **the same one that works today** | new one |
 
-### 🔴 R2 — Two apps writing one database
+Every risky operation now happens to the app you said you can afford to break. The live,
+paying, medically-sensitive one is left alone — and at the end it is alone, in a folder
+containing only itself, which is what you asked for.
 
-Until the databases split, both apps write `sarathi_biz.db`. SQLite in WAL mode handles multiple
-writers, but a second process doubles the chance of a busy timeout under load — and payments are
-written under load, by definition.
+The end state is identical. The route there is not.
 
-**Mitigation:** do not run two apps against one database for longer than one deploy window, and
-keep the database split immediately after the app split rather than "eventually". The gap is the
-risk, not either end of it.
-
-### 🟠 R3 — 1.5 GB of documents
-
-Claim documents are 1.5 GB on disk and nginx serves `/uploads` directly, bypassing the app. Move
-them wrong and every claim document 404s, or worse, becomes readable at a guessable path.
-
-**Mitigation:** the documents move **last**, after both apps are running, by copy-then-verify-
-then-switch — never move-then-hope. Old path stays readable until the new one is proven.
-
-### 🟠 R4 — The bundle login
-
-`product_link` maps a Nidaan account to a Sarathi tenant. It is the one thing that genuinely
-must keep working across the boundary, and it is the thing he explicitly wants to preserve.
-
-**Mitigation:** it becomes a small authenticated API between the two apps rather than a shared
-table read. That is more work than a join, and it is the correct answer — it is the only piece
-that should survive as a dependency.
-
-### 🟠 R5 — One `biz.env`, shared secrets
-
-Both products read one environment file. Razorpay keys are already separate
-(`NIDAAN_RAZORPAY_*`), but `JWT_SECRET` is shared, so a session minted by one app is currently
-valid in the other.
-
-**Mitigation:** split the env first — it is cheap, reversible, and it makes every later step
-honest. **The JWT secret must be split carefully**: doing it naively logs every user out of both
-products at once.
-
-### 🟡 R6 — Deploy, backup and monitoring all assume one app
-
-`sarathi-deploy.service`, the encrypted off-site backup, the payment guardian, the health
-monitor and the notification routing all currently assume one application. Each needs a second
-instance, and a half-migrated monitor is a monitor that watches nothing while reporting green —
-the exact failure this project has paid for twice.
-
-**Mitigation:** the monitoring moves with each app, and the first check after every stage is
-"does the guardian still see this product".
-
-### 🟡 R7 — Working on a moving target
-
-Lokpal, the superadmin overhaul and the bot team are all queued. A long-running split branch
-diverges from live work and merges badly.
-
-**Mitigation:** the split proceeds in **small, independently shippable steps on master**, not a
-long-lived branch. If we stop after any step, what is live still works.
+**The one cosmetic consequence:** the folder is currently named `sarathi-business` and the
+server path is `/opt/sarathi`. Renaming those is the *last* step, after everything works, and it
+is the only step that touches Nidaan at all.
 
 ---
 
-## The route, in reversible steps
+## The mechanics you asked for — "identify and fix it later"
 
-Each step is independently deployable and independently revertible. **No step begins until the
-one before it is verified live.**
+Three nets, in order of how much they catch.
 
-| Stage | What happens | Reversible by | Risk |
+### 1. The route census — **built and proven today**
+
+`deploy/route-census.py` has recorded all **854** routes (461 Nidaan · 357 Sarathi · 36 shared),
+each with the file, the function, and **what it demands of a caller** — host gate, staff role,
+rate limit.
+
+After every stage it compares. **Missing is failure. A changed gate is failure.** New is fine.
+
+Proven by hiding one route and running it:
+
+```
+!! 1 ROUTE(S) NO LONGER EXIST - this is the failure that hides:
+   GET /nidaan/ops/api/telegram/pending-count   was nidaan-host,staff:super_admin
+```
+
+This is the net that matters, because a route that vanishes **does not error**. It is simply
+gone, and you find out weeks later when somebody says "the button does nothing".
+
+### 2. Nidaan never stops serving
+
+Because Nidaan does not move, there is no cutover for it — no window where it is down, no
+moment where traffic is switched to something new. Sarathi is the one being lifted out, and if
+Sarathi is down for an hour, nobody notices.
+
+### 3. Reverting is one command, at every stage
+
+Nothing is deleted. The old units, the old rows and the old paths stay until their replacement
+has been running for a week and you say otherwise.
+
+---
+
+## The stages
+
+Each is independently shippable. **If we stop after any of them, what is live still works.**
+
+| Stage | What happens | Touches Nidaan? | Revert |
 |---|---|---|---|
-| **0** | **Route census + full backup.** Record all 854 routes and their shapes as a check. Verify the off-site encrypted backup restores. | n/a — adds only | none |
-| **1** | **Split `biz.env`** into shared / Nidaan / Sarathi. Same values, three files. | restore one file | 🟡 |
-| **2** | **Extract Nidaan routes** from `sarathi_biz.py` into `nidaan_app.py`, mounted by the same process. One app still, two route files. | git revert | 🟠 |
-| **3** | **Second process.** `nidaan-web@1/@2` on new ports, own deploy unit; nginx routes nidaanpartner.com to it. Still one database. | point nginx back | 🔴 |
-| **4** | **Split the worker** — Nidaan's bot, guardian and schedulers move to `nidaan-worker`. | re-enable the old one | 🟠 |
-| **5** | **Split the database.** `nidaan.db` gets the 45 `nidaan_*` tables; `product_link` becomes an API. | keep the old DB read-only until proven | 🔴 |
-| **6** | **Move `/uploads`** by copy-verify-switch. | old path still serves | 🟠 |
-| **7** | **Separate the folder** — `C:\nidaanpartner` and its own repo, with no Sarathi code but the bundle-login client. | n/a by then | 🟢 |
+| **0** ✅ | Route census recorded. Restore-test the backup. | no | n/a |
+| **1** | Split `biz.env` into shared / nidaan / sarathi — same values, three files | config only | restore one file |
+| **2** | Move the **357 Sarathi routes** out of `sarathi_biz.py` into `sarathi_app.py`, still one process | **no** | git revert |
+| **3** | Sarathi gets its **own process, port and deploy unit**; nginx points sarathi-ai.com at it | **no** | repoint nginx |
+| **4** | Sarathi's bots and schedulers move to their own worker | **no** | re-enable |
+| **5** | **Sarathi's tables copy out** to `sarathi.db`; `product_link` becomes a small authenticated API | reads only | old tables stay |
+| **6** | What remains is Nidaan-only. Delete nothing — archive the Sarathi files out of the folder | files only | git |
+| **7** | Rename folder and `/opt` path; update the deploy unit | **yes — the only stage that does** | rename back |
 
-**The folder move he asked for is stage 7, not stage 1.** Moving files first would mean a
-half-separated codebase deploying from two places with the entanglement still inside it — the
-riskiest possible order, and the most tempting, because it looks like progress.
-
----
-
-## What makes this safe rather than merely careful
-
-- **A restore is tested before anything moves** (stage 0). A backup nobody has restored is a
-  belief, not a backup.
-- **Every stage is verified from outside**, by outcome — which product answers, does this exact
-  route still return this exact shape — not by reading config.
-- **The route census is a check that runs**, so a route that quietly stops existing fails the
-  build rather than a staff member's afternoon.
-- **Live work continues on master between stages.** The split never becomes the thing blocking
-  Lokpal.
-- **Nothing is deleted at any stage.** The old database, the old upload path and the old units
-  stay until their replacement is proven, then they are archived — and the founder says when.
+Stage 7 is the only one that touches the live app, it is last, it is a rename, and by then
+everything else is proven.
 
 ---
 
-## What I need before stage 0
+## What is genuinely risky, honestly
 
-1. **A maintenance window** for stages 3 and 5 — the two that touch what is serving. Each needs
-   perhaps 30 minutes of accepted risk, ideally late evening IST.
-2. **A decision on the Sarathi side.** Sarathi keeps the existing folder, repo, database and
-   units — Nidaan is the one that moves out. Cheaper and lower risk than moving both, but it
-   means the *Sarathi* repo keeps the name `sarathi-business`.
-3. **Confirmation that "eventually two databases" means now-ish.** If the two apps share one
-   database for weeks, R2 is live that whole time. I would rather do stages 3 and 5 in the same
-   week.
+**R1 — a route quietly disappearing.** Covered by the census, which is why it was built first.
+Residual risk: low, and *detectable in minutes* rather than weeks.
 
-**My recommendation:** do stage 0 and 1 immediately — they are pure gain and carry no risk to
-anything live. Then pause, look at the route census together, and decide stage 2 onward with
-real numbers in front of us.
+**R2 — two apps, one database, for the duration of stages 3–5.** SQLite in WAL handles it, but
+a second writer raises the chance of a busy timeout, and payments are written under load. This
+is the reason to keep stages 3 and 5 in the same week rather than "eventually".
+
+**R3 — the shared `JWT_SECRET`.** Splitting it naively logs everyone out of both products at
+once. It is split with both secrets accepted for a grace period, then the old one retired.
+
+**R4 — the 36 "shared" routes.** `/privacy`, `/terms`, `/login`, service-worker and manifest
+files. Each needs a decision, not a rule. This is the fiddly part and it is where I will come
+back to you with a list rather than guess.
+
+**R5 — a shared function neither product owns.** 66 modules are named for neither product.
+Stage 2 will find the ones both import. Each becomes: copied to both (if small and stable), or
+kept as a shared library both install (if it is real infrastructure like AV scanning).
+
+---
+
+## What I need from you before stage 1
+
+1. **Nothing, for stage 1.** Splitting the env file is reversible in one command and touches no
+   behaviour. I can do it and prove it with the census.
+2. **Before stage 3** — a 30-minute window where Sarathi may be down. Nidaan will not be.
+3. **Before stage 5** — confirmation that `product_link` (your bundle login) is the *only* thing
+   that must keep working across the two. If there is anything else, it is much cheaper to know
+   now than to find out.
+
+**My recommendation: stages 0 and 1 now, then stage 2 in one sitting with the census run after
+every file moved.** Stage 2 is the long one — 357 routes — and it is where care pays. Nidaan is
+not touched by any of it.
