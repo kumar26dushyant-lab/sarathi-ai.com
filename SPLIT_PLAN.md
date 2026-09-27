@@ -137,7 +137,7 @@ not touched by any of it.
 ## Stage 1 result — 74 variables, classified by who reads them
 
 Not by name. The tempting shortcut is "NIDAAN_* is Nidaan's" and it is wrong in both
-directions.  asks the code instead: for each variable, which files
+directions. `deploy/env-ownership.py` asks the code instead: for each variable, which files
 reference it, and which product do those files belong to.
 
 | | |
@@ -145,7 +145,7 @@ reference it, and which product do those files belong to.
 | **Nidaan only** | 15 — ClaimShield, Nidaan SMTP, VAPID push |
 | **Sarathi only** | 4 — TGCRM flags, its WhatsApp number |
 | **Shared** | 52 — duplicated into both, never divided |
-| **Read by nothing** | 3 — , ,  |
+| **Read by nothing** | 3 — `WA_APP_ID`, `WA_APP_SECRET`, `WA_WABA_ID` |
 
 **I did not rewire anything.** Wiring three env files means editing the systemd units that serve
 **Nidaan**, and the rule is that nothing touches Nidaan until the last stage. Each product gets
@@ -154,13 +154,13 @@ it keeps the file it has.
 
 **Two findings worth keeping:**
 
-- **The first run called  dead**, because it only scanned root-level
-  Python and that variable is read by a shell script in . A variable wrongly called
+- **The first run called `BACKUP_ENC_PASSPHRASE` dead**, because it only scanned root-level
+  Python and that variable is read by a shell script in `deploy/`. A variable wrongly called
   dead is one somebody drops — and dropping that one would have silently ended the off-site
   encrypted backups, which nobody would notice until a restore was needed. The scan now covers
   shell, systemd and deploy tooling: "dead" fell from 19 to 3.
-- ** currently classifies as shared**, because it is read through
-  . That is honest rather than wrong, and it **fixes itself at stage 2**: once
+- **`NIDAAN_RAZORPAY_KEY_ID` currently classifies as shared**, because it is read through
+  `sarathi_biz.py`. That is honest rather than wrong, and it **fixes itself at stage 2**: once
   the Nidaan routes live in their own file, the same script reclassifies it to Nidaan with no
   help. The classification gets truer as the split proceeds, which is a good property to have.
 
