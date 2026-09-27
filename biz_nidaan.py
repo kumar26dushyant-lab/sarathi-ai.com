@@ -6324,6 +6324,13 @@ def normalize_indian_mobile(p: str) -> Optional[str]:
 
 # ── Ops settings (key-value office policy) ───────────────────────────────────
 OPS_SETTING_DEFAULTS = {
+    # ── DPDP: the Grievance Officer, by name ───────────────────────────────
+    # The Act expects a person, not a role. People change; a name that needs a deploy to
+    # change is a name that goes stale and then misleads the person trying to complain.
+    # Edited from ops -> Content. Blank is handled at render time, never printed empty.
+    "grievance_officer_name": "",
+    "grievance_officer_email": "enquiries@nidaanlegalindia.com",
+    "grievance_officer_phone": "+91 95844 68804",
     # Minimum role permitted to create a DIRECT assignment. Lower roles can
     # still raise an upward "request". Default 'team_member' = everyone creates.
     "task_create_min_role": "team_member",

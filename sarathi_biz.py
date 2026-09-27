@@ -14205,6 +14205,46 @@ class _OpsSettingReq(BaseModel):
     task_create_min_role: str = Field(pattern=r"^(team_member|sub_super_admin|super_admin)$")
 
 
+class _GrievanceReq(BaseModel):
+    """Who to name on the privacy policy as the Grievance Officer."""
+    model_config = ConfigDict(extra="forbid")
+    grievance_officer_name: str = Field("", max_length=120)
+    grievance_officer_email: str = Field("", max_length=160)
+    grievance_officer_phone: str = Field("", max_length=40)
+
+
+@app.get("/nidaan/ops/api/grievance-officer")
+async def ops_grievance_get(request: Request):
+    """Who is named on the published privacy policy right now."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request, "super_admin")
+    return {k: await nidaan.get_ops_setting(k, "") for k in
+            ("grievance_officer_name", "grievance_officer_email", "grievance_officer_phone")}
+
+
+@app.put("/nidaan/ops/api/grievance-officer")
+async def ops_grievance_set(body: _GrievanceReq, request: Request):
+    """Name the Grievance Officer. Takes effect on the published policy immediately.
+
+    This is a public legal statement about who is accountable, so it is super-admin only and
+    every change is in the audit trail - being able to say later WHO named WHOM and WHEN is
+    the point of naming somebody at all.
+    """
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request, "super_admin")
+    email = body.grievance_officer_email.strip()
+    if email and ("@" not in email or " " in email):
+        raise HTTPException(400, "That does not look like an email address.")
+    for k, v in (("grievance_officer_name", body.grievance_officer_name.strip()),
+                 ("grievance_officer_email", email),
+                 ("grievance_officer_phone", body.grievance_officer_phone.strip())):
+        await nidaan.set_ops_setting(k, v, updated_by=staff["staff_id"])
+    await _ops_audit(request, "grievance_officer.set", "settings", 0,
+                     "named %s <%s>" % (body.grievance_officer_name.strip() or "(nobody)", email))
+    return {"ok": True, "name": body.grievance_officer_name.strip(),
+            "shown_on": f"{NIDAAN_BASE_URL}/privacy"}
+
+
 @app.get("/nidaan/ops/api/ops-settings")
 async def ops_settings_get(request: Request):
     """Office policy settings. Readable by any staff (the create UI adapts to it)."""
@@ -20544,6 +20584,39 @@ async def llms_txt():
         "- Founder LinkedIn: https://www.linkedin.com/in/dushyant-sharma-89659b23/\n"
     )
 
+async def _nidaan_privacy_with_officer(request: Request) -> HTMLResponse:
+    """The privacy policy with whoever currently holds the Grievance Officer role named on it.
+
+    Read at serve time rather than baked in, so the founder changes it from ops -> Content and
+    the published page changes with it. If nobody is named yet the page says the office holds
+    it, because "Grievance Officer:" followed by nothing reads as though the role is vacant -
+    which under DPDP is a worse statement than naming the office.
+    """
+    from html import escape as html_escape   # the name is rendered into a public page
+    html = (static_dir / "nidaan_privacy.html").read_text(encoding="utf-8")
+    try:
+        name = (await nidaan.get_ops_setting("grievance_officer_name", "") or "").strip()
+        mail = (await nidaan.get_ops_setting("grievance_officer_email", "") or "").strip()
+        phone = (await nidaan.get_ops_setting("grievance_officer_phone", "") or "").strip()
+    except Exception as e:  # noqa: BLE001
+        logger.warning("could not read grievance officer setting: %s", e)
+        name = mail = phone = ""
+    who = ("<b>%s</b>, Grievance Officer" % html_escape(name)) if name else \
+          "the <b>Grievance Officer</b>, Nidaan Legal India LLP"
+    bits = [who]
+    if mail:
+        bits.append('<a href="mailto:%s">%s</a>' % (html_escape(mail), html_escape(mail)))
+    if phone:
+        bits.append(html_escape(phone))
+    block = ('<p id="grievance-officer"><b>Grievance Officer.</b> Contact %s. '
+             'We acknowledge within 72 hours and respond within 30 days.</p>'
+             % " &middot; ".join(bits))
+    if 'id="grievance-officer"' not in html:
+        html = html.replace("<h2>Who is responsible for your data</h2>",
+                            "<h2>Who is responsible for your data</h2>\n" + block, 1)
+    return HTMLResponse(html)
+
+
 @app.get("/privacy", response_class=HTMLResponse)
 async def privacy_page(request: Request):
     """The privacy policy for WHICHEVER product was asked.
@@ -20557,7 +20630,7 @@ async def privacy_page(request: Request):
     not a broken link.
     """
     if _is_nidaan_host(request):
-        return _nidaan_page("nidaan_privacy.html", request)
+        return await _nidaan_privacy_with_officer(request)
     pf = static_dir / "privacy.html"
     if pf.exists():
         return HTMLResponse(pf.read_text(encoding="utf-8"))

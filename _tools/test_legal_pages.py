@@ -45,7 +45,16 @@ for route, nidaan_file, sarathi_file in (("/privacy", "nidaan_privacy.html", "pr
                                          ("/terms", "nidaan_terms.html", "terms.html")):
     b = body(route)
     check("%-9s asks WHICH site is being served" % route, "_is_nidaan_host(request)" in b)
-    check("%-9s   -> Nidaan gets the Nidaan page" % route, nidaan_file in b, b[:200])
+    # /privacy reaches its page through a helper that names the current Grievance Officer, so
+    # the file may be one step away. Follow the call rather than requiring it inline - a check
+    # that forbids refactoring is a check that gets deleted.
+    reached = nidaan_file in b
+    if not reached:
+        m = re.search(r"return await (_\w+)\(request\)", b)
+        if m and ("async def %s" % m.group(1)) in src:
+            h = src[src.index("async def %s" % m.group(1)):]
+            reached = nidaan_file in h[:3000]
+    check("%-9s   -> Nidaan gets the Nidaan page" % route, reached, b[:200])
     check("%-9s   -> Sarathi still gets its own" % route, sarathi_file in b)
     check("%-9s   and the host check comes FIRST" % route,
           b.index("_is_nidaan_host") < b.index(sarathi_file),
