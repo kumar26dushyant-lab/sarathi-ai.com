@@ -1,0 +1,414 @@
+{
+ "owners": {
+  "ADMIN_API_KEY": "shared",
+  "BACKUP_ENC_PASSPHRASE": "shared",
+  "BACKUP_GPG_PASSPHRASE": "shared",
+  "BACKUP_RCLONE_REMOTE": "shared",
+  "BRAND_ACCENT_COLOR": "shared",
+  "BRAND_AGENT": "shared",
+  "BRAND_COMPANY": "shared",
+  "BRAND_CTA": "shared",
+  "BRAND_CTA_COLOR": "shared",
+  "BRAND_DOMAIN": "shared",
+  "BRAND_EMAIL": "shared",
+  "BRAND_PRIMARY_COLOR": "shared",
+  "BRAND_TAGLINE": "shared",
+  "BREVO_API_KEY": "shared",
+  "CLAIMSHIELD_API_BASE": "nidaan",
+  "CLAIMSHIELD_API_KEY": "nidaan",
+  "CLAIMSHIELD_PULL_KEY": "nidaan",
+  "CLAIMSHIELD_WEBHOOK_SECRET": "nidaan",
+  "DEPLOY_TOKEN": "shared",
+  "DEV_MODE": "shared",
+  "FAST2SMS_API_KEY": "shared",
+  "GDRIVE_CLIENT_ID": "shared",
+  "GDRIVE_CLIENT_SECRET": "shared",
+  "GDRIVE_REDIRECT_URI": "shared",
+  "GEMINI_API_KEY": "shared",
+  "GITHUB_PAT": "shared",
+  "GOOGLE_CLIENT_ID": "shared",
+  "GOOGLE_CLIENT_SECRET": "shared",
+  "JWT_SECRET": "shared",
+  "NIDAAN_ADMIN_EMAIL": "nidaan",
+  "NIDAAN_FROM_EMAIL": "nidaan",
+  "NIDAAN_GOOGLE_CLIENT_ID": "nidaan",
+  "NIDAAN_RAZORPAY_KEY_ID": "shared",
+  "NIDAAN_RAZORPAY_KEY_SECRET": "shared",
+  "NIDAAN_RAZORPAY_WEBHOOK_SECRET": "nidaan",
+  "NIDAAN_SMTP_ENABLED": "nidaan",
+  "NIDAAN_SMTP_HOST": "nidaan",
+  "NIDAAN_SMTP_PASSWORD": "nidaan",
+  "NIDAAN_SMTP_PORT": "nidaan",
+  "NIDAAN_SMTP_USER": "nidaan",
+  "PEXELS_API_KEY": "shared",
+  "RAZORPAY_KEY_ID": "shared",
+  "RAZORPAY_KEY_SECRET": "shared",
+  "RAZORPAY_WEBHOOK_SECRET": "shared",
+  "SARATHI_TGCRM_BETA_TENANTS": "sarathi",
+  "SARATHI_TGCRM_ENABLED": "sarathi",
+  "SERVER_PORT": "shared",
+  "SERVER_URL": "shared",
+  "SMTP_FROM_EMAIL": "shared",
+  "SMTP_HOST": "shared",
+  "SMTP_PASSWORD": "shared",
+  "SMTP_PORT": "shared",
+  "SMTP_USER": "shared",
+  "SUPERADMIN_PASSWORD": "shared",
+  "SUPERADMIN_PHONES": "shared",
+  "TELEGRAM_BOT_NAME": "shared",
+  "TELEGRAM_BOT_TOKEN": "shared",
+  "VAPID_PRIVATE_KEY": "nidaan",
+  "VAPID_PUBLIC_KEY": "shared",
+  "VAPID_SUBJECT": "nidaan",
+  "WA_ACCESS_TOKEN": "sarathi",
+  "WA_APP_ID": "unused",
+  "WA_APP_SECRET": "unused",
+  "WA_NIDAAN_ACCESS_TOKEN": "shared",
+  "WA_NIDAAN_APP_SECRET": "shared",
+  "WA_NIDAAN_PHONE_NUMBER_ID": "shared",
+  "WA_NIDAAN_VERIFY_TOKEN": "shared",
+  "WA_NIDAAN_WABA_ID": "shared",
+  "WA_PHONE_NUMBER_ID": "sarathi",
+  "WA_WABA_ID": "unused",
+  "WHATSAPP_ACCESS_TOKEN": "shared",
+  "WHATSAPP_APP_SECRET": "shared",
+  "WHATSAPP_PHONE_ID": "shared",
+  "WHATSAPP_VERIFY_TOKEN": "shared"
+ },
+ "where": {
+  "ADMIN_API_KEY": [
+   "_360_test_v2.py",
+   "biz.env",
+   "biz_auth.py",
+   "sarathi_biz.py",
+   "test_e2e_360.py"
+  ],
+  "BACKUP_ENC_PASSPHRASE": [
+   "deploy\\git-db-backup.sh"
+  ],
+  "BACKUP_GPG_PASSPHRASE": [
+   "deploy\\backup.sh"
+  ],
+  "BACKUP_RCLONE_REMOTE": [
+   "deploy\\backup.sh"
+  ],
+  "BRAND_ACCENT_COLOR": [
+   "biz.env"
+  ],
+  "BRAND_AGENT": [
+   "biz.env"
+  ],
+  "BRAND_COMPANY": [
+   "biz.env"
+  ],
+  "BRAND_CTA": [
+   "biz.env"
+  ],
+  "BRAND_CTA_COLOR": [
+   "biz.env"
+  ],
+  "BRAND_DOMAIN": [
+   "biz.env"
+  ],
+  "BRAND_EMAIL": [
+   "biz.env"
+  ],
+  "BRAND_PRIMARY_COLOR": [
+   "biz.env"
+  ],
+  "BRAND_TAGLINE": [
+   "biz.env"
+  ],
+  "BREVO_API_KEY": [
+   "biz.env",
+   "biz_email.py",
+   "sarathi_biz.py"
+  ],
+  "CLAIMSHIELD_API_BASE": [
+   "biz_claimshield.py"
+  ],
+  "CLAIMSHIELD_API_KEY": [
+   "biz_claimshield.py"
+  ],
+  "CLAIMSHIELD_PULL_KEY": [
+   "sarathi_biz.py"
+  ],
+  "CLAIMSHIELD_WEBHOOK_SECRET": [
+   "sarathi_biz.py"
+  ],
+  "DEPLOY_TOKEN": [
+   "biz.env",
+   "sarathi_biz.py"
+  ],
+  "DEV_MODE": [
+   "biz.env",
+   "biz_auth.py",
+   "biz_bot.py",
+   "deploy\\apply-security-hardening.sh"
+  ],
+  "FAST2SMS_API_KEY": [
+   "biz.env",
+   "biz_sms.py",
+   "sarathi_biz.py"
+  ],
+  "GDRIVE_CLIENT_ID": [
+   "biz.env",
+   "biz_gdrive.py",
+   "sarathi_biz.py"
+  ],
+  "GDRIVE_CLIENT_SECRET": [
+   "biz.env",
+   "biz_gdrive.py"
+  ],
+  "GDRIVE_REDIRECT_URI": [
+   "biz.env",
+   "biz_gdrive.py"
+  ],
+  "GEMINI_API_KEY": [
+   "_tools\\generate_imagen_templates.py",
+   "biz.env",
+   "biz_ai.py",
+   "biz_bot.py",
+   "biz_nidaan_telegram.py",
+   "biz_sarathi_tgcrm.py",
+   "biz_tts.py",
+   "biz_wa_agent.py",
+   "deploy\\setup-contabo.sh",
+   "sarathi_biz.py"
+  ],
+  "GITHUB_PAT": [
+   "deploy\\git-backup.sh",
+   "deploy\\setup-contabo.sh"
+  ],
+  "GOOGLE_CLIENT_ID": [
+   "biz.env",
+   "biz_auth.py",
+   "biz_gdrive.py",
+   "biz_health_monitor.py",
+   "deploy\\setup-contabo.sh",
+   "sarathi_biz.py"
+  ],
+  "GOOGLE_CLIENT_SECRET": [
+   "biz.env",
+   "biz_gdrive.py",
+   "deploy\\setup-contabo.sh"
+  ],
+  "JWT_SECRET": [
+   "biz.env",
+   "biz_auth.py",
+   "biz_bot.py",
+   "biz_nidaan.py",
+   "biz_nidaan_radar.py",
+   "biz_nidaan_wa_auth.py",
+   "biz_sarathi_tgcrm.py",
+   "sarathi_biz.py"
+  ],
+  "NIDAAN_ADMIN_EMAIL": [
+   "sarathi_biz.py"
+  ],
+  "NIDAAN_FROM_EMAIL": [
+   "biz.env",
+   "biz_email.py"
+  ],
+  "NIDAAN_GOOGLE_CLIENT_ID": [
+   "sarathi_biz.py"
+  ],
+  "NIDAAN_RAZORPAY_KEY_ID": [
+   "biz_nidaan.py",
+   "biz_nidaan_pay_guard.py",
+   "deploy\\verify-razorpay-split.py",
+   "sarathi_biz.py"
+  ],
+  "NIDAAN_RAZORPAY_KEY_SECRET": [
+   "biz_nidaan.py",
+   "biz_nidaan_pay_guard.py",
+   "sarathi_biz.py"
+  ],
+  "NIDAAN_RAZORPAY_WEBHOOK_SECRET": [
+   "sarathi_biz.py"
+  ],
+  "NIDAAN_SMTP_ENABLED": [
+   "biz_email.py",
+   "sarathi_biz.py"
+  ],
+  "NIDAAN_SMTP_HOST": [
+   "biz_email.py",
+   "sarathi_biz.py"
+  ],
+  "NIDAAN_SMTP_PASSWORD": [
+   "biz_email.py",
+   "sarathi_biz.py"
+  ],
+  "NIDAAN_SMTP_PORT": [
+   "biz_email.py",
+   "sarathi_biz.py"
+  ],
+  "NIDAAN_SMTP_USER": [
+   "biz_email.py",
+   "sarathi_biz.py"
+  ],
+  "PEXELS_API_KEY": [
+   "biz_pexels.py"
+  ],
+  "RAZORPAY_KEY_ID": [
+   "_tools\\razorpay_webhook_reconcile.py",
+   "_tools\\refund_account_9.py",
+   "biz.env",
+   "biz_auth.py",
+   "biz_nidaan.py",
+   "biz_nidaan_pay_guard.py",
+   "biz_payments.py",
+   "deploy\\setup-contabo.sh",
+   "deploy\\verify-razorpay-split.py",
+   "sarathi_biz.py"
+  ],
+  "RAZORPAY_KEY_SECRET": [
+   "_tools\\razorpay_webhook_reconcile.py",
+   "_tools\\refund_account_9.py",
+   "_tools\\test_step5_pay.py",
+   "biz.env",
+   "biz_nidaan.py",
+   "biz_nidaan_pay_guard.py",
+   "biz_payments.py",
+   "deploy\\setup-contabo.sh",
+   "deploy\\verify-razorpay-split.py",
+   "sarathi_biz.py"
+  ],
+  "RAZORPAY_WEBHOOK_SECRET": [
+   "biz_payments.py",
+   "deploy\\setup-contabo.sh",
+   "sarathi_biz.py"
+  ],
+  "SARATHI_TGCRM_BETA_TENANTS": [
+   "biz_sarathi_tgcrm.py"
+  ],
+  "SARATHI_TGCRM_ENABLED": [
+   "biz_sarathi_tgcrm.py"
+  ],
+  "SERVER_PORT": [
+   "biz.env",
+   "deploy\\sarathi-web-staging.service",
+   "deploy\\sarathi-web@.service",
+   "deploy\\sarathi-worker.service",
+   "docker-compose.yml",
+   "sarathi_biz.py"
+  ],
+  "SERVER_URL": [
+   "biz.env",
+   "biz_bot.py",
+   "biz_email.py",
+   "biz_payments.py",
+   "biz_reminders.py",
+   "biz_wa_agent.py",
+   "biz_whatsapp.py",
+   "deploy\\setup-server.sh",
+   "sarathi_biz.py"
+  ],
+  "SMTP_FROM_EMAIL": [
+   "biz.env",
+   "biz_email.py"
+  ],
+  "SMTP_HOST": [
+   "biz.env",
+   "biz_email.py",
+   "deploy\\setup-contabo.sh"
+  ],
+  "SMTP_PASSWORD": [
+   "biz.env",
+   "biz_email.py",
+   "sarathi_biz.py"
+  ],
+  "SMTP_PORT": [
+   "biz.env",
+   "biz_email.py",
+   "deploy\\setup-contabo.sh"
+  ],
+  "SMTP_USER": [
+   "biz.env",
+   "biz_email.py",
+   "deploy\\setup-contabo.sh",
+   "sarathi_biz.py"
+  ],
+  "SUPERADMIN_PASSWORD": [
+   "_test_api.py",
+   "_test_api2.py",
+   "_test_api3.py",
+   "_test_correct.py",
+   "_test_full.py",
+   "biz.env",
+   "biz_auth.py"
+  ],
+  "SUPERADMIN_PHONES": [
+   "_test_api2.py",
+   "_test_api3.py",
+   "_test_correct.py",
+   "_test_full.py",
+   "biz.env",
+   "biz_auth.py",
+   "biz_bot.py"
+  ],
+  "TELEGRAM_BOT_NAME": [
+   "biz.env"
+  ],
+  "TELEGRAM_BOT_TOKEN": [
+   "biz.env",
+   "biz_reminders.py",
+   "deploy\\setup-contabo.sh",
+   "sarathi_biz.py"
+  ],
+  "VAPID_PRIVATE_KEY": [
+   "biz_nidaan_notifications.py"
+  ],
+  "VAPID_PUBLIC_KEY": [
+   "biz_nidaan_notifications.py",
+   "sarathi_biz.py"
+  ],
+  "VAPID_SUBJECT": [
+   "biz_nidaan_notifications.py"
+  ],
+  "WA_ACCESS_TOKEN": [
+   "biz_sarathi_whatsapp.py"
+  ],
+  "WA_APP_ID": [],
+  "WA_APP_SECRET": [],
+  "WA_NIDAAN_ACCESS_TOKEN": [
+   "biz_nidaan_whatsapp.py",
+   "sarathi_biz.py"
+  ],
+  "WA_NIDAAN_APP_SECRET": [
+   "biz_nidaan_whatsapp.py",
+   "sarathi_biz.py"
+  ],
+  "WA_NIDAAN_PHONE_NUMBER_ID": [
+   "biz_nidaan_whatsapp.py",
+   "sarathi_biz.py"
+  ],
+  "WA_NIDAAN_VERIFY_TOKEN": [
+   "biz_nidaan_whatsapp.py",
+   "sarathi_biz.py"
+  ],
+  "WA_NIDAAN_WABA_ID": [
+   "biz_nidaan_whatsapp.py",
+   "sarathi_biz.py"
+  ],
+  "WA_PHONE_NUMBER_ID": [
+   "biz_sarathi_whatsapp.py"
+  ],
+  "WA_WABA_ID": [],
+  "WHATSAPP_ACCESS_TOKEN": [
+   "biz.env",
+   "biz_whatsapp.py"
+  ],
+  "WHATSAPP_APP_SECRET": [
+   "biz.env"
+  ],
+  "WHATSAPP_PHONE_ID": [
+   "biz.env",
+   "biz_whatsapp.py",
+   "sarathi_biz.py"
+  ],
+  "WHATSAPP_VERIFY_TOKEN": [
+   "biz.env"
+  ]
+ }
+}

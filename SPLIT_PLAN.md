@@ -84,7 +84,7 @@ Each is independently shippable. **If we stop after any of them, what is live st
 | Stage | What happens | Touches Nidaan? | Revert |
 |---|---|---|---|
 | **0** ✅ | Route census recorded. Restore-test the backup. | no | n/a |
-| **1** | Split `biz.env` into shared / nidaan / sarathi — same values, three files | config only | restore one file |
+| **1** | ✅ **Every env variable classified by who READS it** — no rewiring, so Nidaan is untouched | **no** | n/a |
 | **2** | Move the **357 Sarathi routes** out of `sarathi_biz.py` into `sarathi_app.py`, still one process | **no** | git revert |
 | **3** | Sarathi gets its **own process, port and deploy unit**; nginx points sarathi-ai.com at it | **no** | repoint nginx |
 | **4** | Sarathi's bots and schedulers move to their own worker | **no** | re-enable |
@@ -131,3 +131,38 @@ kept as a shared library both install (if it is real infrastructure like AV scan
 **My recommendation: stages 0 and 1 now, then stage 2 in one sitting with the census run after
 every file moved.** Stage 2 is the long one — 357 routes — and it is where care pays. Nidaan is
 not touched by any of it.
+
+---
+
+## Stage 1 result — 74 variables, classified by who reads them
+
+Not by name. The tempting shortcut is "NIDAAN_* is Nidaan's" and it is wrong in both
+directions.  asks the code instead: for each variable, which files
+reference it, and which product do those files belong to.
+
+| | |
+|---|---|
+| **Nidaan only** | 15 — ClaimShield, Nidaan SMTP, VAPID push |
+| **Sarathi only** | 4 — TGCRM flags, its WhatsApp number |
+| **Shared** | 52 — duplicated into both, never divided |
+| **Read by nothing** | 3 — , ,  |
+
+**I did not rewire anything.** Wiring three env files means editing the systemd units that serve
+**Nidaan**, and the rule is that nothing touches Nidaan until the last stage. Each product gets
+its own env file at the moment it gets its own unit — Sarathi at stage 3, Nidaan never, because
+it keeps the file it has.
+
+**Two findings worth keeping:**
+
+- **The first run called  dead**, because it only scanned root-level
+  Python and that variable is read by a shell script in . A variable wrongly called
+  dead is one somebody drops — and dropping that one would have silently ended the off-site
+  encrypted backups, which nobody would notice until a restore was needed. The scan now covers
+  shell, systemd and deploy tooling: "dead" fell from 19 to 3.
+- ** currently classifies as shared**, because it is read through
+  . That is honest rather than wrong, and it **fixes itself at stage 2**: once
+  the Nidaan routes live in their own file, the same script reclassifies it to Nidaan with no
+  help. The classification gets truer as the split proceeds, which is a good property to have.
+
+The 3 unread variables are **left alone**. They may be read by something outside this repo, and
+nothing is deleted on a suspicion.
