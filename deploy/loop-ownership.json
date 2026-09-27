@@ -1,0 +1,150 @@
+{
+ "account_erasure_loop": {
+  "mods": [
+   "biz_nidaan"
+  ],
+  "who": "nidaan"
+ },
+ "branch_unpaid_loop": {
+  "mods": [],
+  "who": "housekeeping"
+ },
+ "bucket_standing_loop": {
+  "mods": [
+   "biz_nidaan_buckets"
+  ],
+  "who": "nidaan"
+ },
+ "bucket_wake_loop": {
+  "mods": [
+   "biz_nidaan_buckets"
+  ],
+  "who": "nidaan"
+ },
+ "claim_alert_sweep_loop": {
+  "mods": [
+   "biz_nidaan_notifications"
+  ],
+  "who": "nidaan"
+ },
+ "daily_ops_summary_loop": {
+  "mods": [
+   "biz_nidaan_daily_summary"
+  ],
+  "who": "nidaan"
+ },
+ "doc_chase_loop": {
+  "mods": [
+   "biz_nidaan_doc_request"
+  ],
+  "who": "nidaan"
+ },
+ "health_alert_loop": {
+  "mods": [
+   "biz_nidaan_notifications"
+  ],
+  "who": "nidaan"
+ },
+ "health_watch_loop": {
+  "mods": [
+   "biz_nidaan_health_watch"
+  ],
+  "who": "nidaan"
+ },
+ "lead_retention_loop": {
+  "mods": [
+   "biz_nidaan_retention"
+  ],
+  "who": "nidaan"
+ },
+ "marketing_batch_loop": {
+  "mods": [
+   "biz_marketing"
+  ],
+  "who": "sarathi"
+ },
+ "otp_cleanup_task": {
+  "mods": [],
+  "who": "housekeeping"
+ },
+ "payment_guardian_loop": {
+  "mods": [
+   "biz_nidaan_pay_guard"
+  ],
+  "who": "nidaan"
+ },
+ "payment_watch_loop": {
+  "mods": [
+   "biz_nidaan_payment_watch"
+  ],
+  "who": "nidaan"
+ },
+ "plan_change_applier": {
+  "mods": [],
+  "who": "housekeeping"
+ },
+ "radar_keepalive_loop": {
+  "mods": [
+   "biz_nidaan_radar"
+  ],
+  "who": "nidaan"
+ },
+ "radar_poll_loop": {
+  "mods": [
+   "biz_nidaan_radar"
+  ],
+  "who": "nidaan"
+ },
+ "radar_silence_loop": {
+  "mods": [
+   "biz_nidaan_radar"
+  ],
+  "who": "nidaan"
+ },
+ "reminders.start_scheduler": {
+  "mods": [
+   "biz_reminders"
+  ],
+  "who": "sarathi"
+ },
+ "support_sla_loop": {
+  "mods": [
+   "biz_nidaan_notifications"
+  ],
+  "who": "nidaan"
+ },
+ "telegram_poll_loop": {
+  "mods": [
+   "biz_nidaan_telegram"
+  ],
+  "who": "nidaan"
+ },
+ "tgcrm_digest_loop": {
+  "mods": [
+   "biz_sarathi_tgcrm"
+  ],
+  "who": "sarathi"
+ },
+ "unanswered_sweep_loop": {
+  "mods": [
+   "biz_nidaan_notifications"
+  ],
+  "who": "nidaan"
+ },
+ "video_cleanup_task": {
+  "mods": [],
+  "who": "housekeeping"
+ },
+ "wa_schedule_loop": {
+  "mods": [
+   "biz_nidaan_wa_schedule"
+  ],
+  "who": "nidaan"
+ },
+ "wa_watchdog_loop": {
+  "mods": [
+   "biz_nidaan_notifications"
+  ],
+  "who": "nidaan"
+ }
+}
