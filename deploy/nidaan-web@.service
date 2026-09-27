@@ -1,0 +1,30 @@
+# =============================================================================
+#  nidaan-web@.service - NidaanPartner.com - web
+# =============================================================================
+#  Two instances per product, APP_ROLE=web so NO bots and NO scheduler run here
+#  (those stay in the single sarathi-worker until the worker split).
+#
+#  The port MUST come from a later EnvironmentFile: on this host EnvironmentFile
+#  wins over Environment=, and biz.env already sets SERVER_PORT.
+# =============================================================================
+[Unit]
+Description=NidaanPartner.com - web (instance %i)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=sarathi
+Group=sarathi
+WorkingDirectory=/opt/sarathi
+EnvironmentFile=/opt/sarathi/biz.env
+Environment=APP_ROLE=web
+Environment=SERVER_HOST=127.0.0.1
+EnvironmentFile=/etc/sarathi/nidaan-web-%i.env
+ExecStart=/opt/sarathi/venv/bin/python nidaan_app.py
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
