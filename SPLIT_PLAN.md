@@ -166,3 +166,32 @@ it keeps the file it has.
 
 The 3 unread variables are **left alone**. They may be read by something outside this repo, and
 nothing is deleted on a suspicion.
+
+---
+
+## Stage 4 done - sarathi-ai.com is served by its own app
+
+The rehearsal, run on the product that can afford to break.
+
+| | |
+|---|---|
+| sarathi-ai.com | **sarathi_app.py**, ports 8021/8022, its own nginx block and upstream |
+| nidaanpartner.com | **unchanged** - still the combined app on 8001/8002 |
+
+Verified from outside: each domain serves its own product, Nidaan ops still returns 401
+unauthenticated, /nidaan/ops returns 200, and /nidaan/* returns 404 on sarathi-ai.com.
+
+**What the infrastructure turned out to be**, which no earlier analysis had mapped:
+- **one nginx server block served both domains**, and
+- **one TLS certificate covers all four names** (, , and
+  both ). No new certificate was needed to split traffic - the existing one already
+  covers both, which is why this step needed no DNS or certbot work at all.
+
+**A flaw in my own safety net, found and fixed here.** The first backup was taken with
+ against  - which is a **symlink**. That copied the
+link, not the file, so the "backup" pointed at the very file being edited. A backup that
+tracks its own original is not a backup.
+
+Fixed, and then the revert path was **proven rather than assumed**: the reconstructed original
+was loaded into nginx and validated with  before the working config was put back. An
+untested restore is a belief.
