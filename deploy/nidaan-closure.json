@@ -1,0 +1,566 @@
+{
+ "edges": {
+  "biz_ai.py": [
+   "biz_nidaan_guide.py"
+  ],
+  "biz_auth.py": [
+   "biz_database.py"
+  ],
+  "biz_av_scan.py": [],
+  "biz_bot.py": [
+   "biz_ai.py",
+   "biz_auth.py",
+   "biz_bot_manager.py",
+   "biz_calculators.py",
+   "biz_database.py",
+   "biz_email.py",
+   "biz_i18n.py",
+   "biz_pdf.py",
+   "biz_reminders.py",
+   "biz_resilience.py",
+   "biz_whatsapp.py",
+   "sarathi_biz.py"
+  ],
+  "biz_bot_manager.py": [
+   "biz_bot.py",
+   "biz_database.py"
+  ],
+  "biz_calculators.py": [],
+  "biz_campaigns.py": [
+   "biz_database.py",
+   "biz_email.py",
+   "biz_whatsapp.py"
+  ],
+  "biz_claimshield.py": [
+   "biz_nidaan.py",
+   "biz_nidaan_claimant.py"
+  ],
+  "biz_database.py": [
+   "biz_nurture.py",
+   "biz_payments.py"
+  ],
+  "biz_doc_splitter.py": [
+   "biz_ai.py",
+   "biz_database.py"
+  ],
+  "biz_email.py": [
+   "biz_nidaan.py"
+  ],
+  "biz_gdrive.py": [],
+  "biz_health_monitor.py": [
+   "biz_bot_manager.py",
+   "biz_database.py",
+   "biz_email.py",
+   "biz_nidaan_telegram.py",
+   "biz_payments.py",
+   "biz_resilience.py"
+  ],
+  "biz_i18n.py": [],
+  "biz_lapse.py": [],
+  "biz_marketing.py": [
+   "biz_ai.py",
+   "biz_pexels.py",
+   "biz_reminders.py",
+   "biz_whatsapp_evolution.py"
+  ],
+  "biz_nidaan.py": [
+   "biz_claimshield.py",
+   "biz_nidaan_buckets.py",
+   "biz_nidaan_notifications.py",
+   "biz_nidaan_wa_orchestrator.py",
+   "biz_platform_bridge.py"
+  ],
+  "biz_nidaan_alarm_policy.py": [
+   "biz_database.py",
+   "biz_nidaan.py",
+   "biz_nidaan_health_watch.py",
+   "biz_nidaan_notifications.py",
+   "biz_nidaan_radar.py"
+  ],
+  "biz_nidaan_bot_docs.py": [
+   "biz_doc_splitter.py",
+   "biz_nidaan.py",
+   "biz_nidaan_bot_guard.py",
+   "biz_nidaan_claim_access.py",
+   "biz_nidaan_doc_checklist.py",
+   "biz_nidaan_doc_intake.py"
+  ],
+  "biz_nidaan_bot_guard.py": [
+   "biz_nidaan.py"
+  ],
+  "biz_nidaan_buckets.py": [
+   "biz_database.py",
+   "biz_nidaan.py",
+   "biz_nidaan_doc_request.py",
+   "biz_nidaan_notifications.py",
+   "biz_nidaan_wa_guard.py",
+   "biz_nidaan_wa_orchestrator.py",
+   "biz_nidaan_whatsapp.py"
+  ],
+  "biz_nidaan_capabilities.py": [],
+  "biz_nidaan_case_state.py": [
+   "biz_database.py",
+   "biz_nidaan.py",
+   "biz_nidaan_buckets.py",
+   "biz_nidaan_notifications.py",
+   "biz_nidaan_stage_guide.py"
+  ],
+  "biz_nidaan_channel_partners.py": [
+   "biz_database.py"
+  ],
+  "biz_nidaan_claim_access.py": [
+   "biz_database.py"
+  ],
+  "biz_nidaan_claim_parties.py": [
+   "biz_database.py",
+   "biz_nidaan.py",
+   "biz_nidaan_channel_partners.py",
+   "biz_nidaan_claimant.py",
+   "biz_nidaan_notifications.py",
+   "biz_nidaan_wa_flow.py",
+   "biz_nidaan_whatsapp.py"
+  ],
+  "biz_nidaan_claimant.py": [
+   "biz_database.py",
+   "biz_email.py",
+   "biz_nidaan.py",
+   "biz_nidaan_notifications.py"
+  ],
+  "biz_nidaan_crm.py": [
+   "biz_database.py"
+  ],
+  "biz_nidaan_daily_summary.py": [
+   "biz_ai.py",
+   "biz_database.py",
+   "biz_nidaan.py",
+   "biz_nidaan_telegram.py",
+   "biz_tts.py"
+  ],
+  "biz_nidaan_doc_checklist.py": [
+   "biz_database.py"
+  ],
+  "biz_nidaan_doc_collect.py": [
+   "biz_database.py",
+   "biz_email.py",
+   "biz_nidaan.py",
+   "biz_nidaan_claimant.py",
+   "biz_nidaan_doc_checklist.py"
+  ],
+  "biz_nidaan_doc_intake.py": [
+   "biz_ai.py",
+   "biz_av_scan.py",
+   "biz_database.py",
+   "biz_doc_splitter.py",
+   "biz_nidaan.py",
+   "biz_nidaan_doc_checklist.py"
+  ],
+  "biz_nidaan_doc_request.py": [
+   "biz_database.py",
+   "biz_email.py",
+   "biz_nidaan.py",
+   "biz_nidaan_claim_parties.py",
+   "biz_nidaan_claimant.py",
+   "biz_nidaan_doc_checklist.py",
+   "biz_nidaan_doc_intake.py",
+   "biz_nidaan_notifications.py",
+   "biz_nidaan_wa_flow.py",
+   "biz_nidaan_wa_schedule.py",
+   "biz_nidaan_whatsapp.py"
+  ],
+  "biz_nidaan_guide.py": [],
+  "biz_nidaan_health_watch.py": [
+   "biz_database.py",
+   "biz_nidaan.py",
+   "biz_nidaan_notifications.py",
+   "sarathi_biz.py"
+  ],
+  "biz_nidaan_inbound.py": [
+   "biz_database.py",
+   "biz_nidaan_notifications.py",
+   "biz_nidaan_tasks.py",
+   "biz_whatsapp_evolution.py"
+  ],
+  "biz_nidaan_login_health.py": [
+   "biz_nidaan.py"
+  ],
+  "biz_nidaan_notifications.py": [
+   "biz_database.py",
+   "biz_email.py",
+   "biz_nidaan.py",
+   "biz_nidaan_alarm_policy.py",
+   "biz_nidaan_doc_checklist.py",
+   "biz_nidaan_notify_prefs.py",
+   "biz_nidaan_tasks.py",
+   "biz_nidaan_telegram.py",
+   "biz_nidaan_wa_orchestrator.py",
+   "biz_whatsapp_evolution.py"
+  ],
+  "biz_nidaan_notify_policy.py": [],
+  "biz_nidaan_notify_prefs.py": [
+   "biz_database.py",
+   "biz_nidaan_notify_policy.py",
+   "biz_nidaan_notify_registry.py"
+  ],
+  "biz_nidaan_notify_registry.py": [
+   "biz_nidaan_notify_policy.py"
+  ],
+  "biz_nidaan_pay_guard.py": [
+   "biz_database.py",
+   "biz_nidaan.py",
+   "biz_nidaan_notifications.py"
+  ],
+  "biz_nidaan_payment_watch.py": [
+   "biz_database.py",
+   "biz_nidaan.py",
+   "biz_nidaan_notifications.py"
+  ],
+  "biz_nidaan_radar.py": [
+   "biz_ai.py",
+   "biz_av_scan.py",
+   "biz_database.py",
+   "biz_doc_splitter.py",
+   "biz_nidaan.py",
+   "biz_nidaan_notifications.py"
+  ],
+  "biz_nidaan_retention.py": [
+   "biz_database.py",
+   "biz_nidaan_notifications.py"
+  ],
+  "biz_nidaan_stage_guide.py": [
+   "biz_nidaan_buckets.py"
+  ],
+  "biz_nidaan_stats.py": [
+   "biz_database.py"
+  ],
+  "biz_nidaan_tasks.py": [
+   "biz_database.py"
+  ],
+  "biz_nidaan_telegram.py": [
+   "biz_database.py",
+   "biz_doc_splitter.py",
+   "biz_nidaan.py",
+   "biz_nidaan_bot_docs.py",
+   "biz_nidaan_bot_guard.py",
+   "biz_nidaan_capabilities.py",
+   "biz_nidaan_channel_partners.py",
+   "biz_nidaan_claim_access.py",
+   "biz_nidaan_notifications.py",
+   "biz_nidaan_pay_guard.py",
+   "biz_nidaan_tasks.py"
+  ],
+  "biz_nidaan_wa_auth.py": [
+   "biz_database.py",
+   "biz_email.py",
+   "biz_nidaan.py"
+  ],
+  "biz_nidaan_wa_brain.py": [
+   "biz_ai.py"
+  ],
+  "biz_nidaan_wa_campaigns.py": [
+   "biz_database.py",
+   "biz_nidaan_wa_flow.py",
+   "biz_nidaan_wa_messages.py",
+   "biz_nidaan_whatsapp.py"
+  ],
+  "biz_nidaan_wa_charter.py": [
+   "biz_database.py",
+   "biz_nidaan_doc_checklist.py"
+  ],
+  "biz_nidaan_wa_flow.py": [
+   "biz_database.py",
+   "biz_nidaan.py",
+   "biz_nidaan_buckets.py",
+   "biz_nidaan_crm.py",
+   "biz_nidaan_notifications.py",
+   "biz_nidaan_wa_messages.py",
+   "biz_nidaan_wa_orchestrator.py",
+   "biz_nidaan_whatsapp.py"
+  ],
+  "biz_nidaan_wa_guard.py": [
+   "biz_database.py",
+   "biz_nidaan_wa_orchestrator.py"
+  ],
+  "biz_nidaan_wa_identity.py": [
+   "biz_database.py",
+   "biz_nidaan_doc_checklist.py"
+  ],
+  "biz_nidaan_wa_inbox.py": [
+   "biz_database.py",
+   "biz_nidaan_wa_flow.py",
+   "biz_nidaan_wa_identity.py",
+   "biz_nidaan_wa_orchestrator.py",
+   "biz_nidaan_whatsapp.py"
+  ],
+  "biz_nidaan_wa_messages.py": [],
+  "biz_nidaan_wa_orchestrator.py": [
+   "biz_ai.py",
+   "biz_database.py",
+   "biz_doc_splitter.py",
+   "biz_nidaan.py",
+   "biz_nidaan_buckets.py",
+   "biz_nidaan_doc_checklist.py",
+   "biz_nidaan_doc_intake.py",
+   "biz_nidaan_notifications.py",
+   "biz_nidaan_wa_auth.py",
+   "biz_nidaan_wa_brain.py",
+   "biz_nidaan_wa_charter.py",
+   "biz_nidaan_wa_flow.py",
+   "biz_nidaan_wa_identity.py",
+   "biz_nidaan_wa_messages.py",
+   "biz_nidaan_whatsapp.py"
+  ],
+  "biz_nidaan_wa_schedule.py": [
+   "biz_database.py",
+   "biz_nidaan.py",
+   "biz_nidaan_doc_checklist.py",
+   "biz_nidaan_doc_request.py"
+  ],
+  "biz_nidaan_whatsapp.py": [
+   "biz_nidaan_wa_flow.py",
+   "biz_nidaan_wa_guard.py"
+  ],
+  "biz_nurture.py": [
+   "biz_database.py",
+   "biz_whatsapp_evolution.py"
+  ],
+  "biz_payments.py": [
+   "biz_database.py",
+   "biz_email.py",
+   "biz_reminders.py"
+  ],
+  "biz_pdf.py": [
+   "biz_calculators.py"
+  ],
+  "biz_pexels.py": [],
+  "biz_platform_bridge.py": [],
+  "biz_quotes.py": [],
+  "biz_reminders.py": [
+   "biz_database.py",
+   "biz_email.py",
+   "biz_health_monitor.py",
+   "biz_marketing.py",
+   "biz_nidaan.py",
+   "biz_nidaan_notifications.py",
+   "biz_nurture.py",
+   "biz_resilience.py",
+   "biz_whatsapp.py",
+   "biz_whatsapp_evolution.py"
+  ],
+  "biz_resilience.py": [
+   "biz_whatsapp.py"
+  ],
+  "biz_sarathi_tgcrm.py": [
+   "biz_calculators.py",
+   "biz_database.py"
+  ],
+  "biz_sms.py": [],
+  "biz_tts.py": [],
+  "biz_video.py": [
+   "biz_ai.py"
+  ],
+  "biz_wa_agent.py": [
+   "biz_ai.py",
+   "biz_auth.py",
+   "biz_database.py"
+  ],
+  "biz_whatsapp.py": [
+   "biz_database.py"
+  ],
+  "biz_whatsapp_evolution.py": [],
+  "biz_whatsapp_safety.py": [
+   "biz_database.py"
+  ],
+  "sarathi_biz.py": [
+   "biz_ai.py",
+   "biz_auth.py",
+   "biz_av_scan.py",
+   "biz_bot.py",
+   "biz_bot_manager.py",
+   "biz_calculators.py",
+   "biz_campaigns.py",
+   "biz_claimshield.py",
+   "biz_database.py",
+   "biz_doc_splitter.py",
+   "biz_email.py",
+   "biz_gdrive.py",
+   "biz_health_monitor.py",
+   "biz_lapse.py",
+   "biz_marketing.py",
+   "biz_nidaan.py",
+   "biz_nidaan_buckets.py",
+   "biz_nidaan_capabilities.py",
+   "biz_nidaan_case_state.py",
+   "biz_nidaan_channel_partners.py",
+   "biz_nidaan_claim_access.py",
+   "biz_nidaan_claim_parties.py",
+   "biz_nidaan_claimant.py",
+   "biz_nidaan_crm.py",
+   "biz_nidaan_daily_summary.py",
+   "biz_nidaan_doc_checklist.py",
+   "biz_nidaan_doc_collect.py",
+   "biz_nidaan_doc_request.py",
+   "biz_nidaan_guide.py",
+   "biz_nidaan_health_watch.py",
+   "biz_nidaan_inbound.py",
+   "biz_nidaan_login_health.py",
+   "biz_nidaan_notifications.py",
+   "biz_nidaan_notify_policy.py",
+   "biz_nidaan_notify_prefs.py",
+   "biz_nidaan_notify_registry.py",
+   "biz_nidaan_pay_guard.py",
+   "biz_nidaan_payment_watch.py",
+   "biz_nidaan_radar.py",
+   "biz_nidaan_retention.py",
+   "biz_nidaan_stats.py",
+   "biz_nidaan_tasks.py",
+   "biz_nidaan_telegram.py",
+   "biz_nidaan_wa_campaigns.py",
+   "biz_nidaan_wa_flow.py",
+   "biz_nidaan_wa_inbox.py",
+   "biz_nidaan_wa_orchestrator.py",
+   "biz_nidaan_wa_schedule.py",
+   "biz_nidaan_whatsapp.py",
+   "biz_nurture.py",
+   "biz_payments.py",
+   "biz_pdf.py",
+   "biz_quotes.py",
+   "biz_reminders.py",
+   "biz_resilience.py",
+   "biz_sarathi_tgcrm.py",
+   "biz_sms.py",
+   "biz_tts.py",
+   "biz_video.py",
+   "biz_wa_agent.py",
+   "biz_whatsapp.py",
+   "biz_whatsapp_evolution.py",
+   "biz_whatsapp_safety.py"
+  ]
+ },
+ "needed": [
+  "biz_ai.py",
+  "biz_auth.py",
+  "biz_av_scan.py",
+  "biz_bot.py",
+  "biz_bot_manager.py",
+  "biz_calculators.py",
+  "biz_campaigns.py",
+  "biz_claimshield.py",
+  "biz_database.py",
+  "biz_doc_splitter.py",
+  "biz_email.py",
+  "biz_gdrive.py",
+  "biz_health_monitor.py",
+  "biz_i18n.py",
+  "biz_lapse.py",
+  "biz_marketing.py",
+  "biz_nidaan.py",
+  "biz_nidaan_alarm_policy.py",
+  "biz_nidaan_bot_docs.py",
+  "biz_nidaan_bot_guard.py",
+  "biz_nidaan_buckets.py",
+  "biz_nidaan_capabilities.py",
+  "biz_nidaan_case_state.py",
+  "biz_nidaan_channel_partners.py",
+  "biz_nidaan_claim_access.py",
+  "biz_nidaan_claim_parties.py",
+  "biz_nidaan_claimant.py",
+  "biz_nidaan_crm.py",
+  "biz_nidaan_daily_summary.py",
+  "biz_nidaan_doc_checklist.py",
+  "biz_nidaan_doc_collect.py",
+  "biz_nidaan_doc_intake.py",
+  "biz_nidaan_doc_request.py",
+  "biz_nidaan_guide.py",
+  "biz_nidaan_health_watch.py",
+  "biz_nidaan_inbound.py",
+  "biz_nidaan_login_health.py",
+  "biz_nidaan_notifications.py",
+  "biz_nidaan_notify_policy.py",
+  "biz_nidaan_notify_prefs.py",
+  "biz_nidaan_notify_registry.py",
+  "biz_nidaan_pay_guard.py",
+  "biz_nidaan_payment_watch.py",
+  "biz_nidaan_radar.py",
+  "biz_nidaan_retention.py",
+  "biz_nidaan_stage_guide.py",
+  "biz_nidaan_stats.py",
+  "biz_nidaan_tasks.py",
+  "biz_nidaan_telegram.py",
+  "biz_nidaan_wa_auth.py",
+  "biz_nidaan_wa_brain.py",
+  "biz_nidaan_wa_campaigns.py",
+  "biz_nidaan_wa_charter.py",
+  "biz_nidaan_wa_flow.py",
+  "biz_nidaan_wa_guard.py",
+  "biz_nidaan_wa_identity.py",
+  "biz_nidaan_wa_inbox.py",
+  "biz_nidaan_wa_messages.py",
+  "biz_nidaan_wa_orchestrator.py",
+  "biz_nidaan_wa_schedule.py",
+  "biz_nidaan_whatsapp.py",
+  "biz_nurture.py",
+  "biz_payments.py",
+  "biz_pdf.py",
+  "biz_pexels.py",
+  "biz_platform_bridge.py",
+  "biz_quotes.py",
+  "biz_reminders.py",
+  "biz_resilience.py",
+  "biz_sarathi_tgcrm.py",
+  "biz_sms.py",
+  "biz_tts.py",
+  "biz_video.py",
+  "biz_wa_agent.py",
+  "biz_whatsapp.py",
+  "biz_whatsapp_evolution.py",
+  "biz_whatsapp_safety.py",
+  "sarathi_biz.py"
+ ],
+ "sarathi_pulled": [
+  "biz_bot.py",
+  "biz_nurture.py",
+  "biz_reminders.py",
+  "biz_sarathi_tgcrm.py"
+ ],
+ "unneeded": [
+  "_360_test_v2.py",
+  "_check_divs.py",
+  "_check_js2.py",
+  "_check_js3.py",
+  "_clean_test.py",
+  "_create_nidaan_staff.py",
+  "_db_cleanup.py",
+  "_debug_report.py",
+  "_diag_lapse.py",
+  "_diag_quotes.py",
+  "_e2e_full_test.py",
+  "_e2e_test.py",
+  "_fix_test_phone.py",
+  "_gen_tc_audio.py",
+  "_hunt_vasura.py",
+  "_i18n_audit.py",
+  "_i18n_keys.py",
+  "_prelaunch_test.py",
+  "_regen_audio.py",
+  "_setdob.py",
+  "_smoke_test.py",
+  "_test_api.py",
+  "_test_api2.py",
+  "_test_api3.py",
+  "_test_browser2.py",
+  "_test_browser_flow.py",
+  "_test_correct.py",
+  "_test_email_live.py",
+  "_test_email_live2.py",
+  "_test_full.py",
+  "_test_nurture_e2e.py",
+  "_verify_dark_mode.py",
+  "_verify_deploy.py",
+  "_verify_pdf_photo.py",
+  "biz_sarathi_whatsapp.py",
+  "generate_logos.py",
+  "setup_enterprise_test.py",
+  "test_biz.py",
+  "test_e2e_360.py"
+ ]
+}
