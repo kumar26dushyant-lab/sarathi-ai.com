@@ -1,0 +1,182 @@
+# NidaanPartner.com — the project brief
+
+**Read this first, every session.** It is the standing context for NidaanPartner: what it is,
+how it is built, the rules it is built under, where the work has got to and what comes next.
+
+> Sarathi-AI.com is a **separate product** with its own brief in `CLAUDE.sarathi.md`. The two
+> shared one codebase until 27 September 2026. They no longer do. Do not mix them.
+
+---
+
+## What this is
+
+A **live** insurance-claim legal ERP for **Nidaan Legal India LLP** (Indore). Real claims, real
+staff, real money, real medical documents belonging to real people. Nothing here is a sandbox.
+
+Claimants are mostly **not our customers** — they are the insured person on a claim a branch or
+a subscriber brought to us. They never signed up with us, and they hold the most sensitive data
+in the system with the fewest routes back to us.
+
+**Registered entity:** Nidaan Legal India LLP · 79/A Ranjeet Hanuman Road, Dravid Nagar Colony,
+Scheme 71, Indore, MP 452009 · enquiries@nidaanlegalindia.com · +91 95844 68804 · courts at
+Indore. NidaanPartner.com is its **technology operations wing**, built by GoLuQ.com Digital
+Consultancy.
+
+---
+
+## The founder's rules — these win over speed, always
+
+1. **Never delete data without asking.** Archive, soft-delete, mark inactive. `archived=1` and
+   `deleted_at` exist and are the pattern. A migration that drops a column *is* a deletion.
+2. **Every change strengthens the foundation.** Scalable, not temporary. Fix the cause in one
+   place. Look for the sibling — a change to a shared concept applies at *every* endpoint that
+   does it.
+3. **A check must read an OUTCOME, not a configuration.** "The key is set" is not "email
+   arrives". This has cost two outages.
+4. **Tight security against external attack.** Every new endpoint hostile until proven: auth on
+   the route, authorisation on the record id, validation at the boundary, a rate limit if public.
+   Fail closed. Never log a credential.
+5. **No live deploys while the IST team is working.** Build, test, commit — deploy after 6pm IST
+   or when he says go.
+6. **Mobile first. Both themes. Three languages** (English, Hindi, Hinglish — total conversion,
+   no leftover strings). **Confirm before anything destructive.**
+7. **Tests never reach real people** — `NIDAAN_NO_OUTBOUND=1` on any run against live data.
+8. **Say what is unproven.** Reading the code is not evidence that a message arrived.
+
+---
+
+## How it runs, today
+
+| | |
+|---|---|
+| Host | Oracle Mumbai `161.118.186.201`, `ssh -i ~/.ssh/id_nidaan_oracle ubuntu@…` |
+| App | `nidaan_app.py` — **its own file since 27 Sep 2026** |
+| Web | `nidaan-web@1` / `@2`, ports **8031/8032** |
+| Worker | still the shared `sarathi-worker` — **the last thing not yet split** |
+| Database | `/opt/sarathi/sarathi_biz.db` (SQLite, WAL) |
+| Documents | `/opt/sarathi/uploads`, 1.5 GB, served by nginx directly |
+| Deploy | `git push` → `sudo systemctl start sarathi-deploy.service` |
+| Fallback | 8001/8002 still run the old combined app, warm — revert is one nginx edit |
+
+**Run something with the app's environment without reading secrets:**
+```
+sudo systemd-run --quiet --wait --pipe --collect --uid=sarathi \
+  --property=EnvironmentFile=/opt/sarathi/biz.env \
+  --property=WorkingDirectory=/opt/sarathi /opt/sarathi/venv/bin/python <script>
+```
+**Read the live DB:** `sudo -u sarathi sqlite3 /opt/sarathi/sarathi_biz.db "PRAGMA query_only=1; …"`
+(WAL needs write access, so `mode=ro` fails.)
+
+**Local Python:** `py -3.13` for verifiers, `py -3.14` for async tests (it has aiosqlite, httpx).
+
+---
+
+## The product, in the founder's own model
+
+**Part 1 — intake.** Every correct detail, document and authorisation, up to Consolidation.
+**Part 2 — the assembly line.** Level-2 → Settlement. Less automation, ask-and-manual-trigger.
+
+### The claim pipeline (buckets)
+
+`live` → `pending_draft` → `pending_docs` → `escalation` → **`lokpal`** → `completed` →
+`pending_payment`
+
+Each bucket has **internal statuses**, its own **recorded fields**, and query-raising mechanics.
+All of it is defined in one place: `biz_nidaan_buckets.py`.
+
+**Lokpal** (Insurance Ombudsman), completed 27 Sep 2026 against the founder's drawing:
+- statuses: pending → registered → ann5_pending → ann5_replied → ann6_pending → ann6_replied →
+  **hearing OR consent** (alternatives, never both required) → **award**
+- fields: BHP number *(keeps that name — staff know it; the bracket explains it)*, registration
+  date, Annexure 5/6 number + received + replied, hearing date, consent date, **award number,
+  date and amount**, dispatch POD
+- the award amount is recorded separately from the settlement *because they differ* — the gap
+  between awarded and received is the thing to chase
+
+### Money
+
+`nidaan_payments` is the ledger: **one idempotent row per payment**, whatever the source.
+Revenue reads it. Every new payment path must call `record_payment`.
+
+**Idempotency is on `dedup_key` AND on the event.** A subscription activation arriving by
+webhook and by api_fetch once produced two rows under two keys — ₹11,776 of phantom revenue
+across 14 subscriptions. A row with no `razorpay_payment_id` is a *placeholder*; the real
+payment completes it in place rather than adding a second row.
+
+Nidaan has its **own Razorpay account**: `NIDAAN_RAZORPAY_KEY_ID`, not `RAZORPAY_KEY_ID`.
+
+### Notifications
+
+`biz_nidaan_notify_prefs` resolves who hears what, most specific first:
+**claim × user → user → role → policy → on by default.**
+Money, security and system health **cannot be switched off**. The dashboard bell is **never**
+silenced — turning it off would delete the record of having been told, not stop an interruption.
+Authorisation fails **closed**; notification routing fails **open**. Opposite on purpose.
+
+### The bot
+
+**@NidaanPartnerOpsBot** (`biz_nidaan_telegram.py`, long-polling). Tasks, claims, notes, stage
+changes, approvals, leave, AI, broadcast, voice notes, **document upload** and a **PDF splitter**.
+150 strings × 3 languages. Rate-limited by `biz_nidaan_bot_guard`; claim access by
+`biz_nidaan_claim_access` (fails closed; "not yours" and "no such claim" read identically, or the
+bot becomes a way to enumerate claim numbers).
+
+---
+
+## Scars worth remembering
+
+- **Silent success.** Providers returning 201 and delivering nothing. Check outcomes and leading
+  indicators, never configuration.
+- **A route that disappears does not error.** It is simply gone. `deploy/route-census.py` exists
+  because of this — and it has a known blind spot: routes registered in a *loop* are invisible to
+  it, so check the **running app's** route table, not the source.
+- **A dead button is usually a name that is not there.** `npm run check:pages`, then
+  `verify-ops-buttons.py`.
+- **A bot token was handed to every staff browser** — `/ops-settings` returned the whole settings
+  table and the ops page fetched it to read one value. Credentials are now filtered in the
+  accessor, not in the endpoints.
+- **The ops Telegram bot was owned by a staff member's personal account** and vanished when that
+  account did. BotFather ownership cannot be transferred. Company-owned accounts only.
+- **Git Bash heredocs mangle backslashes, and backticks get executed.** Patch scripts go through
+  a file written by the editor. This has bitten five times.
+
+---
+
+## Checks before every commit
+
+```
+npm run check:all                              # page JS, python names, notifications, routes
+py -3.13 deploy/verify-ops-buttons.py          # no dead or duplicated handlers
+py -3.13 deploy/verify-claim-statuses.py       # one status list, one stylesheet
+py -3.13 deploy/verify-notify-routing.py       # who hears what
+py -3.14 _tools/test_*.py                      # behaviour
+```
+
+---
+
+## Where the work is
+
+**Done and live:** notification controller · Telegram document upload + splitter + Hinglish ·
+claim authorisation · bot rate limits + audit · payment idempotency (₹11,776 corrected) · DPDP
+legal pages with the right entity · Grievance Officer editable from ops · Lokpal bucket completed.
+
+**In flight — the split (`SPLIT_PLAN.md`):** stages 0–5 done. Both products run on their own
+apps. **Stage 6, the worker, is mapped but not executed** — `main()` launches 26 loops and both
+app files still contain all of them, so starting two workers would double-run 19 Nidaan loops.
+`deploy/loop-ownership.json` has the ownership. Then stage 7 (databases — `leads` and
+`system_flags` get copied to Nidaan) and stage 8 (folders and repos).
+
+**Next, agreed with the founder:**
+1. Finish the split — worker, then databases, then the folder move.
+2. **Buckets end to end** through to settlement, the same treatment Lokpal just had.
+3. **`/superadmin` ops is messy** — align it, merge or drop features, make it feel like a modern
+   app.
+4. **A team of monitoring bots** watching each department — logins, payments, the L2 queue —
+   alerting only when a person is actually needed.
+5. **DPDP**, from `COMPLIANCE_DPDP.md`: retention (nothing is ever deleted today), the Gemini
+   transfer is undisclosed, 47 portal links with no consent record, claimants have no route to
+   request anything, no breach procedure, no cookie policy.
+
+**Living documents:** `TODO.md` (per-conversation), `PROJECT_MASTER_CONTEXT.md` (the long
+history), `SPLIT_PLAN.md`, `SPLIT_DECISIONS.md`, `COMPLIANCE_DPDP.md`, `ANNOUNCEMENTS.md`
+(bilingual staff drafts — the founder sends them, never automatically).

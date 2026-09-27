@@ -1,5 +1,17 @@
 # Working rules for NidaanPartner.com and Sarathi-AI.com
 
+> **Two products, two briefs.** This file holds the founder's standing rules, which apply to
+> both. For everything else — what each product is, how it runs, where the work has got to —
+> read the one you are working on:
+>
+> * **[CLAUDE.nidaan.md](CLAUDE.nidaan.md)** — NidaanPartner.com. Live, critical, real claims
+>   and medical documents. This is where the work is.
+> * **[CLAUDE.sarathi.md](CLAUDE.sarathi.md)** — Sarathi-AI.com. No active users; the place
+>   risky changes are rehearsed first.
+>
+> They shared one codebase until 27 September 2026. They no longer do.
+
+
 These are the founder's own standing rules, in his words where it matters. They sit in the repo
 so they survive any session, any assistant, any machine. They are **in addition to** the global
 rules in `~/.claude/CLAUDE.md`, and where they overlap, these are the stricter ones.
