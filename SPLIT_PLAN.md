@@ -183,15 +183,16 @@ unauthenticated, /nidaan/ops returns 200, and /nidaan/* returns 404 on sarathi-a
 
 **What the infrastructure turned out to be**, which no earlier analysis had mapped:
 - **one nginx server block served both domains**, and
-- **one TLS certificate covers all four names** (, , and
-  both ). No new certificate was needed to split traffic - the existing one already
+- **one TLS certificate covers all four names** (`nidaanpartner.com`, `sarathi-ai.com` and both
+  `www` variants). No new certificate was needed to split traffic — the existing one already
   covers both, which is why this step needed no DNS or certbot work at all.
 
-**A flaw in my own safety net, found and fixed here.** The first backup was taken with
- against  - which is a **symlink**. That copied the
-link, not the file, so the "backup" pointed at the very file being edited. A backup that
-tracks its own original is not a backup.
+**A flaw in my own safety net, found and fixed here.** The first backup was taken with `cp -a`
+against `/etc/nginx/sites-enabled/sarathi` — which is a **symlink**. That copied the link, not
+the file, so the "backup" pointed at the very file being edited. A backup that tracks its own
+original is not a backup, and I would have found that out at the worst possible moment.
 
 Fixed, and then the revert path was **proven rather than assumed**: the reconstructed original
-was loaded into nginx and validated with  before the working config was put back. An
-untested restore is a belief.
+was loaded into nginx and validated with `nginx -t` before the working config was put back. An
+untested restore is a belief — the same rule already written down for the database backups, and
+apparently worth writing down twice.
