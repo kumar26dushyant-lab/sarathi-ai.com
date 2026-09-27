@@ -60,6 +60,33 @@ check("...and it names an LLP as the data fiduciary", "LLP" in np)
 check("...and gives somewhere to complain", re.search(r"[\w.+-]+@[\w.-]+", np) is not None)
 check("the Sarathi policy does not name Nidaan either", "Nidaan" not in sp)
 
+# ── the entity, the office, and who to write to ─────────────────────────────
+print()
+LLP = "Nidaan Legal India LLP"
+MAIL = "enquiries@nidaanlegalindia.com"
+nt = io.open(os.path.join(ROOT, "static", "nidaan_terms.html"), encoding="utf-8").read()
+for name, page in (("privacy", np), ("terms", nt)):
+    check("%-7s names the registered entity" % name, LLP in page)
+    check("%-7s   and NOT the old one" % name, "The Legal Consultants LLP" not in page)
+    check("%-7s   publishes the registered office" % name, "452009" in page)
+    check("%-7s   and a phone number" % name, "95844 68804" in page)
+    check("%-7s   routes legal contact to the LLP, not the product inbox" % name, MAIL in page)
+    check("%-7s   says NidaanPartner is the technology wing" % name,
+          "GoLuQ.com Digital Consultancy" in page)
+check("privacy names a Grievance Officer route", "Grievance Officer" in np)
+check("...with a response time somebody can be held to",
+      "72 hours" in np and "30 days" in np)
+check("terms names Indore as the jurisdiction", "Indore" in nt)
+
+# A company name spelled two ways is not a name.
+import glob
+wrong = [os.path.basename(f) for f in glob.glob(os.path.join(ROOT, "static", "*.html"))
+         if "The Legal Consultants LLP" in io.open(f, encoding="utf-8").read()]
+check("no page anywhere still shows the old entity name", not wrong, wrong)
+bad = [os.path.basename(f) for f in glob.glob(os.path.join(ROOT, "static", "*.html"))
+       if re.search(r"Digital Consultant(?!cy)", io.open(f, encoding="utf-8").read())]
+check("the developer is 'Digital Consultancy' on every page", not bad, bad)
+
 print("\n" + ("%d failed" % FAILED if FAILED
-              else "each site answers for itself, and neither speaks for the other"))
+              else "each site answers for itself, and the right company answers for Nidaan"))
 sys.exit(1 if FAILED else 0)
