@@ -1,0 +1,17774 @@
+# -*- coding: utf-8 -*-
+# NidaanPartner.com - the application, on its own.
+#
+# Built from sarathi_biz.py by deploy/extract-nidaan-app.py, SUBTRACTIVELY: a copy of
+# the file that works today, with only the provably Sarathi-only definitions removed.
+# Source order is untouched, so every definition still precedes its use and every
+# module-level side effect still happens in the order it always did.
+#
+# Do not hand-edit while the split is in progress - re-run the extractor.
+# =============================================================================
+#  sarathi_biz.py — Sarathi Smart Business Solutions: Main Entry Point
+# =============================================================================
+#
+#  Run this file to start the complete Financial Advisor CRM system:
+#    1. FastAPI web server — calculator pages, dashboard, API, PDF server
+#    2. Telegram CRM bot — agent interface for sales cycle
+#    3. Background scheduler — birthday/renewal/follow-up reminders
+#
+#  Usage:
+#    py -3.12 sarathi_biz.py
+#
+# =============================================================================
+
+import asyncio
+import io
+import json
+import logging
+import os
+import platform
+import random
+import re
+import signal
+import subprocess
+import sys
+import time as _time
+import uuid
+from pathlib import Path
+
+import aiosqlite
+
+from dotenv import load_dotenv
+from fastapi import FastAPI, Request, Query, Depends, HTTPException, Response, UploadFile, File, Form, WebSocket, WebSocketDisconnect
+from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, ConfigDict, Field
+from typing import Optional, List
+from email.utils import formatdate
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.middleware import SlowAPIMiddleware
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from starlette.middleware.cors import CORSMiddleware
+import mimetypes
+import uvicorn
+
+# Register PWA MIME types that Python stdlib may not know about
+mimetypes.add_type("application/manifest+json", ".webmanifest")
+mimetypes.add_type("application/javascript", ".js")
+
+import biz_database as db
+import biz_bot as bot
+import biz_calculators as calc
+import biz_whatsapp as wa
+import biz_pdf as pdf
+import biz_reminders as reminders
+import biz_bot_manager as botmgr
+import biz_payments as payments
+import biz_auth as auth
+import biz_email as email_svc
+import biz_gdrive as gdrive
+import biz_campaigns as campaigns
+import biz_resilience as resilience
+import biz_sms as sms
+import biz_whatsapp_evolution as wa_evo
+import biz_whatsapp_safety as wa_safety
+import biz_nidaan as nidaan
+import biz_nidaan_radar as radar
+import biz_doc_splitter as docsplit
+import biz_nidaan_claimant as claimant
+import biz_nidaan_telegram as tg
+import biz_sarathi_tgcrm as tgcrm
+import biz_wa_agent as wa_agent
+import biz_nidaan_login_health as _login_health
+
+# Public base URL for Nidaan (deep links + Telegram webhook registration).
+NIDAAN_BASE_URL = os.getenv("NIDAAN_BASE_URL", "https://nidaanpartner.com")
+
+# =============================================================================
+#  LOGGING
+# =============================================================================
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s  %(name)-22s  %(levelname)-7s  %(message)s",
+    datefmt="%H:%M:%S",
+)
+# SECURITY: httpx/httpcore log every request URL at INFO. Meta's Graph API takes the WhatsApp
+# access token as a QUERY PARAMETER, so those lines wrote a live send-as-NidaanPartner
+# credential into the systemd journal (and therefore into any log backup or shipper). Anyone
+# with log access could then message our customers as us. Warnings and errors still surface;
+# only the request-URL chatter is silenced.
+for _noisy in ("httpx", "httpcore", "urllib3", "openai", "google_genai", "google.genai"):
+    logging.getLogger(_noisy).setLevel(logging.WARNING)
+logger = logging.getLogger("sarathi.biz")
+
+
+# Third-party libraries put the credential they were handed straight into their error messages.
+# python-telegram-bot's InvalidToken was writing a live bot token into journald in plaintext on
+# every worker restart. A log line is not a safe place for a secret: it is readable by anyone with
+# log access, retained for as long as the journal is, and swept up by anything that ships logs.
+#
+# The last 6 characters are kept so two tokens can be told apart in a bug report; that is not
+# enough to use one. Patterns are deliberately shape-based rather than name-based - a secret does
+# not announce itself.
+_SECRET_SHAPES = [
+    re.compile(r"\b\d{8,12}:[A-Za-z0-9_-]{30,}"),        # Telegram bot token
+    re.compile(r"\brzp_(?:live|test)_[A-Za-z0-9]{10,}"),  # Razorpay key id
+    re.compile(r"\b[A-Za-z0-9_-]{32,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}"),  # JWT
+]
+
+
+def _scrub_secrets(text: str) -> str:
+    """Replace anything shaped like a credential with its last 6 characters."""
+    out = text or ""
+    for pat in _SECRET_SHAPES:
+        out = pat.sub(lambda m: "***REDACTED***" + m.group(0)[-6:], out)
+    return out
+
+# ── Control-center error ring buffer: keep the most recent WARNING+ log records
+# in memory so the superadmin can see what's failing without shell access. ──────
+import collections as _collections
+_ERROR_RING = _collections.deque(maxlen=300)
+
+
+class _RingHandler(logging.Handler):
+    def emit(self, record):
+        try:
+            if record.levelno < logging.WARNING:
+                return
+            _ERROR_RING.append({
+                "ts": getattr(record, "created", None),
+                "level": record.levelname,
+                "logger": record.name,
+                "msg": record.getMessage()[:600],
+                "where": f"{record.module}:{record.lineno}",
+            })
+        except Exception:
+            pass
+
+
+try:
+    _rh = _RingHandler()
+    _rh.setLevel(logging.WARNING)
+    logging.getLogger().addHandler(_rh)   # root → catches all module loggers
+except Exception:
+    pass
+
+# =============================================================================
+#  LOAD ENVIRONMENT
+# =============================================================================
+
+load_dotenv("biz.env")
+
+SERVER_HOST = os.getenv("SERVER_HOST", "0.0.0.0")
+SERVER_PORT = int(os.getenv("SERVER_PORT", "8000"))
+SERVER_URL = os.getenv("SERVER_URL", f"http://localhost:{SERVER_PORT}")
+
+# Process role for zero-downtime (blue-green) deploys:
+#   full   — everything (DEFAULT, = legacy single-process behaviour)
+#   worker — the in-process SINGLETONS only (Telegram master+tenant bots,
+#            reminder scheduler, plan-change applier). Exactly ONE worker runs.
+#   web    — HTTP only, NO singletons → safe to run 2+ behind nginx and
+#            blue-green rolling-restart without double bots / double schedulers.
+# Unset → 'full' so existing deployments behave exactly as before until the new
+# systemd units (which set APP_ROLE) are installed.
+APP_ROLE = os.getenv("APP_ROLE", "full").strip().lower()
+RUN_SINGLETONS = APP_ROLE in ("full", "worker")
+
+# =============================================================================
+#  FASTAPI APP
+# =============================================================================
+
+app = FastAPI(
+    title="Sarathi-AI Business Technologies",
+    description="AI-Powered Multi-tenant Financial Advisor CRM SaaS — Calculators, Reports, Lead Management",
+    version="3.0.0",
+    docs_url=None,
+    redoc_url=None,
+)
+
+
+# ── Background-task safety net ────────────────────────────────────────────────
+# Fire-and-forget `asyncio.create_task(...)` (used widely for notification dispatch)
+# swallows exceptions into an "unretrieved future" warning that is easy to miss — an
+# aiosqlite.Row.get() bug in on_quick_task_mention silently stopped @mention Telegram/
+# email alerts before it was noticed. This handler turns ANY unhandled background-task
+# exception into a loud ERROR with a full traceback, so such failures surface at once.
+def _log_background_task_exception(loop, context):
+    exc = context.get("exception")
+    msg = context.get("message") or "background task error"
+    if exc is not None:
+        logger.error("⚠️ UNHANDLED BACKGROUND TASK: %s", msg,
+                     exc_info=(type(exc), exc, exc.__traceback__))
+    else:
+        logger.error("⚠️ UNHANDLED BACKGROUND TASK: %s", msg)
+
+
+@app.on_event("startup")
+async def _install_bg_exception_handler():
+    try:
+        asyncio.get_running_loop().set_exception_handler(_log_background_task_exception)
+        logger.info("🛡️  Background-task exception handler installed")
+
+        # The guardian runs in the WORKER. If the worker dies, nothing would ever be heard from it
+        # again - so every web process checks its heartbeat. The incident key is fixed, so two web
+        # processes checking cannot raise two alerts.
+        async def payment_guardian_heartbeat_loop():
+            import biz_nidaan_pay_guard as _pg
+            await asyncio.sleep(420)
+            while True:
+                try:
+                    await _pg.heartbeat_check()
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.info("payment guardian heartbeat check failed: %s", e)
+                await asyncio.sleep(600)
+        if os.getenv("APP_ROLE", "web") == "web":
+            asyncio.create_task(payment_guardian_heartbeat_loop())
+    except Exception as _e:
+        logger.warning("Could not install bg exception handler: %s", _e)
+    # Seed the DB-backed Nidaan plan config (idempotent) so plans become editable in ops.
+    try:
+        await nidaan.seed_plans_config()
+    except Exception as _pe:
+        logger.warning("nidaan plan-config seed failed: %s", _pe)
+    # Seed canonical content facts (idempotent) — single source for chat KB + homepage.
+    try:
+        await nidaan.seed_content_config()
+    except Exception as _ce:
+        logger.warning("nidaan content-config seed failed: %s", _ce)
+    # Seed go/no-go review templates (idempotent).
+    try:
+        await nidaan.seed_review_templates()
+    except Exception as _rte:
+        logger.warning("nidaan review-templates seed failed: %s", _rte)
+    # Sarathi Telegram Voice CRM — self-contained additive schema (idempotent).
+    try:
+        await tgcrm.ensure_schema()
+    except Exception as _tge:
+        logger.warning("tgcrm schema init failed: %s", _tge)
+
+# ── Rate Limiting ────────────────────────────────────────────────────────────
+# IMPORTANT: SlowAPIMiddleware must be added below for @limiter.limit decorators
+# to actually fire. Without it, the decorators are silently inert. Discovered
+# during Sprint E.2 hardening (2026-06-11) — every "rate limited" endpoint was
+# wide open until this line was added.
+limiter = Limiter(key_func=get_remote_address, default_limits=["200/minute"])
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
+
+# ── CORS ─────────────────────────────────────────────────────────────────────
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        SERVER_URL,
+        "http://localhost:8001",
+        "http://127.0.0.1:8001",
+        "https://nidaanpartner.com",
+        "https://www.nidaanpartner.com",
+    ],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
+)
+
+# ── Request timing (latency profiling) ───────────────────────────────────────
+# Logs any request slower than the threshold and exposes per-request timing via an
+# X-Response-Time-ms response header (visible in browser devtools Network tab), so the
+# post-login "buffering" can be traced to the exact slow endpoint.
+@app.middleware("http")
+async def _timing_middleware(request: Request, call_next):
+    _start = _time.perf_counter()
+    response = await call_next(request)
+    _ms = (_time.perf_counter() - _start) * 1000.0
+    if _ms > 800:
+        logger.warning("⏱️ SLOW %.0fms %s %s", _ms, request.method, request.url.path)
+    try:
+        _lp = request.url.path
+        if not (_lp.startswith("/static") or _lp.startswith("/uploads") or _lp == "/health"
+                or _lp.endswith("/api/health")):
+            _LATENCY_RING.append(_ms)
+    except Exception:
+        pass
+    try:
+        response.headers["X-Response-Time-ms"] = f"{_ms:.0f}"
+    except Exception:
+        pass
+    return response
+
+
+# ── Server Start Time (for uptime) ──────────────────────────────────────────
+SERVER_START_TIME = _time.time()
+
+# ── App-Health read-only metrics: latency ring + system snapshot ─────────────
+from collections import deque as _deque
+_LATENCY_RING = _deque(maxlen=600)   # recent app-request durations (ms)
+
+def _latency_stats() -> dict:
+    vals = list(_LATENCY_RING)
+    if not vals:
+        return {"count": 0}
+    s = sorted(vals); n = len(s)
+    def _pct(p): return s[min(n - 1, int(n * p))]
+    return {"count": n, "avg_ms": round(sum(s) / n), "p50_ms": round(_pct(0.5)),
+            "p95_ms": round(_pct(0.95)), "max_ms": round(s[-1])}
+
+def _system_metrics() -> dict:
+    """Read-only host snapshot for the super-admin App Health panel (no side effects)."""
+    import os as _os, shutil as _shutil
+    m = {}
+    try: m["uptime_sec"] = int(_time.time() - SERVER_START_TIME)
+    except Exception: pass
+    try:
+        la = _os.getloadavg()
+        m["load"] = {"m1": round(la[0], 2), "m5": round(la[1], 2), "m15": round(la[2], 2)}
+        m["cpu_count"] = _os.cpu_count()
+    except Exception: pass
+    try: m["db_mb"] = round(_os.path.getsize(db.DB_PATH) / 1048576, 1)
+    except Exception: pass
+    try:
+        du = _shutil.disk_usage(".")
+        m["disk"] = {"used_pct": round(du.used / du.total * 100, 1), "free_gb": round(du.free / 1073741824, 1)}
+    except Exception: pass
+    try:
+        info = {}
+        with open("/proc/meminfo") as _f:
+            for _line in _f:
+                _k, _v = _line.split(":", 1); info[_k.strip()] = int(_v.strip().split()[0])
+        _t = info.get("MemTotal", 0); _a = info.get("MemAvailable", 0)
+        if _t: m["mem"] = {"used_pct": round((_t - _a) / _t * 100, 1), "total_gb": round(_t / 1048576, 1)}
+    except Exception: pass
+    return m
+
+# ── Security Headers Middleware ──────────────────────────────────────────────
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(self), geolocation=(), identity-credentials-get=(self)"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    # Allow Google Sign-In popup (window.opener.postMessage) — without this, GIS popup hangs 60s+
+    response.headers["Cross-Origin-Opener-Policy"] = "same-origin-allow-popups"
+    # NOTE: Content-Security-Policy is set by nginx (a full policy: default-src 'self',
+    # pinned script/style/font/connect/frame hosts, form-action 'self', object-src 'none',
+    # base-uri 'self', frame-ancestors 'self', upgrade-insecure-requests). Deliberately NOT
+    # duplicated here — two CSP headers make the browser enforce the intersection, which only
+    # makes future debugging confusing. Audited 2026-09-04: nginx policy verified live.
+    if request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    return response
+
+
+# ── Error Capture Middleware — auto-logs 5xx to system_events ────────────────
+@app.middleware("http")
+async def error_capture_middleware(request: Request, call_next):
+    try:
+        response = await call_next(request)
+        if response.status_code >= 500:
+            try:
+                ip = request.client.host if request.client else None
+                await db.add_system_event(
+                    event_type="error", severity="high", category="api",
+                    title=f"HTTP {response.status_code} on {request.method} {request.url.path}",
+                    detail=f"Query: {str(request.query_params)[:500]}",
+                    ip_address=ip)
+            except Exception:
+                pass
+        return response
+    except Exception as exc:
+        try:
+            ip = request.client.host if request.client else None
+            await db.add_system_event(
+                event_type="error", severity="critical", category="api",
+                title=f"Unhandled exception on {request.method} {request.url.path}",
+                detail=f"{type(exc).__name__}: {str(exc)[:500]}",
+                ip_address=ip)
+        except Exception:
+            pass
+        raise
+
+
+# ── Subscription Enforcement Middleware ──────────────────────────────────────
+# Checks subscription status on authenticated API routes. Expired tenants
+# can still access: auth, payments, subscription, health, signup, affiliate,
+# support, and webhook endpoints (so they can renew/pay/get help).
+_SUB_EXEMPT_PREFIXES = (
+    "/api/auth/", "/api/payments/", "/api/subscription/",
+    "/api/signup", "/api/affiliate/", "/api/support/",
+    "/api/sa/", "/api/admin/tenants", "/api/admin/stats",
+    "/api/admin/bots", "/api/bot-setup/",
+    "/api/calc/", "/api/report/",
+    "/webhook", "/health", "/api/onboarding/",
+)
+
+@app.middleware("http")
+async def subscription_enforcement_middleware(request: Request, call_next):
+    """Server-side subscription enforcement on all /api/ routes.
+    Expired tenants get 403 on CRM endpoints but can still auth/pay/get help."""
+    path = request.url.path
+    # Only enforce on /api/ routes that aren't exempt
+    if path.startswith("/api/") and not any(path.startswith(p) for p in _SUB_EXEMPT_PREFIXES):
+        tenant = await auth.get_optional_tenant(request)
+        if tenant and tenant.get('tenant_id'):
+            active = await db.check_subscription_active(tenant['tenant_id'])
+            if not active:
+                return JSONResponse(
+                    {"detail": "Your subscription has expired. "
+                               "Please renew at sarathi-ai.com to continue.",
+                     "code": "subscription_expired"},
+                    status_code=403)
+    return await call_next(request)
+
+
+@app.middleware("http")
+async def impersonation_audit_middleware(request: Request, call_next):
+    """Log all write operations performed under SA impersonation tokens."""
+    response = await call_next(request)
+    path = request.url.path
+    method = request.method
+    # Only audit write operations on API routes
+    if method in ("POST", "PUT", "PATCH", "DELETE") and path.startswith("/api/"):
+        try:
+            token = auth._extract_token(request)
+            if token:
+                import jwt as _jwt
+                payload = _jwt.decode(token, auth.JWT_SECRET, algorithms=[auth.JWT_ALGORITHM])
+                if payload.get("imp"):
+                    tenant_id = int(payload.get("sub", 0))
+                    await db.add_audit_log(
+                        tenant_id, None, "sa_imp_action",
+                        f"[IMP] {method} {path} → {response.status_code}")
+        except Exception:
+            pass  # Don't block requests on audit failures
+    return response
+
+
+async def _doc_download_name(stored_name: str) -> str:
+    """The name this file had when somebody uploaded it, ready for a Content-Disposition header.
+
+    Returns "" when there is nothing safe or useful to say, and the header is then left as a bare
+    attachment exactly as before - a download with an ugly name beats a download that fails.
+
+    Quotes, backslashes and control characters are stripped rather than escaped: this value goes
+    into a response header, and a filename is never worth a header-injection risk.
+    """
+    try:
+        import aiosqlite as _sq
+        async with _sq.connect(db.DB_PATH) as c:
+            row = await (await c.execute(
+                "SELECT original_name FROM nidaan_claim_documents WHERE stored_name=? LIMIT 1",
+                (stored_name,))).fetchone()
+        name = (row[0] if row else "") or ""
+    except Exception:
+        return ""
+    name = "".join(ch for ch in name if ch.isprintable() and ch not in '"\\')
+    name = name.replace("\r", "").replace("\n", "").strip().strip(".")
+    if not name or name in (".", ".."):
+        return ""
+    return name[:150]
+
+
+@app.middleware("http")
+async def nidaan_doc_access_guard(request: Request, call_next):
+    """Gate direct access to uploaded Nidaan claim documents. The files sit under
+    the public /uploads mount, but are served only via short-lived signed URLs
+    handed out by the ownership-checked document APIs. A raw, expired, or forged
+    link is refused — defence in depth over the unguessable UUID filename."""
+    path = request.url.path
+    if path.startswith("/uploads/nidaan-docs/"):
+        stored_name = path.rsplit("/", 1)[-1]
+        if not _verify_doc_sig(stored_name,
+                               request.query_params.get("exp", ""),
+                               request.query_params.get("sig", "")):
+            return JSONResponse(
+                {"detail": "This document link is invalid or has expired. Please reopen it from your dashboard."},
+                status_code=403)
+        # Valid signed request → serve, but keep it out of any shared cache.
+        response = await call_next(request)
+        response.headers["Cache-Control"] = "private, no-store"
+        # Never let an uploaded file RENDER on our origin. Even with the extension now derived
+        # from the file's own bytes, forcing a download means a crafted upload can't become
+        # stored XSS against a staff session — it can only be saved to disk. nosniff stops the
+        # browser second-guessing the type, and an empty sandbox drops any inherited privileges.
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        # The in-app viewer may ask to SEE a PDF rather than download it. Granted only for .pdf,
+        # and the extension is derived from the file's own first bytes at upload - never from
+        # its name - so this is a real PDF. nosniff pins the type: the browser can only hand it
+        # to its PDF viewer, which runs apart from our pages, never parse it as a page of ours.
+        # (Chrome's viewer will not draw under a sandbox CSP, so frame-ancestors alone here.)
+        # Everything else, and every request that does not ask, still downloads.
+        # THE NAME THE FILE ARRIVED WITH. Without a filename= the browser falls back to the last
+        # path segment, which is the storage UUID - staff were saving f79a2278d2b8....pdf instead
+        # of NP-65_rejection_letter.pdf. RFC 5987 (filename*) carries Hindi or accented names
+        # intact; the plain filename= stays as an ASCII fallback for older clients.
+        _dl = await _doc_download_name(stored_name)
+        if _dl:
+            from urllib.parse import quote as _q
+            _ascii = _dl.encode("ascii", "replace").decode("ascii").replace("?", "_")
+            _fn = '; filename="%s"; filename*=UTF-8\'\'%s' % (_ascii, _q(_dl))
+        else:
+            _fn = ""
+        if (request.query_params.get("inline") == "1"
+                and stored_name.lower().endswith(".pdf")):
+            response.headers["Content-Disposition"] = "inline" + _fn
+            response.headers["Content-Security-Policy"] = "frame-ancestors 'self'"
+        else:
+            response.headers["Content-Disposition"] = "attachment" + _fn
+            response.headers["Content-Security-Policy"] = "sandbox; default-src 'none'"
+        return response
+    return await call_next(request)
+
+# Mount static directory for calculator & dashboard HTML
+static_dir = Path(__file__).parent / "static"
+static_dir.mkdir(exist_ok=True)
+app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+# Mount generated PDFs directory
+pdf_dir = Path(__file__).parent / "generated_pdfs"
+pdf_dir.mkdir(exist_ok=True)
+app.mount("/reports", StaticFiles(directory=str(pdf_dir)), name="reports")
+
+# Mount uploads directory for agent profile photos
+uploads_dir = Path(__file__).parent / "uploads" / "photos"
+uploads_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(Path(__file__).parent / "uploads")), name="uploads")
+
+
+# =============================================================================
+#  PWA — Service Worker & Manifest (must be served from root scope)
+# =============================================================================
+
+@app.get("/sw.js")
+async def service_worker():
+    return FileResponse(static_dir / "sw.js", media_type="application/javascript",
+                        headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": "/"})
+
+@app.get("/manifest.json")
+async def manifest():
+    return FileResponse(static_dir / "manifest.json", media_type="application/manifest+json")
+
+
+# =============================================================================
+#  WEB PAGES
+# =============================================================================
+
+def _is_nidaan_host(request: Request) -> bool:
+    """Return True when the request is for nidaanpartner.com (any env)."""
+    host = request.headers.get("host", "").lower().split(":")[0]
+    return host in ("nidaanpartner.com", "www.nidaanpartner.com")
+
+
+@app.get("/", response_class=HTMLResponse)
+async def home(request: Request):
+    """Serve Nidaan homepage on nidaanpartner.com; Sarathi homepage everywhere else."""
+    if _is_nidaan_host(request):
+        nidaan_file = static_dir / "nidaan_index.html"
+        if nidaan_file.exists():
+            return HTMLResponse(nidaan_file.read_text(encoding="utf-8"))
+        return HTMLResponse("<h1>Nidaan homepage not found</h1>", status_code=404)
+    index_file = static_dir / "index.html"
+    if index_file.exists():
+        return HTMLResponse(index_file.read_text(encoding="utf-8"))
+    return HTMLResponse("<h1>Homepage not found</h1>", status_code=404)
+
+
+@app.get("/preview", response_class=HTMLResponse)
+async def nidaan_home_preview(request: Request):
+    """PRIVATE preview of a redesigned Nidaan homepage — NOT linked from the live site,
+    served only so the owner can review the sample before it replaces the live homepage."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    f = static_dir / "nidaan_index_sample.html"
+    if f.exists():
+        return HTMLResponse(f.read_text(encoding="utf-8"),
+                            headers={"Cache-Control": "no-cache"})
+    return HTMLResponse("<h1>Preview not found</h1>", status_code=404)
+
+
+@app.get("/login", response_class=HTMLResponse)
+async def sarathi_login_page(request: Request):
+    """Dedicated Sarathi sign-in page (the installed app's logged-out landing).
+    Web visitors still get the marketing homepage at '/'."""
+    if _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    f = static_dir / "login.html"
+    if f.exists():
+        return HTMLResponse(f.read_text(encoding="utf-8"),
+                            headers={"Cache-Control": "no-cache"})
+    return HTMLResponse("<h1>Login page not found</h1>", status_code=404)
+
+
+@app.get("/onboarding", response_class=HTMLResponse)
+async def onboarding_page():
+    """Post-signup onboarding wizard — connect Telegram, WhatsApp, branding."""
+    ob_file = static_dir / "onboarding.html"
+    if ob_file.exists():
+        return HTMLResponse(ob_file.read_text(encoding="utf-8"))
+    return HTMLResponse("<h1>Onboarding page not found</h1>", status_code=404)
+
+
+# =============================================================================
+#  NIDAAN PHASE 2 — PAGES + API
+# =============================================================================
+
+# One validator per file, recomputed only when the file on disk changes. Hashing 1.25 MB on
+# every page load would trade network time for CPU time, which is not a trade worth making.
+_PAGE_ETAG: dict = {}
+
+
+def _page_etag(f) -> str:
+    st = f.stat()
+    hit = _PAGE_ETAG.get(str(f))
+    if hit and hit[0] == st.st_mtime and hit[1] == st.st_size:
+        return hit[2]
+    import hashlib
+    tag = '"%s"' % hashlib.sha256(f.read_bytes()).hexdigest()[:24]
+    _PAGE_ETAG[str(f)] = (st.st_mtime, st.st_size, tag)
+    return tag
+
+
+def _etag_matches(header: str, etag: str) -> bool:
+    """Does the browser already hold this exact version?
+
+    nginx and Cloudflare both WEAKEN an ETag when they compress the body, so what comes back is
+    `W/"abc"` for the `"abc"` we sent. Comparing those as strings never matches, and a validator
+    nobody can match is a validator that does nothing - the page would be re-sent in full for
+    ever while looking correct.
+    """
+    want = etag.strip()
+    if want.startswith("W/"):
+        want = want[2:]
+    for part in (header or "").split(","):
+        got = part.strip()
+        if got.startswith("W/"):
+            got = got[2:]
+        if got and (got == want or got == "*"):
+            return True
+    return False
+
+
+def _nidaan_page(filename: str, request: Optional[Request] = None):
+    f = static_dir / filename
+    if not f.exists():
+        return HTMLResponse(f"<h1>{filename} not found</h1>", status_code=404)
+    # `no-cache` is NOT `no-store`: the browser still asks us every single time, so a deploy is
+    # picked up on the next load exactly as it was under no-store. What changes is that an
+    # unchanged page costs a 304 instead of 320 KB. The ops page is 1.25 MB of one file.
+    #
+    # BOTH validators go out, and that is not belt-and-braces. Checked live on 22 Sep: Cloudflare
+    # re-compresses this page with Brotli and STRIPS the ETag when it does, so on its own the
+    # ETag never reaches a browser and every load is the full page again. Last-Modified survives
+    # the transform. A browser answers with whichever one it was given.
+    etag = _page_etag(f)
+    lastmod = formatdate(f.stat().st_mtime, usegmt=True)
+    headers = {"Cache-Control": "no-cache, must-revalidate", "ETag": etag,
+               "Last-Modified": lastmod, "Vary": "Accept-Encoding"}
+    if request is not None:
+        inm = request.headers.get("if-none-match", "")
+        ims = (request.headers.get("if-modified-since", "") or "").strip()
+        # If-None-Match wins when it is present at all: it is the more precise of the two, and a
+        # browser that sends it has the exact version in hand.
+        fresh = _etag_matches(inm, etag) if inm else (bool(ims) and ims == lastmod)
+        if fresh:
+            return Response(status_code=304, headers=headers)
+    return HTMLResponse(f.read_text(encoding="utf-8"), headers=headers)
+
+
+def _nidaan_ops_page_with_role(role: str) -> HTMLResponse:
+    """Serve nidaan_ops.html with intended_role injected as a JS variable.
+    The frontend enforces that the logged-in user's role matches this role.
+    """
+    f = static_dir / "nidaan_ops.html"
+    if not f.exists():
+        return HTMLResponse("<h1>nidaan_ops.html not found</h1>", status_code=404)
+    html = f.read_text(encoding="utf-8")
+    # Inject intended_role before closing </head> tag
+    inject = f'<script>window._INTENDED_ROLE = "{role}";</script>'
+    html = html.replace("</head>", inject + "\n</head>", 1)
+    # NOTE: nothing calls this today — both /nidaan/ops and /admin serve the page through
+    # _nidaan_page(), which already sends these headers. Kept in step with that function so the
+    # two cannot drift if this one is ever wired up: the whole ops app is this single file, so a
+    # cached copy means a staffer silently runs an old build with panels missing.
+    return HTMLResponse(html, headers={"Cache-Control": "no-cache, no-store, must-revalidate",
+                                       "Pragma": "no-cache", "Expires": "0"})
+
+
+def _nidaan_bearer(request: Request) -> Optional[dict]:
+    """Extract and verify Nidaan JWT from Authorization header."""
+    h = request.headers.get("Authorization", "")
+    if h.startswith("Bearer "):
+        return nidaan.verify_nidaan_token(h[7:])
+    return None
+
+
+# ── Nidaan Razorpay credentials (SEPARATE account from Sarathi) ──────────────
+# Nidaan money settles to its own bank via its own Razorpay account. These helpers
+# return the Nidaan-specific keys, FALLING BACK to the shared RAZORPAY_* keys until
+# NIDAAN_RAZORPAY_* are set in biz.env — so this is a zero-change staged rollout:
+# Nidaan flips to its own account the moment those keys are added. Sarathi payments
+# (biz_payments.py + Sarathi endpoints) always use RAZORPAY_* and are unaffected.
+def _nidaan_rzp_id() -> str:
+    return os.getenv("NIDAAN_RAZORPAY_KEY_ID") or os.getenv("RAZORPAY_KEY_ID", "")
+def _nidaan_rzp_secret() -> str:
+    return os.getenv("NIDAAN_RAZORPAY_KEY_SECRET") or os.getenv("RAZORPAY_KEY_SECRET", "")
+def _nidaan_rzp_webhook_secret() -> str:
+    return os.getenv("NIDAAN_RAZORPAY_WEBHOOK_SECRET") or os.getenv("RAZORPAY_WEBHOOK_SECRET", "")
+
+
+async def _nidaan_payment_captured(payment_id: str) -> bool:
+    """Authoritative payment check: a valid Razorpay SIGNATURE only proves the payment was
+    created/authorized — NOT that money was actually collected. A UPI/pending payment can carry
+    a valid signature yet never capture. So before we mark anything paid on a dashboard, confirm
+    the payment status is 'captured' straight from Razorpay. Fail-CLOSED (return False on any
+    doubt) — the webhook (payment.captured) + recovery poll will finalize a genuine late capture."""
+    pid = (payment_id or "").strip()
+    if not pid or len(pid) > 60:
+        return False
+    rzp_id, rzp_secret = _nidaan_rzp_id(), _nidaan_rzp_secret()
+    if not rzp_id or not rzp_secret:
+        return False
+    import httpx as _hxc
+    try:
+        async with _hxc.AsyncClient() as _cl:
+            r = await _cl.get(f"https://api.razorpay.com/v1/payments/{pid}",
+                              auth=(rzp_id, rzp_secret), timeout=15.0)
+        return (r.json() or {}).get("status") == "captured"
+    except Exception as _e:
+        logger.warning("payment capture-check failed for %s: %s", pid, _e)
+        return False
+
+
+async def _nidaan_account_from_payload(payload: Optional[dict]) -> Optional[dict]:
+    """Resolve the Nidaan account from a verified token payload. Prefers the account_id
+    (`sub`) so accounts WITHOUT an email still resolve; falls back to the token email for
+    older tokens. Behaviour-preserving for existing email accounts (same row either way)."""
+    if not payload:
+        return None
+    aid = payload.get("sub")
+    if aid:
+        acct = await nidaan.get_account_by_id(int(aid))
+        if acct:
+            return acct
+    em = payload.get("email")
+    if em:
+        return await nidaan.get_account_by_email(em)
+    return None
+
+
+# ── Page routes ───────────────────────────────────────────────────────────────
+
+@app.get("/google3df0c6b7c9115ee9.html", response_class=PlainTextResponse, include_in_schema=False)
+async def google_search_console_verify(request: Request):
+    """Google Search Console HTML-file verification for nidaanpartner.com.
+    (A <meta google-site-verification> tag is also present on the homepage; either
+    method verifies the property.)"""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    return "google-site-verification: google3df0c6b7c9115ee9.html"
+
+
+@app.get("/nidaan/start", response_class=HTMLResponse)
+async def nidaan_start_page(request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    return _nidaan_page("nidaan_start.html", request)
+
+
+@app.get("/nidaan/about", response_class=HTMLResponse)
+async def nidaan_about_page(request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    return _nidaan_page("nidaan_about.html", request)
+
+
+@app.get("/nidaan/privacy", response_class=HTMLResponse)
+async def nidaan_privacy_page(request: Request):
+    """NidaanPartner's own privacy policy. The footer of every Nidaan page linked here but the
+    route did not exist (404) — and /privacy serves the Sarathi-AI policy, which is the wrong
+    entity for a legal-services LLP handling medical records."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    return _nidaan_page("nidaan_privacy.html", request)
+
+
+@app.get("/nidaan/terms", response_class=HTMLResponse)
+async def nidaan_terms_page(request: Request):
+    """NidaanPartner's own terms of service (see the note on /nidaan/privacy)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    return _nidaan_page("nidaan_terms.html", request)
+
+
+@app.get("/nidaan/success", response_class=HTMLResponse)
+async def nidaan_success_page(request: Request):
+    """Post-payment thank-you page. Every payment flow lands here - the in-dashboard checkouts
+    redirect to it, and payment links are created with it as their callback_url.
+
+    The page shows nothing about a payment until /nidaan/api/paylink/verify has checked
+    Razorpay's signature, so a hand-written URL cannot produce a success screen on our domain."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    return _nidaan_page("nidaan_success.html", request)
+
+
+@app.get("/nidaan/api/paylink/verify")
+@limiter.limit("30/minute")
+async def nidaan_paylink_verify(request: Request):
+    """Did this payment link really get paid? Answered from Razorpay's signature, not the URL.
+
+    Razorpay appends payment_link_id, payment_link_reference_id, payment_link_status,
+    payment_id and a signature to the callback. The signature is
+    HMAC-SHA256("id|reference_id|status|payment_id", key_secret). Anyone can type the first four;
+    only Razorpay can produce the fifth.
+
+    Returns {ok, status} and nothing else - no amount, no name, no claim. The caller is an
+    anonymous browser arriving from a payment page, so it is told whether its own payment went
+    through and not one thing more.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    q = request.query_params
+    link_id = (q.get("razorpay_payment_link_id") or "")[:64]
+    ref = (q.get("razorpay_payment_link_reference_id") or "")[:64]
+    status = (q.get("razorpay_payment_link_status") or "")[:32]
+    pay_id = (q.get("razorpay_payment_id") or "")[:64]
+    sig = (q.get("razorpay_signature") or "")[:128]
+    if not (link_id and sig):
+        return {"ok": False, "status": "unknown"}
+    secret = _nidaan_rzp_secret()
+    if not secret:
+        logger.warning("paylink verify: no Nidaan Razorpay secret configured")
+        return {"ok": False, "status": "unknown"}
+    import hashlib as _hl
+    import hmac as _hm
+    expected = _hm.new(secret.encode(), f"{link_id}|{ref}|{status}|{pay_id}".encode(),
+                       _hl.sha256).hexdigest()
+    if not _hm.compare_digest(expected, sig):
+        # Worth knowing about: a wrong signature here is either a misconfiguration or somebody
+        # building a fake receipt on our domain. Never echoed to the caller.
+        logger.warning("paylink verify: bad signature for link %s", link_id)
+        return {"ok": False, "status": "unverified"}
+    return {"ok": status.lower() == "paid", "status": status.lower() or "unknown"}
+
+
+@app.get("/nidaan/branch", response_class=HTMLResponse)
+async def nidaan_branch_page(request: Request):
+    """Affiliate branch self-service portal (login via their @nidaanpartner.com email OTP)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    return _nidaan_page("nidaan_branch.html", request)
+
+
+# ── Branch portal API (affiliate self-service; email-OTP auth, scoped to one branch) ──
+def _branch_bearer(request: Request) -> Optional[str]:
+    """Extract + verify a branch-portal token → branch_code, or None."""
+    h = request.headers.get("Authorization", "")
+    if h.startswith("Bearer "):
+        return nidaan.verify_branch_token(h[7:])
+    return None
+
+
+def _nidaan_origin(request: Request) -> str:
+    """Public origin for building Nidaan email links (works on prod + staging)."""
+    host = (request.headers.get("host") or "nidaanpartner.com").split(",")[0].strip()
+    return f"https://{host}"
+
+
+class BranchOtpReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    email: str
+    # Which way to send it. Email is the default because most branches have no mobile on file
+    # yet; WhatsApp is the fallback the founder asked for, and becomes the primary once every
+    # branch has a number.
+    channel: str = "email"
+
+
+class BranchVerifyReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    email: str
+    otp: str
+
+
+@app.post("/nidaan/branch/api/request-otp")
+@limiter.limit("5/minute")
+async def nidaan_branch_request_otp(body: BranchOtpReq, request: Request):
+    """Send a login OTP IF the email is an active branch's login address. Always returns a
+    generic success so branch emails can't be enumerated."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    generic = {"status": "otp_sent"}
+    email = auth.sanitize_email(body.email)
+    if not email:
+        return generic
+    branch = await nidaan.get_branch_by_email(email)
+    if not branch:
+        return generic  # do not reveal whether this is a real branch login
+    result = auth.generate_email_otp(email)
+    if "error" in result:
+        return JSONResponse({"detail": result["error"]}, status_code=429)  # OTP cooldown
+
+    # ── WhatsApp, when they ask for it ──────────────────────────────────────
+    # The code lives against the branch's EMAIL either way, so verification is unchanged - only
+    # the delivery differs. It now goes as an APPROVED AUTHENTICATION TEMPLATE, which reaches a
+    # branch cold: no "write to us first", no 24-hour window. That instruction was the whole
+    # reason this fallback was not really a fallback - the person locked out is the least able to
+    # go and open a chat window. One honest limit remains: a branch with no mobile on file.
+    if (body.channel or "").strip().lower() == "whatsapp":
+        phone = (branch.get("contact_phone") or "").strip()
+        if not phone:
+            return JSONResponse(
+                {"detail": "We do not have a mobile number for this branch. Use email, or ask the "
+                           "office to add your number."}, status_code=400)
+        import biz_nidaan_whatsapp as _wa
+        msisdn = _wa.normalize_msisdn(phone)
+        with _wa.sending_as("critical"):
+            sent = await _wa.send_auth_code(msisdn, result["otp"])
+            _via = "WhatsApp authentication template"
+            if not sent.get("ok"):
+                # Last resort: if the template is somehow unavailable, a free-form message still
+                # works for a branch that HAS written to us recently. Outside that window this
+                # fails too, which is no worse than not trying.
+                text = ("Your NidaanPartner branch login code is %s. It expires in 10 minutes. "
+                        "We will never ask you for this code." % result["otp"])
+                _fallback = await _wa.send_text(msisdn, text)
+                if _fallback.get("ok"):
+                    sent, _via = _fallback, "WhatsApp free-form (template refused)"
+        await _login_health.record("branch", "whatsapp", msisdn, bool(sent.get("ok")),
+                                   detail=str(sent.get("error") or "")[:150], via=_via)
+        if not sent.get("ok"):
+            return JSONResponse({"detail": "WhatsApp could not deliver the code just now. "
+                                           "Please use email."}, status_code=400)
+        logger.info("📱 Branch login code sent on WhatsApp (%s) → %s",
+                    _via, branch.get("branch_code"))
+        return {"status": "otp_sent", "channel": "whatsapp"}
+
+    # One-click login link (magic token, 20 min) alongside the code — mobile-friendly.
+    magic = nidaan.create_branch_magic_token(branch["branch_code"], email, minutes=20)
+    magic_url = f"{_nidaan_origin(request)}/nidaan/branch/magic?token={magic}"
+    # The outcome is recorded, not assumed. Every branch code was being silently discarded on
+    # 17 Sep while this call returned and the page said "sent" — App Health now reads this.
+    _t: dict = {}
+    _ok = await email_svc.send_nidaan_branch_login_email(
+        email, magic_url, otp=result["otp"], name=branch.get("name") or "", welcome=False,
+        transport_out=_t)
+    await _login_health.record("branch", "email", email, bool(_ok),
+                               detail=_t.get("error") or "", via=_t.get("via") or "")
+    return generic
+
+
+@app.get("/nidaan/branch/magic")
+@limiter.limit("12/minute")
+async def nidaan_branch_magic(request: Request, token: str = ""):
+    """One-click branch login. Verifies the emailed magic token, re-checks the branch is still
+    ACTIVE, mints a normal branch session, and hands it to the portal via a URL fragment
+    (fragments aren't sent to the server, and the portal clears it immediately)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    data = nidaan.verify_branch_magic_token(token or "")
+    if not data:
+        return RedirectResponse(url="/nidaan/branch?e=expired", status_code=303)
+    # Prefer the email binding; fall back to the code — either way, ACTIVE-only.
+    branch = await nidaan.get_branch_by_email(data["email"]) if data.get("email") else None
+    if not branch:
+        for b in await nidaan.list_branches(include_disabled=False):
+            if b["branch_code"] == data["branch_code"]:
+                branch = b
+                break
+    if not branch:
+        return RedirectResponse(url="/nidaan/branch?e=inactive", status_code=303)
+    session = nidaan.create_branch_token(branch["branch_code"])
+    return RedirectResponse(url=f"/nidaan/branch#t={session}", status_code=303)
+
+
+@app.post("/nidaan/branch/api/verify-otp")
+@limiter.limit("10/minute")
+async def nidaan_branch_verify_otp(body: BranchVerifyReq, request: Request):
+    """Verify the OTP + that the email is an active branch → issue a branch session token."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    email = auth.sanitize_email(body.email)
+    if not email or not auth.verify_email_otp(email, body.otp):
+        raise HTTPException(status_code=401, detail="Invalid or expired code")
+    branch = await nidaan.get_branch_by_email(email)
+    if not branch:
+        raise HTTPException(status_code=403, detail="This email is not a branch login")
+    token = nidaan.create_branch_token(branch["branch_code"])
+    return {"access_token": token, "branch_code": branch["branch_code"], "name": branch.get("name") or ""}
+
+
+@app.get("/nidaan/branch/api/features")
+async def nidaan_branch_features(request: Request, lang: str = "en"):
+    """Branch/affiliate 'what you can do here' list — bilingual, from the shared registry."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    if not _branch_bearer(request):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    import biz_nidaan_capabilities as caps
+    return {"lang": ("hi" if str(lang).lower().startswith("hi") else "en"),
+            "features": caps.features_for("branch", lang),
+            "speech": caps.speech_text_for("branch", lang)}
+
+
+@app.get("/nidaan/branch/api/features/audio")
+async def nidaan_branch_features_audio(request: Request, lang: str = "en"):
+    """Cached Gemini narration of the branch feature list (503 → browser voice fallback)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    if not _branch_bearer(request):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    import biz_nidaan_capabilities as caps
+    import biz_tts
+    text = caps.speech_text_for("branch", lang)
+    is_hi = str(lang).lower().startswith("hi")
+    voice = os.getenv("TTS_VOICE_HI" if is_hi else "TTS_VOICE_EN", "Kore")
+    wav = await biz_tts.cached_wav(text, voice=voice)
+    if not wav:
+        raise HTTPException(status_code=503, detail="voice_unavailable")
+    return Response(content=wav, media_type="audio/wav",
+                    headers={"Cache-Control": "private, max-age=3600"})
+
+
+@app.get("/nidaan/branch/api/me")
+async def nidaan_branch_me(request: Request):
+    """Branch's own reconciliation summary (revenue, share %, payout, counts)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    code = _branch_bearer(request)
+    if not code:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    recon = await nidaan.get_branch_reconciliation(code)
+    if not recon:
+        raise HTTPException(status_code=404, detail="Branch not found")
+    return {"branch": recon}
+
+
+@app.get("/nidaan/branch/api/accounts")
+async def nidaan_branch_accounts(request: Request):
+    """Branch's own attributed accounts (masked) — scoped strictly to the token's branch."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    code = _branch_bearer(request)
+    if not code:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return {"accounts": await nidaan.get_branch_attributed_accounts(code)}
+
+
+@app.get("/nidaan/branch/api/account/{account_id}")
+async def nidaan_branch_account_detail(account_id: int, request: Request):
+    """Branch drill-down into ONE of its referred accounts — claims + statuses + plan/payment,
+    so a branch can track its referrals' progress. Strictly scoped to the token's branch;
+    customer phone MASKED and internal legal notes omitted (mirrors the staff drill-down)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    code = _branch_bearer(request)
+    if not code:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    import aiosqlite as _aio
+    async with _aio.connect(nidaan.DB_PATH) as conn:
+        conn.row_factory = _aio.Row
+        cur = await conn.execute(
+            """SELECT a.account_id, a.owner_name, a.phone, a.branch_code, a.created_at,
+                      COALESCE(s.plan,'free') AS plan, s.status AS sub_status, s.current_period_end
+               FROM nidaan_accounts a
+               LEFT JOIN nidaan_subscriptions s ON s.account_id=a.account_id AND s.status='active'
+               WHERE a.account_id=?""", (account_id,))
+        account = dict(cur) if (cur := await cur.fetchone()) else None
+        if not account:
+            raise HTTPException(status_code=404, detail="Account not found")
+        if (account.get("branch_code") or "").strip().upper() != (code or "").strip().upper():
+            raise HTTPException(status_code=403, detail="Not your referral")
+        _ph = str(account.get("phone") or "")
+        account["phone_masked"] = ("•••••" + _ph[-4:]) if len(_ph) >= 4 else ""
+        account.pop("phone", None)
+        claims = [dict(r) for r in await (await conn.execute(
+            """SELECT claim_id, claim_type, insurer_name, disputed_amount, status,
+                      created_at, last_status_at
+               FROM nidaan_claims WHERE account_id=? ORDER BY created_at DESC""",
+            (account_id,))).fetchall()]
+        reviews = [dict(r) for r in await (await conn.execute(
+            """SELECT claim_type, amount_paid, status, created_at, reviewed_at
+               FROM nidaan_per_claim_purchase
+               WHERE account_id=? AND status NOT IN ('pending_payment','cancelled')
+               ORDER BY created_at DESC""", (account_id,))).fetchall()]
+    return {"account": account, "claims": claims, "reviews": reviews}
+
+
+def _clean_complainant_contact(phone_in: str, email_in: str):
+    """Enforce a valid 10-digit mobile + a valid email for the COMPLAINANT (the person presenting
+    the case and providing documents) at every claim-creation endpoint — this is our comms point.
+    Returns (phone10, email); raises HTTPException(400) with a plain-language message on failure."""
+    phone = "".join(ch for ch in (phone_in or "") if ch.isdigit())
+    if len(phone) >= 11 and phone.startswith("91"):
+        phone = phone[-10:]
+    if len(phone) != 10:
+        raise HTTPException(400, "Enter a valid 10-digit mobile number for the complainant")
+    email = auth.sanitize_email(email_in or "")
+    if not email:
+        raise HTTPException(400, "Enter a valid email for the complainant — that's where we send "
+                                 "document requests and updates")
+    return phone, email
+
+
+# ── Branch raises a claim on behalf of a customer (Item 3.2) ──────────────────
+class _BranchClaimReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    # Complainant = the contact who presents the case + provides documents (our comms point).
+    # When a form sends these, THEY are the mandatory contact. Optional here so the ops form (which
+    # still sends insured_*) keeps working — the endpoint falls back to insured_* as the complainant.
+    complainant_name: str = Field("", max_length=120)
+    complainant_phone: str = Field("", max_length=15)
+    complainant_email: str = Field("", max_length=120)
+    # Insured (patient) — name required (every form sends a name); phone now optional (patient's).
+    insured_name: str = Field(..., min_length=1, max_length=120)
+    insured_phone: str = Field("", max_length=15)
+    insured_email: str = Field("", max_length=120)
+    claim_type: str = Field(..., max_length=40)
+    insurer_name: str = Field("", max_length=120)
+    policy_no: str = Field("", max_length=80)
+    disputed_amount: Optional[int] = Field(None, ge=0, le=100000000)
+    notes: str = Field("", max_length=2000)
+    channel_partner_id: Optional[int] = None   # approved CP credited on a My Business claim
+
+
+@app.post("/nidaan/branch/api/claims")
+async def nidaan_branch_raise_claim(body: _BranchClaimReq, request: Request):
+    """A branch raises a claim FOR a customer. Attaches to the branch's house account,
+    origin='branch', free at intake — the L2 fee (if any) is charged later per policy."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    code = _branch_bearer(request)
+    if not code: raise HTTPException(401, "Unauthorized")
+    # Complainant = the contact who provides documents (mandatory). Falls back to the insured
+    # fields when a form doesn't split them (keeps older callers working).
+    _cname = (body.complainant_name or body.insured_name or "").strip()
+    cphone, cemail = _clean_complainant_contact(body.complainant_phone or body.insured_phone,
+                                                body.complainant_email or body.insured_email)
+    # Insured (patient): name from the patient field (or the complainant); phone optional.
+    _iname = (body.insured_name or _cname).strip()
+    _iphone = "".join(ch for ch in (body.insured_phone or "") if ch.isdigit()) or cphone
+    house_account = await nidaan.get_or_create_branch_house_account(code)
+    claim_id, msg = await nidaan.submit_claim(
+        account_id=house_account, user_id=None,
+        claim_type=(body.claim_type or "").strip(), insured_name=_iname,
+        insured_phone=_iphone, insured_email=cemail, insurer_name=(body.insurer_name or "").strip(),
+        policy_no=(body.policy_no or "").strip(), disputed_amount=body.disputed_amount,
+        notes_from_agent=(body.notes or "").strip(), branch_code=code,
+        payment_status="unpaid_lead", skip_eligibility=True, origin="branch",
+        complainant_name=_cname, complainant_phone=cphone, complainant_email=cemail,
+        complainant_role="branch")
+    if not claim_id:
+        raise HTTPException(400, msg or "Could not raise claim")
+    try:
+        import biz_nidaan_notifications as _nnot
+        # Reliable all-channel ops alert (bell + email + Telegram) for branch-raised claims.
+        asyncio.create_task(_nnot.on_ops_claim_raised(claim_id, raised_by=f"Branch/Partner {code}"))
+    except Exception:
+        pass
+    return {"claim_id": claim_id, "status": "intimated"}
+
+
+@app.get("/nidaan/branch/api/claims")
+async def nidaan_branch_list_claims(request: Request):
+    """List the claims this branch has raised (with review + L2-payment state)."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    code = _branch_bearer(request)
+    if not code: raise HTTPException(401, "Unauthorized")
+    return {"claims": await nidaan.list_branch_claims(code),
+            "l2": await nidaan.branch_l2_pricing()}
+
+
+@app.post("/nidaan/branch/api/claims/{claim_id}/documents/upload")
+@limiter.limit("20/minute")
+async def nidaan_branch_upload_claim_doc(claim_id: int, request: Request,
+                                         files: list[UploadFile] = File(...)):
+    """Branch uploads documents (e.g. the rejection letter) for one of ITS claims."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    code = _branch_bearer(request)
+    if not code: raise HTTPException(401, "Unauthorized")
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+        _c.row_factory = __import__("aiosqlite").Row
+        r = await (await _c.execute(
+            "SELECT account_id FROM nidaan_claims WHERE claim_id=? AND origin='branch' "
+            "AND UPPER(branch_code)=?", (claim_id, code.upper()))).fetchone()
+    if not r: raise HTTPException(404, "Claim not found")
+    account_id = r["account_id"]
+    _guard_upload_batch(files)
+    saved = []
+    for f in files:
+        content = await f.read()
+        if len(content) > _MAX_DOC_SIZE:
+            raise HTTPException(413, f"{f.filename} is over the {_MAX_DOC_SIZE // (1024*1024)} MB limit")
+        if not _doc_magic_ok(content):
+            raise HTTPException(415, _upload_refusal(f.filename, content))
+        ext = await validate_upload_scanned(content, (f.content_type or ""), what="document")
+        content, ext = _as_viewable(content, ext)
+        stored = f"{uuid.uuid4().hex}{ext}"
+        (_NIDAAN_DOCS_DIR / stored).write_bytes(content)
+        doc_id = await nidaan.save_claim_document(
+            account_id=account_id, stored_name=stored, original_name=f.filename or stored,
+            file_size=len(content), mime_type=f.content_type or "", claim_id=claim_id)
+        saved.append({"doc_id": doc_id, "original_name": f.filename})
+    return {"uploaded": saved, "count": len(saved)}
+
+
+# ── Branch Level-2 payment gate (Item 3.3) ───────────────────────────────────
+# When a branch-raised claim is reviewed as GO ('can_fight'), the branch pays the
+# configured, super-admin-editable fee (branch_l2_fee) via the Nidaan Razorpay to
+# push it to the legal team. Policy 'free' skips the charge (l2-advance instead).
+async def _branch_claim_row(claim_id: int, code: str):
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+        _c.row_factory = __import__("aiosqlite").Row
+        return await (await _c.execute(
+            "SELECT review_outcome, l2_payment_status FROM nidaan_claims "
+            "WHERE claim_id=? AND origin='branch' AND UPPER(branch_code)=?",
+            (claim_id, code.upper()))).fetchone()
+
+
+@app.post("/nidaan/branch/api/claims/{claim_id}/l2-pay")
+@limiter.limit("10/minute")
+async def nidaan_branch_l2_pay(claim_id: int, request: Request):
+    """Create a Razorpay order for the branch's Level-2 fee on a reviewed-GO claim."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    code = _branch_bearer(request)
+    if not code: raise HTTPException(401, "Unauthorized")
+    pricing = await nidaan.branch_l2_fee_for_claim(claim_id)
+    if not pricing["charge_required"]:
+        raise HTTPException(400, "No Level-2 fee is configured — use Send to Level-2 instead")
+    fee = int(pricing["fee"])
+    row = await _branch_claim_row(claim_id, code)
+    if not row: raise HTTPException(404, "Claim not found")
+    if row["review_outcome"] != "can_fight":
+        raise HTTPException(400, "This claim is not eligible for Level-2 yet")
+    if row["l2_payment_status"] == "paid":
+        raise HTTPException(400, "Level-2 fee already paid for this claim")
+    rzp_key_id = _nidaan_rzp_id(); rzp_key_secret = _nidaan_rzp_secret()
+    if not rzp_key_id or not rzp_key_secret:
+        raise HTTPException(503, "Payments not configured")
+    _l2_paise = (await nidaan.charge_with_gst(fee))["total_paise"]   # + GST when enabled
+    import httpx as _httpx3, time as _time3
+    receipt = f"l2_{claim_id}_{int(_time3.time())}"[:40]
+    async with _httpx3.AsyncClient() as _cl:
+        _r = await _cl.post(
+            "https://api.razorpay.com/v1/orders",
+            auth=(rzp_key_id, rzp_key_secret),
+            json={"amount": _l2_paise, "currency": "INR", "receipt": receipt,
+                  "payment_capture": 1,
+                  "notes": {"product": "nidaan_branch_l2", "claim_id": str(claim_id),
+                            "branch": code}},
+            timeout=20.0)
+        result = _r.json()
+    if "id" not in result:
+        raise HTTPException(502, result.get("error", {}).get("description", "Order creation failed"))
+    return {"order_id": result["id"], "amount": _l2_paise, "currency": "INR",
+            "razorpay_key_id": rzp_key_id, "fee": fee}
+
+
+class _BranchL2VerifyReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    razorpay_order_id: str
+    razorpay_payment_id: str
+    razorpay_signature: str
+
+
+@app.post("/nidaan/branch/api/claims/{claim_id}/l2-pay-verify")
+@limiter.limit("10/minute")
+async def nidaan_branch_l2_pay_verify(claim_id: int, body: _BranchL2VerifyReq, request: Request):
+    """Verify the branch's Level-2 payment and queue the claim for the legal team."""
+    import hmac as _hm, hashlib as _hs
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    code = _branch_bearer(request)
+    if not code: raise HTTPException(401, "Unauthorized")
+    secret = _nidaan_rzp_secret()
+    if not secret: raise HTTPException(503, "Payments not configured")
+    _msg = f"{body.razorpay_order_id}|{body.razorpay_payment_id}".encode()
+    _expected = _hm.new(secret.encode(), _msg, _hs.sha256).hexdigest()
+    if not _hm.compare_digest(_expected, body.razorpay_signature):
+        raise HTTPException(400, "Invalid payment signature")
+    # Confirm the L2 fee was actually CAPTURED (not just authorized) before queuing for legal —
+    # the webhook (nidaan_branch_l2 payment.captured) finalizes a genuine late capture.
+    if not await _nidaan_payment_captured(body.razorpay_payment_id):
+        return {"status": "pending", "claim_id": claim_id,
+                "message": "Payment is still processing — we'll confirm it shortly. No need to pay again."}
+    pricing = await nidaan.branch_l2_fee_for_claim(claim_id)
+    ok = await nidaan.mark_l2_paid(claim_id, code, int(pricing["fee"]), body.razorpay_payment_id)
+    if not ok:
+        raise HTTPException(400, "Could not record the Level-2 payment for this claim")
+    try:
+        import biz_nidaan_notifications as _nnot
+        asyncio.create_task(_nnot.on_branch_l2_paid(claim_id, code))
+    except Exception:
+        pass
+    return {"status": "paid", "claim_id": claim_id}
+
+
+@app.post("/nidaan/branch/api/claims/{claim_id}/l2-advance")
+@limiter.limit("10/minute")
+async def nidaan_branch_l2_advance(claim_id: int, request: Request):
+    """Free-policy path: queue a reviewed-GO branch claim for legal with no charge."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    code = _branch_bearer(request)
+    if not code: raise HTTPException(401, "Unauthorized")
+    pricing = await nidaan.branch_l2_fee_for_claim(claim_id)
+    if pricing["charge_required"]:
+        raise HTTPException(400, "A Level-2 fee applies — please pay to proceed")
+    ok = await nidaan.mark_l2_paid(claim_id, code, 0, "free")
+    if not ok:
+        raise HTTPException(400, "This claim is not eligible for Level-2 yet")
+    try:
+        import biz_nidaan_notifications as _nnot
+        asyncio.create_task(_nnot.on_branch_l2_paid(claim_id, code))
+    except Exception:
+        pass
+    return {"status": "queued", "claim_id": claim_id}
+
+
+# ── Razorpay Payment Links (shareable link + QR; branch L2 + super-admin) ─────
+async def _create_rzp_payment_link(amount_paise: int, description: str, *,
+                                   customer_name: str = "", customer_phone: str = "",
+                                   customer_email: str = "", notes: dict = None,
+                                   expire_by: int = None, reminder: bool = True) -> dict:
+    """Create a Razorpay Payment Link (hosted page + short_url; SMS/reminders handled by
+    Razorpay). Returns the Razorpay response dict (id, short_url, …).
+
+    The payer is sent back to /nidaan/success when they are done - see callback_url below."""
+    rzp_id = _nidaan_rzp_id(); rzp_secret = _nidaan_rzp_secret()
+    if not rzp_id or not rzp_secret:
+        raise HTTPException(status_code=503, detail="Payments not configured")
+    ph = "".join(ch for ch in (customer_phone or "") if ch.isdigit())[-10:]
+    payload = {
+        "amount": int(amount_paise), "currency": "INR",
+        "description": (description or "Nidaan Partner")[:255],
+        "notify": {"sms": bool(len(ph) == 10), "email": bool(customer_email)},
+        "reminder_enable": bool(reminder),
+        "notes": notes or {},
+    }
+    cust = {}
+    if customer_name: cust["name"] = customer_name[:120]
+    if len(ph) == 10: cust["contact"] = "+91" + ph
+    if customer_email: cust["email"] = customer_email[:120]
+    if cust: payload["customer"] = cust
+    if expire_by: payload["expire_by"] = int(expire_by)
+    # Bring the payer back to us. Without this Razorpay keeps them on its own hosted page: no
+    # thank-you, no "here is what happens next", and no idea on our side that they arrived.
+    # Razorpay signs the parameters it appends; /nidaan/api/paylink/verify checks that signature,
+    # because a query string is written by whoever sends the link.
+    _base = (os.getenv("NIDAAN_BASE_URL", "https://nidaanpartner.com") or "").rstrip("/")
+    if _base:
+        payload["callback_url"] = _base + "/nidaan/success?type=link"
+        payload["callback_method"] = "get"
+    import httpx as _hx
+    async with _hx.AsyncClient() as _cl:
+        r = await _cl.post("https://api.razorpay.com/v1/payment_links",
+                           auth=(rzp_id, rzp_secret), json=payload, timeout=25.0)
+        data = r.json()
+    if "id" not in data:
+        raise HTTPException(status_code=502,
+                            detail=(data.get("error", {}) or {}).get("description", "Could not create payment link"))
+    return data
+
+
+def _nidaan_retry_email_html(kind: str, rupees: int, url: str, why_html: str) -> str:
+    return (f'<div style="font-family:Segoe UI,Arial,sans-serif;max-width:520px;margin:0 auto;'
+            f'padding:24px;color:#111">'
+            f'<h2 style="color:#0d9488;margin:0 0 8px">Your payment didn\'t go through</h2>'
+            f'<p style="font-size:15px;line-height:1.6">Your recent payment of <b>₹{rupees}</b> for '
+            f'<b>{kind}</b> could not be completed.{why_html}</p>'
+            f'<p style="font-size:15px;line-height:1.6">No worries — you can complete it securely here:</p>'
+            f'<p style="text-align:center;margin:24px 0"><a href="{url}" '
+            f'style="background:#0d9488;color:#fff;text-decoration:none;padding:14px 28px;border-radius:10px;'
+            f'font-weight:700;display:inline-block">Complete Payment — ₹{rupees}</a></p>'
+            f'<p style="font-size:13px;color:#6b7280">This is a secure Razorpay link. If you\'ve already '
+            f'paid, please ignore this email.</p>'
+            f'<p style="font-size:13px;color:#6b7280">— Team Nidaan Partner</p></div>')
+
+
+async def _retry_contact(pe: dict, notes: dict, kind: str = "") -> tuple:
+    """Who do we write to about a payment that just failed? Returns (email, name).
+
+    THIS HAD NEVER FOUND ANYBODY. 27 failures since 17 Aug 2026, zero retry links sent. The old
+    version looked for `account_id` / `acct_id` in the order's notes, and not one of our five
+    products writes either key - while two carry an address outright and three carry an id that
+    leads to one. A UPI payment carries no email on the Razorpay entity, so the notes were the
+    only route, and the only route was looking in the wrong place.
+
+    What each product actually writes:
+        nidaan_claim_499    claim_id
+        nidaan_branch_l2    claim_id, branch
+        nidaan_review_999   purchase_id
+        nidaan_review       advisor_email, insured_name, claim_type
+        subscription        nidaan_account_id, nidaan_plan, notify_email
+
+    Tried most direct first. Every step is wrapped: a lookup that fails must leave the next one
+    to try, never abort the chain.
+    """
+    pe = pe or {}
+    notes = notes or {}
+    email = (pe.get("email") or "").strip()
+    name = ""
+    if email:
+        return email, name
+
+    # 1. An address written straight into the notes.
+    email = (str(notes.get("notify_email") or "") or str(notes.get("advisor_email") or "")).strip()
+    if email:
+        return email, name
+
+    # 2. The account behind a subscription. `nidaan_account_id` is the key the subscription
+    #    really writes; the other two are kept for anything older.
+    _aid = (notes.get("nidaan_account_id") or notes.get("account_id") or notes.get("acct_id") or "")
+    if str(_aid).strip().isdigit():
+        try:
+            acct = await nidaan.get_account_by_id(int(_aid)) or {}
+            email = (acct.get("email") or "").strip()
+            name = acct.get("owner_name", "") or ""
+            if email:
+                return email, name
+        except Exception:  # noqa: BLE001
+            pass
+
+    # 3. A claim payment - the ₹499 review, the branch Level-2 fee. The COMPLAINANT is who this
+    #    is, and contact_for_claim knows that; reading the claim row here would be a second copy
+    #    of a rule with real consequences.
+    _cid = str(notes.get("claim_id") or "").strip()
+    if _cid.isdigit():
+        try:
+            import biz_nidaan_claimant as _clc
+            who = await _clc.contact_for_claim(int(_cid)) or {}
+            email = (who.get("to_email") or "").strip()
+            name = (who.get("to_name") or "") or ""
+            if email:
+                return email, name
+        except Exception:  # noqa: BLE001
+            pass
+
+    # 4. A D2C review purchase, which holds its own buyer.
+    _pid = str(notes.get("purchase_id") or "").strip()
+    if _pid.isdigit():
+        try:
+            async with aiosqlite.connect(nidaan.DB_PATH) as c:
+                c.row_factory = aiosqlite.Row
+                row = await (await c.execute(
+                    "SELECT insured_email, advisor_email, insured_name "
+                    "FROM nidaan_per_claim_purchase WHERE purchase_id=?", (int(_pid),))).fetchone()
+            if row:
+                row = dict(row)
+                email = ((row.get("insured_email") or "") or (row.get("advisor_email") or "")).strip()
+                name = row.get("insured_name", "") or ""
+                if email:
+                    return email, name
+        except Exception:  # noqa: BLE001
+            pass
+
+    # Worth a line in the log: a failure we cannot follow up is a sale we do not get back, and
+    # the count of these is the measure of what that is costing.
+    logger.warning("payment.failed: no address anywhere for %s (%s) - no retry link sent. "
+                   "notes=%s", pe.get("id", ""), kind, sorted(notes.keys()))
+    return "", ""
+
+
+async def _send_customer_retry_link(*, email: str, phone: str, name: str,
+                                    amount_paise: int, kind: str, notes: dict, reason: str) -> None:
+    """On a failed payment, email the customer a fresh Razorpay link to try again (all types)."""
+    email = (email or "").strip()
+    if not email or int(amount_paise or 0) < 100:
+        return
+    try:
+        _rn = dict(notes or {}); _rn["retry"] = "1"
+        link = await _create_rzp_payment_link(
+            int(amount_paise), f"Retry payment — {kind}",
+            customer_name=name, customer_phone=phone, customer_email=email, notes=_rn)
+        url = link.get("short_url") or link.get("url") or ""
+        if not url:
+            return
+        rupees = int(amount_paise) // 100
+        why = (f"<br><span style='color:#6b7280;font-size:13px'>Reason: {reason}</span>") if reason else ""
+        await email_svc.send_email(
+            email, f"Complete your Nidaan payment — ₹{rupees}",
+            _nidaan_retry_email_html(kind, rupees, url, why), from_name="Nidaan Partner",
+            delivery_critical=True)   # a payment they are trying to complete must not be lost
+        logger.info("💳 retry link emailed to %s (₹%d, %s)", email, rupees, kind)
+    except Exception as e:
+        logger.warning("send_customer_retry_link failed: %s", e)
+
+
+@app.post("/nidaan/branch/api/claims/{claim_id}/l2-payment-link")
+@limiter.limit("10/minute")
+async def nidaan_branch_l2_payment_link(claim_id: int, request: Request):
+    """Generate a shareable payment link for the branch's L2 fee, bound to this claim — so the
+    branch can send it to their walk-in customer to pay (instead of paying it themselves)."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    code = _branch_bearer(request)
+    if not code: raise HTTPException(401, "Unauthorized")
+    pricing = await nidaan.branch_l2_fee_for_claim(claim_id)
+    if not pricing["charge_required"]:
+        raise HTTPException(400, "No Level-2 fee is configured")
+    fee = int(pricing["fee"])
+    row = await _branch_claim_row(claim_id, code)
+    if not row: raise HTTPException(404, "Claim not found")
+    if row["review_outcome"] != "can_fight":
+        raise HTTPException(400, "This claim is not eligible for Level-2 yet")
+    if row["l2_payment_status"] == "paid":
+        raise HTTPException(400, "Level-2 fee already paid for this claim")
+    import time as _t
+    expire_by = int(_t.time()) + 3 * 24 * 3600   # 3-day validity
+    data = await _create_rzp_payment_link(
+        (await nidaan.charge_with_gst(fee))["total_paise"], f"Nidaan Level-2 fee — Claim #{claim_id}",
+        notes={"product": "nidaan_plink", "purpose": "l2", "claim_id": str(claim_id), "branch": code},
+        expire_by=expire_by)
+    await nidaan.record_payment_link(
+        data["id"], data.get("short_url", ""), "l2", fee * 100,
+        claim_id=claim_id, branch_code=code, created_by_type="branch", created_by_id=code,
+        description=f"L2 fee claim #{claim_id}", expire_by=expire_by)
+    return {"short_url": data.get("short_url", ""), "plink_id": data["id"], "fee": fee}
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# COMPLAINANT PORTAL — the policyholder's direct view of their claim (P1).
+# Auth = the opaque per-claim access_token (revocable; doubles as the magic-link).
+# The complainant reads status, sees the success-fee consent card, and gives digital
+# acceptance — without any mediator in between. Dormant until the L2 trigger + link
+# send are wired (deliberately held until the T&C copy is counsel-approved).
+# ═════════════════════════════════════════════════════════════════════════════
+def _bearer(request: Request) -> str:
+    h = request.headers.get("Authorization", "")
+    return h[7:] if h.startswith("Bearer ") else (request.query_params.get("token", "") or "")
+
+
+async def _claimant_link_ctx(request: Request) -> Optional[dict]:
+    """The PORTAL LINK — enough to be asked "is this you?", and nothing else.
+
+    It used to be the whole credential: whoever held the URL could open the claim and accept the
+    success-fee terms. Now it only reaches the verification endpoints."""
+    tok = _bearer(request)
+    return await claimant.get_portal_by_token(tok) if tok else None
+
+
+async def _claimant_ctx(request: Request) -> Optional[dict]:
+    """A VERIFIED complainant session → portal+claim row, or None.
+
+    The session is minted only after they typed the code we sent to the number or email already
+    on their claim (biz_nidaan_claim_access). A raw portal link no longer opens anything — that
+    is the whole point of the change (founder, 16 Sep)."""
+    tok = _bearer(request)
+    if not tok:
+        return None
+    sess = nidaan.verify_claim_session_token(tok)
+    if not sess:
+        return None
+    ctx = await claimant.get_portal(sess["claim_id"])
+    if not ctx:
+        return None
+    ctx = dict(ctx)
+    ctx["preview"] = sess.get("preview", False)
+    # get_portal() returns the portal row; the claim's own details come with it for the page.
+    # The old token lookup aliased two of them (c.status AS claim_status, c.stage AS claim_stage),
+    # and the dashboard reads those names - so map them here or the complainant's page would show
+    # "In progress" for every claim whatever its real status.
+    claim = await nidaan.get_claim_with_account(sess["claim_id"]) or {}
+    for k, v in claim.items():
+        ctx.setdefault(k, v)
+    ctx["claim_status"] = claim.get("status") or ""
+    ctx["claim_stage"] = claim.get("stage") or ""
+    ctx["claim_id"] = sess["claim_id"]
+    return ctx
+
+
+@app.get("/nidaan/claim", response_class=HTMLResponse)
+async def nidaan_claim_portal_page(request: Request):
+    """The complainant's dashboard shell (mobile-first PWA). Auth happens client-side via the token in
+    the URL fragment (never sent to the server) — same pattern as the branch portal."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    return _nidaan_page("nidaan_claim_portal.html", request)
+
+
+@app.get("/nidaan/claim/manifest.webmanifest")
+async def nidaan_claim_manifest(request: Request):
+    """PWA manifest so the complainant can install the dashboard to their home screen."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    m = {
+        "name": "My Claim · NidaanPartner", "short_name": "My Claim",
+        "start_url": "/nidaan/claim", "scope": "/nidaan/claim",
+        "display": "standalone", "orientation": "portrait",
+        "background_color": "#f4f7f6", "theme_color": "#0b5c4f",
+        "icons": [
+            {"src": "/nidaan/claim/icon.svg", "sizes": "512x512", "type": "image/svg+xml", "purpose": "any maskable"},
+        ],
+    }
+    return JSONResponse(m, media_type="application/manifest+json")
+
+
+@app.get("/nidaan/claim/icon.svg")
+async def nidaan_claim_icon(request: Request):
+    svg = (
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">'
+        '<rect width="512" height="512" rx="96" fill="#0b5c4f"/>'
+        '<path d="M256 96l128 48v104c0 84-56 140-128 168-72-28-128-84-128-168V144z" fill="#0d7a68"/>'
+        '<path d="M212 268l32 32 68-72" fill="none" stroke="#fff" stroke-width="26" '
+        'stroke-linecap="round" stroke-linejoin="round"/></svg>')
+    return Response(content=svg, media_type="image/svg+xml",
+                    headers={"Cache-Control": "public, max-age=86400"})
+
+
+@app.get("/nidaan/claim/sw.js")
+async def nidaan_claim_sw(request: Request):
+    """Minimal service worker — enables install + an offline shell. (Background push is a later add.)"""
+    js = (
+        "const C='nidaan-claim-v1';\n"
+        "self.addEventListener('install',e=>{self.skipWaiting();});\n"
+        "self.addEventListener('activate',e=>{e.waitUntil(self.clients.claim());});\n"
+        "self.addEventListener('fetch',e=>{\n"
+        "  if(e.request.method!=='GET')return;\n"
+        "  e.respondWith(fetch(e.request).catch(()=>caches.match(e.request)));\n"
+        "});\n")
+    return Response(content=js, media_type="application/javascript",
+                    headers={"Service-Worker-Allowed": "/nidaan/claim",
+                             "Cache-Control": "no-cache"})
+
+
+@app.get("/nidaan/claim/magic")
+@limiter.limit("20/minute")
+async def nidaan_claim_magic(request: Request, token: str = ""):
+    """One-click complainant entry from the emailed link. Validates the token, stamps first-open, then
+    hands the token to the dashboard via a URL fragment (not sent to the server)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    ctx = await claimant.get_portal_by_token(token or "")
+    if not ctx:
+        return RedirectResponse(url="/nidaan/claim?e=expired", status_code=303)
+    # First-open is NOT stamped here any more. Opening a link proves only that somebody clicked
+    # it - it could be anyone the link was forwarded to. It is stamped when they enter the code we
+    # sent to the number or email on the claim, which is the first moment we know it is them.
+    # (The old `?staff=1` flag is gone with it: staff now use the ops preview session instead.)
+    return RedirectResponse(url=f"/nidaan/claim#t={token}", status_code=303)
+
+
+class _ClaimVerifyStartReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    channel: str = Field(..., max_length=20)
+    lang: str = Field("en", max_length=8)      # so a Hindi reader gets a Hindi refusal
+
+
+class _ClaimVerifyCheckReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    code: str = Field(..., min_length=4, max_length=10)
+
+
+@app.get("/nidaan/claim/api/verify/where")
+@limiter.limit("30/minute")
+async def nidaan_claim_verify_where(request: Request):
+    """Where we can send a code — masked, from the contacts ALREADY on the claim. Reached with
+    the portal link, which from here on proves nothing more than that."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    ctx = await _claimant_link_ctx(request)
+    if not ctx:
+        raise HTTPException(401, "This link is invalid or has expired")
+    import biz_nidaan_claim_access as _acc
+    name = (ctx.get("insured_name") or "").split(" ")[0]
+    return {"claim_id": ctx["claim_id"], "name": name,
+            "channels": await _acc.channels(ctx["claim_id"])}
+
+
+@app.post("/nidaan/claim/api/verify/start")
+@limiter.limit("10/minute")
+async def nidaan_claim_verify_start(body: _ClaimVerifyStartReq, request: Request):
+    """Send the code to the number or email already on the claim. Never to one typed in here."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    ctx = await _claimant_link_ctx(request)
+    if not ctx:
+        raise HTTPException(401, "This link is invalid or has expired")
+    import biz_nidaan_claim_access as _acc
+    res = await _acc.start(ctx["claim_id"], body.channel, lang=body.lang)
+    if not res.get("ok"):
+        # A dict, not a sentence: the page needs the seconds to run a countdown on, and "please
+        # wait a little" was the message that made somebody tap five times in five seconds.
+        raise HTTPException(400, {
+            "error": res.get("message") or "Could not send the code",
+            "reason": res.get("reason") or "",
+            "retry_after_sec": int(res.get("retry_after_sec") or 0),
+            "left": int(res.get("left") or 0),
+        })
+    try:
+        await nidaan.record_claim_activity(
+            ctx["claim_id"], "portal_code", channel="system", actor="complainant",
+            summary="Verification code sent to %s (%s)" % (res.get("masked"), res.get("kind")))
+    except Exception:
+        pass
+    return res
+
+
+@app.post("/nidaan/claim/api/verify/check")
+@limiter.limit("20/minute")
+async def nidaan_claim_verify_check(body: _ClaimVerifyCheckReq, request: Request):
+    """Right code → a session. That session, not the link, is what opens the claim."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    ctx = await _claimant_link_ctx(request)
+    if not ctx:
+        raise HTTPException(401, "This link is invalid or has expired")
+    import biz_nidaan_claim_access as _acc
+    res = await _acc.check(ctx["claim_id"], body.code)
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("message") or "That code is not right")
+    # First time the COMPLAINANT proves who they are, that is the real first-open.
+    try:
+        await claimant.mark_activated(ctx["claim_id"])
+        await nidaan.record_claim_activity(
+            ctx["claim_id"], "portal_open", channel="system", actor="complainant",
+            summary="Complainant confirmed their identity by %s and opened their claim page"
+                    % (res.get("channel") or "code"))
+    except Exception:
+        pass
+    return {"ok": True,
+            "session": nidaan.create_claim_session_token(ctx["claim_id"],
+                                                         minutes=_acc.SESSION_MIN)}
+
+
+@app.get("/nidaan/claim/api/me")
+async def nidaan_claim_me(request: Request):
+    """Everything the complainant dashboard needs: their claim summary + current status + the
+    success-fee consent card (terms + live line-item calc) + whether they've already accepted."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    ctx = await _claimant_ctx(request)
+    if not ctx:
+        raise HTTPException(status_code=401, detail="This link is invalid or has expired")
+    cfg = await claimant.fee_config()
+    disputed = ctx.get("disputed_amount") or 0
+    # Pre-recovery, we show the rule + an ILLUSTRATIVE calc on the disputed amount (clearly labelled)
+    # so the complainant understands exactly how our fee works before accepting.
+    illustration = claimant.compute_fee(disputed, cfg["fee_pct"], cfg["gst_pct"])
+    # Friendly status: prefer the ClaimShield customer-facing label if present.
+    status_label = ctx.get("claim_status") or "In progress"
+    try:
+        import biz_claimshield as _cs
+        cs = await _cs.get_claimshield_state(ctx["claim_id"])
+        if cs and cs.get("bucket"):
+            m = _cs.map_status(cs.get("raw_status") or "")
+            status_label = (m.get("labels") or {}).get("en") or status_label
+    except Exception:
+        pass
+    return {
+        "claim": {
+            "claim_id": ctx["claim_id"],
+            "insured_name": ctx.get("insured_name") or "",
+            "insured_phone": ctx.get("insured_phone") or "",
+            "insured_email": ctx.get("insured_email") or "",
+            "claim_type": ctx.get("claim_type") or "",
+            "status_label": status_label,
+            "disputed_amount": disputed,
+        },
+        "consent": {
+            "is_l2": (ctx.get("review_outcome") == "can_fight"),
+            "accepted": bool(ctx.get("consent_accepted_at")),
+            "accepted_at": ctx.get("consent_accepted_at"),
+            "fee_pct": cfg["fee_pct"],
+            "gst_pct": cfg["gst_pct"],
+            "gst_enabled": cfg["gst_enabled"],
+            "terms_version": cfg["terms_version"],
+            "terms_html": cfg["terms_html"],
+            "terms_html_hi": cfg["terms_html_hi"],
+            "illustration": illustration,
+        },
+        "timeline": await claimant.claim_timeline(ctx["claim_id"]),
+        "documents": [
+            {"doc_id": d["doc_id"], "name": d["original_name"],
+             "size": d.get("file_size") or 0, "uploaded_at": d.get("uploaded_at"),
+             # NULL until they press Save and submit. The page marks those "Not sent yet".
+             "submitted_at": d.get("submitted_at"),
+             "url": _nidaan_doc_url(d["stored_name"])}
+            for d in await claimant.list_claimant_docs(ctx["claim_id"])
+        ],
+    }
+
+
+@app.delete("/nidaan/claim/api/documents/{doc_id}")
+@limiter.limit("30/minute")
+async def nidaan_claim_delete_doc(doc_id: int, request: Request):
+    """The complainant removes a document they uploaded themselves.
+
+    Anyone can attach the wrong file — a phone gallery is full of near-identical photos. Without
+    this the only options were to leave a wrong document on the case or to ask staff to remove it,
+    and a case file full of "ignore the second one" is how the wrong paper reaches an insurer.
+
+    Scoped twice over: the token resolves to one claim, and the delete is guarded by claim_id, so
+    a token can only ever remove a document from its own case.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    ctx = await _claimant_ctx(request)
+    if not ctx:
+        raise HTTPException(status_code=401, detail="This link has expired. Ask us for a new one.")
+    stored = await nidaan.delete_claim_document(int(doc_id), claim_id=int(ctx["claim_id"]))
+    if not stored:
+        raise HTTPException(status_code=404, detail="That document is no longer on this claim.")
+    _nidaan_remove_doc_file(stored)
+    try:
+        import biz_nidaan_doc_checklist as _ck
+        await _ck.unmark_doc_by_doc_id(int(ctx["claim_id"]), int(doc_id))
+    except Exception as e:  # noqa: BLE001
+        logger.info("could not reopen the checklist line for doc %s: %s", doc_id, e)
+    try:
+        await nidaan.record_claim_activity(
+            int(ctx["claim_id"]), "doc_removed", channel="web", direction="in",
+            actor="complainant", summary="Complainant removed a document they had uploaded")
+    except Exception:
+        pass
+    return {"ok": True}
+
+
+@app.post("/nidaan/claim/api/documents/upload")
+@limiter.limit("20/minute")
+async def nidaan_claim_upload_doc(request: Request, files: list[UploadFile] = File(...)):
+    """The complainant uploads documents for their own claim (marked source='claimant' so it never
+    mixes with internal files). Reuses the standard nidaan-docs storage + validation."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    ctx = await _claimant_ctx(request)
+    if not ctx:
+        raise HTTPException(status_code=401, detail="This link is invalid or has expired")
+    claim_id = ctx["claim_id"]
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+        _c.row_factory = __import__("aiosqlite").Row
+        r = await (await _c.execute(
+            "SELECT account_id FROM nidaan_claims WHERE claim_id=?", (claim_id,))).fetchone()
+    if not r:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    account_id = r["account_id"]
+    _guard_upload_batch(files)
+    saved = []
+    for f in files:
+        content = await f.read()
+        if len(content) > _MAX_DOC_SIZE:
+            raise HTTPException(status_code=413, detail=f"{f.filename} is over the {_MAX_DOC_SIZE // (1024*1024)} MB limit")
+        if not _doc_magic_ok(content):
+            raise HTTPException(status_code=415, detail=_upload_refusal(f.filename, content))
+        ext = await validate_upload_scanned(content, (f.content_type or ""), what="document")
+        content, ext = _as_viewable(content, ext)
+        stored = f"{uuid.uuid4().hex}{ext}"
+        (_NIDAAN_DOCS_DIR / stored).write_bytes(content)
+        # HELD, NOT HANDED OVER. Picking a file is not the same as saying "these are the ones":
+        # the founder's own report is somebody uploading four and removing two (22 Sep). It is
+        # stored - a browser cannot hold it and re-sending everything on submit would punish a
+        # slow connection - but the claim does not count it until they press the button.
+        doc_id = await nidaan.save_claim_document(
+            account_id=account_id, stored_name=stored, original_name=f.filename or stored,
+            file_size=len(content), mime_type=f.content_type or "", claim_id=claim_id,
+            source="claimant", submitted=False)
+        saved.append({"doc_id": doc_id, "name": f.filename or stored})
+    return {"ok": True, "saved": saved,
+            "pending": await nidaan.count_unsubmitted_documents(claim_id)}
+
+
+@app.post("/nidaan/claim/api/documents/submit")
+@limiter.limit("20/minute")
+async def nidaan_claim_submit_docs(request: Request):
+    """The complainant says these are the ones. This is the moment the claim counts them.
+
+    Idempotent: the button is on a phone and a first tap that looked like nothing is exactly why
+    people press twice, so a second press hands over nothing and still says it worked.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    ctx = await _claimant_ctx(request)
+    if not ctx:
+        raise HTTPException(status_code=401, detail="This link is invalid or has expired")
+    claim_id = ctx["claim_id"]
+    n = await nidaan.submit_claim_documents(claim_id)
+    total = len(await nidaan.get_claim_documents(claim_id=claim_id))
+    if n:
+        try:
+            await nidaan.record_claim_activity(
+                claim_id, "documents", actor="complainant",
+                summary="\U0001f4ce The complainant submitted %d document%s (%d on the claim now)"
+                        % (n, "" if n == 1 else "s", total))
+        except Exception as e:  # noqa: BLE001
+            logger.warning("document submit remark failed claim=%s: %s", claim_id, e)
+        # Told ONCE, when there is something to act on - not on every file as it is picked.
+        try:
+            import biz_nidaan_notifications as _nnot
+            await _nnot.notify_claim_watchers(
+                claim_id,
+                "\U0001f4ce Documents submitted \u2014 NP-%s" % claim_id,
+                "The complainant has submitted %d document%s. The claim now holds %d."
+                % (n, "" if n == 1 else "s", total),
+                event_key="claim.watch")
+        except Exception as e:  # noqa: BLE001
+            logger.info("document submit notify skipped claim=%s: %s", claim_id, e)
+    return {"ok": True, "submitted": n, "total": total}
+
+
+async def _file_consent_pdf(claim_id: int) -> Optional[int]:
+    """Phase 3: persist the tamper-evident acceptance PDF into the claim's L2 documents so the
+    signed authorization is permanently ON FILE (not just generated on demand). Idempotent —
+    skips if an 'authorization' doc already exists for this claim. Returns doc_id or None."""
+    await nidaan.ensure_claim_documents_table()
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+        _c.row_factory = __import__("aiosqlite").Row
+        exists = await (await _c.execute(
+            "SELECT 1 FROM nidaan_claim_documents WHERE claim_id=? AND source='authorization' LIMIT 1",
+            (claim_id,))).fetchone()
+        acc = await (await _c.execute(
+            "SELECT account_id FROM nidaan_claims WHERE claim_id=?", (claim_id,))).fetchone()
+    if exists or not acc:
+        return None
+    pdf = await claimant.build_consent_proof_pdf(claim_id)
+    if not pdf:
+        return None
+    stored = f"{uuid.uuid4().hex}.pdf"
+    (_NIDAAN_DOCS_DIR / stored).write_bytes(pdf)
+    return await nidaan.save_claim_document(
+        account_id=acc["account_id"], stored_name=stored,
+        original_name=f"authorization-acceptance-claim-{claim_id}.pdf",
+        file_size=len(pdf), mime_type="application/pdf", claim_id=claim_id, source="authorization")
+
+
+@app.post("/nidaan/claim/api/consent")
+@limiter.limit("10/minute")
+async def nidaan_claim_consent(request: Request):
+    """Record the complainant's DIGITAL ACCEPTANCE of the success-fee terms (idempotent). Snapshots the
+    % + GST + T&C version that applied at this moment. On the FIRST acceptance it also files the
+    acceptance PDF into L2 and (Phase 3) releases the claim to ClaimShield via the gated auto-send."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    ctx = await _claimant_ctx(request)
+    if not ctx:
+        raise HTTPException(status_code=401, detail="This link is invalid or has expired")
+    # A staff preview session can look at this page; it can never accept on somebody's behalf.
+    # The whole point of the code is that the person who accepts is the person we hold a number
+    # for - a staffer standing in for them would put us right back where we started.
+    if ctx.get("preview"):
+        raise HTTPException(status_code=403,
+                            detail="This is a staff preview. Only the complainant can accept "
+                                   "the terms, after confirming their identity.")
+    ip = (request.client.host if request.client else "") or ""
+    ua = request.headers.get("user-agent", "") or ""
+    res = await claimant.record_consent(ctx["claim_id"], ip=ip, user_agent=ua)
+    if not res.get("already"):
+        async def _post_accept(cid):
+            # 1) File the tamper-evident acceptance PDF into the claim's L2 documents (once).
+            try:
+                await _file_consent_pdf(cid)
+            except Exception as _fe:
+                logger.warning("file consent pdf failed claim=%s: %s", cid, _fe)
+            # 2) Complainant has authorized → run the GATED auto-send to ClaimShield.
+            try:
+                import biz_claimshield as _cs
+                await _cs.auto_send_if_eligible(cid)
+            except Exception as _se:
+                logger.warning("post-accept ClaimShield send failed claim=%s: %s", cid, _se)
+            # 3) Alert admins on all channels that the complainant accepted.
+            try:
+                import biz_nidaan_notifications as _nnot
+                await _nnot.on_claimant_accepted(cid)
+            except Exception:
+                pass
+            # 4) Thank the complainant for accepting (email + WhatsApp best-effort), log it.
+            try:
+                await _claimant_accept_thankyou(cid)
+            except Exception as _te:
+                logger.warning("complainant thank-you failed claim=%s: %s", cid, _te)
+        asyncio.create_task(_post_accept(ctx["claim_id"]))
+    return {"ok": True, "already": res.get("already", False)}
+
+
+async def _claimant_accept_thankyou(claim_id: int) -> None:
+    """Thank the complainant right after they accept the authorization — email (reliable) + WhatsApp
+    (best-effort, in-session), and record it on the claim timeline. No ClaimShield/L2 wording."""
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+        _c.row_factory = __import__("aiosqlite").Row
+        r = await (await _c.execute(
+            "SELECT insured_name, insured_email, insured_phone FROM nidaan_claims WHERE claim_id=?",
+            (claim_id,))).fetchone()
+    if not r:
+        return
+    name = (r["insured_name"] or "").split(" ")[0]
+    reg = f"NP-{claim_id}"
+    email = (r["insured_email"] or "").strip()
+    if email and "@" in email:
+        html = (f"<div style='font-family:Arial,sans-serif;font-size:15px;color:#1a1a1a;line-height:1.6'>"
+                f"<p>Namaste {_esc_html(name)} 🙏</p>"
+                f"<p>Thank you for confirming your authorization for claim <b>{reg}</b>. "
+                f"We're now taking your claim forward for further processing, and we'll keep you "
+                f"updated at every step. If we need any documents, we'll reach out on WhatsApp/email.</p>"
+                f"<p style='color:#444'>नमस्ते {_esc_html(name)} 🙏<br>आपके क्लेम <b>{reg}</b> के लिए "
+                f"अधिकार-पुष्टि के लिए धन्यवाद। अब हम आपके क्लेम को आगे की प्रक्रिया के लिए ले रहे हैं और "
+                f"हर चरण पर आपको अपडेट करते रहेंगे।</p>"
+                f"<p style='color:#888;font-size:13px'>— Team NidaanPartner</p></div>")
+        try:
+            await email_svc.send_email(to_email=email, subject=f"[NidaanPartner] Thank you — claim {reg} authorized",
+                                       html_body=html, from_name="Nidaan Partner")
+        except Exception:
+            pass
+    phone = (r["insured_phone"] or "").strip()
+    if phone:
+        try:
+            import biz_nidaan_whatsapp as _nwa
+            if _nwa.is_configured():
+                # 'critical': this confirms something the complainant just DID. Holding it behind
+                # the daily cap would leave them wondering whether their authorisation landed.
+                with _nwa.sending_as("critical"):
+                    await _nwa.send_text(
+                        phone, f"Namaste {name} 🙏 Aapke claim {reg} ki authorization mil gayi — "
+                               f"dhanyavaad! Ab hum aapka claim aage badha rahe hain aur har update "
+                               f"aapko yahin denge. — Team NidaanPartner")
+        except Exception:
+            pass
+    try:
+        await nidaan.record_claim_activity(claim_id, "authorization_accepted", channel="system",
+                                           actor="complainant", summary="Complainant accepted authorization; thank-you sent")
+    except Exception:
+        pass
+
+
+def _esc_html(s: str) -> str:
+    return (str(s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
+
+
+# ── Ops side: manage a claim's complainant portal (staff, from the L2 claim view) ──
+@app.get("/nidaan/ops/api/claims/{claim_id}/portal")
+async def ops_claim_portal_state(claim_id: int, request: Request):
+    """Portal status for the L2 claim view: exists? complainant opened it? accepted the fee terms?
+    link sent how many times? Plus the current fee/GST config."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    return await claimant.portal_state(claim_id)
+
+
+@app.get("/nidaan/ops/api/claims/{claim_id}/portal/preview")
+@limiter.limit("30/minute")
+async def ops_claim_portal_preview(claim_id: int, request: Request):
+    """A short-lived link that shows a staffer EXACTLY what the complainant sees.
+
+    Staff cannot receive the complainant's code — and should not: the point of the code is that
+    the person who accepts the fee terms is the person whose number we hold. So ops mints its own
+    preview session instead. It can look; the consent endpoint refuses it, and it dies in 20
+    minutes. This replaces the old '?staff=1' on the magic link, which anybody could type."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    claim = await nidaan.get_claim_with_account(claim_id)
+    if not claim:
+        raise HTTPException(404, "Claim not found")
+    import biz_nidaan_claim_access as _acc
+    tok = nidaan.create_claim_session_token(claim_id, minutes=_acc.PREVIEW_MIN, preview=True)
+    await _ops_audit(request, "claimant_portal.preview", "claim", str(claim_id),
+                     "%s previewed the complainant's page" % _actor_label(caller))
+    return {"ok": True, "minutes": _acc.PREVIEW_MIN,
+            "link": f"{_nidaan_origin(request)}/nidaan/claim#s={tok}"}
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/portal/ensure")
+async def ops_claim_portal_ensure(claim_id: int, request: Request):
+    """Create the complainant portal link AND email it to them. Returns the link either way.
+
+    This used to create the link, call mark_link_sent(), and email nobody - so the screen
+    reported "sent 2x" for two emails that were never written (founder, 22 Sep: "reissuing a
+    dashboard link ... currently failing"). A counter that says sent when nothing went is worse
+    than no counter.
+
+    The link is still returned when there is no email on file, because copying it into WhatsApp
+    is a real thing staff do - but that case now says so instead of claiming it was sent.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "sub_super_admin")
+    p = await claimant.ensure_portal(claim_id, with_token=True)
+    url = f"{_nidaan_origin(request)}/nidaan/claim/magic?token={p.get('access_token')}"
+    # send_greeting_email marks the link sent ITSELF, and only when the send succeeded. Nothing
+    # here may mark it sent, or we are back where we started.
+    res = await claimant.send_greeting_email(claim_id, force=True)
+    emailed = bool(res.get("ok"))
+    why = "" if emailed else (res.get("reason") or "send_failed")
+    await _ops_audit(request, "claimant_portal.link", "claim", str(claim_id),
+                     f"portal link issued; emailed={emailed}" + (f" ({why})" if why else ""))
+    return {"ok": True, "link": url, "emailed": emailed, "reason": why,
+            "state": await claimant.portal_state(claim_id)}
+
+
+@app.get("/nidaan/ops/api/claims/{claim_id}/consent-proof")
+async def ops_claim_consent_proof(claim_id: int, request: Request):
+    """Download the tamper-evident Digital Consent Record (PDF) for a claim. Super-admin only; audited."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    pdf = await claimant.build_consent_proof_pdf(claim_id)
+    if not pdf:
+        raise HTTPException(status_code=404, detail="No recorded consent for this claim yet")
+    await _ops_audit(request, "claimant_consent.proof", "claim", str(claim_id), "consent proof downloaded")
+    return Response(content=pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="consent-claim-{claim_id}.pdf"'})
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/portal/push-authorization")
+async def ops_claim_push_authorization(claim_id: int, request: Request):
+    """Push the fee authorization to the complainant: records WHO pushed it + when (accountability),
+    then emails them their dashboard link IF they haven't accepted yet. Staff must have verified the
+    dispute amount first (the UI prompts for that). Sub-admin+; audited."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "sub_super_admin")
+    staff_name = staff.get("name") or staff.get("email") or f"staff#{staff.get('staff_id')}"
+    state = await claimant.portal_state(claim_id)
+    await claimant.mark_pushed(claim_id, staff_name)
+    emailed = False
+    if not state.get("consent_accepted"):
+        res = await claimant.send_greeting_email(claim_id, force=True)
+        emailed = bool(res.get("ok"))
+    await _ops_audit(request, "claimant_portal.push_auth", "claim", str(claim_id),
+                     f"authorization pushed by {staff_name}; emailed={emailed}")
+    return {"ok": True, "emailed": emailed, "state": await claimant.portal_state(claim_id)}
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/portal/send-email")
+async def ops_claim_portal_send_email(claim_id: int, request: Request):
+    """Manually email the complainant their portal link now (bypasses the auto-send switch). Used for
+    the 'send / re-send link' action + when a policyholder didn't get the auto email."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    res = await claimant.send_greeting_email(claim_id, force=True)
+    if not res.get("ok"):
+        _m = {"no_claimant_email": "This claim has no complainant email on file — add one first.",
+              "claim_not_found": "Claim not found."}
+        raise HTTPException(status_code=400, detail=_m.get(res.get("reason"), "Could not send the email."))
+    await _ops_audit(request, "claimant_portal.email", "claim", str(claim_id), "greeting email sent")
+    return {"ok": True, "state": await claimant.portal_state(claim_id)}
+
+
+# ── Super-admin: the counsel-owned T&C content + fee % (ops Content section) ──
+@app.get("/nidaan/ops/api/claimant-terms")
+async def ops_claimant_terms_get(request: Request):
+    """Current success-fee %, GST state, T&C version + text. Any staff may read; only SA edits."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "team_member")
+    cfg = await claimant.fee_config()
+    return {**cfg, "autosend_enabled": await claimant.autosend_enabled(),
+            "can_edit": staff.get("role") == "super_admin"}
+
+
+class _ClaimantTermsReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    fee_pct: float = Field(..., ge=0, le=100)
+    terms_version: str = Field(..., min_length=1, max_length=60)
+    terms_html: str = Field(..., min_length=1, max_length=20000)
+    terms_html_hi: str = Field("", max_length=20000)
+    autosend_enabled: bool = False
+
+
+@app.put("/nidaan/ops/api/claimant-terms")
+async def ops_claimant_terms_set(body: _ClaimantTermsReq, request: Request):
+    """Update the success-fee % + the T&C version/text (English + Hindi) (super-admin / counsel).
+    Existing acceptances keep the version + % they were pinned to — this only changes what NEW
+    complainants will see."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "super_admin")
+    sid = staff["staff_id"]
+    await nidaan.set_ops_setting("claimant_success_fee_pct", str(body.fee_pct), updated_by=sid)
+    await nidaan.set_ops_setting("claimant_terms_version", body.terms_version.strip(), updated_by=sid)
+    await nidaan.set_ops_setting("claimant_terms_html", body.terms_html, updated_by=sid)
+    await nidaan.set_ops_setting("claimant_terms_html_hi", body.terms_html_hi or "", updated_by=sid)
+    await nidaan.set_ops_setting("claimant_autosend_enabled", "1" if body.autosend_enabled else "0", updated_by=sid)
+    await _ops_audit(request, "claimant_terms.update", "settings", 0,
+                     f"fee={body.fee_pct}% ver={body.terms_version} autosend={body.autosend_enabled}")
+    return {"ok": True, **(await claimant.fee_config())}
+
+
+async def _reconcile_admin_payment_link(rec: dict, pay_id: str) -> None:
+    """On a super-admin payment link being paid: create/find the payer's account by mobile and
+    AUTO-GRANT the entitlement (₹499 review credit / subscription plan), then alert ops.
+    Custom-amount links are account-only. All of these show in ops revenue."""
+    phone = "".join(ch for ch in (rec.get("customer_phone") or "") if ch.isdigit())[-10:]
+    name = rec.get("customer_name") or "Customer"
+    email = rec.get("customer_email") or ""
+    purpose = rec.get("purpose")
+    amount_paise = int(rec.get("amount_paise") or 0)
+    plan = rec.get("plan") or ""
+    plink_id = rec.get("plink_id", "")
+    acct_id = rec.get("account_id")
+    granted = "account only"
+    if not acct_id and len(phone) == 10:
+        try:
+            acct_id = await nidaan.get_account_id_by_phone(phone)
+            if not acct_id:
+                acct_id = await nidaan.create_account_by_admin(owner_name=name, email=email, phone=phone)
+        except Exception as e:
+            logger.error("admin link account create failed: %s", e)
+    if acct_id:
+        try:
+            await nidaan.set_payment_link_account(plink_id, acct_id)
+        except Exception:
+            pass
+        try:
+            if purpose == "review499":
+                await nidaan.grant_admin_review_credit(acct_id, name, phone, email,
+                                                       (amount_paise // 100) or 499, plink_id)
+                granted = "₹499 review credit"
+            elif purpose == "subscription" and plan:
+                await nidaan.activate_from_order_payment(plink_id, acct_id, plan, amount_paise,
+                                                         razorpay_payment_id=pay_id)
+                granted = f"{plan} subscription activated"
+        except Exception as e:
+            logger.error("admin link auto-grant failed plink=%s: %s", plink_id, e)
+            granted = "⚠ GRANT FAILED — grant manually"
+    else:
+        granted = "⚠ no account (grant manually)"
+    try:
+        import biz_nidaan_notifications as _n
+        async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+            _c.row_factory = __import__("aiosqlite").Row
+            ids = [r["staff_id"] for r in await (await _c.execute(
+                "SELECT staff_id FROM nidaan_staff WHERE role IN ('super_admin','sub_super_admin') "
+                "AND status='active' AND deleted_at IS NULL")).fetchall()]
+        if ids:
+            await _n.notify_staff_inapp(
+                ids, f"💰 Payment link paid — {purpose} ₹{amount_paise // 100}",
+                f"{name} ({phone or '—'}) paid a {purpose} payment link. Account #{acct_id or '—'}; "
+                f"granted: {granted}. Shows in revenue.\n\nOpen: /nidaan/ops",
+                event_key="payment.link_paid", email=True)
+    except Exception as e:
+        logger.warning("admin link ops notify failed: %s", e)
+
+
+class _AdminPayLinkReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    purpose: str = Field(..., pattern=r"^(review499|subscription|custom)$")
+    amount: int = Field(0, ge=0, le=1000000)          # rupees; forced to 499 for review499
+    plan: str = Field("", max_length=40)               # required for subscription
+    customer_name: str = Field(..., min_length=1, max_length=120)
+    customer_phone: str = Field(..., max_length=15)
+    customer_email: str = Field("", max_length=120)
+    expiry_days: int = Field(3, ge=1, le=30)
+
+
+@app.post("/nidaan/ops/api/payment-links")
+@limiter.limit("20/minute")
+async def nidaan_ops_create_payment_link(body: _AdminPayLinkReq, request: Request):
+    """Super-admin: generate a shareable Razorpay payment link for a specific customer.
+    On payment the webhook creates the account by mobile and auto-grants the entitlement."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request, "super_admin")
+    phone = "".join(ch for ch in body.customer_phone if ch.isdigit())[-10:]
+    if len(phone) != 10:
+        raise HTTPException(400, "Enter a valid 10-digit customer mobile")
+    purpose = body.purpose
+    if purpose == "review499":
+        amount = 499
+        desc = "Nidaan — ₹499 claim review"
+    elif purpose == "subscription":
+        if body.plan not in ("silver", "gold", "platinum", "silver_annual", "gold_annual", "platinum_annual"):
+            raise HTTPException(400, "Select a valid subscription plan")
+        amount = int(body.amount)
+        if amount <= 0:
+            raise HTTPException(400, "Enter the subscription amount")
+        desc = f"Nidaan — {body.plan} subscription"
+    else:  # custom
+        amount = int(body.amount)
+        if amount <= 0:
+            raise HTTPException(400, "Enter an amount")
+        desc = "Nidaan Partner — payment"
+    import time as _t
+    expire_by = int(_t.time()) + body.expiry_days * 24 * 3600
+    notes = {"product": "nidaan_plink", "purpose": purpose, "phone": phone}
+    if purpose == "subscription":
+        notes["plan"] = body.plan
+    data = await _create_rzp_payment_link(
+        (await nidaan.charge_with_gst(amount))["total_paise"], desc, customer_name=body.customer_name, customer_phone=phone,
+        customer_email=body.customer_email, notes=notes, expire_by=expire_by)
+    await nidaan.record_payment_link(
+        data["id"], data.get("short_url", ""), purpose, amount * 100,
+        plan=(body.plan or None), customer_name=body.customer_name, customer_phone=phone,
+        customer_email=body.customer_email, created_by_type="staff", created_by_id=staff["staff_id"],
+        description=desc, expire_by=expire_by)
+    return {"short_url": data.get("short_url", ""), "plink_id": data["id"], "amount": amount}
+
+
+@app.get("/nidaan/ops/api/payment-links")
+async def nidaan_ops_list_payment_links(request: Request):
+    """Super-admin: list generated payment links with live status (created/paid/expired)."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request, "super_admin")
+    return {"links": await nidaan.list_payment_links(limit=100, created_by_type="staff")}
+
+
+# ── Customer support chat (public; AI first-line + human handoff) ─────────────
+def _derive_support_channel(declared: str, account) -> str:
+    """Origin channel for a NEW support thread (single source of truth for both the
+    message and lead endpoints). A logged-in customer is a 'subscriber' chat (plan
+    derived later via account_id); a page may declare homepage/review/branch/staff;
+    anything else falls back to 'web'."""
+    ch = declared if declared in ("branch", "staff", "homepage", "review") else ""
+    if account and ch not in ("branch", "staff"):
+        ch = "subscriber"
+    return ch or "web"
+
+
+class NidaanSupportMsgReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    message: str = Field(..., min_length=1, max_length=1500)
+    thread_id: Optional[int] = None
+    thread_key: Optional[str] = None
+    name: str = Field("", max_length=80)
+    contact: str = Field("", max_length=120)
+    lang: str = Field("", max_length=10)   # en | hi | hinglish (preferred reply language)
+    channel: str = Field("", max_length=12)  # web | branch | staff — where the chat originates
+    visitor_token: str = Field("", max_length=64)  # server-minted; identifies the BROWSER
+    hp: str = Field("", max_length=100)    # honeypot — must stay empty (bots fill it)
+
+
+class _SupportRateReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    thread_id: int
+    thread_key: str
+    rating: int   # 1 = 👍, -1 = 👎
+
+
+@app.post("/nidaan/api/support/rate")
+@limiter.limit("20/minute")
+async def nidaan_support_rate(body: _SupportRateReq, request: Request):
+    """Customer rates a chat 👍/👎 (recorded on the thread for Support analytics)."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    thread = await nidaan.get_support_thread(body.thread_id, body.thread_key)
+    if not thread: raise HTTPException(404, "Thread not found")
+    await nidaan.set_support_rating(body.thread_id, body.rating)
+    return {"ok": True}
+
+
+class _SupportCloseReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    thread_id: int
+    thread_key: str
+
+
+@app.post("/nidaan/api/support/close")
+@limiter.limit("30/minute")
+async def nidaan_support_close(body: _SupportCloseReq, request: Request):
+    """End a chat session (files the thread to history). Called when the customer
+    closes the chat, or when the widget detects the 30-min session expiry."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    thread = await nidaan.get_support_thread(body.thread_id, body.thread_key)
+    if not thread: raise HTTPException(404, "Thread not found")
+    await nidaan.close_support_session(body.thread_id)
+    return {"ok": True}
+
+
+@app.post("/nidaan/api/support/message")
+@limiter.limit("20/minute")
+async def nidaan_support_message(body: NidaanSupportMsgReq, request: Request):
+    """A customer sends a support message. Continues an existing thread (validated by its
+    thread_key) or starts a new one, stores the message, gets an AI first-line reply, and
+    escalates to a human when needed. Public + rate-limited; anonymous is fine."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _ip = request.client.host if request.client else ""
+    if auth.is_ip_blocked(_ip):
+        raise HTTPException(status_code=429, detail="Too many requests. Please try again later.")
+    if body.hp:   # honeypot: bots fill hidden fields, humans never do → flag IP + benign no-op
+        auth.record_failed_login(_ip)
+        return {"thread_id": 0, "thread_key": "", "reply": "Thanks!", "escalated": False,
+                "support_hours": "Mon–Fri, 10am–6pm IST"}
+    msg = body.message.strip()
+    if not msg:
+        raise HTTPException(status_code=400, detail="Empty message")
+    # Continue a validated thread, or open a new one.
+    _lang = body.lang if body.lang in ("en", "hi", "hinglish") else ""
+    # A logged-in customer (valid Nidaan token) → 'support' mode (account-aware, dashboard);
+    # anonymous homepage visitor → 'guide' mode (lead-gen/info only, NO account data).
+    _payload = _nidaan_bearer(request)
+    _account = (await _nidaan_account_from_payload(_payload)) if _payload else None
+    _mode = "support" if _account else "guide"
+    _acct_ctx = None
+    if _account:
+        _sub = await nidaan.get_active_subscription(_account["account_id"])
+        _acct_ctx = {"name": _account.get("owner_name"),
+                     "plan": (_sub or {}).get("plan"), "active": bool(_sub)}
+    _prev_status = None
+    if body.thread_id and body.thread_key:
+        thread = await nidaan.get_support_thread(body.thread_id, body.thread_key)
+        if not thread:
+            raise HTTPException(status_code=403, detail="Invalid conversation")
+        tid, tkey = thread["thread_id"], body.thread_key
+        _vtok = thread.get("visitor_token") or ""
+        _prev_status = thread.get("status")
+        _lang = _lang or (thread.get("lang") or "")
+    else:
+        _ch = _derive_support_channel(body.channel, _account)
+        # Same person, one conversation. A signed-in customer who lost their thread key (new
+        # device, cleared storage) used to spawn a second thread, so support saw the same person
+        # twice. Reuse their open thread instead. Only for a PROVEN identity — see
+        # find_open_support_thread; an anonymous contact string is never matched.
+        _reuse = await nidaan.find_open_support_thread(
+            account_id=(_account["account_id"] if _account else None))
+        # No account? Then the browser's own token continues its conversation. The widget used
+        # to forget the thread after 30 minutes idle, so one returning visitor became five
+        # threads in the support inbox and nobody could see they were the same person.
+        if not _reuse and body.visitor_token:
+            _reuse = await nidaan.find_thread_by_visitor(body.visitor_token)
+        if _reuse:
+            tid, tkey = _reuse["thread_id"], _reuse["thread_key"]
+            _vtok = _reuse.get("visitor_token") or ""
+            _prev_status = _reuse.get("status")
+            _lang = _lang or (_reuse.get("lang") or "")
+            # A visitor coming back to a closed conversation is re-opening it, not starting over.
+            if _prev_status == "closed":
+                try:
+                    await nidaan.set_support_status(tid, "ai")
+                    _prev_status = "ai"
+                except Exception:
+                    pass
+        else:
+            started = await nidaan.create_support_thread(
+                name=(_account.get("owner_name") if _account else body.name),
+                contact=body.contact, channel=_ch, lang=_lang,
+                account_id=(_account["account_id"] if _account else None),
+                visitor_token=body.visitor_token)
+            tid, tkey = started["thread_id"], started["thread_key"]
+            _vtok = started["visitor_token"]
+    # Per-thread flood cap: stop a single conversation from being spammed unbounded.
+    if body.thread_id and len(await nidaan.get_support_messages(tid, limit=200)) >= 80:
+        raise HTTPException(status_code=429,
+                            detail="This conversation is very long — please start a new chat or leave your details.")
+    await nidaan.add_support_message(tid, "customer", msg)
+    history = await nidaan.get_support_messages(tid)
+    # Loop / anomaly guard: if the visitor repeats the same question or the chat drags on without
+    # resolution, hand to a human instead of letting the AI re-explain in circles.
+    import re as _re_sup
+    _cust = [h["body"] for h in history if h["sender_type"] == "customer"]
+    def _norm_sup(s):
+        return _re_sup.sub(r"\W+", " ", (s or "").lower()).strip()
+    _nmsg = _norm_sup(msg)
+    _repeat = bool(_nmsg) and sum(1 for p in _cust if _norm_sup(p) == _nmsg) >= 2
+    _force_human = _repeat or len(_cust) >= 6
+    import biz_ai as ai_mod
+    _facts_block = nidaan.content_facts_block(await nidaan.get_content(), lang=(_lang or "en"))
+    ai = await ai_mod.nidaan_support_reply(
+        msg, [{"sender_type": h["sender_type"], "body": h["body"]} for h in history],
+        lang=_lang, mode=_mode, account_ctx=_acct_ctx, facts_block=_facts_block)
+    answer = (ai.get("answer") or "").strip() or (
+        "Thanks for reaching out! A member of our team will get back to you during support "
+        "hours (Mon–Fri, 10am–6pm IST).")
+    escalated = bool(ai.get("escalate")) or _force_human
+    if _force_human and not bool(ai.get("escalate")):
+        answer += ("\n\nLet me connect you with a human teammate who can help further — "
+                   "they'll follow up during support hours (Mon–Fri, 10am–6pm IST).")
+    await nidaan.add_support_message(tid, "ai", answer)
+    if escalated:
+        await nidaan.set_support_status(tid, "escalated")
+        try:
+            import biz_nidaan_notifications as _nnot
+            if hasattr(_nnot, "on_support_escalated"):
+                import asyncio as _aio
+                _aio.create_task(_nnot.on_support_escalated(tid))
+        except Exception:
+            pass
+    else:
+        # Customer follow-up on a thread a human is already handling (was escalated, or a
+        # staffer has replied) → alert the handling reps so the reply isn't missed. Not an
+        # escalation; skipped for pure-AI threads to avoid noise.
+        try:
+            _human_engaged = (_prev_status == "escalated") or any(
+                h.get("sender_type") == "staff" for h in history)
+            if _human_engaged:
+                import biz_nidaan_notifications as _nnot
+                import asyncio as _aio
+                _aio.create_task(_nnot.on_support_customer_reply(tid))
+        except Exception:
+            pass
+    return {"thread_id": tid, "thread_key": tkey, "visitor_token": _vtok, "reply": answer,
+            "escalated": escalated, "support_hours": "Mon–Fri, 10am–6pm IST"}
+
+
+@app.get("/nidaan/api/support/thread")
+@limiter.limit("120/minute")
+async def nidaan_support_thread(thread_id: int, thread_key: str, request: Request, after_id: int = 0):
+    """Fetch a support thread's messages — only with the matching thread_key. `after_id`
+    returns only newer messages (the widget polls this ~every 4s for live staff replies)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    thread = await nidaan.get_support_thread(thread_id, thread_key)
+    if not thread:
+        raise HTTPException(status_code=403, detail="Invalid conversation")
+    msgs = _attach_message_urls(await nidaan.get_support_messages(thread_id, after_id=max(0, after_id)))
+    # Customer viewed the thread → mark its messages seen (clears the dashboard chat-reply bell).
+    try:
+        await nidaan.mark_support_seen_by_subscriber(thread_id)
+    except Exception:
+        pass
+    try:
+        await nidaan.mark_support_read(thread_id, "customer")
+    except Exception:
+        pass
+    return {"thread_id": thread_id, "status": thread.get("status"), "messages": msgs,
+            "read": await nidaan.get_support_read_marks(thread_id)}
+
+
+_MAX_SUPPORT_ATTACH = 15          # per-thread storage-abuse cap
+
+
+async def _save_support_attachment(file, account_id):
+    """Store a support-chat file through the SAME hardened path as claim documents: size cap,
+    MIME allow-list, magic-byte check, and an extension derived from the bytes (never the client
+    filename). Returns the doc_id, or raises."""
+    content = await file.read()
+    # One gate for size, real type, extension-from-bytes AND the virus scan.
+    ext = await validate_upload_scanned(content, (file.content_type or ""), what="file")
+    stored_name = f"{uuid.uuid4().hex}{ext}"
+    (_NIDAAN_DOCS_DIR / stored_name).write_bytes(content)
+    return await nidaan.save_claim_document(
+        account_id=account_id, stored_name=stored_name,
+        original_name=(file.filename or stored_name)[:180],
+        file_size=len(content), mime_type=file.content_type or "", claim_id=None,
+        source="support")
+
+
+@app.post("/nidaan/api/support/attach")
+@limiter.limit("10/minute")
+async def nidaan_support_attach(request: Request, thread_id: int = Form(...),
+                                file: UploadFile = File(...)):
+    """Customer attaches a file to their support conversation.
+
+    SECURITY: deliberately requires a real signed-in account, NOT just the thread_key. The
+    thread_key is a read capability that can be copied out of a URL or a shared device; letting
+    it also grant WRITE-to-disk would hand an upload endpoint to anyone who ever saw a link.
+    So we require the account bearer token AND that the thread belongs to that account."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Please sign in to attach a file")
+    account_id = payload["sub"]
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+        _c.row_factory = __import__("aiosqlite").Row
+        t = await (await _c.execute(
+            "SELECT thread_id, account_id, status FROM nidaan_support_threads WHERE thread_id=?",
+            (thread_id,))).fetchone()
+    if not t or t["account_id"] != account_id:
+        raise HTTPException(status_code=403, detail="Not your conversation")
+    if t["status"] == "closed":
+        raise HTTPException(status_code=400, detail="This conversation is closed")
+    if await nidaan.count_support_attachments(thread_id) >= _MAX_SUPPORT_ATTACH:
+        raise HTTPException(status_code=429, detail="Too many files on this conversation")
+    doc_id = await _save_support_attachment(file, account_id)
+    mid = await nidaan.add_support_message(thread_id, "customer",
+                                           f"[file] {(file.filename or 'document')[:120]}",
+                                           attachment_doc_id=doc_id)
+    try:
+        await nidaan.set_support_status(thread_id, "escalated")   # a file needs a human to look
+    except Exception:
+        pass
+    return {"ok": True, "msg_id": mid}
+
+
+@app.post("/nidaan/ops/api/support/threads/{thread_id}/attach")
+@limiter.limit("20/minute")
+async def ops_support_attach(thread_id: int, request: Request, file: UploadFile = File(...)):
+    """Staff attaches a file into a support conversation."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    meta = await nidaan.get_support_thread_meta(thread_id)
+    if not meta:
+        raise HTTPException(status_code=404, detail="Thread not found")
+    if await nidaan.count_support_attachments(thread_id) >= _MAX_SUPPORT_ATTACH:
+        raise HTTPException(status_code=429, detail="Too many files on this conversation")
+    doc_id = await _save_support_attachment(file, meta.get("account_id"))
+    mid = await nidaan.add_support_message(thread_id, "staff",
+                                           f"[file] {(file.filename or 'document')[:120]}",
+                                           attachment_doc_id=doc_id)
+    await _ops_audit(request, "support.attach", "support_thread", str(thread_id),
+                     (file.filename or "")[:80])
+    return {"ok": True, "msg_id": mid}
+
+
+@app.get("/nidaan/api/support/status")
+@limiter.limit("60/minute")
+async def nidaan_support_status(request: Request):
+    """Whether the human team is currently online (business hours, IST) — the widget uses
+    this to offer the leave-your-details fallback out of hours."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    cfg = await nidaan.get_business_hours()
+    return {"open": await nidaan.is_within_business_hours(),
+            "days": cfg["days"], "start": cfg["start"], "end": cfg["end"]}
+
+
+class NidaanSupportLeadReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(..., min_length=1, max_length=80)
+    contact: str = Field(..., min_length=3, max_length=120)   # email or 10-digit mobile
+    message: str = Field("", max_length=1000)
+    thread_id: Optional[int] = None
+    thread_key: Optional[str] = None
+    lang: str = Field("", max_length=10)
+    channel: str = Field("", max_length=12)  # where the chat originates (branch/staff/homepage/review)
+    hp: str = Field("", max_length=100)    # honeypot — must stay empty
+
+
+@app.post("/nidaan/api/support/lead")
+@limiter.limit("4/hour")
+async def nidaan_support_lead(body: NidaanSupportLeadReq, request: Request):
+    """Capture a lead from the widget (out-of-hours / callback request). Creates or continues
+    a thread with the visitor's name + contact, marks it escalated (needs a human), and alerts
+    staff. Returns a ticket number. Rate-limited (4/hour/IP) + one-per-browser on the client."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _ip = request.client.host if request.client else ""
+    if auth.is_ip_blocked(_ip):
+        raise HTTPException(status_code=429, detail="Too many requests. Please try again later.")
+    if body.hp:   # honeypot → flag + benign fake success
+        auth.record_failed_login(_ip)
+        return {"ok": True, "ticket": 0, "thread_key": ""}
+    name = body.name.strip()
+    contact = body.contact.strip()
+    is_email = ("@" in contact and "." in contact.rsplit("@", 1)[-1])
+    is_mobile = bool(nidaan.normalize_phone(contact))
+    if not (is_email or is_mobile):
+        raise HTTPException(status_code=400, detail="Please enter a valid email or 10-digit mobile")
+    _lang = body.lang if body.lang in ("en", "hi", "hinglish") else ""
+    if body.thread_id and body.thread_key:
+        thread = await nidaan.get_support_thread(body.thread_id, body.thread_key)
+        if not thread:
+            raise HTTPException(status_code=403, detail="Invalid conversation")
+        tid, tkey = thread["thread_id"], body.thread_key
+        await nidaan.update_support_thread_contact(tid, name=name, contact=contact)
+    else:
+        _payload = _nidaan_bearer(request)
+        _account = (await _nidaan_account_from_payload(_payload)) if _payload else None
+        _ch = _derive_support_channel(body.channel, _account)
+        started = await nidaan.create_support_thread(
+            name=name, contact=contact, channel=_ch, lang=_lang,
+            account_id=(_account["account_id"] if _account else None))
+        tid, tkey = started["thread_id"], started["thread_key"]
+    note = body.message.strip() or "(Requested a callback — left contact details)"
+    await nidaan.add_support_message(tid, "customer", f"📇 Lead — {name} · {contact}\n{note}")
+    await nidaan.set_support_status(tid, "escalated")
+    try:
+        import biz_nidaan_notifications as _nnot
+        import asyncio as _aio
+        _aio.create_task(_nnot.on_support_escalated(tid))
+    except Exception:
+        pass
+    return {"ok": True, "ticket": tid, "thread_key": tkey}
+
+
+@app.get("/nidaan-sw.js")
+async def nidaan_service_worker():
+    """Serve the Nidaan PWA service worker from root scope so it can control /nidaan/* pages."""
+    sw_path = Path(__file__).parent / "static" / "nidaan-sw.js"
+    return FileResponse(
+        str(sw_path),
+        media_type="application/javascript",
+        headers={"Service-Worker-Allowed": "/", "Cache-Control": "no-cache"},
+    )
+
+
+@app.get("/nidaan/signup", response_class=RedirectResponse)
+async def nidaan_signup_page(request: Request, plan: str = ""):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    dest = "/nidaan/start" + (f"?plan={plan}" if plan else "")
+    return RedirectResponse(url=dest, status_code=302)
+
+
+@app.get("/nidaan/login", response_class=RedirectResponse)
+async def nidaan_login_page(request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    return RedirectResponse(url="/nidaan/start", status_code=302)
+
+
+@app.get("/nidaan/dashboard", response_class=HTMLResponse)
+async def nidaan_dashboard_page(request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    return _nidaan_page("nidaan_dashboard.html", request)
+
+
+@app.get("/nidaan/get-reviewed", response_class=HTMLResponse)
+async def nidaan_review_page(request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    return _nidaan_page("nidaan_review.html", request)
+
+
+@app.get("/nidaan/logout")
+async def nidaan_logout(request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    return RedirectResponse("/nidaan/start")
+
+
+# ── Pydantic models ───────────────────────────────────────────────────────────
+
+class NidaanSignupReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
+    owner_name: str
+    email: str
+    phone: str
+    password: str
+    email_otp: str  # required — verified via /nidaan/api/send-verify-otp before submission
+    firm_name: str = ""
+    plan: str = "silver"
+    branch_code: str = ""   # optional affiliate branch OR staff referral code (validated if given)
+    utm_source: str = ""    # marketing attribution (analytics) — all optional
+    utm_medium: str = ""
+    utm_campaign: str = ""
+
+
+class NidaanMobileSignupReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    owner_name: str = Field(..., min_length=1, max_length=100)
+    phone: str                       # 10-digit mobile — primary identity (required)
+    password: str
+    email: str = ""                  # OPTIONAL — verified via OTP only if provided
+    email_otp: str = ""              # required only when email is given
+    firm_name: str = ""
+    plan: str = "silver"
+    branch_code: str = ""            # affiliate branch OR staff referral code — locked at signup
+    utm_source: str = ""             # marketing attribution (analytics) — all optional
+    utm_medium: str = ""
+    utm_campaign: str = ""
+
+
+class NidaanLoginReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3 — reject unknown fields
+    email: str                       # accepts email OR 10-digit mobile (login identifier)
+    password: str
+
+
+class NidaanClaimReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
+    claim_type: str
+    insured_name: str
+    insured_phone: str
+    insured_email: str = ""
+    insurer_name: str = ""
+    policy_no: str = ""
+    disputed_amount: Optional[int] = None
+    claim_event_date: Optional[str] = None
+    policy_inception_date: Optional[str] = None
+    tpa_name: str = ""
+    notes_from_agent: str = ""
+    intermediary_code: str = ""
+    intermediary_name: str = ""
+    comm_lang: str = ""          # en|hi|mr — preferred WhatsApp/email language
+    wa_consent: bool = True      # ₹499 funnel: opt-in to WhatsApp updates for this claim
+    branch_code: str = ""        # optional affiliate branch (captured here too; covers Google-signup)
+    # Who will actually deal with us — often not the patient (a son for his mother, a wife for her
+    # husband). Blank means they are the same person; every message and document ask goes here.
+    complainant_name: str = ""
+    complainant_phone: str = ""
+    complainant_email: str = ""
+
+
+class NidaanSendOTPReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
+    email: str
+
+
+class NidaanVerifyOTPReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
+    email: str
+    otp: str
+
+
+class NidaanGoogleReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
+    credential: str = Field(..., min_length=10)
+    plan: str = "free"  # only used during signup
+    branch_code: str = ""   # optional affiliate branch OR staff referral code (signup only)
+    utm_source: str = ""    # marketing attribution (analytics) — all optional
+    utm_medium: str = ""
+    utm_campaign: str = ""
+
+
+class NidaanCheckEmailReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
+    email: str
+
+
+# ── API routes ────────────────────────────────────────────────────────────────
+
+@app.post("/nidaan/api/check-email")
+@limiter.limit("10/minute")
+async def nidaan_api_check_email(body: NidaanCheckEmailReq, request: Request):
+    """Check if an email exists in nidaan_accounts. Used by the smart auth flow."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    email = body.email.strip().lower()
+    if not email or "@" not in email:
+        raise HTTPException(status_code=400, detail="Invalid email")
+    account = await nidaan.get_account_by_email(email)
+    return {"exists": account is not None}
+
+
+class NidaanCheckPhoneReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    phone: str
+
+
+@app.post("/nidaan/api/check-phone")
+@limiter.limit("10/minute")
+async def nidaan_api_check_phone(body: NidaanCheckPhoneReq, request: Request):
+    """Check if a 10-digit mobile already has an account. Entry point of the mobile-first
+    signup flow: exists → password login; new → register. Returns {valid, exists}."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    ph = nidaan.normalize_phone(body.phone)
+    if not ph:
+        return {"valid": False, "exists": False}
+    account = await nidaan.get_account_by_phone(ph)
+    return {"valid": True, "exists": account is not None}
+
+
+@app.get("/nidaan/api/branches")
+@limiter.limit("30/minute")
+async def nidaan_api_list_branches(request: Request):
+    """Public list of ACTIVE branches (code + city + name) for the claim/signup
+    branch-code picker (datalist/autocomplete). Reflects the live branch list, so it
+    auto-updates as branches are added/edited/removed in ops. No sensitive fields."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    rows = await nidaan.list_branches(include_disabled=False)
+    return {"branches": [
+        {"branch_code": r.get("branch_code"), "city": r.get("city"), "name": r.get("name")}
+        for r in (rows or [])]}
+
+
+@app.get("/nidaan/api/plans")
+@limiter.limit("30/minute")
+async def nidaan_api_plans(request: Request):
+    """Public monthly plan tiers (price, claims/mo, disputed cap) — for the pricing UI
+    and the claim-form disputed-amount cap nudge. Single source of truth."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    return {"plans": await nidaan.public_plans()}
+
+
+async def _notify_branch_signup(branch_code: str, owner_name: str, email: str, phone: str):
+    """Email the affiliate branch that a lead signed up under their code (still unpaid)."""
+    def _esc(s):
+        return (s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    try:
+        branch = await nidaan.get_branch(branch_code)
+        to = (branch or {}).get("contact_email", "").strip()
+        if not to:
+            return  # no branch email on file — superadmin still sees it in the panel
+        label = _esc(branch.get("name") or branch.get("city") or branch_code)
+        await email_svc.send_email(
+            to_email=to,
+            subject=f"New signup under your branch {branch_code} — payment pending",
+            html_body=(
+                f"<p>Hello {label} team,</p>"
+                f"<p>A customer just signed up on Nidaan Partner using your branch code "
+                f"<b>{_esc(branch_code)}</b>:</p>"
+                f"<ul><li><b>Name:</b> {_esc(owner_name)}</li>"
+                f"<li><b>Email:</b> {_esc(email)}</li>"
+                f"<li><b>Phone:</b> {_esc(phone)}</li></ul>"
+                f"<p><b>They have not paid yet.</b> Please don't provide offline services until "
+                f"their ₹499 review (or a subscription) is paid — we'll confirm once payment clears. "
+                f"This keeps commissions clean and prevents unpaid offline servicing.</p>"
+                f"<p>— Nidaan Partner</p>"
+            ),
+            from_name="Nidaan Partner",
+        )
+    except Exception as e:
+        logger.warning("branch signup notify failed for %s: %s", branch_code, e)
+
+
+async def _run_branch_unpaid_sweep() -> int:
+    """Daily sweep: email branches about attributed leads that started a ₹499
+    review but are still unpaid past 24h — once each (flagged so no repeats)."""
+    def _esc(s):
+        return (s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    try:
+        leads = await nidaan.get_branch_leads_to_remind(24)
+    except Exception as e:
+        logger.error("branch unpaid sweep: fetch failed: %s", e)
+        return 0
+    sent = 0
+    for L in leads:
+        to = (L.get("branch_email") or "").strip()
+        if not to:
+            continue
+        try:
+            await email_svc.send_email(
+                to_email=to,
+                subject=f"Reminder: lead under branch {L['branch_code']} still unpaid",
+                html_body=(
+                    f"<p>Hello {_esc(L.get('branch_name') or L.get('branch_city') or L['branch_code'])} team,</p>"
+                    f"<p>This customer signed up under your branch code <b>{_esc(L['branch_code'])}</b> "
+                    f"and started a ₹499 review, but <b>has still not paid</b>:</p>"
+                    f"<ul><li><b>Name:</b> {_esc(L.get('owner_name'))}</li>"
+                    f"<li><b>Phone:</b> {_esc(L.get('phone'))}</li>"
+                    f"<li><b>Claim:</b> {_esc(L.get('claim_type'))} — ₹{L.get('disputed_amount') or 0}</li></ul>"
+                    f"<p>Please ensure payment is completed before any offline servicing — this keeps "
+                    f"commission attribution clean.</p>"
+                    f"<p>— Nidaan Partner</p>"
+                ),
+                from_name="Nidaan Partner",
+            )
+            await nidaan.mark_branch_reminded(L["account_id"])
+            sent += 1
+        except Exception as e:
+            logger.warning("branch reminder failed for acct %s: %s", L.get("account_id"), e)
+    if sent:
+        logger.info("📨 Branch unpaid sweep: reminded %d lead(s)", sent)
+    return sent
+
+
+class NidaanTrackReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    event_type: str                  # whitelisted below
+    session_id: str = ""
+    ref: str = ""                    # staff/branch/campaign code from the URL
+    utm_source: str = ""
+    utm_medium: str = ""
+    utm_campaign: str = ""
+    purpose: str = ""                # review499 | subscription | ... (for pay_opened)
+    contact: str = ""                # best-effort phone/email seen mid-attempt
+
+
+# Public funnel/abandonment beacons. Only these anonymous top-of-funnel events are accepted;
+# money/outcome events are recorded server-side (webhook/signup) and can't be spoofed here.
+_TRACK_ALLOWED = {"signup_started", "review_started", "pay_opened", "abandoned", "page_lead"}
+
+
+@app.post("/nidaan/api/track")
+@limiter.limit("40/minute")
+async def nidaan_api_track(body: NidaanTrackReq, request: Request):
+    """Lightweight analytics beacon from the public pages (fire-and-forget). Records
+    top-of-funnel + abandonment events so the dashboard can show real drop-off by channel.
+    Never errors the client — always returns ok."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    et = (body.event_type or "").strip()
+    if et not in _TRACK_ALLOWED:
+        return {"ok": False}   # ignore unknown/spoofed event types silently
+    try:
+        await nidaan.record_event(
+            et, ref_code=(body.ref or ""), utm_source=body.utm_source or "",
+            utm_medium=body.utm_medium or "", utm_campaign=body.utm_campaign or "",
+            purpose=(body.purpose or ""), status="attempt",
+            session_id=(body.session_id or ""), contact=(body.contact or ""))
+    except Exception:
+        pass
+    return {"ok": True}
+
+
+@app.post("/nidaan/api/signup")
+@limiter.limit("5/minute")
+async def nidaan_api_signup(body: NidaanSignupReq, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    email = auth.sanitize_email(body.email)
+    if not email:
+        raise HTTPException(status_code=400, detail="Invalid email address")
+    # Verify email OTP before creating account — prevents fake email registrations
+    if not auth.verify_email_otp(email, body.email_otp):
+        raise HTTPException(status_code=401, detail="Invalid or expired verification code. Please request a new OTP.")
+    plan = body.plan if body.plan in ("silver", "gold", "platinum") else "free"
+    if len(body.password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+    # Referral attribution — optional. Accepts an active branch OR a staff referral code
+    # (staff-as-branch). Invalid non-blank codes are rejected to keep attribution clean.
+    branch_code = (body.branch_code or "").strip().upper()
+    if branch_code and not await nidaan.is_valid_ref_code(branch_code):
+        raise HTTPException(status_code=400, detail="Invalid or inactive referral code. Leave blank if you don't have one.")
+    account_id = await nidaan.create_account(
+        owner_name=body.owner_name.strip(),
+        email=email,
+        phone=body.phone.strip(),
+        password=body.password,
+        firm_name=body.firm_name.strip(),
+        branch_code=branch_code,
+        utm_source=getattr(body, "utm_source", "") or "",
+        utm_medium=getattr(body, "utm_medium", "") or "",
+        utm_campaign=getattr(body, "utm_campaign", "") or "",
+    )
+    if account_id is None:
+        raise HTTPException(status_code=409, detail="Email already registered")
+    token = nidaan.create_nidaan_token(account_id, email, plan)
+    import asyncio as _asyncio
+    try:
+        import biz_nidaan_notifications as _nnot
+        _asyncio.create_task(_nnot.on_subscriber_signup(account_id))  # alert SA/Admin
+    except Exception:
+        pass
+    # Affiliate branch alert: a lead just signed up under this branch code — tell
+    # the branch immediately (they're unpaid until the ₹499 / subscription clears,
+    # so the branch knows not to service them offline before payment). Only for REAL
+    # branches — a staff referral code lands in the same slot but has no branch inbox.
+    if branch_code and await nidaan.is_valid_branch(branch_code):
+        _asyncio.create_task(_notify_branch_signup(
+            branch_code, body.owner_name.strip(), email, body.phone.strip()))
+    _asyncio.create_task(email_svc.send_email(
+        to_email=body.email.strip(),
+        subject="Welcome to Nidaan Partner! 🛡️",
+        html_body=(
+            f"<p>Hi {body.owner_name.strip()},</p>"
+            f"<p>Welcome to <b>Nidaan Partner</b> — your gateway to insurance claim dispute resolution.</p>"
+            f"<p>Your account is ready. Subscribe to a plan from your dashboard to start submitting claims.</p>"
+            f"<p><a href='https://nidaanpartner.com/nidaan/dashboard' style='background:#0891b2;color:#fff;"
+            f"padding:.6rem 1.2rem;border-radius:8px;text-decoration:none;font-weight:700'>"
+            f"Go to Dashboard →</a></p>"
+            f"<p>If you have any questions, reply to this email — we respond within a few hours.</p>"
+            f"<p>— Nidaan Partner Team</p>"
+        ),
+        from_name="Nidaan Partner",
+    ))
+    return {"access_token": token, "account_id": account_id, "plan": plan}
+
+
+@app.post("/nidaan/api/signup/mobile")
+@limiter.limit("5/minute")
+async def nidaan_api_signup_mobile(body: NidaanMobileSignupReq, request: Request):
+    """Mobile-first signup: name + 10-digit mobile + password (email OPTIONAL). No email
+    OTP gate unless an email is supplied — the Razorpay payment verifies the person.
+    Branch code is captured + locked here for profit-share attribution."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    name = body.owner_name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Please enter your name")
+    ph = nidaan.normalize_phone(body.phone)
+    if not ph:
+        raise HTTPException(status_code=400, detail="Please enter a valid 10-digit mobile number")
+    if len(body.password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+    # Email is optional — but if given, it must be valid AND OTP-verified (unlocks email
+    # receipts + the free Sarathi CRM). Blank email is fine; account is created without one.
+    email = ""
+    if body.email.strip():
+        email = auth.sanitize_email(body.email)
+        if not email:
+            raise HTTPException(status_code=400, detail="Invalid email address")
+        if not auth.verify_email_otp(email, body.email_otp):
+            raise HTTPException(status_code=401, detail="Invalid or expired email code. Please request a new OTP, or leave email blank.")
+    # Referral attribution — optional. Accepts an active branch OR a staff referral code
+    # (staff-as-branch). Invalid non-blank codes are rejected to keep attribution clean.
+    branch_code = (body.branch_code or "").strip().upper()
+    if branch_code and not await nidaan.is_valid_ref_code(branch_code):
+        raise HTTPException(status_code=400, detail="Invalid or inactive referral code. Leave blank if you don't have one.")
+    # Dedup before insert for clean messages (one mobile = one account).
+    if await nidaan.get_account_by_phone(ph):
+        raise HTTPException(status_code=409, detail="This mobile is already registered. Please log in.")
+    if email and await nidaan.get_account_by_email(email):
+        raise HTTPException(status_code=409, detail="This email is already registered. Please log in.")
+    plan = body.plan if body.plan in ("silver", "gold", "platinum") else "free"
+    account_id = await nidaan.create_account(
+        owner_name=name, phone=ph, password=body.password, email=email,
+        firm_name=body.firm_name.strip(), branch_code=branch_code,
+        utm_source=body.utm_source or "", utm_medium=body.utm_medium or "",
+        utm_campaign=body.utm_campaign or "",
+    )
+    if account_id is None:
+        # Lost the unique-mobile race → the account now exists; tell them to log in.
+        raise HTTPException(status_code=409, detail="This mobile is already registered. Please log in.")
+    token = nidaan.create_nidaan_token(account_id, email, plan)
+    import asyncio as _asyncio
+    try:
+        import biz_nidaan_notifications as _nnot
+        _asyncio.create_task(_nnot.on_subscriber_signup(account_id))  # alert SA/Admin
+    except Exception:
+        pass
+    if branch_code and await nidaan.is_valid_branch(branch_code):
+        _asyncio.create_task(_notify_branch_signup(branch_code, name, email, ph))
+    if email:  # welcome email only when we actually have one
+        _asyncio.create_task(email_svc.send_email(
+            to_email=email,
+            subject="Welcome to Nidaan Partner! 🛡️",
+            html_body=(
+                f"<p>Hi {name},</p>"
+                f"<p>Welcome to <b>Nidaan Partner</b> — your gateway to insurance claim dispute resolution.</p>"
+                f"<p>Your account is ready.</p>"
+                f"<p>— Nidaan Partner Team</p>"
+            ),
+            from_name="Nidaan Partner",
+        ))
+    return {"access_token": token, "account_id": account_id, "plan": plan}
+
+
+@app.post("/nidaan/api/login")
+@limiter.limit("10/minute")
+async def nidaan_api_login(body: NidaanLoginReq, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    account = await nidaan.authenticate_account(body.email, body.password)
+    if not account:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    sub = await nidaan.get_active_subscription(account["account_id"])
+    plan = sub["plan"] if sub else ""
+    if not plan:
+        _pc = await nidaan.get_per_claim_status(account["account_id"])
+        if _pc:
+            plan = "per_claim"
+    token = nidaan.create_nidaan_token(account["account_id"], account["email"], plan)
+    return {
+        "access_token": token,
+        "account": {
+            "account_id": account["account_id"],
+            "owner_name": account["owner_name"],
+            "firm_name": account["firm_name"],
+            "email": account["email"],
+            "plan": plan,
+        },
+    }
+
+
+# ── Email OTP login (Nidaan) ──────────────────────────────────────────────────
+
+@app.post("/nidaan/api/send-verify-otp")
+@limiter.limit("5/minute")
+async def nidaan_api_send_verify_otp(req: NidaanSendOTPReq, request: Request):
+    """Send a 6-digit OTP to any email — for pre-signup/review email verification.
+    Does NOT require an existing account (unlike send-email-otp).
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    email = auth.sanitize_email(req.email)
+    if not email:
+        return JSONResponse({"detail": "Invalid email address"}, status_code=400)
+    client_ip = request.client.host if request.client else "unknown"
+    if auth.is_ip_blocked(client_ip):
+        return JSONResponse({"detail": "Too many attempts. Try again later."}, status_code=429)
+    result = auth.generate_email_otp(email)
+    if "error" in result:
+        return JSONResponse({"detail": result["error"]}, status_code=429)
+    otp_code = result["otp"]
+    logger.info("📧 Nidaan Verify OTP (pre-signup) for %s***", email[:3])
+    # Fetch name if account exists, else use generic greeting
+    account = await nidaan.get_account_by_email(email)
+    name = account.get("owner_name", "") if account else ""
+    _t: dict = {}
+    sent = await email_svc.send_nidaan_otp_email(email, otp_code, name, transport_out=_t)
+    await _login_health.record("subscriber", "email", email, bool(sent),
+                               detail=_t.get("error") or "", via=_t.get("via") or "")
+    if not sent:
+        return JSONResponse({"detail": "Could not send verification email right now. Please try again in a few minutes.", "code": "email_failed"}, status_code=503)
+    resp = {
+        "status": "otp_sent",
+        "email": email[:3] + "***" + email[email.index("@"):],
+        "expires_in": result["expires_in"],
+        "account_exists": account is not None,
+    }
+    if os.getenv("ENVIRONMENT", "").lower() == "development":
+        resp["_dev_otp"] = otp_code
+    return resp
+
+
+@app.post("/nidaan/api/send-email-otp")
+@limiter.limit("5/minute")
+async def nidaan_api_send_email_otp(req: NidaanSendOTPReq, request: Request):
+    """Send a 6-digit OTP to the registered Nidaan account email."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    email = auth.sanitize_email(req.email)
+    if not email:
+        return JSONResponse({"detail": "Invalid email address"}, status_code=400)
+    client_ip = request.client.host if request.client else "unknown"
+    if auth.is_ip_blocked(client_ip):
+        return JSONResponse({"detail": "Too many attempts. Try again later."}, status_code=429)
+    account = await nidaan.get_account_by_email(email)
+    if not account:
+        return JSONResponse(
+            {"detail": "No Nidaan account found with this email. Please sign up first."},
+            status_code=404)
+    result = auth.generate_email_otp(email)
+    if "error" in result:
+        return JSONResponse({"detail": result["error"]}, status_code=429)
+    otp_code = result["otp"]
+    logger.info("📧 Nidaan Email OTP for %s***", email[:3])
+    _t: dict = {}
+    sent = await email_svc.send_nidaan_otp_email(email, otp_code, account.get("owner_name", ""),
+                                                 transport_out=_t)
+    await _login_health.record("subscriber", "email", email, bool(sent),
+                               detail=_t.get("error") or "", via=_t.get("via") or "")
+    if not sent:
+        return JSONResponse({"detail": "Could not send OTP email right now. Please use Password login or try again in a few minutes.", "code": "email_failed"}, status_code=503)
+    resp = {
+        "status": "otp_sent",
+        "email": email[:3] + "***" + email[email.index("@"):],
+        "expires_in": result["expires_in"],
+    }
+    if os.getenv("ENVIRONMENT", "").lower() == "development":
+        resp["_dev_otp"] = otp_code
+    return resp
+
+
+@app.post("/nidaan/api/verify-email-otp")
+@limiter.limit("10/minute")
+async def nidaan_api_verify_email_otp(req: NidaanVerifyOTPReq, request: Request):
+    """Verify OTP and return Nidaan JWT."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    email = auth.sanitize_email(req.email)
+    if not email:
+        return JSONResponse({"detail": "Invalid email address"}, status_code=400)
+    client_ip = request.client.host if request.client else "unknown"
+    if auth.is_ip_blocked(client_ip):
+        return JSONResponse({"detail": "Too many attempts. Try again later."}, status_code=429)
+    if not auth.verify_email_otp(email, req.otp):
+        auth.record_failed_login(client_ip)
+        return JSONResponse({"detail": "Invalid or expired OTP. Please try again."}, status_code=401)
+    auth.clear_failed_logins(client_ip)
+    account = await nidaan.get_account_by_email(email)
+    if not account:
+        return JSONResponse({"detail": "Account not found"}, status_code=404)
+    sub = await nidaan.get_active_subscription(account["account_id"])
+    plan = sub["plan"] if sub else ""
+    if not plan:
+        _pc = await nidaan.get_per_claim_status(account["account_id"])
+        if _pc:
+            plan = "per_claim"
+    token = nidaan.create_nidaan_token(account["account_id"], account["email"], plan)
+    logger.info("🔑 Nidaan Email OTP Login: account %d (%s)", account["account_id"], email)
+    return {
+        "access_token": token,
+        "account": {
+            "account_id": account["account_id"],
+            "owner_name": account["owner_name"],
+            "firm_name": account["firm_name"],
+            "email": account["email"],
+            "plan": plan,
+        },
+    }
+
+
+# ── Password reset via OTP (Nidaan) ──────────────────────────────────────────
+
+class NidaanResetPasswordReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
+    email: str
+    otp: str
+    new_password: str = Field(..., min_length=8)
+
+@app.post("/nidaan/api/reset-password")
+@limiter.limit("5/minute")
+async def nidaan_api_reset_password(req: NidaanResetPasswordReq, request: Request):
+    """Verify OTP then update password. The OTP is consumed on success."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    email = auth.sanitize_email(req.email)
+    if not email:
+        raise HTTPException(status_code=400, detail="Invalid email")
+    client_ip = request.client.host if request.client else "unknown"
+    if auth.is_ip_blocked(client_ip):
+        raise HTTPException(status_code=429, detail="Too many attempts. Try again later.")
+    if not auth.verify_email_otp(email, req.otp):
+        auth.record_failed_login(client_ip)
+        raise HTTPException(status_code=401, detail="Invalid or expired OTP. Request a new one.")
+    auth.clear_failed_logins(client_ip)
+    account = await nidaan.get_account_by_email(email)
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    ok = await nidaan.update_account_password(account["account_id"], req.new_password)
+    if not ok:
+        raise HTTPException(status_code=500, detail="Password update failed")
+    # Auto sign-in after reset
+    sub = await nidaan.get_active_subscription(account["account_id"])
+    plan = sub["plan"] if sub else ""
+    if not plan:
+        _pc = await nidaan.get_per_claim_status(account["account_id"])
+        if _pc:
+            plan = "per_claim"
+    token = nidaan.create_nidaan_token(account["account_id"], account["email"], plan)
+    logger.info("🔑 Nidaan Password Reset: account %d (%s)", account["account_id"], email)
+    return {
+        "access_token": token,
+        "account": {
+            "account_id": account["account_id"],
+            "owner_name": account["owner_name"],
+            "firm_name": account["firm_name"],
+            "email": account["email"],
+            "plan": plan,
+        },
+    }
+
+
+# ── Google Sign-In / Sign-Up (Nidaan) ────────────────────────────────────────
+
+def _nidaan_google_client_id() -> str:
+    """Nidaan's own Google OAuth client (so the consent screen says 'Nidaan
+    Partner', not 'Sarathi-AI'). Falls back to the shared client if unset."""
+    return os.getenv("NIDAAN_GOOGLE_CLIENT_ID") or os.getenv("GOOGLE_CLIENT_ID", "")
+
+
+@app.get("/nidaan/api/google-client-id")
+async def nidaan_google_client_id(request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    client_id = _nidaan_google_client_id()
+    return {"client_id": client_id if client_id else None}
+
+
+@app.post("/nidaan/api/google")
+@limiter.limit("10/minute")
+async def nidaan_api_google_signin(req: NidaanGoogleReq, request: Request):
+    """Sign in existing Nidaan account with Google ID token."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    google_user = await auth.verify_google_id_token(
+        req.credential, expected_client_id=(os.getenv("NIDAAN_GOOGLE_CLIENT_ID") or None))
+    if not google_user:
+        return JSONResponse({"detail": "Invalid Google credential"}, status_code=401)
+    email = google_user["email"]
+    name = google_user.get("name", "")
+    account = await nidaan.get_account_by_email(email)
+    if not account:
+        return JSONResponse({
+            "detail": "No Nidaan account found with this Google email. Please sign up first.",
+            "email": email, "name": name,
+        }, status_code=404)
+    sub = await nidaan.get_active_subscription(account["account_id"])
+    plan = sub["plan"] if sub else ""
+    if not plan:
+        _pc = await nidaan.get_per_claim_status(account["account_id"])
+        if _pc:
+            plan = "per_claim"
+    token = nidaan.create_nidaan_token(account["account_id"], account["email"], plan)
+    logger.info("🔑 Nidaan Google Login: account %d (%s)", account["account_id"], email)
+    return {
+        "access_token": token,
+        "account": {
+            "account_id": account["account_id"],
+            "owner_name": account["owner_name"],
+            "firm_name": account["firm_name"],
+            "email": account["email"],
+            "plan": plan,
+        },
+    }
+
+
+@app.post("/nidaan/api/signup/google")
+@limiter.limit("5/minute")
+async def nidaan_api_google_signup(req: NidaanGoogleReq, request: Request):
+    """Sign up for a new Nidaan account using Google. If email already registered, signs in instead."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    if req.plan not in ("silver", "gold", "platinum"):
+        req = req.model_copy(update={"plan": "silver"})  # default to silver for any unknown/free plan
+    google_user = await auth.verify_google_id_token(
+        req.credential, expected_client_id=(os.getenv("NIDAAN_GOOGLE_CLIENT_ID") or None))
+    if not google_user:
+        return JSONResponse({"detail": "Invalid Google credential"}, status_code=401)
+    email = google_user["email"].lower().strip()
+    name = google_user.get("name", "")
+    # If already registered, sign them in
+    existing = await nidaan.get_account_by_email(email)
+    if existing:
+        sub = await nidaan.get_active_subscription(existing["account_id"])
+        plan = sub["plan"] if sub else ""
+        token = nidaan.create_nidaan_token(existing["account_id"], existing["email"], plan)
+        return {"access_token": token, "account_id": existing["account_id"], "plan": plan, "existing": True}
+    _gbc = (req.branch_code or "").strip().upper()
+    if _gbc and not await nidaan.is_valid_ref_code(_gbc):
+        _gbc = ""   # silently drop a bad code on Google signup rather than block sign-in
+    account_id = await nidaan.create_account_google(
+        owner_name=name or email.split("@")[0],
+        email=email,
+        plan=req.plan,
+        branch_code=_gbc,
+        utm_source=req.utm_source or "", utm_medium=req.utm_medium or "",
+        utm_campaign=req.utm_campaign or "",
+    )
+    if account_id is None:
+        return JSONResponse({"detail": "Email already registered"}, status_code=409)
+    token = nidaan.create_nidaan_token(account_id, email, req.plan)
+    import asyncio as _asyncio
+    try:
+        import biz_nidaan_notifications as _nnot
+        _asyncio.create_task(_nnot.on_subscriber_signup(account_id))  # alert SA/Admin
+    except Exception:
+        pass
+    _asyncio.create_task(email_svc.send_email(
+        to_email=email,
+        subject="Welcome to Nidaan Partner! 🛡️",
+        html_body=(
+            f"<p>Hi {name or 'there'},</p>"
+            f"<p>Welcome to <b>Nidaan Partner</b> — signed in with Google.</p>"
+            f"<p>You've signed up for the <b>{req.plan.title()} Plan</b>. "
+            f"Complete your subscription payment from your dashboard:</p>"
+            f"<p><a href='https://nidaanpartner.com/nidaan/dashboard' style='background:#0891b2;color:#fff;"
+            f"padding:.6rem 1.2rem;border-radius:8px;text-decoration:none;font-weight:700'>"
+            f"Go to Dashboard →</a></p>"
+            f"<p>— Nidaan Partner Team</p>"
+        ),
+        from_name="Nidaan Partner",
+    ))
+    logger.info("🆕 Nidaan Google Signup: account %d (%s) plan=%s", account_id, email, req.plan)
+    return {"access_token": token, "account_id": account_id, "plan": req.plan}
+
+
+@app.get("/nidaan/api/me")
+async def nidaan_api_me(request: Request):
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    account = await _nidaan_account_from_payload(payload)
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    sub = await nidaan.get_active_subscription(account["account_id"])
+    per_claim = await nidaan.get_per_claim_status(account["account_id"])
+    # ── Authoritative entitlement (single source of truth) ──────────────────────
+    # The dashboard must NOT re-derive "is this user allowed in?" from scattered
+    # signals (that's what kept locking paid users out). The server computes it once
+    # from ALL sources: subscription, any claim (lead/paid), or a per-claim purchase.
+    claims_all = await nidaan.get_claims(account["account_id"], limit=200)
+    _pstat = [(c.get("payment_status") or "") for c in claims_all]
+    has_unpaid_lead = any(p == "unpaid_lead" for p in _pstat)
+    has_any_claim = len(claims_all) > 0
+    pc_active = bool(per_claim and (
+        (per_claim.get("balance") or 0) > 0 or (per_claim.get("purchased") or 0) > 0
+        or (per_claim.get("pending") or [])))
+    if sub:
+        account_state = {"type": "subscriber", "plan": sub.get("plan"),
+                         "active": True, "has_unpaid_lead": False}
+    elif has_any_claim or pc_active:
+        account_state = {"type": "retail", "plan": None,
+                         "active": True, "has_unpaid_lead": has_unpaid_lead}
+    else:
+        account_state = {"type": "new", "plan": None,
+                         "active": False, "has_unpaid_lead": False}
+    return {
+        "account_id": account["account_id"],
+        "owner_name": account["owner_name"],
+        "firm_name": account["firm_name"],
+        "email": account["email"],
+        "phone": account["phone"],
+        "status": account["status"],
+        "subscription": dict(sub) if sub else None,
+        "per_claim": per_claim,
+        "account_state": account_state,
+    }
+
+
+@app.get("/nidaan/api/features")
+async def nidaan_api_features(request: Request, lang: str = "en"):
+    """The advisor's own 'what you can do here' list — bilingual, from the shared feature registry,
+    scoped to the subscriber audience (+ plan). Powers the dashboard's Features section + Listen."""
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    account = await _nidaan_account_from_payload(payload)
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    import biz_nidaan_capabilities as caps
+    sub = await nidaan.get_active_subscription(account["account_id"])
+    plan = (sub.get("plan") if sub else "") or ""
+    return {"lang": ("hi" if str(lang).lower().startswith("hi") else "en"),
+            "features": caps.features_for("subscriber", lang, plan),
+            "speech": caps.speech_text_for("subscriber", lang, plan)}
+
+
+@app.get("/nidaan/api/features/audio")
+async def nidaan_api_features_audio(request: Request, lang: str = "en"):
+    """Cached Gemini narration of the advisor's feature list (free replays; 503 → browser voice)."""
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    account = await _nidaan_account_from_payload(payload)
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    import biz_nidaan_capabilities as caps
+    import biz_tts
+    sub = await nidaan.get_active_subscription(account["account_id"])
+    plan = (sub.get("plan") if sub else "") or ""
+    text = caps.speech_text_for("subscriber", lang, plan)
+    is_hi = str(lang).lower().startswith("hi")
+    voice = os.getenv("TTS_VOICE_HI" if is_hi else "TTS_VOICE_EN", "Kore")
+    wav = await biz_tts.cached_wav(text, voice=voice)
+    if not wav:
+        raise HTTPException(status_code=503, detail="voice_unavailable")
+    return Response(content=wav, media_type="audio/wav",
+                    headers={"Cache-Control": "private, max-age=3600"})
+
+
+@app.get("/nidaan/api/claims")
+async def nidaan_api_claims(request: Request, status: Optional[str] = None, limit: int = 50):
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    claims = await nidaan.get_claims(payload["sub"], status=status, limit=limit)
+    return {"claims": claims, "count": len(claims)}
+
+
+@app.get("/nidaan/api/review-fee-config")
+async def nidaan_review_fee_config(request: Request):
+    """Public: tiered review-fee config so the pay UI shows the correct amount
+    (₹low ≤ threshold, ₹high above) based on the claim's disputed amount."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    return await nidaan.review_fee_config()
+
+
+@app.get("/nidaan/api/guide")
+async def nidaan_guide_content(request: Request, ctx: str = "subscriber"):
+    """Single source for the in-app self-onboarding guides (subscriber | review | branch |
+    staff). The dashboard widgets AND the support chatbot both read from biz_nidaan_guide,
+    so guide text stays in one place and updates everywhere at once."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    import biz_nidaan_guide as _guide
+    if ctx not in _guide.GUIDE_CONTENT:
+        ctx = "subscriber"
+    return _guide.get_context(ctx)
+
+
+@app.get("/nidaan/api/claims/{claim_id}")
+async def nidaan_api_claim_detail(claim_id: int, request: Request):
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    claim = await nidaan.get_claim_detail(claim_id, account_id=payload["sub"])
+    if not claim:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    return claim
+
+
+@app.get("/nidaan/api/claims/{claim_id}/checklist")
+async def nidaan_api_claim_checklist(claim_id: int, request: Request):
+    """Document checklist + progress + pay-gate state for a claim (₹499 funnel).
+    Read by the dashboard (and mirrored to WhatsApp): which docs are needed,
+    which are received, and whether the Pay-₹499 gate should show."""
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    account_id = payload["sub"]
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _conn:
+        _conn.row_factory = __import__("aiosqlite").Row
+        _cur = await _conn.execute(
+            "SELECT claim_type, payment_status, disputed_amount, comm_lang "
+            "FROM nidaan_claims WHERE claim_id=? AND account_id=?",
+            (claim_id, account_id))
+        row = await _cur.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    import biz_nidaan_doc_checklist as _ck
+    lang = (row["comm_lang"] or "en")
+    st = await _ck.checklist_status(claim_id, row["claim_type"])
+    for it in st["items"]:
+        it["label"] = it.get(lang) or it["en"]   # localized display label
+    st["payment_status"] = row["payment_status"]
+    st["disputed_amount"] = row["disputed_amount"]
+    st["trust_line"] = _ck.TRUST_LINE.get(lang, _ck.TRUST_LINE["en"])
+    # Also return BOTH languages so the dashboard can switch label/why/trust live with
+    # its EN/HI toggle (the single `label`/`trust_line` above stays for the WhatsApp mirror).
+    st["trust_line_en"] = _ck.TRUST_LINE["en"]
+    st["trust_line_hi"] = _ck.TRUST_LINE.get("hi", _ck.TRUST_LINE["en"])
+    # Payment is available ANY time for an unpaid lead — documents are optional and
+    # can be added before OR after paying. We never gate ₹499 behind uploads
+    # (that only blocked customers from paying). `docs_optional` tells the UI to
+    # frame uploads as encouraged-not-required.
+    st["show_pay_gate"] = (row["payment_status"] == "unpaid_lead")
+    st["docs_optional"] = True
+    return st
+
+
+@app.get("/nidaan/api/doc-checklist")
+async def nidaan_api_doc_checklist_for_type(request: Request, claim_type: str = "", lang: str = "en"):
+    """Required-document checklist for a claim TYPE (before a claim exists). Used by
+    the review form to show exactly which documents to upload for the chosen type."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    import biz_nidaan_doc_checklist as _ck
+    lang = lang if lang in ("en", "hi", "mr") else "en"
+    docs = []
+    for d in _ck.doc_template_for(claim_type or "other"):
+        docs.append({
+            "key": d["key"],
+            "label": d.get(lang) or d["en"],
+            "why": d.get("why_en", ""),
+            "required": bool(d["required"]),
+            "conditional": bool(d.get("conditional")),
+        })
+    return {"claim_type": _ck.canonical_type(claim_type or "other"), "docs": docs,
+            "trust_line": _ck.TRUST_LINE.get(lang, _ck.TRUST_LINE["en"])}
+
+
+async def _finalize_paid_claim(claim_id: int, razorpay_payment_id: str = "",
+                               source: str = "system") -> dict:
+    """Idempotently mark a ₹499 claim PAID, start the review (initial task), fire the
+    funnel-paid notifications, and set the 48-business-hour SLA. Shared by the client
+    verify (/pay-verify), the Razorpay webhook, and the recovery poll — so a CAPTURED
+    payment ALWAYS unlocks the review even when the client callback is lost (UPI race,
+    low internet, app switch). Safe to call repeatedly: no-ops if already paid.
+    Returns {finalized, already, account_id, sla_due?}."""
+    import asyncio as _aio
+    from datetime import datetime as _dt
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _conn:
+        _conn.row_factory = __import__("aiosqlite").Row
+        claim = await (await _conn.execute(
+            "SELECT * FROM nidaan_claims WHERE claim_id=?", (claim_id,))).fetchone()
+        if not claim:
+            return {"finalized": False, "already": False, "not_found": True}
+        claim = dict(claim)
+        if claim.get("payment_status") == "paid":
+            return {"finalized": False, "already": True, "account_id": claim.get("account_id")}
+        # Item #4: record the tiered review fee actually paid (adjusted toward legal if GO).
+        _fee = await nidaan.review_fee_for(claim.get("disputed_amount"))
+        # Flip only if still not paid (atomic guard against a concurrent verify+webhook race).
+        cur = await _conn.execute(
+            "UPDATE nidaan_claims SET payment_status='paid', review_fee_paid=?, paid_at=CURRENT_TIMESTAMP, "
+            "last_status_at=CURRENT_TIMESTAMP WHERE claim_id=? AND payment_status!='paid'",
+            (_fee, claim_id))
+        if cur.rowcount == 0:
+            # Someone else won the race and marked it paid — treat as already-done.
+            await _conn.commit()
+            return {"finalized": False, "already": True, "account_id": claim.get("account_id")}
+        await _conn.execute(
+            "INSERT INTO nidaan_claim_status_log (claim_id, to_status, note, changed_by_type, changed_by_id) "
+            "VALUES (?, 'intimated', ?, 'system', 0)",
+            (claim_id, f"Review fee ₹{_fee} paid — review unlocked (via {source})"))
+        await _conn.commit()
+    account_id = claim.get("account_id")
+    # GST: record the tax collected (no-op when GST is off). Base = the review fee.
+    try:
+        await nidaan.record_gst(razorpay_payment_id, "review499", _fee,
+                                customer_state="", claim_id=claim_id, account_id=account_id)
+    except Exception as _ge:
+        logger.warning("record_gst failed for claim %s: %s", claim_id, _ge)
+    # Unified ledger: single row per ₹499 claim, from verify / webhook / recovery / reconcile.
+    try:
+        _c499 = (await nidaan.charge_with_gst(int(_fee)))["total_paise"]
+        await nidaan.record_payment(
+            source="per_claim_review", total_paise=_c499, base_paise=int(_fee) * 100,
+            dedup_key=(razorpay_payment_id or f"claim499:{claim_id}"),
+            razorpay_payment_id=(razorpay_payment_id or ""),
+            account_id=account_id, claim_id=claim_id,
+            verified=bool(razorpay_payment_id),
+            verify_method=("api_fetch" if source in ("recovery", "reconcile") else
+                           ("webhook" if source == "webhook" else "signature")),
+            note=f"₹{_fee} claim review · via {source}")
+    except Exception as _pe:
+        logger.warning("record_payment (review499) failed for claim %s: %s", claim_id, _pe)
+    sla_due = nidaan.business_hours_deadline(_dt.utcnow(), 48)
+    try:
+        _flag = await ntasks.get_flag("auto_create_initial_task", "1")
+        if ntasks._flag_truthy(_flag):
+            _tid = await ntasks.create_task(
+                claim_id=claim_id,
+                title=f"PAID ₹499 — review {claim.get('insured_name')}'s {claim.get('claim_type')} claim",
+                description=(claim.get("notes_from_agent") or "")[:400],
+                status_slug="initial_review", priority="high", created_by_staff_id=None)
+            try:
+                import biz_nidaan_notifications as _nnot
+                _aio.create_task(_nnot.on_task_assigned(_tid))
+            except Exception:
+                pass
+    except Exception as _te:
+        logger.warning("finalize paid-claim task create failed for %s: %s", claim_id, _te)
+    try:
+        import biz_nidaan_notifications as _nnot
+        _aio.create_task(_nnot.on_funnel_paid(claim_id, account_id, sla_due.isoformat()))
+        # (The office's "payment received" alert now comes from record_payment, once per payment.)
+    except Exception:
+        pass
+    _admin_email = os.getenv("NIDAAN_ADMIN_EMAIL", "")
+    if _admin_email:
+        _aio.create_task(email_svc.send_email(
+            to_email=_admin_email,
+            subject=f"[Nidaan] ₹499 PAID — claim #{claim_id} — assign + begin review",
+            html_body=(f"<p><b>PAID claim #{claim_id}</b> — {claim.get('insured_name')} · "
+                       f"{claim.get('claim_type')} · disputed ₹{claim.get('disputed_amount') or 'N/A'}</p>"
+                       f"<p>Payment: {razorpay_payment_id or 'n/a'} (via {source}). SLA (48 business hrs) "
+                       f"due ~{sla_due.strftime('%Y-%m-%d %H:%M UTC')}. Assign + begin review.</p>"),
+            from_name="Nidaan Partner"))
+    return {"finalized": True, "already": False, "account_id": account_id,
+            "sla_due": sla_due.isoformat()}
+
+
+@app.post("/nidaan/api/claims/{claim_id}/pay")
+@limiter.limit("10/minute")
+async def nidaan_claim_pay(claim_id: int, request: Request):
+    """₹499 funnel: create a Razorpay order to unlock the review of a free-lead
+    claim. Server-side guards: claim is owned and still 'unpaid_lead'. Documents
+    are OPTIONAL — payment is available anytime; we never block paying on uploads."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _conn:
+        _conn.row_factory = __import__("aiosqlite").Row
+        _cur = await _conn.execute(
+            "SELECT claim_type, payment_status, disputed_amount FROM nidaan_claims WHERE claim_id=? AND account_id=?",
+            (claim_id, payload["sub"]))
+        claim = await _cur.fetchone()
+    if not claim:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    if claim["payment_status"] != "unpaid_lead":
+        raise HTTPException(status_code=400, detail=f"Claim is already '{claim['payment_status']}'")
+    # NOTE: no document gate — customers can pay the review fee anytime; docs are optional.
+    # Item #4: tiered review fee — high tier when the disputed amount exceeds the threshold.
+    _fee = await nidaan.review_fee_for(claim["disputed_amount"])
+    _g = await nidaan.charge_with_gst(_fee)   # GST: adds tax on top when enabled (else base)
+    _amt_paise = _g["total_paise"]
+    import httpx as _httpx2, time as _time2
+    rzp_key_id = _nidaan_rzp_id()
+    rzp_key_secret = _nidaan_rzp_secret()
+    if not rzp_key_id or not rzp_key_secret:
+        raise HTTPException(status_code=503, detail="Payments not configured")
+    receipt = f"nc_{claim_id}_{int(_time2.time())}"[:40]
+    async with _httpx2.AsyncClient() as _client2:
+        _r = await _client2.post(
+            "https://api.razorpay.com/v1/orders",
+            auth=(rzp_key_id, rzp_key_secret),
+            json={"amount": _amt_paise, "currency": "INR", "receipt": receipt,
+                  "payment_capture": 1,   # auto-capture authorized payments (no stuck 'authorized')
+                  "notes": {"product": "nidaan_claim_499", "claim_id": str(claim_id)}},
+            timeout=20.0)
+        result = _r.json()
+    if "id" not in result:
+        raise HTTPException(status_code=502, detail=result.get("error", {}).get("description", "Order creation failed"))
+    return {"order_id": result["id"], "amount": _amt_paise, "fee": _fee,
+            "gst": _g["breakup"], "currency": "INR", "razorpay_key_id": rzp_key_id}
+
+
+class NidaanClaimPayVerifyReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    razorpay_order_id: str
+    razorpay_payment_id: str
+    razorpay_signature: str
+
+
+@app.post("/nidaan/api/claims/{claim_id}/pay-verify")
+@limiter.limit("5/minute")
+async def nidaan_claim_pay_verify(claim_id: int, body: NidaanClaimPayVerifyReq, request: Request):
+    """Verify the ₹499 payment, flip the claim to paid, START the review (task +
+    notifications), and begin the 48-BUSINESS-hour SLA."""
+    import hmac as _hm, hashlib as _hs2, asyncio as _asyncio_cpv
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    rzp_key_secret = _nidaan_rzp_secret()
+    if not rzp_key_secret:
+        raise HTTPException(status_code=503, detail="Payments not configured")
+    _msg = f"{body.razorpay_order_id}|{body.razorpay_payment_id}".encode()
+    _expected = _hm.new(rzp_key_secret.encode(), _msg, _hs2.sha256).hexdigest()
+    if not _hm.compare_digest(_expected, body.razorpay_signature):
+        raise HTTPException(status_code=400, detail="Invalid payment signature")
+    # Ownership check — the JWT holder must own this claim before we finalize.
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _conn:
+        _conn.row_factory = __import__("aiosqlite").Row
+        claim = await (await _conn.execute(
+            "SELECT payment_status FROM nidaan_claims WHERE claim_id=? AND account_id=?",
+            (claim_id, payload["sub"]))).fetchone()
+    if not claim:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    if claim["payment_status"] == "paid":
+        return {"status": "paid", "message": "Already processed", "claim_id": claim_id}
+    # Confirm the money was actually CAPTURED (not just authorized/pending) before we flip the
+    # claim to paid — otherwise a pending/failed payment would wrongly hit the dashboard as paid.
+    if not await _nidaan_payment_captured(body.razorpay_payment_id):
+        return {"status": "pending", "claim_id": claim_id,
+                "message": "Payment is still processing — we'll confirm it shortly. "
+                           "You don't need to pay again; your dashboard will update automatically."}
+    # Shared finalizer — same path the webhook + recovery poll use (idempotent).
+    res = await _finalize_paid_claim(claim_id, body.razorpay_payment_id, source="client")
+    return {"status": "paid", "claim_id": claim_id,
+            "sla_due_utc": res.get("sla_due"),
+            "message": "Payment confirmed. Your case is now under review — we'll share your report within 24–48 business hours, here and on WhatsApp."}
+
+
+@app.get("/nidaan/api/claims/{claim_id}/pay-status")
+@limiter.limit("30/minute")
+async def nidaan_claim_pay_status(claim_id: int, request: Request, order_id: str = ""):
+    """Recovery / poll for the ₹499 claim payment. The dashboard calls this after an
+    ambiguous checkout close (UPI race, low internet) to learn whether the money actually
+    went through — so a paid customer is NEVER left stranded.
+      1) If our DB already shows 'paid' (webhook or client verify) → paid.
+      2) Else, if order_id is given, ask Razorpay if THAT order (bound to this claim via
+         notes) is paid; if so, finalize idempotently. Returns {status: paid|pending}."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+        _c.row_factory = __import__("aiosqlite").Row
+        row = await (await _c.execute(
+            "SELECT payment_status FROM nidaan_claims WHERE claim_id=? AND account_id=?",
+            (claim_id, payload["sub"]))).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    if row["payment_status"] == "paid":
+        return {"status": "paid", "claim_id": claim_id}
+    # Not reflected yet — reconcile straight from Razorpay if we have the order.
+    if order_id and len(order_id) <= 60:
+        rzp_id = _nidaan_rzp_id(); rzp_secret = _nidaan_rzp_secret()
+        if rzp_id and rzp_secret:
+            import httpx as _hx
+            try:
+                async with _hx.AsyncClient() as _cl:
+                    _r = await _cl.get(f"https://api.razorpay.com/v1/orders/{order_id}",
+                                       auth=(rzp_id, rzp_secret), timeout=15.0)
+                    _order = _r.json() or {}
+                _notes = _order.get("notes", {}) or {}
+                # Bind: the order must be THIS claim's ₹499 order, and fully paid (captured).
+                if _notes.get("claim_id") == str(claim_id) and _order.get("status") == "paid":
+                    _pid = ""
+                    try:
+                        async with _hx.AsyncClient() as _cl2:
+                            _rp = await _cl2.get(f"https://api.razorpay.com/v1/orders/{order_id}/payments",
+                                                 auth=(rzp_id, rzp_secret), timeout=15.0)
+                            for _p in ((_rp.json() or {}).get("items", []) or []):
+                                if _p.get("status") == "captured":
+                                    _pid = _p.get("id", ""); break
+                    except Exception:
+                        pass
+                    await _finalize_paid_claim(claim_id, _pid, source="recovery")
+                    return {"status": "paid", "claim_id": claim_id}
+            except Exception as _e:
+                logger.warning("claim pay-status reconcile failed claim=%s: %s", claim_id, _e)
+    return {"status": "pending", "claim_id": claim_id}
+
+
+@app.get("/nidaan/pay/{claim_id}", response_class=HTMLResponse)
+async def nidaan_one_tap_pay(claim_id: int, request: Request, t: str = ""):
+    """WhatsApp one-tap pay link. Validates the claim-bound pay token, mints a
+    short dashboard session, and lands the user on the dashboard with the pay-gate
+    auto-opening. The token is purpose-scoped — it can ONLY pay this one claim,
+    grants no other dashboard power, and expires."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    info = nidaan.verify_pay_link_token(t, claim_id)
+
+    def _msg_page(title: str, sub: str, code: int = 200):
+        return HTMLResponse(
+            f"<!doctype html><html><head><meta charset='utf-8'>"
+            f"<meta name='viewport' content='width=device-width,initial-scale=1'>"
+            f"<title>Nidaan</title><style>body{{font-family:system-ui,sans-serif;background:#0a1628;"
+            f"color:#e2e8f0;display:flex;align-items:center;justify-content:center;min-height:100vh;"
+            f"margin:0;padding:24px;text-align:center}}.c{{max-width:420px}}h1{{font-size:1.3rem;margin:.4rem 0}}"
+            f"p{{color:#94a3b8;line-height:1.6;font-size:.95rem}}a{{color:#22d3ee}}</style></head>"
+            f"<body><div class='c'><div style='font-size:2.4rem'>🛡️</div><h1>{title}</h1>"
+            f"<p>{sub}</p><p><a href='/nidaan/dashboard'>Go to your dashboard →</a></p></div></body></html>",
+            status_code=code)
+
+    if not info:
+        return _msg_page("This payment link is invalid or expired",
+                         "For your security, pay links expire. Please open your dashboard to pay.", 400)
+    account_id = info["account_id"]
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _conn:
+        _conn.row_factory = __import__("aiosqlite").Row
+        row = await (await _conn.execute(
+            "SELECT c.payment_status, a.email AS account_email "
+            "FROM nidaan_claims c LEFT JOIN nidaan_accounts a ON a.account_id=c.account_id "
+            "WHERE c.claim_id=? AND c.account_id=?", (claim_id, account_id))).fetchone()
+    if not row:
+        return _msg_page("Claim not found", "We couldn't find this claim on your account.", 404)
+    if row["payment_status"] == "paid":
+        return _msg_page("Already paid ✅",
+                         "Your review is already underway. Your report arrives within 48 business hours — here and on WhatsApp.")
+    if row["payment_status"] != "unpaid_lead":
+        return _msg_page("Nothing to pay",
+                         "This claim is covered by your plan — no payment needed.")
+    # Mint a normal dashboard session and hand off to the pay-gate (auto-opens).
+    token = nidaan.create_nidaan_token(account_id, row["account_email"] or "", "")
+    import json as _json
+    html = (
+        "<!doctype html><html><head><meta charset='utf-8'>"
+        "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+        "<title>Opening your payment…</title>"
+        "<style>body{font-family:system-ui,sans-serif;background:#0a1628;color:#e2e8f0;"
+        "display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}"
+        "</style></head><body><div>🛡️ Opening your secure payment…</div>"
+        "<script>try{localStorage.setItem('nidaan_token'," + _json.dumps(token) + ");}catch(e){}"
+        "location.replace('/nidaan/dashboard?pay=" + str(claim_id) + "');</script>"
+        "</body></html>")
+    return HTMLResponse(html)
+
+
+@app.post("/nidaan/api/claims/submit")
+@limiter.limit("10/minute")
+async def nidaan_api_submit_claim(body: NidaanClaimReq, request: Request):
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    if not body.claim_type or not body.insured_name or not body.insured_phone:
+        raise HTTPException(status_code=400, detail="claim_type, insured_name, insured_phone are required")
+    # Phase 2: complainant mobile + email mandatory (email verified later via the L2 magic-link).
+    _ins_phone, _ins_email = _clean_complainant_contact(body.insured_phone, body.insured_email)
+    # ₹499 value-first funnel: determine the payment path.
+    #   • Active subscription  → 'subscription' (consumes quota, review starts now)
+    #   • Paid ₹499 per-claim  → 'paid'         (review starts now)
+    #   • Neither              → 'unpaid_lead'  → FREE submission; the claim is a
+    #       lead awaiting ₹499. Review does NOT start until payment (no auto-task,
+    #       no legal notification). The lead is still recorded + visible in ops.
+    _sub_check = await nidaan.get_active_subscription(payload["sub"])
+    _per_claim_check = await nidaan.get_per_claim_status(payload["sub"])
+    _is_paid = bool(_per_claim_check and _per_claim_check.get("status") == "paid")
+    if _sub_check:
+        _pay_status, _skip_elig = "subscription", False
+    elif _is_paid:
+        _pay_status, _skip_elig = "paid", False
+    else:
+        _pay_status, _skip_elig = "unpaid_lead", True
+    # Optional referral code — accepts an active branch OR a staff referral code (staff-as-branch),
+    # validated against the LIVE list (branches/staff can change in ops, so no hardcoded pattern).
+    _bc = (body.branch_code or "").strip().upper()
+    if _bc and not await nidaan.is_valid_ref_code(_bc):
+        raise HTTPException(status_code=400,
+            detail=f"Referral code '{_bc}' is not valid or active — please leave it blank if you don't have one.")
+    claim_id, reason = await nidaan.submit_claim(
+        account_id=payload["sub"],
+        user_id=None,
+        claim_type=body.claim_type,
+        insured_name=body.insured_name,
+        insured_phone=_ins_phone,
+        insured_email=_ins_email,
+        insurer_name=body.insurer_name,
+        policy_no=body.policy_no,
+        disputed_amount=body.disputed_amount,
+        claim_event_date=body.claim_event_date,
+        policy_inception_date=body.policy_inception_date,
+        tpa_name=body.tpa_name,
+        notes_from_agent=body.notes_from_agent,
+        intermediary_code=body.intermediary_code,
+        intermediary_name=body.intermediary_name,
+        branch_code=_bc,
+        payment_status=_pay_status,
+        skip_eligibility=_skip_elig,
+        # Blank falls back to the insured, which is right when they are the same person.
+        complainant_name=(body.complainant_name or "").strip(),
+        complainant_phone=(body.complainant_phone or "").strip(),
+        complainant_email=(body.complainant_email or "").strip(),
+    )
+    if claim_id is None:
+        raise HTTPException(status_code=402, detail=reason)
+    # Auto-assign to the least-loaded handler if enabled + this is a real (payable) claim, not an
+    # unpaid lead. Fire-and-forget so it never blocks or breaks claim submission; notifies the
+    # chosen handler by email exactly like a manual assignment.
+    if _pay_status != "unpaid_lead":
+        try:
+            if await nidaan.is_claim_auto_assign():
+                import asyncio as _aio_aa
+                async def _auto_assign_and_notify(_cid):
+                    try:
+                        sid = await nidaan.auto_assign_claim(_cid)
+                        if not sid:
+                            return
+                        staff = await nidaan.get_staff_by_id(sid)
+                        claim = await nidaan.get_claim_with_account(_cid)
+                        if staff and claim and staff.get("email"):
+                            await email_svc.send_nidaan_claim_assigned_staff_email(
+                                to_email=staff["email"], staff_name=staff["name"], claim_id=_cid,
+                                insured_name=claim.get("insured_name", ""),
+                                claim_type=claim.get("claim_type", ""),
+                                advisor_name=claim.get("owner_name", ""),
+                                advisor_phone=claim.get("advisor_phone", ""))
+                    except Exception as _aae:
+                        logger.warning("auto-assign failed for claim %s: %s", _cid, _aae)
+                _aio_aa.create_task(_auto_assign_and_notify(claim_id))
+        except Exception:
+            pass
+    # Optional affiliate branch from the claim form — store on the account if it
+    # has none yet (covers Google sign-up, which skips the signup branch field).
+    # Validate strictly; notify the branch about this newly-attributed lead.
+    if _bc:  # already validated as an active branch above
+        try:
+            _acct = await nidaan.get_account_by_id(payload["sub"])
+            if _acct and not (_acct.get("branch_code") or "").strip():
+                await nidaan.set_account_branch(payload["sub"], _bc)
+                import asyncio as _aio
+                _aio.create_task(_notify_branch_signup(
+                    _bc, _acct.get("owner_name", ""), _acct.get("email", ""), _acct.get("phone", "")))
+        except Exception as _be:
+            logger.warning("claim-form branch capture failed: %s", _be)
+    # Seed the required-document checklist for this claim (all paths) — the spine
+    # of the de-dup + pay-gate. Non-fatal if it fails.
+    try:
+        import biz_nidaan_doc_checklist as _ck
+        await _ck.seed_checklist_for_claim(claim_id, body.claim_type)
+    except Exception as _ce:
+        logger.warning("checklist seed failed for claim %s: %s", claim_id, _ce)
+    # Unpaid leads: stop here. No review task, no legal notification — the review
+    # only starts after the ₹499 is paid (handled in the payment-verify step).
+    if _pay_status == "unpaid_lead":
+        # ₹499 funnel: capture language + WhatsApp consent, then mirror the
+        # dashboard to WhatsApp/email (welcome + doc-chase + hope/hook).
+        try:
+            import biz_nidaan_notifications as _nnot
+            if body.comm_lang:
+                await _nnot.set_comm_lang(payload["sub"], body.comm_lang)
+            await _nnot.set_subscriber_pref(payload["sub"], wa_opt_in=bool(body.wa_consent))
+            asyncio.create_task(_nnot.on_lead_filed(claim_id, payload["sub"]))
+        except Exception as _le:
+            logger.warning("on_lead_filed dispatch failed for claim %s: %s", claim_id, _le)
+        return {"claim_id": claim_id, "status": "lead", "payment_status": "unpaid_lead"}
+    # Phase 3+4: auto-create initial review task + fan out claim-filed notification.
+    try:
+        _create_flag = await ntasks.get_flag("auto_create_initial_task", "1")
+        if ntasks._flag_truthy(_create_flag):
+            new_task_id = await ntasks.create_task(
+                claim_id=claim_id,
+                title=f"Initial review of {body.insured_name}'s {body.claim_type} claim",
+                description=(body.notes_from_agent or "")[:400],
+                status_slug="initial_review",
+                priority="normal",
+                created_by_staff_id=None,
+            )
+            # Phase 4: notify assignee (if auto-assigned)
+            try:
+                import biz_nidaan_notifications as nnot
+                asyncio.create_task(nnot.on_task_assigned(new_task_id))
+            except Exception:
+                pass
+    except Exception as _te:
+        logger.warning("Auto-task create failed for claim %s: %s", claim_id, _te)
+    # Phase 4: notify subscriber + admins of new claim
+    try:
+        import biz_nidaan_notifications as nnot
+        asyncio.create_task(nnot.on_claim_filed(claim_id, payload["sub"]))
+    except Exception:
+        pass
+    # Notify admin of new claim (non-blocking)
+    _admin_email = os.getenv("NIDAAN_ADMIN_EMAIL", "")
+    if _admin_email:
+        import asyncio as _asyncio_nc
+        account = await _nidaan_account_from_payload(payload)
+        _asyncio_nc.ensure_future(
+            email_svc.send_nidaan_new_claim_admin_email(
+                admin_email=_admin_email,
+                claim_id=claim_id,
+                advisor_name=account["owner_name"] if account else payload.get("email", ""),
+                advisor_email=(account["email"] if account else "") or payload.get("email", ""),
+                insured_name=body.insured_name,
+                claim_type=body.claim_type,
+                insurer_name=body.insurer_name or "",
+                disputed_amount=body.disputed_amount,
+                notes=body.notes_from_agent or "",
+            )
+        )
+    return {"claim_id": claim_id, "status": "intimated"}
+
+
+# ── Review Request (₹499 per-claim, no subscription) ──────────────────────────
+
+class NidaanReviewReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
+    advisor_name: str
+    advisor_phone: str
+    advisor_email: str
+    insured_name: str
+    claim_type: str
+    insurer_name: str = ""
+    disputed_amount: Optional[int] = None
+    notes: str = ""
+    review_type: str = "per_claim_999"
+    intermediary_code: str = ""
+    intermediary_name: str = ""
+
+
+class NidaanReviewSignupReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
+    """Direct-insured signup: submit claim details first, pay later from dashboard."""
+    name: str
+    phone: str
+    email: str
+    otp: str  # required — verified via /nidaan/api/send-verify-otp before submission
+    claim_type: str
+    insurer_name: str = ""
+    disputed_amount: Optional[int] = None
+    notes: str = ""
+    intermediary_code: str = ""
+    intermediary_name: str = ""
+    ref_code: str = ""   # branch/staff referral code from the entry link (?ref=SP-XXXXXX)
+
+
+class NidaanReviewPayByIdReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
+    """Create Razorpay order for a specific pending purchase (dashboard-initiated)."""
+    purchase_id: int
+
+
+class NidaanReviewVerifyByIdReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
+    """Verify Razorpay payment for a specific purchase_id."""
+    purchase_id: int
+    razorpay_order_id: str
+    razorpay_payment_id: str
+    razorpay_signature: str
+
+
+@app.post("/nidaan/api/review-signup")
+@limiter.limit("5/minute")
+async def nidaan_review_signup(body: NidaanReviewSignupReq, request: Request):
+    """Direct-insured signup: verify email OTP → create account + pending purchase → issue JWT."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    if not body.name.strip() or not body.phone.strip() or not body.email.strip():
+        raise HTTPException(status_code=400, detail="name, phone, email are required")
+    if not body.claim_type:
+        raise HTTPException(status_code=400, detail="claim_type is required")
+    email = auth.sanitize_email(body.email)
+    if not email:
+        raise HTTPException(status_code=400, detail="Invalid email address")
+    # Verify OTP before creating account — prevents fake email submissions
+    if not auth.verify_email_otp(email, body.otp):
+        raise HTTPException(status_code=401, detail="Invalid or expired verification code. Please request a new OTP.")
+    result = await nidaan.create_review_signup(
+        name=body.name,
+        phone=body.phone,
+        email=body.email,
+        claim_type=body.claim_type,
+        insurer_name=body.insurer_name,
+        disputed_amount=body.disputed_amount,
+        notes=body.notes,
+        intermediary_code=body.intermediary_code,
+        intermediary_name=body.intermediary_name,
+        ref_code=body.ref_code,
+    )
+    token = nidaan.create_nidaan_token(result["account_id"], body.email.strip().lower(), "per_claim")
+    import asyncio as _asyncio_rs
+    # Notify ops team of new pending review lead
+    admin_email = os.getenv("NIDAAN_ADMIN_EMAIL", "")
+    if admin_email:
+        _asyncio_rs.create_task(email_svc.send_email(
+            to_email=admin_email,
+            subject=f"[Nidaan] New ₹499 Review Lead #{result['purchase_id']} — Pending Payment",
+            html_body=(
+                f"<p><b>Name:</b> {body.name} | <b>Phone:</b> {body.phone} | <b>Email:</b> {body.email}</p>"
+                f"<p><b>Claim type:</b> {body.claim_type} | <b>Insurer:</b> {body.insurer_name or 'N/A'}</p>"
+                f"<p><b>Disputed amount:</b> ₹{body.disputed_amount or 'N/A'}</p>"
+                f"<p><b>Description:</b> {body.notes or '—'}</p>"
+                f"<p><b>Status:</b> PENDING PAYMENT — follow up in 2–3 days if not paid.</p>"
+                f"<p>Purchase ID: #{result['purchase_id']} | New account: {'Yes' if result['is_new'] else 'No'}</p>"
+            ),
+            from_name="Nidaan Partner",
+        ))
+    # Send welcome/login instructions email to the new user
+    login_url = "https://nidaanpartner.com/nidaan/login"
+    _asyncio_rs.create_task(email_svc.send_email(
+        to_email=email,
+        subject="Your Nidaan Claim Dashboard is Ready — How to Log Back In",
+        html_body=(
+            f"<p>Hi {body.name},</p>"
+            f"<p>Your claim has been submitted successfully! You can view your dashboard and complete the ₹499 payment at any time.</p>"
+            f"<p><b>How to log back in:</b><br>"
+            f"Visit <a href='{login_url}'>{login_url}</a> and use <b>Email OTP</b> — "
+            f"enter your email ({email}), click 'Send OTP', and use the code sent to your inbox. No password needed.</p>"
+            f"<p>Your dashboard: <a href='https://nidaanpartner.com/nidaan/dashboard'>https://nidaanpartner.com/nidaan/dashboard</a></p>"
+            f"<p>— Nidaan Team</p>"
+        ),
+    ))
+    return {
+        "token": token,
+        "purchase_id": result["purchase_id"],
+        "account_id": result["account_id"],
+        "is_new_account": result["is_new"],
+        "dashboard_url": "/nidaan/dashboard",
+    }
+
+
+@app.post("/nidaan/api/review/{purchase_id}/pay")
+@limiter.limit("10/minute")
+async def nidaan_review_pay_by_id(purchase_id: int, request: Request):
+    """Authenticated: create Razorpay order for a specific pending purchase."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    # Validate purchase belongs to this account
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _conn:
+        _conn.row_factory = __import__("aiosqlite").Row
+        _cur = await _conn.execute(
+            "SELECT * FROM nidaan_per_claim_purchase WHERE purchase_id=? AND account_id=?",
+            (purchase_id, payload["sub"]),
+        )
+        purchase = await _cur.fetchone()
+    if not purchase:
+        raise HTTPException(status_code=404, detail="Purchase not found")
+    if purchase["status"] != "pending_payment":
+        raise HTTPException(status_code=400, detail=f"Purchase is already '{purchase['status']}'")
+    import httpx as _httpx2, time as _time2
+    rzp_key_id = _nidaan_rzp_id()
+    rzp_key_secret = _nidaan_rzp_secret()
+    if not rzp_key_id or not rzp_key_secret:
+        raise HTTPException(status_code=503, detail="Payments not configured")
+    # Item #4: tiered review fee — the purchase already stores the correct amount_paid.
+    _base_fee = int(purchase["amount_paid"] or 499)
+    _amt_paise = (await nidaan.charge_with_gst(_base_fee))["total_paise"]   # + GST when enabled
+    receipt = f"nr_{purchase_id}_{int(_time2.time())}"[:40]
+    async with _httpx2.AsyncClient() as _client2:
+        _r = await _client2.post(
+            "https://api.razorpay.com/v1/orders",
+            auth=(rzp_key_id, rzp_key_secret),
+            json={"amount": _amt_paise, "currency": "INR", "receipt": receipt,
+                  "payment_capture": 1,
+                  "notes": {"product": "nidaan_review_999", "purchase_id": str(purchase_id)}},
+            timeout=20.0,
+        )
+        result = _r.json()
+    if "id" not in result:
+        err = result.get("error", {}).get("description", "Order creation failed")
+        raise HTTPException(status_code=502, detail=err)
+    return {"order_id": result["id"], "amount": _amt_paise, "currency": "INR", "razorpay_key_id": rzp_key_id}
+
+
+@app.post("/nidaan/api/review/{purchase_id}/pay-verify")
+@limiter.limit("5/minute")
+async def nidaan_review_pay_verify(purchase_id: int, body: NidaanReviewVerifyByIdReq, request: Request):
+    """Authenticated: verify Razorpay payment and mark purchase as paid."""
+    import hmac as _hm, hashlib as _hs2, asyncio as _asyncio_pv
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    if body.purchase_id != purchase_id:
+        raise HTTPException(status_code=400, detail="purchase_id mismatch")
+    rzp_key_secret = _nidaan_rzp_secret()
+    if not rzp_key_secret:
+        raise HTTPException(status_code=503, detail="Payments not configured")
+    # Verify Razorpay HMAC signature
+    _msg = f"{body.razorpay_order_id}|{body.razorpay_payment_id}".encode()
+    _expected = _hm.new(rzp_key_secret.encode(), _msg, _hs2.sha256).hexdigest()
+    if not _hm.compare_digest(_expected, body.razorpay_signature):
+        raise HTTPException(status_code=400, detail="Invalid payment signature")
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _conn:
+        _conn.row_factory = __import__("aiosqlite").Row
+        _cur = await _conn.execute(
+            "SELECT * FROM nidaan_per_claim_purchase WHERE purchase_id=? AND account_id=?",
+            (purchase_id, payload["sub"]),
+        )
+        purchase = await _cur.fetchone()
+        if not purchase:
+            raise HTTPException(status_code=404, detail="Purchase not found")
+        if purchase["status"] != "pending_payment":
+            return {"status": purchase["status"], "message": "Already processed"}
+    # Confirm the payment was actually CAPTURED before marking paid (signature ≠ captured).
+    if not await _nidaan_payment_captured(body.razorpay_payment_id):
+        return {"status": "pending", "purchase_id": purchase_id,
+                "message": "Payment is still processing — we'll confirm it shortly. No need to pay again."}
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _conn:
+        await _conn.execute(
+            "UPDATE nidaan_per_claim_purchase SET status='paid', reviewed_at=CURRENT_TIMESTAMP WHERE purchase_id=?",
+            (purchase_id,),
+        )
+        await _conn.commit()
+    # Materialise a claim so this paid review shows in All Claims + search (not just the
+    # reviews widget). Guarded — a claim-creation hiccup must never fail payment confirmation.
+    try:
+        await nidaan.ensure_claim_for_paid_purchase(purchase_id)
+    except Exception as _ecp:
+        logger.error("ensure_claim_for_paid_purchase failed (verify) purchase=%s: %s", purchase_id, _ecp)
+    # Unified ledger + GST for the D2C per-claim review (was previously untracked).
+    try:
+        async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+            _c.row_factory = __import__("aiosqlite").Row
+            _p = await (await _c.execute(
+                "SELECT amount_paid, converted_to_claim_id FROM nidaan_per_claim_purchase WHERE purchase_id=?",
+                (purchase_id,))).fetchone()
+        _amt = int((_p["amount_paid"] if _p else 0) or 0)
+        _cid = (_p["converted_to_claim_id"] if _p else None)
+        await nidaan.record_gst(body.razorpay_payment_id, "per_claim_review", _amt,
+                                claim_id=_cid, account_id=payload["sub"])
+        await nidaan.record_payment(
+            source="per_claim_review", total_paise=_amt * 100,
+            dedup_key=body.razorpay_payment_id, razorpay_payment_id=body.razorpay_payment_id,
+            razorpay_order_id=body.razorpay_order_id, account_id=payload["sub"], claim_id=_cid,
+            verified=True, verify_method="signature", note=f"D2C per-claim review · purchase #{purchase_id}")
+    except Exception as _pe:
+        logger.warning("record_payment (per_claim verify) failed purchase=%s: %s", purchase_id, _pe)
+    # Email ops team
+    admin_email = os.getenv("NIDAAN_ADMIN_EMAIL", "")
+    if admin_email:
+        _asyncio_pv.create_task(email_svc.send_email(
+            to_email=admin_email,
+            subject=f"[Nidaan] ₹499 Review PAID #{purchase_id} — Begin Review",
+            html_body=(
+                f"<p><b>Name:</b> {purchase['advisor_name']} | <b>Phone:</b> {purchase['advisor_phone']} | <b>Email:</b> {purchase['advisor_email']}</p>"
+                f"<p><b>Claim type:</b> {purchase['claim_type']} | <b>Insurer:</b> {purchase['insurer_name'] or 'N/A'}</p>"
+                f"<p><b>Disputed amount:</b> ₹{purchase['disputed_amount'] or 'N/A'}</p>"
+                f"<p><b>Description:</b> {purchase['brief_description'] or '—'}</p>"
+                f"<p><b>Payment ID:</b> {body.razorpay_payment_id} | <b>Status: PAID ✅</b></p>"
+                f"<p>Proceed with legal review. Purchase ID: #{purchase_id}</p>"
+            ),
+            from_name="Nidaan Partner",
+        ))
+    # Confirmation to customer
+    _asyncio_pv.create_task(email_svc.send_email(
+        to_email=purchase["advisor_email"],
+        subject="Payment confirmed — Your ₹499 claim review is underway",
+        html_body=(
+            f"<p>Hi {purchase['advisor_name']},</p>"
+            f"<p>Your ₹499 payment has been confirmed. Our legal team has received your review request for your "
+            f"<b>{purchase['claim_type']}</b> claim.</p>"
+            f"<p>The review will be delivered within <b>48–72 business hours</b> to this email address.</p>"
+            f"<p>Reference: <b>#{purchase_id}</b> | Payment: {body.razorpay_payment_id}</p>"
+            f"<p>You can track status on your <a href='https://nidaanpartner.com/nidaan/dashboard'>Nidaan Dashboard</a>.</p>"
+            f"<p>— Nidaan Partner Team</p>"
+        ),
+        from_name="Nidaan Partner",
+    ))
+    return {"status": "paid", "purchase_id": purchase_id, "message": "Payment confirmed. Review will be delivered within 48–72 hours."}
+
+
+# ── Document upload (customer) ────────────────────────────────────────────────
+
+# (There is no MIME allow-list any more: _sniff_file() decides from the file's own bytes, which
+# is the only thing an attacker cannot choose. See _sniff_file / _upload_refusal above.)
+_NIDAAN_DOCS_DIR = Path(__file__).parent / "uploads" / "nidaan-docs"
+_NIDAAN_DOCS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+# ── Signed, expiring URLs for Nidaan claim documents ────────────────────────
+# The files live under the public /uploads mount, so we protect them with a
+# short-lived HMAC signature (defence in depth over the random UUID filename).
+# Ownership-checked document APIs hand out signed URLs via _nidaan_doc_url();
+# nidaan_doc_access_guard (middleware) refuses any unsigned/expired/forged link.
+_DOC_URL_TTL = 48 * 3600  # 48h — doc lists are re-fetched whenever a claim is opened
+
+def _doc_sig(stored_name: str, exp: int) -> str:
+    import hmac, hashlib
+    secret = auth.JWT_SECRET
+    if isinstance(secret, str):
+        secret = secret.encode()
+    return hmac.new(secret, f"{stored_name}:{exp}".encode(), hashlib.sha256).hexdigest()[:32]
+
+def _nidaan_doc_url(stored_name: str) -> str:
+    """Relative URL to a claim document, signed and valid for _DOC_URL_TTL."""
+    exp = int(_time.time()) + _DOC_URL_TTL
+    return f"/uploads/nidaan-docs/{stored_name}?exp={exp}&sig={_doc_sig(stored_name, exp)}"
+
+def _verify_doc_sig(stored_name: str, exp: str, sig: str) -> bool:
+    import hmac
+    try:
+        e = int(exp)
+    except (TypeError, ValueError):
+        return False
+    if e < int(_time.time()):
+        return False
+    return hmac.compare_digest(_doc_sig(stored_name, e), sig or "")
+# Per-file ceiling. 25 MB, not 100: every stored file is virus-scanned in memory before it is
+# written, and clamd will not scan a stream beyond its StreamMaxLength. A file we cannot scan is a
+# file we would have to either refuse or wave through unscanned, and we refuse to do the latter —
+# so the scanner's ceiling is the honest ceiling for the whole feature.
+_MAX_DOC_SIZE = 25 * 1024 * 1024  # 25 MB
+_MAX_DOCS_PER_CLAIM = 60          # storage-DoS guard for free leads
+# Files in ONE request. A person who has all the paperwork in hand should be able to attach it in
+# one go; the old limit of 5 forced a real claim file to be sent in four or five trips.
+_MAX_FILES_PER_UPLOAD = 20
+# Bytes in ONE request. nginx caps the request body at 50 MB, so this sits below that: the caller
+# gets a clear message from us instead of an opaque 413 from the web server. The browser splits a
+# large set into batches under this figure, so a big upload succeeds rather than being rejected.
+_MAX_UPLOAD_BATCH_BYTES = 40 * 1024 * 1024
+
+
+def _guard_upload_batch(files) -> None:
+    """Count + declared-size gate for a multi-file upload. Runs BEFORE any file is read into
+    memory, so an oversized batch costs us nothing."""
+    if len(files) > _MAX_FILES_PER_UPLOAD:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Up to {_MAX_FILES_PER_UPLOAD} files per upload — please send the rest in a second batch.")
+    total = 0
+    for f in files:
+        try:
+            total += int(getattr(f, "size", 0) or 0)
+        except (TypeError, ValueError):
+            continue
+    if total > _MAX_UPLOAD_BATCH_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"That batch is {total // (1024*1024)} MB. Please send up to "
+                   f"{_MAX_UPLOAD_BATCH_BYTES // (1024*1024)} MB at a time.")
+
+
+def _sniff_file(content: bytes) -> tuple:
+    """(extension, family) from the file's OWN bytes. family: image | pdf | office | text |
+    audio | video | "" (unknown).
+
+    SECURITY — this is where a stored file's extension comes from. Deriving it from the
+    client-supplied filename instead is exploitable: a file can be a valid PDF/JPEG by magic bytes
+    AND contain HTML (a polyglot). Uploaded as "x.html" it would be stored as "<uuid>.html" and
+    served as text/html from our own origin, so a staffer opening the "document" would execute the
+    attacker's script inside their authenticated ops session. Trust the bytes, never the name.
+    Anything unrecognised is refused, and a bare .zip is refused too - only Office/OpenDocument
+    packages pass, checked by looking INSIDE the zip."""
+    if not content or len(content) < 12:
+        return "", ""
+    head = content[:2048]
+    # A real PDF can carry a few bytes before its header; readers tolerate up to 1 KB, and a
+    # genuine insurer letter was being refused for it.
+    if b"%PDF" in head[:1024]:
+        return ".pdf", "pdf"
+    if content[:3] == b"\xff\xd8\xff":
+        return ".jpg", "image"
+    if content[:8] == b"\x89PNG\r\n\x1a\n":
+        return ".png", "image"
+    if content[:6] in (b"GIF87a", b"GIF89a"):
+        return ".gif", "image"
+    if content[:2] == b"BM":
+        return ".bmp", "image"
+    if content[:4] in (b"II*\x00", b"MM\x00*"):
+        return ".tiff", "image"
+    if content[:4] == b"RIFF" and content[8:12] == b"WEBP":
+        return ".webp", "image"
+    if content[:4] == b"RIFF" and content[8:12] == b"AVI ":
+        return ".avi", "video"
+    if content[:4] == b"\x1aE\xdf\xa3":                       # Matroska / WebM
+        return ".mkv", "video"
+    if content[4:8] == b"ftyp":                               # the iPhone/Android container
+        brand = content[8:12].lower()
+        if brand in (b"heic", b"heix", b"hevc", b"heim", b"heis", b"hevm", b"mif1", b"msf1"):
+            return ".heic", "image"
+        if brand in (b"m4a ", b"m4b "):
+            return ".m4a", "audio"
+        return ".mp4", "video"
+    if content[:4] == b"OggS":
+        return ".ogg", "audio"
+    if content[:3] == b"ID3" or content[:2] in (b"\xff\xfb", b"\xff\xf3"):
+        return ".mp3", "audio"
+    if content[:5] == b"{\\rtf":
+        return ".rtf", "text"
+    if content[:8] == b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1":   # Word/Excel/PowerPoint, old style
+        return ".doc", "office"
+    if content[:4] in (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08"):
+        # A zip is a container: accept ONLY a document package, by what is inside it.
+        try:
+            import zipfile as _zf
+            z = _zf.ZipFile(io.BytesIO(content))
+            names = z.namelist()[:200]
+            if any(n.startswith("word/") for n in names):
+                return ".docx", "office"
+            if any(n.startswith("xl/") for n in names):
+                return ".xlsx", "office"
+            if any(n.startswith("ppt/") for n in names):
+                return ".pptx", "office"
+            if "mimetype" in names:
+                m = z.read("mimetype")[:80]
+                if b"opendocument.text" in m:
+                    return ".odt", "office"
+                if b"opendocument.spreadsheet" in m:
+                    return ".ods", "office"
+                if b"opendocument.presentation" in m:
+                    return ".odp", "office"
+        except Exception:
+            return "", ""
+        return "", ""
+    # Plain text last, so it never swallows a real format. HTML lands here and is stored as .txt -
+    # which is the point: it can then never be served back as a page.
+    if b"\x00" not in content[:4096]:
+        try:
+            content[:4096].decode("utf-8")
+            return ".txt", "text"
+        except UnicodeDecodeError:
+            pass
+    return "", ""
+
+
+def _doc_ext_for(content: bytes) -> str:
+    """The extension for a file we are willing to STORE (video excluded on purpose)."""
+    ext, fam = _sniff_file(content)
+    return "" if (not ext or fam == "video") else ext
+
+
+def _upload_refusal(filename: str, content: bytes) -> str:
+    """Why we cannot take this file, in words that say what to do next."""
+    name = filename or "That file"
+    _, fam = _sniff_file(content)
+    if fam == "video":
+        return ("%s is a video. Videos are not accepted - please attach a photo, a PDF or a "
+                "document instead." % name)
+    return ("%s is not a file type we can accept. Please attach a photo (JPG, PNG, HEIC), a PDF, "
+            "or a Word/Excel document. If it is a PDF that will not attach, open it and re-save "
+            "it as PDF, then try again." % name)
+
+
+def _as_viewable(content: bytes, ext: str) -> tuple:
+    """iPhone photos (HEIC) become JPG on the way in, so they open in the page like any other
+    photo. If the converter is not installed the original is stored untouched - never a failed
+    upload over a preview."""
+    if ext not in (".heic", ".heif"):
+        return content, ext
+    try:
+        from pillow_heif import register_heif_opener
+        from PIL import Image
+        register_heif_opener()
+        im = Image.open(io.BytesIO(content))
+        if im.mode not in ("RGB", "L"):
+            im = im.convert("RGB")
+        buf = io.BytesIO()
+        im.save(buf, format="JPEG", quality=88, optimize=True)
+        return buf.getvalue(), ".jpg"
+    except Exception as e:  # noqa: BLE001
+        logger.info("HEIC conversion unavailable (%s) - storing the original", e)
+        return content, ext
+
+
+def _doc_magic_ok(content: bytes) -> bool:
+    """Defense-in-depth: client Content-Type is spoofable, so confirm the bytes
+    actually look like an allowed document (PDF / JPEG / PNG / WEBP / DOC / DOCX)."""
+    return bool(_doc_ext_for(content))
+
+
+_IMAGE_EXTS = (".jpg", ".png", ".webp", ".heic", ".heif", ".gif", ".bmp", ".tiff")
+
+
+def validate_upload(content: bytes, declared_mime: str = "", *, images_only: bool = False,
+                    max_bytes: int = _MAX_DOC_SIZE, what: str = "file") -> str:
+    """THE single gate every uploaded file must pass. Returns the canonical extension.
+
+    One helper on purpose: upload rules that live in each endpoint drift, and the weakest copy
+    becomes the way in. Every rule here is one an attacker must not be able to talk us out of:
+
+      • size      — bounded, so an upload can't fill the disk.
+      • bytes     — the file must REALLY be one of our allowed types. A declared Content-Type
+                    and a filename are both attacker-controlled; the magic bytes are not.
+      • extension — derived from those bytes, never the filename, so an HTML/JS payload cannot
+                    be stored as .html and served back as executable content on our origin.
+      • mime      — if the client declares one it must agree with our allow-list.
+
+    Combined with the serving guard (Content-Disposition: attachment, nosniff, CSP sandbox), a
+    hostile upload can at worst be downloaded — never rendered, never executed, never phished with.
+    """
+    if not content:
+        raise HTTPException(status_code=400, detail=f"The {what} is empty")
+    if len(content) > max_bytes:
+        raise HTTPException(status_code=413,
+                            detail=f"{what.capitalize()} exceeds the {max_bytes // (1024*1024)} MB limit")
+    ext = _doc_ext_for(content)
+    if not ext or (images_only and ext not in _IMAGE_EXTS):
+        raise HTTPException(
+            status_code=415,
+            detail=("Please upload a real image (JPG, PNG, HEIC or WebP)." if images_only
+                    else _upload_refusal(what.capitalize(), content)))
+    if (declared_mime or "").lower().startswith("video/"):
+        raise HTTPException(status_code=415, detail=_upload_refusal(what.capitalize(), content))
+    return ext
+
+
+async def validate_upload_scanned(content: bytes, declared_mime: str = "", *,
+                                  images_only: bool = False,
+                                  max_bytes: int = _MAX_DOC_SIZE, what: str = "file") -> str:
+    """validate_upload() PLUS an antivirus scan. Use this on every path that stores a file.
+
+    Type checks prove a file is a well-formed PDF; they cannot prove it is safe. We pass these
+    documents on to insurers, hospitals and our own staff, so we are a distribution point — a
+    clean-looking PDF carrying an exploit would go out under our name. The scan runs on the bytes
+    in memory BEFORE anything is written, so an infected file never lands on the server at all.
+    """
+    ext = validate_upload(content, declared_mime, images_only=images_only,
+                          max_bytes=max_bytes, what=what)
+    try:
+        import biz_av_scan as _av
+        allowed, reason = await _av.scan_bytes(content)
+    except Exception as e:  # noqa: BLE001
+        # The scanner module itself failing is still "no verdict" — refuse, don't assume clean.
+        logger.error("AV scan could not run: %s", e)
+        raise HTTPException(status_code=503,
+                            detail="Could not virus-scan this file right now. Please try again.")
+    if not allowed:
+        logger.warning("Rejected upload (%s): %s", what, reason)
+        if reason == "virus scanner unavailable":
+            raise HTTPException(status_code=503,
+                                detail="Could not virus-scan this file right now. Please try again.")
+        raise HTTPException(status_code=422,
+                            detail="This file was blocked by our virus scan. Please check it and upload a clean copy.")
+    return ext
+
+
+@app.post("/nidaan/api/review/{purchase_id}/documents/upload")
+@limiter.limit("20/minute")
+async def nidaan_upload_review_doc(purchase_id: int, request: Request, files: list[UploadFile] = File(...)):
+    """Authenticated: upload supporting documents for a ₹499 review purchase."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    account_id = payload["sub"]
+    # Verify purchase belongs to this account
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _conn:
+        _conn.row_factory = __import__("aiosqlite").Row
+        _cur = await _conn.execute(
+            "SELECT purchase_id FROM nidaan_per_claim_purchase WHERE purchase_id=? AND account_id=?",
+            (purchase_id, account_id),
+        )
+        if not await _cur.fetchone():
+            raise HTTPException(status_code=404, detail="Review not found")
+    _guard_upload_batch(files)
+    saved = []
+    for f in files:
+        content = await f.read()
+        if len(content) > _MAX_DOC_SIZE:
+            raise HTTPException(status_code=413,
+                                detail=f"File {f.filename} is over the {_MAX_DOC_SIZE // (1024*1024)} MB limit")
+        if not _doc_magic_ok(content):
+            raise HTTPException(status_code=415, detail=_upload_refusal(f.filename, content))
+        ext = await validate_upload_scanned(content, (f.content_type or ""), what="document")
+        content, ext = _as_viewable(content, ext)
+        stored_name = f"{uuid.uuid4().hex}{ext}"
+        (_NIDAAN_DOCS_DIR / stored_name).write_bytes(content)
+        doc_id = await nidaan.save_claim_document(
+            account_id=account_id,
+            stored_name=stored_name,
+            original_name=f.filename or stored_name,
+            file_size=len(content),
+            mime_type=f.content_type or "",
+            purchase_id=purchase_id,
+        )
+        saved.append({"doc_id": doc_id, "original_name": f.filename, "size": len(content)})
+    return {"uploaded": saved, "count": len(saved)}
+
+
+@app.post("/nidaan/api/claims/{claim_id}/documents/upload")
+@limiter.limit("20/minute")
+async def nidaan_upload_claim_doc(claim_id: int, request: Request,
+                                  files: list[UploadFile] = File(...),
+                                  doc_key: str = Form("")):
+    """Authenticated: upload supporting documents for a claim.
+    If doc_key is given (a checklist item), the upload marks that item received
+    so the de-dup + pay-gate update (₹499 funnel)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    account_id = payload["sub"]
+    # Verify claim belongs to this account
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _conn:
+        _conn.row_factory = __import__("aiosqlite").Row
+        _cur = await _conn.execute(
+            "SELECT review_outcome, claimshield_sent_at, claimshield_case_id "
+            "FROM nidaan_claims WHERE claim_id=? AND account_id=?",
+            (claim_id, account_id),
+        )
+        _crow = await _cur.fetchone()
+        if not _crow:
+            raise HTTPException(status_code=404, detail="Claim not found")
+        # Once a claim moves to Level-2 (legal escalation), the customer can no longer add documents —
+        # the legal team owns the file. (Server-side guard so it holds even if the UI is bypassed.)
+        if (_crow["review_outcome"] == "can_fight" or _crow["claimshield_sent_at"]
+                or _crow["claimshield_case_id"]):
+            raise HTTPException(
+                status_code=403,
+                detail="This claim has moved to legal escalation (Level-2); documents are now handled "
+                       "by our legal team. Please message the team to share anything new.")
+        # Storage-DoS guard: cap total documents per claim (free leads can upload).
+        _dc = await (await _conn.execute(
+            "SELECT COUNT(*) FROM nidaan_claim_documents WHERE claim_id=?", (claim_id,))).fetchone()
+        if _dc and _dc[0] + len(files) > _MAX_DOCS_PER_CLAIM:
+            raise HTTPException(status_code=429, detail=f"Document limit reached ({_MAX_DOCS_PER_CLAIM} per claim).")
+    _guard_upload_batch(files)
+    saved = []
+    for f in files:
+        content = await f.read()
+        if len(content) > _MAX_DOC_SIZE:
+            raise HTTPException(status_code=413,
+                                detail=f"File {f.filename} is over the {_MAX_DOC_SIZE // (1024*1024)} MB limit")
+        if not _doc_magic_ok(content):
+            raise HTTPException(status_code=415, detail=_upload_refusal(f.filename, content))
+        ext = await validate_upload_scanned(content, (f.content_type or ""), what="document")
+        content, ext = _as_viewable(content, ext)
+        stored_name = f"{uuid.uuid4().hex}{ext}"
+        (_NIDAAN_DOCS_DIR / stored_name).write_bytes(content)
+        doc_id = await nidaan.save_claim_document(
+            account_id=account_id,
+            stored_name=stored_name,
+            original_name=f.filename or stored_name,
+            file_size=len(content),
+            mime_type=f.content_type or "",
+            claim_id=claim_id,
+        )
+        saved.append({"doc_id": doc_id, "original_name": f.filename, "size": len(content)})
+    # ₹499 funnel: if this upload satisfies a checklist item, mark it received
+    # (cross-channel de-dup source). Non-fatal if it fails.
+    checklist = None
+    if doc_key and saved:
+        try:
+            import biz_nidaan_doc_checklist as _ck
+            await _ck.mark_doc_received(claim_id, doc_key, via=_ck.VIA_DASHBOARD,
+                                        doc_id=saved[0]["doc_id"])
+            # return fresh checklist status so the UI can update the pay-gate inline
+            async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c2:
+                _c2.row_factory = __import__("aiosqlite").Row
+                _r = await (await _c2.execute(
+                    "SELECT claim_type, payment_status FROM nidaan_claims WHERE claim_id=?",
+                    (claim_id,))).fetchone()
+            if _r:
+                _st = await _ck.checklist_status(claim_id, _r["claim_type"])
+                checklist = {
+                    "complete": _st["complete"],
+                    "received_required": _st["received_required"],
+                    "required_total": _st["required_total"],
+                    "show_pay_gate": (_r["payment_status"] == "unpaid_lead"),
+                }
+                # ₹499 funnel: pay-gate is open (payment is available anytime) →
+                # mirror a one-tap pay link to WhatsApp/email. Idempotent (fires once).
+                if checklist["show_pay_gate"]:
+                    try:
+                        import biz_nidaan_notifications as _nnot
+                        asyncio.create_task(_nnot.on_funnel_pay_ready(claim_id, payload["sub"]))
+                    except Exception as _pe:
+                        logger.warning("on_funnel_pay_ready dispatch failed for claim %s: %s", claim_id, _pe)
+        except Exception as _me:
+            logger.warning("checklist mark failed for claim %s key %s: %s", claim_id, doc_key, _me)
+    return {"uploaded": saved, "count": len(saved), "doc_key": doc_key, "checklist": checklist}
+
+
+def _nidaan_remove_doc_file(stored_name: str) -> None:
+    """Best-effort removal of a document file from disk after its DB row is deleted."""
+    try:
+        if stored_name:
+            p = _NIDAAN_DOCS_DIR / stored_name
+            if p.exists():
+                p.unlink()
+    except Exception as _fe:
+        logger.warning("doc file removal failed for %s: %s", stored_name, _fe)
+
+
+@app.delete("/nidaan/api/claims/{claim_id}/documents/{doc_id}")
+async def nidaan_delete_claim_doc(claim_id: int, doc_id: int, request: Request):
+    """Customer/subscriber deletes one of THEIR OWN claim documents (ownership-checked)."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    payload = _nidaan_bearer(request)
+    if not payload: raise HTTPException(401, "Unauthorized")
+    stored = await nidaan.delete_claim_document(doc_id, account_id=payload["sub"], claim_id=claim_id)
+    if stored is None: raise HTTPException(404, "Document not found")
+    _nidaan_remove_doc_file(stored)
+    try:   # clear the checklist item that pointed to this doc, so it no longer shows 'Received'
+        import biz_nidaan_doc_checklist as _ck
+        await _ck.unmark_doc_by_doc_id(claim_id, doc_id)
+    except Exception as _e:
+        logger.warning("checklist unmark on delete failed (claim %s doc %s): %s", claim_id, doc_id, _e)
+    return {"ok": True}
+
+
+@app.delete("/nidaan/api/review/{purchase_id}/documents/{doc_id}")
+async def nidaan_delete_review_doc(purchase_id: int, doc_id: int, request: Request):
+    """Customer deletes one of THEIR OWN ₹499-review documents (ownership-checked)."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    payload = _nidaan_bearer(request)
+    if not payload: raise HTTPException(401, "Unauthorized")
+    stored = await nidaan.delete_claim_document(doc_id, account_id=payload["sub"], purchase_id=purchase_id)
+    if stored is None: raise HTTPException(404, "Document not found")
+    _nidaan_remove_doc_file(stored)
+    return {"ok": True}
+
+
+@app.get("/nidaan/branch/api/claims/{claim_id}/documents")
+async def nidaan_branch_list_claim_docs(claim_id: int, request: Request):
+    """Documents already attached to one of THIS branch's claims — so the partner can see what is
+    on file before uploading, instead of sending duplicates."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    code = _branch_bearer(request)
+    if not code: raise HTTPException(401, "Unauthorized")
+    if not await _branch_claim_row(claim_id, code):
+        raise HTTPException(404, "Claim not found")
+    docs = await nidaan.get_claim_documents(claim_id=claim_id)
+    for d in docs:
+        d["url"] = _nidaan_doc_url(d["stored_name"])
+    return {"docs": docs}
+
+
+@app.delete("/nidaan/branch/api/claims/{claim_id}/documents/{doc_id}")
+async def nidaan_branch_delete_claim_doc(claim_id: int, doc_id: int, request: Request):
+    """A branch deletes a document on one of ITS OWN raised claims."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    code = _branch_bearer(request)
+    if not code: raise HTTPException(401, "Unauthorized")
+    if not await _branch_claim_row(claim_id, code):
+        raise HTTPException(404, "Claim not found")
+    stored = await nidaan.delete_claim_document(doc_id, claim_id=claim_id, allow_any=True)
+    if stored is None: raise HTTPException(404, "Document not found")
+    _nidaan_remove_doc_file(stored)
+    try:
+        import biz_nidaan_doc_checklist as _ck
+        await _ck.unmark_doc_by_doc_id(claim_id, doc_id)
+    except Exception as e:  # noqa: BLE001
+        logger.info("could not reopen the checklist line for doc %s: %s", doc_id, e)
+    return {"ok": True}
+
+
+class _DocRenameReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(..., min_length=2, max_length=160)
+
+
+@app.patch("/nidaan/ops/api/claims/{claim_id}/documents/{doc_id}")
+@limiter.limit("60/minute")
+async def nidaan_ops_rename_claim_doc(claim_id: int, doc_id: int, body: _DocRenameReq,
+                                      request: Request):
+    """Rename a document so the list reads like a set of papers, not a camera roll."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(404)
+    caller = _require_staff(request, "team_member")
+    res = await nidaan.rename_claim_document(doc_id, claim_id, body.name)
+    if not res:
+        raise HTTPException(404, "Document not found")
+    await _ops_audit(request, "claim.doc_rename", "claim", str(claim_id),
+                     "%s -> %s" % (res["old"], res["name"]))
+    try:
+        import biz_nidaan_buckets as _bk
+        await _bk._log(claim_id, "\U0001f4dd Renamed a document: %s \u2192 %s"
+                       % (res["old"], res["name"]), _actor_label(caller))
+    except Exception:
+        pass
+    return res
+
+
+@app.get("/nidaan/ops/api/claims/{claim_id}/documents/{doc_id}/preview")
+async def nidaan_ops_doc_preview(claim_id: int, doc_id: int, request: Request):
+    """The TEXT of a Word document, so a letter can be read in the page instead of downloaded.
+    The file itself is never rendered: we extract the words on the server and the screen escapes
+    them."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(404)
+    _require_staff(request, "team_member")
+    import aiosqlite as _aio
+    async with _aio.connect(nidaan.DB_PATH) as c:
+        c.row_factory = _aio.Row
+        r = await (await c.execute(
+            "SELECT stored_name, original_name FROM nidaan_claim_documents "
+            "WHERE doc_id=? AND claim_id=?", (doc_id, claim_id))).fetchone()
+    if not r:
+        raise HTTPException(404, "Document not found")
+    stored = dict(r)["stored_name"] or ""
+    path = _NIDAAN_DOCS_DIR / stored
+    if not path.exists():
+        raise HTTPException(404, "That file is no longer on the server")
+    ext = os.path.splitext(stored)[1].lower()
+    if ext == ".txt":
+        try:
+            return {"kind": "text", "text": path.read_text(encoding="utf-8", errors="replace")[:100000]}
+        except Exception:
+            raise HTTPException(415, "Could not read that file")
+    if ext != ".docx":
+        raise HTTPException(415, "No preview for this kind of file")
+    try:
+        import docx as _docx
+        d = _docx.Document(str(path))
+        parts = [p.text for p in d.paragraphs]
+        for t in d.tables:
+            for row in t.rows:
+                parts.append(" | ".join(c.text.strip() for c in row.cells))
+        return {"kind": "text", "text": "\n".join(parts)[:100000]}
+    except Exception as e:  # noqa: BLE001
+        logger.info("docx preview failed for %s: %s", stored, e)
+        raise HTTPException(415, "Could not read this Word file - please download it")
+
+
+@app.delete("/nidaan/ops/api/claims/{claim_id}/documents/{doc_id}")
+async def nidaan_ops_delete_claim_doc(claim_id: int, doc_id: int, request: Request):
+    """Ops staff delete a document on any claim (staff-raised, subscriber, one-time, branch)."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request, "team_member")
+    stored = await nidaan.delete_claim_document(doc_id, claim_id=claim_id, allow_any=True)
+    if stored is None: raise HTTPException(404, "Document not found")
+    _nidaan_remove_doc_file(stored)
+    # If that file was what answered a checklist line, the line has to open again - otherwise a
+    # wrong document removed leaves a green tick behind and we never ask for the real one.
+    try:
+        import biz_nidaan_doc_checklist as _ck
+        await _ck.unmark_doc_by_doc_id(claim_id, doc_id)
+    except Exception as e:  # noqa: BLE001
+        logger.info("could not reopen the checklist line for doc %s: %s", doc_id, e)
+    await _ops_audit(request, "claim.doc_delete", "claim", str(claim_id), f"doc {doc_id}")
+    return {"ok": True}
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/documents/upload")
+@limiter.limit("30/minute")
+async def ops_upload_any_claim_doc(claim_id: int, request: Request,
+                                   files: list[UploadFile] = File(...),
+                                   doc_key: str = Form("")):
+    """Attach documents to ANY claim.
+
+    The only staff upload used to be scoped to claims the staffer raised under their own My
+    Business code, so on every other claim there was no way to put a paper on it at all. Same
+    guards as every other upload - batch limits, size, type, magic bytes, the virus scan.
+
+    `doc_key` says which checklist document this is, so the upload turns that line green
+    instead of sitting unlabelled in a list. Optional: a file that is not on the list is still
+    worth keeping.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(404)
+    caller = _require_staff(request, "team_member")
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+        _c.row_factory = __import__("aiosqlite").Row
+        r = await (await _c.execute(
+            "SELECT account_id, claim_type FROM nidaan_claims WHERE claim_id=?",
+            (claim_id,))).fetchone()
+    if not r:
+        raise HTTPException(404, "Claim not found")
+    account_id, ctype = r["account_id"], r["claim_type"] or ""
+    doc_key = (doc_key or "").strip()[:60]
+    if doc_key:
+        import biz_nidaan_doc_checklist as _ck
+        known = {d["key"] for d in await _ck.effective_docs(claim_id, ctype)}
+        if doc_key not in known:
+            raise HTTPException(400, "That is not a document on this claim's list.")
+    _guard_upload_batch(files)
+    saved = []
+    mb = _MAX_DOC_SIZE // (1024 * 1024)
+    for f in files:
+        content = await f.read()
+        if len(content) > _MAX_DOC_SIZE:
+            raise HTTPException(413, f"{f.filename} is larger than {mb} MB.")
+        if not _doc_magic_ok(content):
+            raise HTTPException(415, _upload_refusal(f.filename, content))
+        ext = await validate_upload_scanned(content, (f.content_type or ""), what="document")
+        content, ext = _as_viewable(content, ext)
+        stored = f"{uuid.uuid4().hex}{ext}"
+        (_NIDAAN_DOCS_DIR / stored).write_bytes(content)
+        doc_id = await nidaan.save_claim_document(
+            account_id=account_id, stored_name=stored, original_name=f.filename or stored,
+            file_size=len(content), mime_type=f.content_type or "", claim_id=claim_id)
+        saved.append({"doc_id": doc_id, "original_name": f.filename})
+    # The first file answers the checklist line it was uploaded against.
+    if doc_key and saved:
+        import biz_nidaan_doc_checklist as _ck
+        await _ck.mark_doc_received(claim_id, doc_key, via="staff",
+                                    doc_id=saved[0]["doc_id"])
+    try:
+        await nidaan.record_claim_activity(
+            claim_id, "doc_upload", actor=_actor_label(caller),
+            summary="Attached %d document(s)%s" % (
+                len(saved), (" as " + doc_key.replace("_", " ")) if doc_key else ""))
+    except Exception:
+        pass
+    await _ops_audit(request, "claim.doc_upload", "claim", str(claim_id),
+                     f"{len(saved)} file(s) {doc_key}"[:160])
+    return {"uploaded": saved, "count": len(saved), "doc_key": doc_key}
+
+
+class _DocsCompleteReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    done: bool = True
+
+
+@app.post("/nidaan/ops/api/cases/{claim_id}/docs-complete")
+@limiter.limit("60/minute")
+async def ops_docs_complete(claim_id: int, body: _DocsCompleteReq, request: Request):
+    """"All documents received" - ticked or unticked, with the name of whoever did it.
+
+    This is what lets a claim leave L2 Claims for Level-2. Unticking it is allowed and recorded
+    too: a mark somebody can set must be one they can take back.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(404)
+    caller = _require_staff(request, "team_member")
+    who = _actor_label(caller)
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+        cur = await _c.execute(
+            "UPDATE nidaan_claims SET docs_complete_at=%s, docs_complete_by=? WHERE claim_id=?"
+            % ("CURRENT_TIMESTAMP" if body.done else "NULL"),
+            ((who if body.done else "")[:80], claim_id))
+        await _c.commit()
+    if not cur.rowcount:
+        raise HTTPException(404, "Claim not found")
+    try:
+        await nidaan.record_claim_activity(
+            claim_id, "docs_complete", actor=who,
+            summary=("All documents marked received by %s" % who) if body.done
+            else ("'All documents received' taken back by %s" % who))
+    except Exception:
+        pass
+    await _ops_audit(request, "claim.docs_complete", "claim", str(claim_id),
+                     "done" if body.done else "undone")
+    return {"ok": True, "done": body.done, "by": who if body.done else ""}
+
+
+@app.get("/nidaan/ops/api/review-requests/{purchase_id}/documents")
+async def ops_get_review_docs(purchase_id: int, request: Request):
+    """Staff: get uploaded documents for a ₹499 review purchase."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    docs = await nidaan.get_claim_documents(purchase_id=purchase_id)
+    # Add download URL for each doc
+    for d in docs:
+        d["url"] = _nidaan_doc_url(d["stored_name"])
+    return {"docs": docs}
+
+
+@app.get("/nidaan/ops/api/claims/{claim_id}/documents")
+async def ops_get_claim_docs(claim_id: int, request: Request):
+    """Staff: get uploaded documents for a regular claim."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    docs = await nidaan.get_claim_documents(claim_id=claim_id)
+    for d in docs:
+        d["url"] = _nidaan_doc_url(d["stored_name"])
+    return {"docs": docs}
+
+
+@app.get("/nidaan/api/claims/{claim_id}/documents")
+async def nidaan_get_claim_docs(claim_id: int, request: Request):
+    """Customer: fetch documents they uploaded for one of their own claims."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    account_id = payload["sub"]
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _conn:
+        _conn.row_factory = __import__("aiosqlite").Row
+        _cur = await _conn.execute(
+            "SELECT claim_id FROM nidaan_claims WHERE claim_id=? AND account_id=?",
+            (claim_id, account_id),
+        )
+        if not await _cur.fetchone():
+            raise HTTPException(status_code=404, detail="Claim not found")
+    docs = await nidaan.get_claim_documents(claim_id=claim_id)
+    for d in docs:
+        d["url"] = _nidaan_doc_url(d["stored_name"])
+    return {"docs": docs}
+
+
+# ── Subscriber ⇄ ops messaging (per claim) ───────────────────────────────────
+class _NidaanMsgReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    content: str = Field(min_length=1, max_length=4000)
+
+
+async def _nidaan_claim_owned_by(claim_id: int, account_id: int) -> bool:
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+        _c.row_factory = __import__("aiosqlite").Row
+        r = await (await _c.execute(
+            "SELECT 1 FROM nidaan_claims WHERE claim_id=? AND account_id=?",
+            (claim_id, account_id))).fetchone()
+        return bool(r)
+
+
+async def _save_message_attachment(file: UploadFile, claim_id: int, account_id: int) -> int:
+    """Validate + store a claim-message attachment (same rules/store as claim docs);
+    returns its nidaan_claim_documents doc_id so it can be linked to the message."""
+    content = await file.read()
+    # One gate: size, real type, extension-from-bytes, and the virus scan.
+    ext = await validate_upload_scanned(content, (file.content_type or ""), what="attachment")
+    stored_name = f"{uuid.uuid4().hex}{ext}"
+    (_NIDAAN_DOCS_DIR / stored_name).write_bytes(content)
+    return await nidaan.save_claim_document(
+        account_id=account_id, stored_name=stored_name,
+        original_name=file.filename or stored_name,
+        file_size=len(content), mime_type=file.content_type or "", claim_id=claim_id)
+
+
+def _attach_message_urls(msgs: list) -> list:
+    """Add a short-lived signed URL for any message that carries an attachment."""
+    for m in msgs:
+        if m.get("attachment_stored"):
+            m["attachment_url"] = _nidaan_doc_url(m["attachment_stored"])
+    return msgs
+
+
+@app.get("/nidaan/api/claims/{claim_id}/messages")
+async def nidaan_claim_messages(claim_id: int, request: Request):
+    """Subscriber: message thread with the ops team for one of their claims."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    payload = _nidaan_bearer(request)
+    if not payload: raise HTTPException(401, "Unauthorized")
+    if not await _nidaan_claim_owned_by(claim_id, payload["sub"]):
+        raise HTTPException(404, "Claim not found")
+    msgs = _attach_message_urls(await nidaan.list_claim_messages(claim_id))
+    await nidaan.mark_messages_read(claim_id, by="subscriber")
+    return {"messages": msgs}
+
+
+@app.post("/nidaan/api/claims/{claim_id}/messages")
+@limiter.limit("30/minute")
+async def nidaan_claim_message_send(claim_id: int, request: Request,
+                                    content: str = Form(""),
+                                    file: Optional[UploadFile] = File(None)):
+    """Subscriber: send a message (and/or a file) to the ops team about their claim."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    payload = _nidaan_bearer(request)
+    if not payload: raise HTTPException(401, "Unauthorized")
+    account_id = payload["sub"]
+    if not await _nidaan_claim_owned_by(claim_id, account_id):
+        raise HTTPException(404, "Claim not found")
+    content = (content or "").strip()[:4000]
+    doc_id = await _save_message_attachment(file, claim_id, account_id) if (file and file.filename) else None
+    if not content and not doc_id:
+        raise HTTPException(400, "Type a message or attach a file")
+    await nidaan.add_claim_message(claim_id, "subscriber", content,
+                                   subscriber_id=account_id, attachment_doc_id=doc_id)
+    try:
+        import biz_nidaan_notifications as _nnot
+        preview = content or "📎 sent an attachment"
+        asyncio.create_task(_nnot.on_new_claim_message(claim_id, account_id, "subscriber", preview))
+    except Exception:
+        pass
+    return {"ok": True}
+
+
+@app.get("/nidaan/api/my/notifications")
+async def nidaan_my_notifications(request: Request):
+    """Subscriber dashboard bell: unread ops replies on their claims (per-claim + total). The
+    subscriber's read state is marked when they open a claim's message thread (mark_messages_read).
+    Chat-reply notifications land in a later increment (support read-tracking)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(404)
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(401, "Unauthorized")
+    per_claim = await nidaan.unread_messages_by_claim(payload["sub"])
+    per_chat = await nidaan.unread_support_by_thread(payload["sub"])
+    return {"claim_unread_total": sum(per_claim.values()), "claims": per_claim,
+            "chat_unread_total": sum(per_chat.values()), "chats": per_chat}
+
+
+@app.get("/nidaan/ops/api/claims/{claim_id}/messages")
+async def ops_claim_messages(claim_id: int, request: Request):
+    """Ops: message thread with the subscriber for a claim."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request)
+    msgs = _attach_message_urls(await nidaan.list_claim_messages(claim_id))
+    await nidaan.mark_messages_read(claim_id, by="staff")
+    return {"messages": msgs}
+
+
+@app.delete("/nidaan/ops/api/claims/{claim_id}/messages/{message_id}")
+async def ops_claim_message_unsend(claim_id: int, message_id: int, request: Request):
+    """Unsend a message we sent to the subscriber. Soft delete: it disappears from both sides of
+    the thread but the row is retained for the record. Only OUR messages can be unsent."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request)
+    ok = await nidaan.unsend_claim_message(message_id, claim_id, staff["staff_id"])
+    if not ok:
+        raise HTTPException(status_code=404, detail="Message not found, already unsent, or not ours to unsend")
+    await _ops_audit(request, "claim.message_unsend", "claim", str(claim_id), f"message {message_id}")
+    return {"ok": True}
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/messages")
+@limiter.limit("60/minute")
+async def ops_claim_message_send(claim_id: int, request: Request,
+                                 content: str = Form(""),
+                                 file: Optional[UploadFile] = File(None)):
+    """Ops: reply to a subscriber about their claim (with an optional file)."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+        _c.row_factory = __import__("aiosqlite").Row
+        r = await (await _c.execute(
+            "SELECT account_id FROM nidaan_claims WHERE claim_id=?", (claim_id,))).fetchone()
+    if not r: raise HTTPException(404, "Claim not found")
+    account_id = r["account_id"]
+    content = (content or "").strip()[:4000]
+    doc_id = await _save_message_attachment(file, claim_id, account_id) if (file and file.filename) else None
+    if not content and not doc_id:
+        raise HTTPException(400, "Type a message or attach a file")
+    await nidaan.add_claim_message(claim_id, "staff", content,
+                                   staff_id=staff["staff_id"], attachment_doc_id=doc_id)
+    # The staffer who messaged the customer becomes a "watcher" — so when the customer REPLIES they
+    # get it on every channel (dashboard popup + web push + Telegram + email) and can attend at once.
+    try:
+        await nidaan.add_claim_watchers(claim_id, [staff["staff_id"]], staff["staff_id"],
+                                        relation="messaged")
+    except Exception:
+        pass
+    try:
+        import biz_nidaan_notifications as _nnot
+        preview = content or "📎 sent an attachment"
+        asyncio.create_task(_nnot.on_new_claim_message(claim_id, account_id, "staff", preview,
+                                                       actor_staff_id=staff["staff_id"]))
+    except Exception:
+        pass
+    try:
+        await _ops_audit(request, "claim_message", "claim", claim_id, (content or "attachment")[:80])
+    except Exception:
+        pass
+    return {"ok": True}
+
+
+# ── Claim "involved" watchers + mute (mirrors the task watcher/mute model) ────
+@app.get("/nidaan/ops/api/claims/{claim_id}/watchers")
+async def ops_claim_watchers(claim_id: int, request: Request):
+    """List the 'involved' staff on a claim + whether the caller has muted it."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    watchers = await nidaan.list_claim_watchers(claim_id)
+    me_muted = any(w["staff_id"] == staff["staff_id"] and w.get("muted") for w in watchers)
+    return {"watchers": watchers, "me_muted": me_muted, "me": staff["staff_id"]}
+
+
+class _ClaimInvolveReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    staff_ids: List[int] = Field(..., min_length=1, max_length=20)
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/watchers")
+@limiter.limit("30/minute")
+async def ops_claim_involve(claim_id: int, body: _ClaimInvolveReq, request: Request):
+    """Involve a colleague in a claim directly, instead of having to @mention them in a note.
+    Same effect as a mention: they are told once, and then they follow the claim until they mute."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(404)
+    caller = _require_staff(request, "team_member")
+    claim = await nidaan.get_claim_with_account(claim_id)
+    if not claim:
+        raise HTTPException(404, "Claim not found")
+    newly = await nidaan.add_claim_watchers(claim_id, body.staff_ids, caller["staff_id"],
+                                            relation="involved")
+    who = _actor_label(caller)
+    if newly:
+        try:
+            import biz_nidaan_notifications as _nnot
+            from biz_nidaan_notifications import _cn as _claim_no
+            await _nnot.notify_staff_inapp(
+                newly, f"👥 You are now involved in #{_claim_no(claim_id)}",
+                f"{who} added you to the claim for {claim.get('insured_name') or ''}. "
+                f"You will get its updates until you mute it.",
+                event_key="claim.involved", claim_id=claim_id)
+        except Exception as e:  # noqa: BLE001 — being told is not worth failing the action for
+            logger.info("could not tell the newly involved on claim %s: %s", claim_id, e)
+    await _ops_audit(request, "claim.involve", "claim", str(claim_id),
+                     "involved %d staff" % len(newly))
+    return {"ok": True, "added": newly, "watchers": await nidaan.list_claim_watchers(claim_id)}
+
+
+class _ClaimMuteReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    muted: bool = True
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/mute")
+async def ops_claim_mute(claim_id: int, body: _ClaimMuteReq, request: Request):
+    """Mute/unmute a claim's activity notifications for the current staffer. They keep
+    full access — this only silences their own bell/Telegram pings for this claim."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    await nidaan.set_claim_watch_mute(claim_id, staff["staff_id"], body.muted)
+    return {"ok": True, "muted": body.muted}
+
+
+@app.get("/nidaan/api/review/{purchase_id}/documents")
+async def nidaan_get_review_docs(purchase_id: int, request: Request):
+    """Customer: fetch documents they uploaded for one of their own ₹499 reviews."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    account_id = payload["sub"]
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _conn:
+        _conn.row_factory = __import__("aiosqlite").Row
+        _cur = await _conn.execute(
+            "SELECT purchase_id FROM nidaan_per_claim_purchase WHERE purchase_id=? AND account_id=?",
+            (purchase_id, account_id),
+        )
+        if not await _cur.fetchone():
+            raise HTTPException(status_code=404, detail="Review not found")
+    docs = await nidaan.get_claim_documents(purchase_id=purchase_id)
+    for d in docs:
+        d["url"] = _nidaan_doc_url(d["stored_name"])
+    return {"docs": docs}
+
+
+class NidaanReviewPayReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
+    """Create a Razorpay order for ₹499 review — payment first, review created after."""
+    advisor_name: str
+    advisor_phone: str
+    advisor_email: str
+    insured_name: str
+    claim_type: str
+    insurer_name: str = ""
+    disputed_amount: Optional[int] = None
+    notes: str = ""
+    intermediary_code: str = ""
+    intermediary_name: str = ""
+
+
+class NidaanReviewVerifyReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
+    razorpay_order_id: str
+    razorpay_payment_id: str
+    razorpay_signature: str
+    # Form data repeated for server-side creation after payment verified
+    advisor_name: str
+    advisor_phone: str
+    advisor_email: str
+    insured_name: str
+    claim_type: str
+    insurer_name: str = ""
+    disputed_amount: Optional[int] = None
+    notes: str = ""
+
+
+@app.post("/nidaan/api/review-request/pay")
+@limiter.limit("5/minute")
+async def nidaan_review_pay(body: NidaanReviewPayReq, request: Request):
+    """Create a Razorpay order for ₹499 review payment. Public endpoint."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    import httpx as _httpx, time as _time
+    rzp_key_id = _nidaan_rzp_id()
+    rzp_key_secret = _nidaan_rzp_secret()
+    if not rzp_key_id or not rzp_key_secret:
+        raise HTTPException(status_code=503, detail="Payments not configured")
+    _fee = await nidaan.review_fee_for(body.disputed_amount)   # Item #4: tiered review fee
+    _amt_paise = (await nidaan.charge_with_gst(_fee))["total_paise"]   # + GST when enabled
+    receipt = f"nidaan_review_{int(_time.time())}"[:40]
+    async with _httpx.AsyncClient() as client:
+        r = await client.post(
+            "https://api.razorpay.com/v1/orders",
+            auth=(rzp_key_id, rzp_key_secret),
+            json={
+                "amount": _amt_paise,
+                "currency": "INR",
+                "receipt": receipt,
+                "payment_capture": 1,
+                "notes": {
+                    "product": "nidaan_review",
+                    "advisor_email": body.advisor_email[:100],
+                    "insured_name": body.insured_name[:100],
+                    "claim_type": body.claim_type,
+                },
+            },
+            timeout=20.0,
+        )
+        result = r.json()
+    if "id" not in result:
+        err = result.get("error", {}).get("description", "Order creation failed")
+        raise HTTPException(status_code=502, detail=err)
+    return {
+        "order_id": result["id"],
+        "amount": _amt_paise,
+        "fee": _fee,
+        "currency": "INR",
+        "razorpay_key_id": rzp_key_id,
+    }
+
+
+@app.post("/nidaan/api/review-request/verify")
+@limiter.limit("5/minute")
+async def nidaan_review_verify(body: NidaanReviewVerifyReq, request: Request):
+    """Verify ₹499 Razorpay payment, then create the review request. Idempotent."""
+    import hmac as _hmac_mod, hashlib as _hs, asyncio as _asyncio
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    rzp_key_id = _nidaan_rzp_id()
+    rzp_key_secret = _nidaan_rzp_secret()
+    if not rzp_key_secret:
+        raise HTTPException(status_code=503, detail="Payments not configured")
+    # Verify Razorpay signature
+    msg = f"{body.razorpay_order_id}|{body.razorpay_payment_id}".encode()
+    expected = _hmac_mod.new(rzp_key_secret.encode(), msg, _hs.sha256).hexdigest()
+    if not _hmac_mod.compare_digest(expected, body.razorpay_signature):
+        raise HTTPException(status_code=400, detail="Invalid payment signature")
+    # Never create a paid review on an uncaptured (pending/authorized) payment.
+    if not await _nidaan_payment_captured(body.razorpay_payment_id):
+        return {"status": "pending",
+                "message": "Payment is still processing — we'll confirm it shortly. No need to pay again."}
+    # Find or create Nidaan account → gives this advisor dashboard access.
+    # Mobile is the primary identity: match by email first (if given), then by mobile,
+    # so a repeat customer using a different/blank email still reuses their account.
+    email = body.advisor_email.strip().lower()
+    account = (await nidaan.get_account_by_email(email)) if email else None
+    if not account:
+        account = await nidaan.get_account_by_phone(body.advisor_phone.strip())
+    if account:
+        account_id = account["account_id"]
+    else:
+        import secrets as _sec
+        tmp_pw = _sec.token_hex(16)
+        account_id = await nidaan.create_account(
+            owner_name=body.advisor_name.strip(),
+            email=email,
+            phone=body.advisor_phone.strip(),
+            password=tmp_pw,
+            firm_name="",
+        )
+        # Lost a create race on the unique mobile? Recover by looking the account up.
+        if account_id is None:
+            account = await nidaan.get_account_by_phone(body.advisor_phone.strip())
+            if not account:
+                raise HTTPException(status_code=409, detail="This mobile is already registered. Please log in.")
+            account_id = account["account_id"]
+        else:
+            account = await nidaan.get_account_by_id(account_id)
+        try:
+            import asyncio as _asyncio2, biz_nidaan_notifications as _nnot
+            _asyncio2.create_task(_nnot.on_subscriber_signup(account_id))  # alert SA/Admin (new signup)
+        except Exception:
+            pass
+
+    # Create review request record, linked to this account
+    purchase_id = await nidaan.create_review_request(
+        advisor_name=body.advisor_name.strip(),
+        advisor_phone=body.advisor_phone.strip(),
+        advisor_email=email,
+        insured_name=body.insured_name.strip(),
+        claim_type=body.claim_type,
+        insurer_name=body.insurer_name.strip(),
+        disputed_amount=body.disputed_amount,
+        notes=body.notes.strip(),
+        intermediary_code=body.intermediary_code,
+        intermediary_name=body.intermediary_name,
+        account_id=account_id,
+    )
+    # Mark as paid immediately
+    await nidaan.update_review_request_status(purchase_id, "paid")
+    # Unified ledger + GST for the review request (was previously untracked).
+    try:
+        _rfee = await nidaan.review_fee_for(body.disputed_amount)
+        _rtot = (await nidaan.charge_with_gst(int(_rfee)))["total_paise"]
+        await nidaan.record_gst(body.razorpay_payment_id, "review_request", _rfee, account_id=account_id)
+        await nidaan.record_payment(
+            source="per_claim_review", total_paise=_rtot, base_paise=int(_rfee) * 100,
+            dedup_key=body.razorpay_payment_id, razorpay_payment_id=body.razorpay_payment_id,
+            razorpay_order_id=getattr(body, "razorpay_order_id", "") or "",
+            account_id=account_id, verified=True, verify_method="signature",
+            note=f"review request #{purchase_id}")
+    except Exception as _pe:
+        logger.warning("record_payment (review-request) failed purchase=%s: %s", purchase_id, _pe)
+    # Notify admin
+    admin_email = os.getenv("NIDAAN_ADMIN_EMAIL", os.getenv("SMTP_FROM_SUPPORT", ""))
+    if admin_email:
+        _asyncio.create_task(email_svc.send_email(
+            to_email=admin_email,
+            subject=f"[Nidaan] ₹499 Review Request PAID #{purchase_id}",
+            html_body=(
+                f"<p><b>Advisor:</b> {body.advisor_name} — {body.advisor_phone} — {email}</p>"
+                f"<p><b>Client:</b> {body.insured_name}</p>"
+                f"<p><b>Claim type:</b> {body.claim_type} | <b>Insurer:</b> {body.insurer_name or 'N/A'}</p>"
+                f"<p><b>Disputed amount:</b> ₹{body.disputed_amount or 'N/A'}</p>"
+                f"<p><b>Notes:</b> {body.notes or '—'}</p>"
+                f"<p><b>Payment ID:</b> {body.razorpay_payment_id}</p>"
+                f"<p><b>Status: PAID ✅</b> — proceed with legal review. Purchase ID: #{purchase_id}</p>"
+            ),
+            from_name="Nidaan Partner",
+        ))
+    # Confirmation to advisor
+    _asyncio.create_task(email_svc.send_email(
+        to_email=email,
+        subject="Payment confirmed — Your review request is with our legal team",
+        html_body=(
+            f"<p>Hi {body.advisor_name},</p>"
+            f"<p>Your ₹499 payment has been confirmed. Our legal team has received your review request for "
+            f"client <b>{body.insured_name}</b> ({body.claim_type} claim).</p>"
+            f"<p>The review will be delivered within <b>48–72 business hours</b> to this email address.</p>"
+            f"<p>Reference ID: <b>#{purchase_id}</b> | Payment: {body.razorpay_payment_id}</p>"
+            f"<p>You can track status on your <a href='https://nidaan.sarathi.ai/nidaan/dashboard'>Nidaan Dashboard</a>.</p>"
+            f"<p>— Nidaan Partner Team</p>"
+        ),
+        from_name="Nidaan Partner",
+    ))
+    # Issue a JWT so the dashboard loads immediately after payment
+    dashboard_token = nidaan.create_nidaan_token(account_id, email, "per_claim")
+    return {
+        "purchase_id": purchase_id,
+        "status": "paid",
+        "message": "Review request submitted. You will receive the review within 48–72 business hours.",
+        "dashboard_token": dashboard_token,
+        "dashboard_url": "/nidaan/dashboard",
+    }
+
+
+@app.post("/nidaan/api/review-request")
+async def nidaan_api_review_request(body: NidaanReviewReq, request: Request):
+    """Legacy: manual review request (admin sends payment link). Use /review-request/pay instead."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    import asyncio as _asyncio
+    purchase_id = await nidaan.create_review_request(
+        advisor_name=body.advisor_name.strip(),
+        advisor_phone=body.advisor_phone.strip(),
+        advisor_email=body.advisor_email.strip(),
+        insured_name=body.insured_name.strip(),
+        claim_type=body.claim_type,
+        insurer_name=body.insurer_name.strip(),
+        disputed_amount=body.disputed_amount,
+        notes=body.notes.strip(),
+        intermediary_code=body.intermediary_code,
+        intermediary_name=body.intermediary_name,
+    )
+    # Notify admin
+    admin_email = os.getenv("NIDAAN_ADMIN_EMAIL", os.getenv("SMTP_FROM_SUPPORT", ""))
+    if admin_email:
+        _asyncio.create_task(email_svc.send_email(
+            to_email=admin_email,
+            subject=f"[Nidaan] New ₹499 Review Request #{purchase_id}",
+            html_body=(
+                f"<p><b>Advisor:</b> {body.advisor_name} — {body.advisor_phone} — {body.advisor_email}</p>"
+                f"<p><b>Client:</b> {body.insured_name}</p>"
+                f"<p><b>Claim type:</b> {body.claim_type} | <b>Insurer:</b> {body.insurer_name or 'N/A'}</p>"
+                f"<p><b>Disputed amount:</b> ₹{body.disputed_amount or 'N/A'}</p>"
+                f"<p><b>Notes:</b> {body.notes or '—'}</p>"
+                f"<p>Send payment link and proceed once ₹499 confirmed. Purchase ID: {purchase_id}</p>"
+            ),
+            from_name="Nidaan Partner",
+        ))
+    # Confirmation to advisor
+    _asyncio.create_task(email_svc.send_email(
+        to_email=body.advisor_email,
+        subject="Your review request received — Nidaan Partner",
+        html_body=(
+            f"<p>Hi {body.advisor_name},</p>"
+            f"<p>We've received your ₹499 review request for client <b>{body.insured_name}</b> "
+            f"({body.claim_type} claim).</p>"
+            f"<p>Our team will send a payment link to this email within a few hours. "
+            f"Once payment is confirmed, the legal review will be delivered in 48–72 business hours.</p>"
+            f"<p>Reference ID: <b>#{purchase_id}</b></p>"
+            f"<p>— Nidaan Partner Team</p>"
+        ),
+        from_name="Nidaan Partner",
+    ))
+    return {"purchase_id": purchase_id, "status": "received"}
+
+
+# ── Razorpay Subscription (Nidaan) ────────────────────────────────────────────
+
+class NidaanSubscribeReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
+    plan: str  # silver | gold | platinum
+
+
+@app.post("/nidaan/api/subscribe")
+@limiter.limit("5/minute")
+async def nidaan_api_subscribe(body: NidaanSubscribeReq, request: Request):
+    """Create a Razorpay ORDER (one-time) for an authenticated Nidaan account.
+    Orders support UPI, cards, wallets, net banking — unlike subscriptions which block UPI.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    _valid_nidaan_plans = ("silver", "gold", "platinum", "silver_annual", "gold_annual", "platinum_annual")
+    if body.plan not in _valid_nidaan_plans:
+        raise HTTPException(status_code=400, detail="Invalid plan")
+    account = await _nidaan_account_from_payload(payload)
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    # 1d — already-subscribed guide: detect + guide (never error / double-charge).
+    _guide = await _nidaan_resub_guard(account["account_id"], body.plan)
+    if _guide:
+        return _guide
+    rzp_key_id = _nidaan_rzp_id()
+    rzp_key_secret = _nidaan_rzp_secret()
+    if not rzp_key_id or not rzp_key_secret:
+        raise HTTPException(status_code=503, detail="Payments not configured")
+    result = await nidaan.create_nidaan_razorpay_order(
+        account_id=account["account_id"],
+        plan=body.plan,
+        rzp_key_id=rzp_key_id,
+        rzp_key_secret=rzp_key_secret,
+        email=account["email"],
+        phone=account["phone"] or "",
+    )
+    if "error" in result:
+        raise HTTPException(status_code=502, detail=result["error"])
+    return result
+
+
+# ── Nidaan → Sarathi Magic Link ───────────────────────────────────────────────
+
+@app.post("/nidaan/api/sarathi/access")
+async def nidaan_sarathi_access(request: Request):
+    """Magic link: Nidaan JWT → Sarathi JWT.
+    Called by the Nidaan dashboard "Open Sarathi CRM" button.
+    Finds (or provisions) the linked Sarathi tenant and returns a short-lived
+    Sarathi access token + redirect URL so the client can navigate directly
+    into the dashboard without a separate login step.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    account = await _nidaan_account_from_payload(payload)
+    if not account:
+        raise HTTPException(status_code=404, detail="Nidaan account not found")
+    account_id = account["account_id"]
+
+    # Verify they have an active subscription that includes the Sarathi bundle
+    sub = await nidaan.get_active_subscription(account_id)
+    if not sub:
+        raise HTTPException(status_code=403,
+                            detail="No active Nidaan subscription")
+    plan = sub.get("plan", "")
+    if not nidaan.PLAN_LIMITS.get(plan, {}).get("sarathi_bundle"):
+        raise HTTPException(status_code=403,
+                            detail="Your Nidaan plan does not include Sarathi CRM")
+
+    # Find (or provision on-demand) the linked Sarathi tenant
+    sarathi_tenant_id = await nidaan.get_sarathi_tenant_for_nidaan(account_id)
+    if not sarathi_tenant_id:
+        # Derive period_days from subscription current_period_end
+        import aiosqlite as _asql_ml
+        async with _asql_ml.connect(nidaan.DB_PATH) as _mc:
+            _row = await (await _mc.execute(
+                "SELECT current_period_end FROM nidaan_subscriptions "
+                "WHERE account_id=? AND status='active' ORDER BY started_at DESC LIMIT 1",
+                (account_id,),
+            )).fetchone()
+        from datetime import date as _dt_date
+        if _row and _row[0]:
+            try:
+                _end = _dt_date.fromisoformat(_row[0][:10])
+                _period_days = max(1, (_end - _dt_date.today()).days)
+            except ValueError:
+                _period_days = 30
+        else:
+            _period_days = 30
+        await nidaan._provision_sarathi_bundle(account_id, plan, _period_days)
+        sarathi_tenant_id = await nidaan.get_sarathi_tenant_for_nidaan(account_id)
+
+    if not sarathi_tenant_id:
+        raise HTTPException(status_code=503, detail="Could not provision Sarathi access")
+
+    sarathi_tenant = await db.get_tenant(sarathi_tenant_id)
+    if not sarathi_tenant:
+        raise HTTPException(status_code=404, detail="Sarathi tenant not found")
+
+    # Get owner agent (needed for agent_id claim in JWT)
+    owner_agent = await db.get_owner_agent_by_tenant(sarathi_tenant_id)
+    agent_id = owner_agent["agent_id"] if owner_agent else None
+
+    tokens = auth.create_token_pair(
+        tenant_id=sarathi_tenant_id,
+        phone=sarathi_tenant.get("phone") or sarathi_tenant.get("email", ""),
+        firm_name=sarathi_tenant.get("firm_name", ""),
+        role="owner",
+        agent_id=agent_id,
+    )
+    sarathi_base = os.getenv("SERVER_URL", "https://sarathi-ai.com").rstrip("/")
+    return {
+        "access_token": tokens["access_token"],
+        "redirect_url": f"{sarathi_base}/dashboard?token={tokens['access_token']}",
+        "firm_name": sarathi_tenant.get("firm_name", ""),
+    }
+
+
+# ── Nidaan Razorpay Webhook ────────────────────────────────────────────────────
+
+def _claimshield_webhook_secret() -> str:
+    return os.getenv("CLAIMSHIELD_WEBHOOK_SECRET", "").strip()
+
+
+class _ClaimShieldStatusReq(BaseModel):
+    # tolerate ClaimShield's exact field names (contract still being confirmed) — we
+    # accept several common aliases for the case reference + status.
+    model_config = ConfigDict(extra="allow")
+    case_ref: Optional[str] = None
+    case_id: Optional[str] = None
+    reference: Optional[str] = None
+    nidaan_case_id: Optional[str] = None
+    nidaan_ref: Optional[str] = None
+    Nidaanpartnercasenumber: Optional[str] = None   # our ref, as ClaimShield names it
+    caseReferenceNumber: Optional[str] = None         # their ref (from create-case response)
+    status: Optional[str] = None
+    case_status: Optional[str] = None
+    token: Optional[str] = None
+
+
+@app.post("/nidaan/api/claimshield/status")
+@limiter.limit("120/minute")
+async def nidaan_claimshield_status(body: _ClaimShieldStatusReq, request: Request):
+    """Inbound webhook: ClaimShield pushes a status change for one of our L2 cases.
+    Authenticated by a shared secret (header X-ClaimShield-Token, or a 'token' field).
+    Maps their raw status → a friendly bilingual bucket and records it on the claim,
+    which then surfaces on the customer's dashboard."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    import hmac as _hm
+    secret = _claimshield_webhook_secret()
+    provided = (request.headers.get("X-ClaimShield-Token", "") or (body.token or "")).strip()
+    if not secret or not provided or not _hm.compare_digest(provided, secret):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    case_ref = (body.case_ref or body.Nidaanpartnercasenumber or body.nidaan_case_id
+                or body.nidaan_ref or body.reference or body.caseReferenceNumber or body.case_id)
+    raw_status = (body.status or body.case_status or "").strip()
+    if not case_ref or not raw_status:
+        raise HTTPException(status_code=400, detail="Missing case reference or status")
+    # ClaimShield's OWN reference (if they include it) — stored so our L2 column self-heals to their
+    # real number. Prefer caseReferenceNumber; only treat case_id as their ref if it isn't our claim no.
+    cs_case_ref = (body.caseReferenceNumber or "").strip()
+    if not cs_case_ref and body.case_id and str(body.case_id).strip() != str(case_ref).strip():
+        cs_case_ref = str(body.case_id).strip()
+    import biz_claimshield as _cs
+    result = await _cs.record_status_update(case_ref, raw_status, source="claimshield",
+                                            cs_case_ref=cs_case_ref)
+    if not result.get("ok"):
+        if result.get("error") == "claim_not_found":
+            raise HTTPException(status_code=404, detail="Case not found")
+        raise HTTPException(status_code=400, detail=result.get("error", "Could not record status"))
+    # Phase 2 will notify the customer + ops here when result["changed"] is True.
+    return {"ok": True, "bucket": result["bucket"]}
+
+
+class _CsRoutingReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool
+
+
+@app.post("/nidaan/ops/api/claimshield/routing")
+async def ops_claimshield_routing(body: _CsRoutingReq, request: Request):
+    """Super-admin master switch for ClaimShield (L2 legal) routing. OFF = L2 claims stay in
+    NidaanPartner (no auto-send, manual push refused). Audited."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "super_admin")
+    await nidaan.set_ops_setting("claimshield_routing_enabled", "1" if body.enabled else "0",
+                                 updated_by=str(staff.get("staff_id") or ""))
+    await _ops_audit(request, "claimshield.routing", "settings", "claimshield",
+                     f"routing {'ON' if body.enabled else 'PAUSED (L2 kept in NidaanPartner)'}")
+    return {"ok": True, "enabled": body.enabled}
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/send-to-claimshield")
+@limiter.limit("30/minute")
+async def ops_send_to_claimshield(claim_id: int, request: Request):
+    """Ops manually pushes a claim to ClaimShield (L2 legal). Idempotent — never creates
+    a duplicate (ClaimShield doesn't dedupe). sub_super_admin+ only."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "sub_super_admin")
+    # MASTER pause: while the in-house L2 model is being built, ClaimShield routing is OFF and
+    # L2 claims stay in NidaanPartner. A super_admin can resume it in Workflow Settings.
+    if str(await nidaan.get_ops_setting("claimshield_routing_enabled", "1")).strip().lower() not in ("1", "true", "on", "yes"):
+        raise HTTPException(status_code=409, detail="ClaimShield routing is paused — L2 claims are "
+                            "handled in NidaanPartner. Re-enable it in Workflow Settings to send.")
+    _by = _actor_label(caller)   # real actor, even if impersonating another staff
+    reason = ""
+    try:
+        _b = await request.json()
+        if isinstance(_b, dict):
+            reason = (_b.get("reason") or "").strip()[:500]
+    except Exception:
+        reason = ""
+    import biz_claimshield as _cs
+    result = await _cs.create_case(claim_id, reason=reason, sent_by=_by)
+    if not result.get("ok"):
+        _emap = {"not_configured": "ClaimShield API key not set on the server",
+                 "claim_not_found": "Claim not found",
+                 "not_eligible": "Only a reviewed-GO (can-fight) claim that is PAID "
+                                 "(₹499 review / subscription / L2 fee) can go to ClaimShield",
+                 "network": "Could not reach ClaimShield — please try again",
+                 "rejected": "ClaimShield rejected the case"}
+        raise HTTPException(status_code=400,
+                            detail=_emap.get(result.get("error"), result.get("error") or "Failed"))
+    await _ops_audit(request, "claimshield.create", "claim", str(claim_id),
+                     f"sent to ClaimShield (case {result.get('case_id') or 'already-sent'})")
+    return result
+
+
+@app.get("/nidaan/api/claimshield/case/{claim_id}/documents")
+@limiter.limit("60/minute")
+async def claimshield_case_documents(claim_id: int, request: Request):
+    """INBOUND API for ClaimShield.in to fetch an L2 claim's documents after the case has been
+    created there. This is how documents move from NidaanPartner → ClaimShield, safely:
+
+      Auth      : dedicated shared secret in the `x-api-key` header (env CLAIMSHIELD_PULL_KEY) —
+                  a SEPARATE key from the outbound CLAIMSHIELD_API_KEY, constant-time compared.
+      Scope     : only claims ALREADY SENT to ClaimShield (a case exists) — so ClaimShield can
+                  fetch its own cases' docs, never enumerate arbitrary Nidaan claims.
+      Transport : returns short-lived HMAC-SIGNED, expiring download URLs (the files stay behind
+                  the signed-URL guard; the key never grants blanket file access).
+      Audit     : every pull is recorded (who=ClaimShield, which claim, how many docs).
+
+    ClaimShield calls it with the case number it already holds (Nidaanpartnercasenumber = claim_id).
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    import hmac as _hm
+    # Accept EITHER the dedicated doc-pull key (x-api-key: CLAIMSHIELD_PULL_KEY) OR — per ClaimShield's
+    # request to use one token everywhere — the same status-webhook token (X-ClaimShield-Token:
+    # CLAIMSHIELD_WEBHOOK_SECRET). Both are constant-time compared.
+    key = (os.getenv("CLAIMSHIELD_PULL_KEY", "") or "").strip()
+    webhook_secret = _claimshield_webhook_secret()
+    prov_apikey = (request.headers.get("x-api-key", "") or "").strip()
+    prov_token = (request.headers.get("X-ClaimShield-Token", "") or "").strip()
+    if not (key or webhook_secret):
+        raise HTTPException(status_code=503, detail="Document API not configured")
+    _ok = ((key and prov_apikey and _hm.compare_digest(key, prov_apikey)) or
+           (webhook_secret and prov_token and _hm.compare_digest(webhook_secret, prov_token)))
+    if not _ok:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    import biz_claimshield as _cs
+    if not await _cs.already_sent(claim_id):
+        raise HTTPException(status_code=404, detail="No ClaimShield case exists for this claim")
+    cs_state = await _cs.get_claimshield_state(claim_id)
+    docs = await nidaan.get_claim_documents(claim_id=claim_id)
+    origin = _nidaan_origin(request)
+    out = []
+    for d in docs:
+        if not d.get("stored_name"):
+            continue
+        out.append({
+            "original_name": d.get("original_name") or d.get("stored_name"),
+            "size": d.get("file_size"),
+            "uploaded_at": d.get("uploaded_at"),
+            # Signed, expiring URL — ClaimShield downloads each within the validity window.
+            "download_url": origin + _nidaan_doc_url(d["stored_name"]),
+        })
+    try:
+        await nidaan.log_activity(
+            action="claimshield.docs_pull", actor_type="system", actor_id=None,
+            actor_name="ClaimShield", actor_role="integration", target_type="claim",
+            target_id=str(claim_id), detail=f"{len(out)} document(s) fetched by ClaimShield",
+            ip=(request.client.host if request.client else ""))
+    except Exception:
+        pass
+    return {
+        "nidaan_claim_id": claim_id,
+        "claimshield_case_id": (cs_state or {}).get("case_id", ""),
+        "document_count": len(out),
+        "documents": out,
+    }
+
+
+@app.get("/nidaan/api/wa/webhook", include_in_schema=False)
+async def nidaan_wa_webhook_verify(request: Request):
+    """Meta webhook verification handshake for the NidaanPartner complainant WhatsApp number.
+    Meta calls this once on setup with hub.verify_token — we echo hub.challenge if it matches."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    import biz_nidaan_whatsapp as _nwa
+    qp = request.query_params
+    if qp.get("hub.mode") == "subscribe" and qp.get("hub.verify_token") == _nwa.verify_token() \
+            and _nwa.verify_token():
+        return PlainTextResponse(qp.get("hub.challenge", ""))
+    raise HTTPException(status_code=403, detail="verification failed")
+
+
+@app.post("/nidaan/api/wa/webhook", include_in_schema=False)
+@limiter.limit("600/minute")
+async def nidaan_wa_webhook(request: Request):
+    """Inbound WhatsApp events (messages + delivery statuses) for the complainant number. Signature-
+    verified over the RAW body; parsing/handling is delegated to biz_nidaan_wa_flow (never raises)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    import biz_nidaan_whatsapp as _nwa, biz_nidaan_wa_flow as _waflow
+    raw = await request.body()
+    sig = request.headers.get("X-Hub-Signature-256", "")
+    if _nwa._app_secret() and not _nwa.verify_webhook_signature(_nwa._app_secret(), raw, sig):
+        raise HTTPException(status_code=401, detail="bad signature")
+    try:
+        payload = json.loads(raw.decode("utf-8") or "{}")
+    except Exception:
+        payload = {}
+    # WHAT ARRIVED, AND WHAT WE DID WITH IT. Shape only - counts and types, never a message
+    # body or a number. On 23 Sep the founder reported the WhatsApp number not replying:
+    # nginx showed 17 webhooks all answering 200, delivery statuses were updating normally,
+    # and yet no inbound message had been recorded since 22 Sep 06:03. There was no way to
+    # tell whether messages were arriving and being dropped, or not arriving at all - the
+    # webhook logged nothing either way. That question should never be unanswerable again.
+    try:
+        _fields, _msgs, _stats = [], 0, 0
+        for _e in (payload.get("entry") or []):
+            for _ch in (_e.get("changes") or []):
+                _fields.append(_ch.get("field") or "?")
+                _v = _ch.get("value") or {}
+                _msgs += len(_v.get("messages") or [])
+                _stats += len(_v.get("statuses") or [])
+        _res = await _waflow.handle_inbound_payload(payload)
+        logger.info("WA webhook: fields=%s messages=%d statuses=%d handled=%s",
+                    ",".join(sorted(set(_fields))) or "none", _msgs, _stats,
+                    (_res or {}).get("handled", "?"))
+    except Exception as _we:
+        logger.warning("WA webhook handling failed: %s", _we)
+    return {"ok": True}   # Meta needs a fast 200 or it retries
+
+
+@app.post("/nidaan/api/webhook")
+@limiter.limit("60/minute")
+async def nidaan_razorpay_webhook(request: Request):
+    """Razorpay webhook for Nidaan events.
+    Handles both legacy subscription events AND order payment.captured events.
+    This is the server-side safety net — activates subscription even if the client
+    handler failed (UPI app switch, browser context lost, network error, etc.).
+    """
+    import asyncio as _asyncio, json as _json, hmac as _hmac_mod, hashlib as _hs
+    body = await request.body()
+    sig = request.headers.get("X-Razorpay-Signature", "")
+    # Razorpay webhooks are signed with the per-webhook secret (Dashboard →
+    # Webhooks → Secret), NOT the API key secret. Try the dedicated webhook
+    # secret first, fall back to API key secret for legacy setups.
+    webhook_secret = _nidaan_rzp_webhook_secret().strip()
+    api_secret = _nidaan_rzp_secret().strip()
+    _ua = request.headers.get("User-Agent", "")
+    _ip = request.client.host if request.client else ""
+    if not sig:
+        try:
+            await db.log_webhook_failure("/nidaan/api/webhook", _ip,
+                                          "missing_signature", user_agent=_ua)
+        except Exception:
+            pass
+        return JSONResponse({"detail": "Missing signature"}, status_code=400)
+    secrets_to_try = []
+    if webhook_secret:
+        secrets_to_try.append(webhook_secret)
+    if api_secret and api_secret != webhook_secret:
+        secrets_to_try.append(api_secret)
+    if not secrets_to_try:
+        return JSONResponse({"detail": "Webhook secret not configured"}, status_code=503)
+    matched = False
+    for s in secrets_to_try:
+        expected = _hmac_mod.new(s.encode(), body, _hs.sha256).hexdigest()
+        if _hmac_mod.compare_digest(expected, sig):
+            matched = True; break
+    if not matched:
+        logger.warning("⚠️ Invalid Razorpay signature on Nidaan webhook")
+        try:
+            await db.log_webhook_failure("/nidaan/api/webhook", _ip,
+                                          "invalid_signature", user_agent=_ua)
+        except Exception:
+            pass
+        return JSONResponse({"detail": "Invalid signature"}, status_code=400)
+    try:
+        data = _json.loads(body)
+    except Exception:
+        return JSONResponse({"detail": "Invalid JSON"}, status_code=400)
+
+    event = data.get("event", "")
+    payload = data.get("payload", {})
+
+    # PROOF OF ARRIVAL, stamped the moment a correctly-signed webhook gets this far.
+    #
+    # The payment guardian used to prove the webhook was alive by asking "has a webhook CREATED a
+    # payment row in the last 24 hours?" — which is a different question. record_payment is
+    # idempotent by design, so a webhook for a payment the browser checkout already recorded is a
+    # no-op and writes no row. On a day when every payment completes in the browser, that check
+    # sees nothing and concludes the webhook is dead.
+    #
+    # It did exactly that on 20 Sep: "No Razorpay webhook has reached us in 24 hours — check the
+    # webhook URL and secret", while webhooks were arriving and verifying perfectly (nginx logged
+    # them; zero signature failures in a week). That is worse than a noisy alarm, because it told
+    # a person to go and change a setting that was working.
+    #
+    # This records arrival itself — signature verified, JSON parsed — whatever the event turns out
+    # to do. Best-effort: a webhook must never fail because a diagnostic write failed.
+    try:
+        # `datetime` is NOT a module-level name in this file - every other use imports it
+        # locally, aliased. Without this line the call raised NameError, the bare `except`
+        # swallowed it, and the stamp was never written once: from 20 Sep to 23 Sep the payment
+        # guardian read a frozen timestamp and emailed "No Razorpay webhook has reached us in 24
+        # hours" 44 times a day while webhooks were arriving and being processed normally.
+        from datetime import datetime as _dt_now
+        await nidaan.set_ops_setting(
+            "razorpay_webhook_last_at",
+            _dt_now.utcnow().strftime("%Y-%m-%d %H:%M:%S") + "|" + str(event or "")[:60])
+    except Exception as _se:
+        # Still best-effort - a webhook must never fail because a diagnostic write failed - but
+        # no longer silent, because silence here cost three days of false alarms.
+        logger.warning("could not stamp razorpay_webhook_last_at: %s", _se)
+
+    # ── #3(ii): Payment FAILED — alert every super-admin on ALL channels ─────────
+    if event == "payment.failed":
+        _pe = payload.get("payment", {}).get("entity", {})
+        _notes = _pe.get("notes", {}) or {}
+        _prod = _notes.get("product", "") or _notes.get("purpose", "")
+        _kind = {"nidaan": "Subscription", "nidaan_claim_499": "₹499/₹2000 review",
+                 "nidaan_review_999": "Review", "nidaan_review": "Review",
+                 "nidaan_branch_l2": "Branch Level-2", "nidaan_plink": "Payment link"}.get(_prod, _prod or "Payment")
+        _amt = int(_pe.get("amount", 0) or 0) // 100
+        _reason = (_pe.get("error_description") or _pe.get("error_reason") or "").strip()
+        _contact = (_pe.get("contact") or _pe.get("email") or "").strip()
+        _detail = f"Method: {_pe.get('method','')}  ·  Payment: {_pe.get('id','')}"
+        try:
+            import biz_nidaan_notifications as _nf
+            _asyncio.create_task(_nf.on_payment_failed(_kind, _amt, _detail, _reason, _contact,
+                                                       ref_code=(_notes.get("ref", "") or "")))
+        except Exception as _fe:
+            logger.warning("payment.failed alert dispatch failed: %s", _fe)
+        # Complainant-facing reassurance on WhatsApp ("no money was deducted, try again") —
+        # only for claim-linked payments, where the order notes carry the claim_id.
+        _cid_note = str(_notes.get("claim_id", "") or "").strip()
+        if _cid_note.isdigit():
+            try:
+                import biz_nidaan_wa_orchestrator as _worch
+                _asyncio.create_task(_worch.wa_journey(int(_cid_note), "payment_failed"))
+            except Exception as _we:
+                logger.warning("payment.failed wa_journey dispatch failed: %s", _we)
+        # Persist for the analytics dashboard (failures-by-channel + trend). Best-effort.
+        try:
+            _purpose = {"nidaan": "subscription", "nidaan_claim_499": "review499",
+                        "nidaan_review_999": "review499", "nidaan_review": "review499",
+                        "nidaan_branch_l2": "branch_l2", "nidaan_plink": "custom"}.get(_prod, _prod or "")
+            _asyncio.create_task(nidaan.record_event(
+                "payment_failed", ref_code=(_notes.get("ref", "") or ""),
+                amount_paise=int(_pe.get("amount", 0) or 0), purpose=_purpose, status="failed",
+                reason=_reason, contact=_contact, meta=_pe.get("id", "")))
+        except Exception as _ve:
+            logger.warning("record_event(payment_failed) dispatch failed: %s", _ve)
+        # ── Customer retry link — email the customer a fresh link to try again (all types).
+        #
+        # THIS HAD NEVER SENT ONE. 27 failures since 17 Aug, zero retry links. It looked for the
+        # address under `account_id` / `acct_id`, and not one of our five products writes either
+        # of those keys into an order's notes - while two of them carry an address outright and
+        # three carry an id that leads to one. A UPI payment carries no email on the Razorpay
+        # entity, so the notes were the only route and the only route was looking in the wrong
+        # place. Every route each product actually provides is tried here, most direct first.
+        try:
+            _cust_email, _cust_name = await _retry_contact(_pe, _notes, _kind)
+            if _cust_email:
+                _asyncio.create_task(_send_customer_retry_link(
+                    email=_cust_email, phone=(_pe.get("contact") or ""), name=_cust_name,
+                    amount_paise=int(_pe.get("amount", 0) or 0), kind=_kind,
+                    notes=_notes, reason=_reason))
+        except Exception as _rle:
+            logger.warning("payment.failed customer retry link failed: %s", _rle)
+        return {"status": "ok", "event": event}
+
+    # ── Refund events (refund.processed / refund.failed) ─────────────────────────
+    if event in ("refund.processed", "refund.failed", "refund.created"):
+        refund_entity = payload.get("refund", {}).get("entity", {})
+        rzp_refund_id = refund_entity.get("id", "")
+        rzp_payment_id = refund_entity.get("payment_id", "")
+        rzp_status = refund_entity.get("status", "")
+        if not rzp_refund_id:
+            return {"status": "ignored", "reason": "no_refund_id"}
+        async with aiosqlite.connect(nidaan.DB_PATH) as _c:
+            _c.row_factory = aiosqlite.Row
+            row = await (await _c.execute(
+                "SELECT refund_id FROM nidaan_refunds WHERE razorpay_refund_id=? "
+                "OR (razorpay_payment_id=? AND razorpay_refund_id IS NULL)",
+                (rzp_refund_id, rzp_payment_id))).fetchone()
+        if row:
+            new_status = "processed" if rzp_status == "processed" or event == "refund.processed" \
+                         else ("failed" if event == "refund.failed" else "processing")
+            await nidaan.update_refund_status(row["refund_id"], new_status,
+                                              razorpay_refund_id=rzp_refund_id)
+            logger.info("Nidaan refund webhook: refund_id=%d status=%s rzp=%s",
+                        row["refund_id"], new_status, rzp_refund_id)
+        else:
+            logger.info("Nidaan refund webhook unmatched: rzp_refund=%s payment=%s",
+                        rzp_refund_id, rzp_payment_id)
+        return {"status": "ok", "event": event}
+
+    # ── Payment Link paid (branch L2 share-link / super-admin generated link) ───
+    if event == "payment_link.paid":
+        pl = payload.get("payment_link", {}).get("entity", {})
+        pay = payload.get("payment", {}).get("entity", {})
+        plink_id = pl.get("id", "")
+        pay_id = pay.get("id", "")
+        rec = await nidaan.get_payment_link(plink_id)
+        if not rec:
+            logger.info("payment_link.paid unknown plink=%s", plink_id)
+            return {"status": "ignored", "reason": "unknown_link"}
+        first = await nidaan.mark_payment_link_paid(plink_id, pay_id)
+        if not first:
+            return {"status": "ok", "already": True}
+        purpose = rec.get("purpose")
+        if purpose == "l2":
+            _cid = rec.get("claim_id"); _branch = rec.get("branch_code")
+            if _cid and _branch:
+                try:
+                    _pricing = await nidaan.branch_l2_fee_for_claim(int(_cid))
+                    _ok = await nidaan.mark_l2_paid(int(_cid), _branch, int(_pricing["fee"]), pay_id)
+                    if _ok:
+                        try:
+                            import biz_nidaan_notifications as _nl2
+                            _asyncio.create_task(_nl2.on_branch_l2_paid(int(_cid), _branch))
+                        except Exception:
+                            pass
+                except Exception as _e:
+                    logger.error("payment_link.paid l2 reconcile failed plink=%s: %s", plink_id, _e)
+        else:
+            # review499 / subscription / custom — super-admin links (reconciled below).
+            try:
+                await _reconcile_admin_payment_link(rec, pay_id)
+            except Exception as _e:
+                logger.error("payment_link.paid admin reconcile failed plink=%s: %s", plink_id, _e)
+        logger.info("payment_link.paid reconciled plink=%s purpose=%s", plink_id, purpose)
+        return {"status": "ok", "event": event, "purpose": purpose}
+
+    # ── Order payment.captured (one-time order flow for quarterly/annual plans) ─
+    if event == "payment.captured":
+        payment_entity = payload.get("payment", {}).get("entity", {})
+        # Razorpay returns EMPTY notes as [] (a list), not {} — calling .get() on it crashed the whole
+        # webhook (→ 500 → payment never activated on our side). Coerce to a dict defensively.
+        notes = payment_entity.get("notes") or {}
+        if not isinstance(notes, dict):
+            notes = {}
+        product = notes.get("product", "")
+        payment_id_evt = payment_entity.get("id", "")
+        # ── ₹499 claim review — SERVER-SIDE SAFETY NET ──────────────────────────
+        # If the client callback was lost (UPI race / low internet), the money is
+        # captured but /pay-verify never ran. This unlocks the review regardless.
+        if product == "nidaan_claim_499":
+            try:
+                _cid = int(notes.get("claim_id", "0") or 0)
+            except (ValueError, TypeError):
+                _cid = 0
+            if _cid:
+                _res = await _finalize_paid_claim(_cid, payment_id_evt, source="webhook")
+                logger.info("Nidaan webhook payment.captured claim_499: claim=%s finalized=%s already=%s",
+                            _cid, _res.get("finalized"), _res.get("already"))
+            else:
+                logger.warning("Nidaan webhook claim_499 missing claim_id: %s", notes)
+            return {"status": "ok", "event": event, "product": product}
+        # ── ₹499/₹2000 review purchase — server-side safety net (client verify now
+        # requires capture; this finalizes a genuine LATE capture the client missed). ──
+        if product == "nidaan_review_999":
+            try:
+                _pid_purchase = int(notes.get("purchase_id", "0") or 0)
+            except (ValueError, TypeError):
+                _pid_purchase = 0
+            if _pid_purchase:
+                try:
+                    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+                        await _c.execute(
+                            "UPDATE nidaan_per_claim_purchase SET status='paid', "
+                            "reviewed_at=CURRENT_TIMESTAMP WHERE purchase_id=? AND status='pending_payment'",
+                            (_pid_purchase,))
+                        await _c.commit()
+                    # Same as the client verify path: surface this paid review in the
+                    # claims workspace. Idempotent + guarded (never fail the webhook).
+                    try:
+                        await nidaan.ensure_claim_for_paid_purchase(_pid_purchase)
+                    except Exception as _ecpw:
+                        logger.error("ensure_claim_for_paid_purchase failed (webhook) purchase=%s: %s",
+                                     _pid_purchase, _ecpw)
+                    logger.info("Nidaan webhook payment.captured review_999: purchase=%s finalized", _pid_purchase)
+                except Exception as _rpe:
+                    logger.error("Nidaan webhook review_999 finalize failed purchase=%s: %s", _pid_purchase, _rpe)
+            return {"status": "ok", "event": event, "product": product}
+        # ── Branch Level-2 fee — reconcile branch payment server-side ───────────
+        if product == "nidaan_branch_l2":
+            try:
+                _cid = int(notes.get("claim_id", "0") or 0)
+            except (ValueError, TypeError):
+                _cid = 0
+            _branch = notes.get("branch", "")
+            if _cid and _branch:
+                try:
+                    _pricing = await nidaan.branch_l2_fee_for_claim(_cid)
+                    _ok = await nidaan.mark_l2_paid(_cid, _branch, int(_pricing["fee"]), payment_id_evt)
+                    if _ok:
+                        try:
+                            import biz_nidaan_notifications as _nnot_l2
+                            _asyncio.create_task(_nnot_l2.on_branch_l2_paid(_cid, _branch))
+                        except Exception:
+                            pass
+                    logger.info("Nidaan webhook payment.captured branch_l2: claim=%s branch=%s ok=%s",
+                                _cid, _branch, _ok)
+                except Exception as _l2e:
+                    logger.error("Nidaan webhook branch_l2 reconcile failed claim=%s: %s", _cid, _l2e)
+            return {"status": "ok", "event": event, "product": product}
+        # ── Subscription one-time order (quarterly/annual) — existing behavior ──
+        if notes.get("product") != "nidaan":
+            return {"status": "ignored", "reason": "not_nidaan"}
+        account_id_str = notes.get("nidaan_account_id", "")
+        plan = notes.get("nidaan_plan", "")
+        order_id = payment_entity.get("order_id", "")
+        amount_paise = int(payment_entity.get("amount", 0))
+        if not account_id_str or not plan or not order_id:
+            logger.warning("Nidaan webhook payment.captured missing fields: %s", notes)
+            return {"status": "ignored"}
+        account_id = int(account_id_str)
+        payment_id_evt = payment_entity.get("id", "")
+        # Idempotent activation — safe to call even if client already verified
+        already = await nidaan.activate_from_order_payment(order_id, account_id, plan, amount_paise,
+                                                            razorpay_payment_id=payment_id_evt)
+        logger.info("Nidaan webhook payment.captured: account=%d plan=%s order=%s activated=%s",
+                    account_id, plan, order_id, already)
+        # Email confirmation (only sends if not already sent — handled inside activate)
+        async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+            _c.row_factory = __import__("aiosqlite").Row
+            _row = await (await _c.execute(
+                "SELECT * FROM nidaan_accounts WHERE account_id=?", (account_id,)
+            )).fetchone()
+            if _row:
+                _row = dict(_row)
+                _sub = await nidaan.get_active_subscription(account_id)
+                _renewal = _sub["current_period_end"][:10] if _sub else ""
+                # One confirmation per payment: only when THIS call activated the plan.
+                if not already:
+                    _asyncio.create_task(email_svc.send_nidaan_subscription_email(
+                        _row["email"], _row["owner_name"], plan, amount_paise // 100, _renewal
+                    ))
+                # (The office's "payment received" alert comes from record_payment, once per payment.)
+        return {"status": "ok", "event": event}
+
+    # ── Legacy subscription events (kept for backward compat) ─────────────────
+    sub_entity = payload.get("subscription", {}).get("entity", {})
+    notes = sub_entity.get("notes") or {}   # empty notes arrive as [] from Razorpay — coerce
+    if not isinstance(notes, dict):
+        notes = {}
+    if notes.get("product") != "nidaan":
+        return {"status": "ignored", "reason": "not_nidaan"}
+    account_id_str = notes.get("nidaan_account_id", "")
+    plan = notes.get("nidaan_plan", "")
+    if not account_id_str or not plan:
+        logger.warning("Nidaan webhook missing account_id/plan: %s", notes)
+        return {"status": "ignored"}
+    account_id = int(account_id_str)
+    rzp_sub_id = sub_entity.get("id", "")
+    if event in ("subscription.activated", "subscription.charged"):
+        payment_entity = payload.get("payment", {}).get("entity", {})
+        amount_paise = payment_entity.get("amount", 0)
+        # Pass the Razorpay payment id: it is the idempotency key that lets the renewal path
+        # extend the period + hit the ledger exactly once per charge.
+        _res = await nidaan.activate_from_razorpay_webhook(
+            rzp_sub_id, account_id, plan, amount_paise,
+            razorpay_payment_id=(payment_entity.get("id") or ""))
+        # One confirmation email per payment. Razorpay sends activated AND charged for the first
+        # payment, and the subscriber's own confirmation may have activated it already - account
+        # 134 got "Plan Activated!" three times in one second.
+        if _res not in ("new", "renewed"):
+            return {"status": "ok", "event": event, "already": True}
+        async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+            _c.row_factory = __import__("aiosqlite").Row
+            _row = await (await _c.execute(
+                "SELECT * FROM nidaan_accounts WHERE account_id=?", (account_id,)
+            )).fetchone()
+            if _row:
+                _row = dict(_row)
+                _sub = await nidaan.get_active_subscription(account_id)
+                _renewal = _sub["current_period_end"][:10] if _sub else ""
+                _asyncio.create_task(email_svc.send_nidaan_subscription_email(
+                    _row["email"], _row["owner_name"], plan,
+                    amount_paise // 100, _renewal
+                ))
+    elif event in ("subscription.cancelled", "subscription.halted", "subscription.completed"):
+        logger.info("Nidaan subscription %s: account=%d rzp=%s", event, account_id, rzp_sub_id)
+        # B3: unified teardown — webhook + manual cancel converge here.
+        try:
+            await nidaan.apply_bundle_teardown(account_id, reason=f"webhook_{event}")
+        except Exception as bwe:
+            logger.error("Bundle teardown on webhook failed: %s", bwe)
+        # #3(ii): a HALTED subscription = recurring failed after retries — alert super-admins.
+        if event == "subscription.halted":
+            try:
+                import biz_nidaan_notifications as _nf2
+                # Resolve who referred this subscriber so the halt reaches them too (locked model).
+                _href = ""
+                try:
+                    _hacct = await nidaan.get_account_by_id(account_id)
+                    _href = ((_hacct or {}).get("branch_code") or "").strip()
+                except Exception:
+                    _href = ""
+                _asyncio.create_task(_nf2.on_payment_failed(
+                    f"Recurring subscription HALTED ({plan})", 0,
+                    f"Account #{account_id} · sub {rzp_sub_id} — autopay stopped after failed retries.",
+                    reason="Recurring charge failed (retries exhausted)", ref_code=_href))
+            except Exception:
+                pass
+            # Persist for analytics (recurring failure).
+            try:
+                _asyncio.create_task(nidaan.record_event(
+                    "subscription_failed", account_id=account_id, purpose="subscription",
+                    status="failed", reason="Recurring charge failed (retries exhausted)",
+                    meta=rzp_sub_id or ""))
+            except Exception:
+                pass
+            # Customer recovery: email them a one-tap re-activate link (mirrors Sarathi).
+            try:
+                _acc = await nidaan.get_account_by_id(account_id)
+                if _acc and _acc.get("email"):
+                    _asyncio.create_task(email_svc.send_nidaan_autopay_recovery_email(
+                        _acc["email"], _acc.get("owner_name", ""), plan, kind="halted"))
+            except Exception:
+                pass
+    elif event == "subscription.pending":
+        # First-failure / mandate-pending (BEFORE retries are exhausted) — nudge the customer to
+        # authorize/retry now, and log it. This is the early-warning Nidaan was missing (Sarathi has it).
+        logger.info("Nidaan subscription pending: account=%d rzp=%s", account_id, rzp_sub_id)
+        try:
+            _acc = await nidaan.get_account_by_id(account_id)
+            if _acc and _acc.get("email"):
+                _asyncio.create_task(email_svc.send_nidaan_autopay_recovery_email(
+                    _acc["email"], _acc.get("owner_name", ""), plan, kind="pending"))
+        except Exception:
+            pass
+        try:
+            _asyncio.create_task(nidaan.record_event(
+                "subscription_pending", account_id=account_id, purpose="subscription",
+                status="pending", reason="Recurring charge pending / awaiting authorization",
+                meta=rzp_sub_id or ""))
+        except Exception:
+            pass
+    return {"status": "ok", "event": event}
+
+
+# ── Nidaan: payment reconciliation sweep (super-admin safety net) ─────────────
+@app.post("/nidaan/ops/api/payments/reconcile")
+@limiter.limit("6/minute")
+async def nidaan_payments_reconcile(request: Request, hours: int = 168, dry_run: bool = True):
+    """Sweep recent Razorpay orders and reconcile any ₹499-claim / branch-L2 payment that
+    was captured but never reflected in our DB (e.g. a captured payment whose webhook was
+    missed because the old handler ignored it, or a lost client callback). Super-admin only.
+    dry_run=true (default) only REPORTS mismatches; dry_run=false actually finalizes them."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "super_admin")
+    rzp_id = _nidaan_rzp_id(); rzp_secret = _nidaan_rzp_secret()
+    if not rzp_secret:
+        raise HTTPException(status_code=503, detail="Payments not configured")
+    import httpx as _hx, time as _t
+    frm = int(_t.time()) - max(1, min(int(hours), 720)) * 3600
+    orders = []
+    skip = 0
+    async with _hx.AsyncClient() as _cl:
+        while True:
+            r = await _cl.get("https://api.razorpay.com/v1/orders", auth=(rzp_id, rzp_secret),
+                              params={"count": 100, "skip": skip, "from": frm}, timeout=25.0)
+            js = r.json() or {}
+            items = js.get("items", []) or []
+            orders.extend(items)
+            if len(items) < 100:
+                break
+            skip += 100
+            if skip >= 1000:
+                break
+    report = {"dry_run": dry_run, "hours": hours, "scanned": len(orders),
+              "claim_unlock": [], "claim_ok": [], "l2_unlock": [], "unpaid_skipped": 0}
+    for o in orders:
+        if o.get("status") != "paid":
+            report["unpaid_skipped"] += 1
+            continue
+        notes = o.get("notes", {}) or {}
+        prod = notes.get("product", "")
+        oid = o.get("id", "")
+        if prod == "nidaan_claim_499":
+            try:
+                cid = int(notes.get("claim_id", "0") or 0)
+            except (ValueError, TypeError):
+                cid = 0
+            if not cid:
+                continue
+            async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+                _c.row_factory = __import__("aiosqlite").Row
+                row = await (await _c.execute(
+                    "SELECT payment_status FROM nidaan_claims WHERE claim_id=?", (cid,))).fetchone()
+            st = row["payment_status"] if row else "missing"
+            if st == "paid":
+                report["claim_ok"].append({"claim_id": cid, "order": oid})
+            else:
+                if not dry_run:
+                    res = await _finalize_paid_claim(cid, "", source="reconcile")
+                    report["claim_unlock"].append({"claim_id": cid, "order": oid, "was": st,
+                                                    "finalized": res.get("finalized")})
+                else:
+                    report["claim_unlock"].append({"claim_id": cid, "order": oid, "was": st})
+        elif prod == "nidaan_branch_l2":
+            try:
+                cid = int(notes.get("claim_id", "0") or 0)
+            except (ValueError, TypeError):
+                cid = 0
+            branch = notes.get("branch", "")
+            if not (cid and branch):
+                continue
+            if not dry_run:
+                pricing = await nidaan.branch_l2_fee_for_claim(cid)
+                ok = await nidaan.mark_l2_paid(cid, branch, int(pricing["fee"]), "")
+                if ok:
+                    try:
+                        import biz_nidaan_notifications as _nnot_r
+                        asyncio.create_task(_nnot_r.on_branch_l2_paid(cid, branch))
+                    except Exception:
+                        pass
+                report["l2_unlock"].append({"claim_id": cid, "branch": branch, "order": oid, "ok": ok})
+            else:
+                report["l2_unlock"].append({"claim_id": cid, "branch": branch, "order": oid})
+    logger.info("Payment reconcile by staff=%s dry_run=%s: %s claim_unlock, %s l2_unlock (scanned %s)",
+                staff.get("staff_id"), dry_run, len(report["claim_unlock"]),
+                len(report["l2_unlock"]), report["scanned"])
+    return report
+
+
+# ── Nidaan: Check order payment status (recovery endpoint) ────────────────────
+
+@app.get("/nidaan/api/payment/confirm-check")
+async def nidaan_payment_confirm_check(request: Request):
+    """Recovery-on-return: tells the dashboard whether the account's plan activated RECENTLY (last
+    ~90 min) so it can show the thank-you confirmation even when the original payment callback was
+    lost (UPI app-switch / low network → activated via webhook, browser never confirmed). The client
+    tracks which sub_id it already showed, so this never loops."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    sub = await nidaan.get_active_subscription(payload["sub"])
+    if not sub:
+        return {"just_activated": False}
+    recent = False
+    try:
+        from datetime import datetime as _dt
+        started = _dt.fromisoformat(str(sub.get("started_at") or "").replace(" ", "T")[:19])
+        recent = (_dt.utcnow() - started).total_seconds() < 90 * 60
+    except Exception:
+        recent = False
+    return {"just_activated": bool(recent), "sub_id": sub.get("sub_id"),
+            "plan": sub.get("plan"), "cycle": sub.get("billing_cycle") or "monthly",
+            "amount": sub.get("amount_paid")}
+
+
+@app.get("/nidaan/api/subscribe/check")
+async def nidaan_subscribe_check(order_id: str, request: Request):
+    """Check if a Razorpay order has been paid. Used by the dashboard to recover from
+    handler failures (UPI app switching, browser context lost, etc.).
+    If the order is paid but not yet activated, this endpoint activates it.
+    Returns the new JWT so the client can update localStorage without a page reload.
+    """
+    import httpx as _httpx
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    if not order_id or len(order_id) > 60:
+        raise HTTPException(status_code=400, detail="Invalid order_id")
+
+    rzp_key_id = _nidaan_rzp_id()
+    rzp_secret = _nidaan_rzp_secret()
+    if not rzp_secret:
+        raise HTTPException(status_code=503, detail="Payments not configured")
+
+    # Fetch order from Razorpay to check status + notes
+    async with _httpx.AsyncClient() as client:
+        r = await client.get(
+            f"https://api.razorpay.com/v1/orders/{order_id}",
+            auth=(rzp_key_id, rzp_secret), timeout=15.0,
+        )
+        order_data = r.json()
+
+    if "id" not in order_data:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    # Verify this order belongs to this user's account
+    notes = order_data.get("notes", {})
+    account = await _nidaan_account_from_payload(payload)
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    if notes.get("nidaan_account_id") != str(account["account_id"]):
+        raise HTTPException(status_code=403, detail="Order does not belong to this account")
+
+    order_status = order_data.get("status", "")
+    if order_status != "paid":
+        # Payment not captured (either failed, still pending UPI, or never attempted)
+        # Return paid:false — client will show "try again" banner regardless
+        return {"paid": False, "order_status": order_status}
+
+    plan = notes.get("nidaan_plan", "")
+    amount_paise = int(order_data.get("amount", 0))
+    if not plan:
+        raise HTTPException(status_code=400, detail="Plan not found in order notes")
+
+    # Activate idempotently (safe to call if already activated by client-side verify)
+    await nidaan.activate_from_order_payment(order_id, account["account_id"], plan, amount_paise)
+
+    new_token = nidaan.create_nidaan_token(account["account_id"], account["email"], plan)
+    logger.info("✅ Nidaan check-recovery activated: account=%d plan=%s order=%s",
+                account["account_id"], plan, order_id)
+    return {"paid": True, "token": new_token, "plan": plan, "status": "active"}
+
+
+# ── Nidaan: Verify inline-checkout payment ─────────────────────────────────────
+
+class NidaanVerifyPaymentReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
+    razorpay_payment_id: str
+    razorpay_order_id: str          # Razorpay order_id (for one-time order flow)
+    razorpay_signature: str
+    plan: Optional[str] = None      # plan passed from frontend as fallback
+
+
+@app.post("/nidaan/api/subscribe/verify")
+@limiter.limit("10/minute")
+async def nidaan_subscribe_verify(body: NidaanVerifyPaymentReq, request: Request):
+    """Verify Razorpay order payment signature, activate 90-day subscription, return new JWT."""
+    import hmac as _hmac_mod, hashlib as _hs
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    rzp_key_id = _nidaan_rzp_id()
+    rzp_secret = _nidaan_rzp_secret()
+    if not rzp_secret:
+        raise HTTPException(status_code=503, detail="Payments not configured")
+
+    # Razorpay order payment signature: HMAC-SHA256(order_id + "|" + payment_id)
+    msg = f"{body.razorpay_order_id}|{body.razorpay_payment_id}".encode()
+    expected = _hmac_mod.new(rzp_secret.encode(), msg, _hs.sha256).hexdigest()
+    if not _hmac_mod.compare_digest(expected, body.razorpay_signature):
+        raise HTTPException(status_code=400, detail="Invalid payment signature")
+
+    # Plan comes from client body (already validated when order was created server-side)
+    plan = body.plan or ""
+    _valid = ("silver", "gold", "platinum", "silver_annual", "gold_annual", "platinum_annual")
+    if plan not in _valid:
+        raise HTTPException(status_code=400, detail=f"Invalid plan '{plan}'")
+
+    account = await _nidaan_account_from_payload(payload)
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    # Amount comes from our own plan config — no need to hit Razorpay again
+    plan_info = nidaan.NIDAAN_RAZORPAY_PLANS.get(plan, {})
+    amount_paise = plan_info.get("amount_paise", 0)
+
+    try:
+        await nidaan.activate_from_order_payment(
+            body.razorpay_order_id, account["account_id"], plan, amount_paise,
+            razorpay_payment_id=body.razorpay_payment_id,
+        )
+    except Exception as exc:
+        logger.error("Nidaan activate_from_order_payment failed: order=%s plan=%s err=%s",
+                     body.razorpay_order_id, plan, exc)
+        raise HTTPException(status_code=500, detail="Subscription activation failed — contact support with payment ID: " + body.razorpay_payment_id)
+
+    # Send subscription confirmation email (non-blocking)
+    sub = await nidaan.get_active_subscription(account["account_id"])
+    renewal_date = sub["current_period_end"][:10] if sub else ""
+    import asyncio as _asyncio
+    _asyncio.create_task(email_svc.send_nidaan_subscription_email(
+        account["email"], account["owner_name"], plan,
+        amount_paise // 100, renewal_date
+    ))
+
+    new_token = nidaan.create_nidaan_token(account["account_id"], account["email"], plan)
+    logger.info("✅ Nidaan payment verified: account=%d plan=%s payment=%s",
+                account["account_id"], plan, body.razorpay_payment_id)
+    return {"token": new_token, "plan": plan, "status": "active"}
+
+
+# ── Nidaan: Create recurring subscription (quarterly auto-renew) ───────────────
+
+def _plan_label(plan: str) -> str:
+    base = (plan or "").replace("_annual", "")
+    cyc = " (annual)" if (plan or "").endswith("_annual") else ""
+    return (base[:1].upper() + base[1:]) + cyc if base else "your plan"
+
+
+async def _nidaan_resub_guard(account_id: int, requested_plan: str) -> Optional[dict]:
+    """1d — detect an existing subscriber trying to re-subscribe and GUIDE them (never
+    error, never double-charge / mis-record). Returns a friendly guide dict if the account
+    already has an active plan, else None (caller proceeds normally). Bilingual EN/HI."""
+    cur = await nidaan.get_active_subscription(account_id)
+    if not cur:
+        return None
+    cur_plan = (cur.get("plan") or "").strip().lower()
+    same = cur_plan == (requested_plan or "").strip().lower()
+    cur_lbl = _plan_label(cur_plan)
+    ends = ""
+    try:
+        _e = (cur.get("current_period_end") or "")[:10]
+        if _e:
+            # Same missing import as the webhook stamp: `datetime` is not a name in this file.
+            from datetime import datetime as _dt_p
+            ends = _dt_p.strptime(_e, "%Y-%m-%d").strftime("%d %b %Y")
+    except Exception:
+        ends = (cur.get("current_period_end") or "")[:10]
+    until_en = f" It stays active till {ends}." if ends else ""
+    until_hi = f" यह {ends} तक सक्रिय है।" if ends else ""
+    if same:
+        msg_en = (f"You already have the {cur_lbl} plan active.{until_en} "
+                  f"No need to pay again — it renews automatically.")
+        msg_hi = (f"आपके पास पहले से {cur_lbl} प्लान सक्रिय है।{until_hi} "
+                  f"दोबारा भुगतान की ज़रूरत नहीं — यह अपने आप रिन्यू होता है।")
+    else:
+        msg_en = (f"You already have the {cur_lbl} plan active.{until_en} "
+                  f"To switch plans, please cancel the current one first from "
+                  f"Manage Subscription — you won't be double-charged.")
+        msg_hi = (f"आपके पास पहले से {cur_lbl} प्लान सक्रिय है।{until_hi} "
+                  f"प्लान बदलने के लिए पहले ‘Manage Subscription’ से मौजूदा प्लान रद्द करें — "
+                  f"आपसे दोहरा शुल्क नहीं लिया जाएगा।")
+    return {"guide": True, "code": "already_active", "same_plan": same,
+            "current_plan": cur_plan, "current_plan_label": cur_lbl, "ends_at": ends,
+            "message_en": msg_en, "message_hi": msg_hi}
+
+
+@app.post("/nidaan/api/subscribe/recurring")
+@limiter.limit("5/minute")
+async def nidaan_subscribe_recurring(body: NidaanSubscribeReq, request: Request):
+    """Create a Razorpay recurring subscription for ANY Nidaan plan — quarterly
+    (auto-renews every 3 months) or annual (auto-renews yearly). All subscriptions
+    are recurring; only the ₹499 single review is one-time."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    _valid_sub_plans = ("silver", "gold", "platinum",
+                        "silver_annual", "gold_annual", "platinum_annual")
+    if body.plan not in _valid_sub_plans:
+        raise HTTPException(status_code=400, detail="Invalid plan for recurring subscription")
+    account = await _nidaan_account_from_payload(payload)
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    # 1d — already-subscribed guide: detect + guide (never error / double-charge).
+    _guide = await _nidaan_resub_guard(account["account_id"], body.plan)
+    if _guide:
+        return _guide
+    rzp_key_id = _nidaan_rzp_id()
+    rzp_key_secret = _nidaan_rzp_secret()
+    if not rzp_key_id or not rzp_key_secret:
+        raise HTTPException(status_code=503, detail="Payments not configured")
+    result = await nidaan.create_nidaan_recurring_subscription(
+        account_id=account["account_id"],
+        plan=body.plan,
+        rzp_key_id=rzp_key_id,
+        rzp_key_secret=rzp_key_secret,
+        email=account["email"],
+        phone=account["phone"] or "",
+    )
+    if "error" in result:
+        raise HTTPException(status_code=502, detail=result["error"])
+    return result
+
+
+# ── Nidaan: Verify recurring subscription payment ──────────────────────────────
+
+class NidaanVerifySubscriptionReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
+    razorpay_payment_id: str
+    razorpay_subscription_id: str
+    razorpay_signature: str
+    plan: str
+
+
+@app.post("/nidaan/api/subscribe/recurring/verify")
+@limiter.limit("10/minute")
+async def nidaan_subscribe_recurring_verify(body: NidaanVerifySubscriptionReq, request: Request):
+    """Verify Razorpay subscription payment signature, activate subscription, return new JWT."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    _valid = ("silver", "gold", "platinum",
+              "silver_annual", "gold_annual", "platinum_annual")
+    if body.plan not in _valid:
+        raise HTTPException(status_code=400, detail=f"Invalid plan '{body.plan}'")
+    account = await _nidaan_account_from_payload(payload)
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    rzp_secret = _nidaan_rzp_secret()
+    if not rzp_secret:
+        raise HTTPException(status_code=503, detail="Payments not configured")
+    result = await nidaan.verify_nidaan_subscription_and_activate(
+        account_id=account["account_id"],
+        plan=body.plan,
+        razorpay_payment_id=body.razorpay_payment_id,
+        razorpay_subscription_id=body.razorpay_subscription_id,
+        razorpay_signature=body.razorpay_signature,
+        rzp_key_secret=rzp_secret,
+    )
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+    if result.get("already_processed"):
+        # Razorpay's webhook activated it first and sent the confirmation - do not send another.
+        new_token = nidaan.create_nidaan_token(account["account_id"], account["email"], body.plan)
+        return {"token": new_token, "plan": body.plan, "status": "active",
+                "renewal_date": result.get("renewal_date", "")}
+    # Send confirmation email — with the ACTUAL GST-inclusive amount charged (not the old base).
+    _pc = await nidaan.get_plan_cfg(body.plan)
+    _pi = nidaan.NIDAAN_RAZORPAY_PLANS.get(body.plan, {})
+    _basep = int(_pc.get("price_paise") or _pi.get("amount_paise", 0))
+    _paid = int(round((await nidaan.charge_with_gst(_basep / 100))["total_paise"] / 100))
+    import asyncio as _asyncio
+    _asyncio.create_task(email_svc.send_nidaan_subscription_email(
+        account["email"], account["owner_name"], body.plan,
+        _paid, result.get("renewal_date", "")
+    ))
+    new_token = nidaan.create_nidaan_token(account["account_id"], account["email"], body.plan)
+    logger.info("✅ Nidaan recurring sub verified: account=%d plan=%s",
+                account["account_id"], body.plan)
+    return {"token": new_token, "plan": body.plan, "status": "active",
+            "renewal_date": result.get("renewal_date", "")}
+
+
+# ── Nidaan: Cancel subscription ────────────────────────────────────────────────
+
+@app.post("/nidaan/api/account/delete")
+@limiter.limit("3/minute")
+async def nidaan_account_delete(request: Request):
+    """DPDP right-to-erasure: user requests account deletion. Stops billing now,
+    soft-deletes with a grace window for undo; a daily sweep hard-purges the PII."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    account = await _nidaan_account_from_payload(payload)
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    result = await nidaan.request_account_deletion(account["account_id"])
+    # DPDP record + confirmation to the user.
+    try:
+        asyncio.create_task(email_svc.send_email(
+            to_email=account["email"],
+            subject="Your Nidaan account deletion request",
+            html_body=(f"<p>Hello {account.get('owner_name','')},</p>"
+                       f"<p>We've received your request to delete your Nidaan Partner account. "
+                       f"Any active subscription has been cancelled, and your data will be "
+                       f"permanently and securely deleted on <b>{result['purge_on']}</b>.</p>"
+                       f"<p>Changed your mind? Sign in before then and choose <b>Keep my account</b> "
+                       f"to cancel the deletion.</p><p>— Nidaan – The Legal Consultants LLP</p>")))
+    except Exception:
+        pass
+    return {"status": "deletion_pending", "purge_on": result["purge_on"],
+            "grace_days": result["grace_days"],
+            "message": f"Account scheduled for deletion on {result['purge_on']}. "
+                       f"Sign in before then to undo."}
+
+
+@app.post("/nidaan/api/account/delete/cancel")
+@limiter.limit("5/minute")
+async def nidaan_account_delete_cancel(request: Request):
+    """Undo a pending account deletion within the grace window."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    account = await _nidaan_account_from_payload(payload)
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    ok = await nidaan.cancel_account_deletion(account["account_id"])
+    if not ok:
+        raise HTTPException(status_code=400, detail="No pending deletion to cancel")
+    return {"status": "active", "message": "Your account deletion has been cancelled."}
+
+
+@app.post("/nidaan/api/subscribe/cancel")
+@limiter.limit("5/minute")
+async def nidaan_subscribe_cancel(request: Request):
+    """Cancel current Nidaan subscription + auto-refund if Policy A eligible.
+
+    Policy A: full refund when cancelled within 7 days AND zero claims filed.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    account = await _nidaan_account_from_payload(payload)
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    sub = await nidaan.get_active_subscription(account["account_id"])
+    if not sub:
+        raise HTTPException(status_code=404, detail="No active subscription to cancel")
+    sub_id = sub["sub_id"]
+
+    # 1. Mark cancelled in our DB (fast, always succeeds)
+    await nidaan.cancel_nidaan_subscription(account["account_id"])
+    logger.info("Nidaan sub cancelled: account=%d sub_id=%d",
+                account["account_id"], sub_id)
+
+    # 1b. B3: Cascade to the linked Sarathi tenant — apply 5-day grace.
+    # Mirrors the webhook path so manual + webhook cancel are equivalent.
+    try:
+        torn_tid = await nidaan.apply_bundle_teardown(
+            account["account_id"], reason="user_cancel_dashboard")
+        if torn_tid:
+            logger.info("Manual cancel → Sarathi tenant %d bundle scheduled to end in 5d", torn_tid)
+    except Exception as bte:
+        logger.error("Bundle teardown on manual cancel failed: %s", bte)
+
+    # 2. Decide refund eligibility (Policy A)
+    refund_info = {"eligible": False, "reason": "", "refund_id": None,
+                   "amount": 0, "status": ""}
+    eligible, reason, sub_full = await nidaan.check_refund_eligibility(sub_id)
+    refund_info["eligible"] = eligible
+    refund_info["reason"] = reason
+    if eligible:
+        rzp_key_id = _nidaan_rzp_id()
+        rzp_secret = _nidaan_rzp_secret()
+        order_id = sub_full.get("razorpay_subscription_id", "") or ""
+        payment_id = sub_full.get("razorpay_payment_id", "") or ""
+        # Legacy rows: payment_id missing — resolve via order_id
+        if not payment_id and order_id and rzp_secret:
+            payment_id = await nidaan.find_payment_id_via_razorpay(
+                order_id, rzp_key_id, rzp_secret)
+        amount_rupees = int(sub_full.get("amount_paid", 0))
+        amount_paise = amount_rupees * 100
+        refund_id = await nidaan.create_refund_row(
+            sub_id=sub_id,
+            account_id=account["account_id"],
+            amount=amount_rupees,
+            razorpay_order_id=order_id,
+            razorpay_payment_id=payment_id,
+            reason=f"Auto: cancelled in window, 0 claims",
+        )
+        refund_info["refund_id"] = refund_id
+        refund_info["amount"] = amount_rupees
+
+        if payment_id and rzp_secret and amount_paise > 0:
+            await nidaan.update_refund_status(refund_id, "processing")
+            result = await nidaan.issue_razorpay_refund(
+                payment_id, amount_paise, rzp_key_id, rzp_secret,
+                notes={"sub_id": str(sub_id), "account_id": str(account["account_id"]),
+                       "reason": "policy_a_within_window_zero_claims"})
+            if result.get("ok"):
+                await nidaan.update_refund_status(
+                    refund_id, "processed",
+                    razorpay_refund_id=result.get("refund_id", ""))
+                refund_info["status"] = "processed"
+                logger.info("✅ Nidaan refund processed: refund_id=%d razorpay=%s amount=₹%d",
+                            refund_id, result.get("refund_id"), amount_rupees)
+                # B3: refund issued → re-affirm bundle teardown to today+5
+                # (already set in step 1b, but this acts as a safety net for
+                # rare cases where step 1b errored silently).
+                try:
+                    await nidaan.apply_bundle_teardown(
+                        account["account_id"], reason="refund_processed")
+                except Exception as bte2:
+                    logger.error("Bundle teardown on refund failed: %s", bte2)
+                # Notify the subscriber
+                try:
+                    import asyncio as _asyncio
+                    _asyncio.create_task(email_svc.send_email(
+                        to_email=account["email"],
+                        subject=f"[Nidaan] Refund of ₹{amount_rupees} initiated",
+                        html_body=(
+                            f"<p>Hi {account.get('owner_name','')},</p>"
+                            f"<p>Your subscription was cancelled and we have initiated a full "
+                            f"refund of <b>₹{amount_rupees}</b> to your original payment method.</p>"
+                            f"<p><b>Refund ID:</b> {result.get('refund_id','')}<br/>"
+                            f"<b>Expected in your account:</b> 5-7 working days.</p>"
+                            f"<p>— Team NidaanPartner</p>"),
+                        from_name="NidaanPartner"))
+                except Exception as _ee:
+                    logger.warning("Refund email enqueue failed: %s", _ee)
+            else:
+                await nidaan.update_refund_status(
+                    refund_id, "failed", last_error=result.get("error", "")[:500])
+                refund_info["status"] = "failed"
+                logger.error("❌ Nidaan refund failed: refund_id=%d err=%s",
+                             refund_id, result.get("error"))
+        else:
+            await nidaan.update_refund_status(
+                refund_id, "failed",
+                last_error="missing_payment_id_or_credentials")
+            refund_info["status"] = "failed"
+            logger.warning("Nidaan refund row %d marked failed: payment_id=%s rzp_secret=%s",
+                           refund_id, bool(payment_id), bool(rzp_secret))
+
+    new_token = nidaan.create_nidaan_token(account["account_id"], account["email"], "free")
+    return {"token": new_token, "plan": "free", "status": "cancelled",
+            "refund": refund_info}
+
+
+# ── Nidaan: Update profile ─────────────────────────────────────────────────────
+
+class NidaanProfileUpdateReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
+    owner_name: Optional[str] = None
+    firm_name: Optional[str] = None
+    phone: Optional[str] = None
+
+
+@app.patch("/nidaan/api/profile")
+async def nidaan_profile_update(body: NidaanProfileUpdateReq, request: Request):
+    """Update mutable profile fields."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    account = await _nidaan_account_from_payload(payload)
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    # Phone is optional, but if given it must be a real 10-digit mobile — never a code/label.
+    # (This blocks values like a branch code ever landing in the phone field.)
+    _phone = body.phone
+    if _phone is not None:
+        _digits = "".join(ch for ch in _phone if ch.isdigit())
+        if _digits and len(_digits) != 10:
+            raise HTTPException(status_code=400, detail="Enter a valid 10-digit mobile number, or leave it blank.")
+        _phone = _digits  # store digits only (or "" to clear)
+    await nidaan.update_account_profile(
+        account["account_id"],
+        owner_name=body.owner_name,
+        firm_name=body.firm_name,
+        phone=_phone,
+    )
+    return {"status": "updated"}
+
+
+class _PreCaptureReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    owner_name: str = Field("", max_length=120)
+    phone: str = Field("", max_length=20)
+    email: str = Field("", max_length=200)
+    branch_code: str = Field("", max_length=20)
+
+
+@app.post("/nidaan/api/subscribe/precapture")
+async def nidaan_subscribe_precapture(body: _PreCaptureReq, request: Request):
+    """Save Name + Mobile (mandatory) and Email/Branch (optional) to the ACCOUNT
+    right before Razorpay opens. Keeps ops branch attribution aligned (branch lives
+    on the account). Does NOT touch the payment flow itself."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    payload = _nidaan_bearer(request)
+    if not payload: raise HTTPException(401, "Unauthorized")
+    account = await _nidaan_account_from_payload(payload)
+    if not account: raise HTTPException(404, "Account not found")
+    name = (body.owner_name or "").strip()
+    phone = "".join(ch for ch in (body.phone or "") if ch.isdigit())
+    if not name:
+        raise HTTPException(400, "Name is required")
+    if len(phone) != 10:
+        raise HTTPException(400, "A valid 10-digit mobile number is required")
+    await nidaan.update_account_profile(account["account_id"], owner_name=name, phone=phone)
+    bc = (body.branch_code or "").strip().upper()
+    if bc:
+        try:
+            await nidaan.set_account_branch(account["account_id"], bc)
+        except Exception:
+            pass
+    em = (body.email or "").strip()
+    if em:  # best-effort; only fill when empty so we never clobber / clash on unique email
+        try:
+            async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+                await _c.execute(
+                    "UPDATE nidaan_accounts SET email=? WHERE account_id=? AND (email IS NULL OR email='')",
+                    (em, account["account_id"]))
+                await _c.commit()
+        except Exception:
+            pass
+    return {"ok": True}
+
+
+# ── Nidaan: Change password ────────────────────────────────────────────────────
+
+class NidaanChangePasswordReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
+    current_password: str
+    new_password: str = Field(min_length=8)
+
+
+@app.post("/nidaan/api/change-password")
+@limiter.limit("10/hour")
+async def nidaan_change_password(body: NidaanChangePasswordReq, request: Request):
+    """Change password after verifying current password."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    account = await _nidaan_account_from_payload(payload)
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    # Verify current password
+    if not nidaan._verify_password(body.current_password, account.get("password_hash", "")):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    await nidaan.update_account_password(account["account_id"], body.new_password)
+    return {"status": "password_changed"}
+
+
+# ── Admin helpers ──────────────────────────────────────────────────────────────
+
+def _nidaan_admin_auth(request: Request) -> bool:
+    """Check Nidaan admin token from Authorization header."""
+    token = os.getenv("NIDAAN_ADMIN_TOKEN", "")
+    if not token:
+        return False
+    h = request.headers.get("Authorization", "")
+    if h.startswith("Bearer "):
+        import hmac as _h
+        return _h.compare_digest(h[7:], token)
+    return False
+
+
+@app.get("/nidaan/admin", response_class=HTMLResponse)
+async def nidaan_admin_page(request: Request):
+    """Redirect legacy /nidaan/admin to the unified ops portal.
+    The ops portal has email+password login and routes each staff member to the
+    correct panels based on their role — no token-paste UX needed.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/nidaan/ops", status_code=302)
+
+
+@app.get("/admin", response_class=HTMLResponse)
+async def nidaan_admin_short(request: Request):
+    """nidaanpartner.com/admin → the ops portal, served here directly so /admin is
+    the ops PWA's OWN scope — a separate installable app from the subscriber app
+    (which is scoped to /nidaan/). Ops still also lives at /nidaan/ops."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    return _nidaan_page("nidaan_ops.html", request)
+
+
+@app.get("/nidaan/api/admin/stats")
+async def nidaan_api_admin_stats(request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    if not _nidaan_admin_auth(request):
+        raise HTTPException(status_code=401, detail="Admin access required")
+    return await nidaan.get_admin_stats()
+
+
+@app.get("/nidaan/api/admin/claims")
+async def nidaan_api_admin_claims(
+    request: Request,
+    status: Optional[str] = None,
+    limit: int = 100,
+    offset: int = 0,
+):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    if not _nidaan_admin_auth(request):
+        raise HTTPException(status_code=401, detail="Admin access required")
+    claims = await nidaan.get_all_claims_admin(status=status, limit=limit, offset=offset)
+    return {"claims": claims, "count": len(claims)}
+
+
+@app.get("/nidaan/api/admin/accounts")
+async def nidaan_api_admin_accounts(
+    request: Request,
+    limit: int = 200,
+    offset: int = 0,
+):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    if not _nidaan_admin_auth(request):
+        raise HTTPException(status_code=401, detail="Admin access required")
+    accounts = await nidaan.get_all_accounts_admin(limit=limit, offset=offset)
+    return {"accounts": accounts, "count": len(accounts)}
+
+
+class NidaanMarkPaidReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    plan: str
+    amount: int              # rupees actually received
+    ref: str = ""            # UTR / QR ref / note
+    period_days: int = 30    # monthly default (no quarterly)
+
+
+@app.post("/nidaan/ops/api/accounts/{account_id}/mark-paid")
+@limiter.limit("20/minute")
+async def nidaan_ops_mark_paid(account_id: int, body: NidaanMarkPaidReq, request: Request):
+    """Super-admin: record an offline/QR payment for an account and activate its plan."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "super_admin")
+    acct = await nidaan.get_account_by_id(account_id)
+    if not acct:
+        raise HTTPException(status_code=404, detail="Account not found")
+    plan = (body.plan or "").strip().lower()
+    cfg = await nidaan.get_plans_config()
+    if plan not in (cfg or {}):
+        raise HTTPException(status_code=400, detail="Unknown plan")
+    amt = int(body.amount or 0)
+    if amt < 1:
+        raise HTTPException(status_code=400, detail="Enter the amount received")
+    ref = (body.ref or "").strip()[:60]
+    days = int(body.period_days or 30)
+    # Activate the Nidaan subscription (offline/QR — no Razorpay event). The unified ledger
+    # row is stamped with the REAL actor (even under impersonation) for full accountability.
+    _actor = _get_staff_from_request(request) or caller
+    await nidaan.create_subscription(
+        account_id, plan, amt,
+        razorpay_payment_id=(f"MANUAL:{ref}" if ref else f"MANUAL:{account_id}:{int(_time.time())}"),
+        period_days=days, verify_method="manual",
+        actor_id=str((_actor or {}).get("staff_id") or (_actor or {}).get("id") or ""),
+        actor_name=_actor_label(caller))
+    # SANCTIONED bundle coupling only: if this plan includes the Sarathi bundle, provision it.
+    try:
+        if nidaan.PLAN_LIMITS.get(plan, {}).get("sarathi_bundle"):
+            await nidaan._provision_sarathi_bundle(account_id, plan, days)
+    except Exception as _be:
+        logger.warning("mark-paid bundle provision failed for account %d: %s", account_id, _be)
+    await _ops_audit(request, "account.mark_paid", "account", str(account_id),
+                     f"{plan} ₹{amt} (manual/QR ref={ref or '-'})")
+    logger.info("💳 Nidaan account %d marked paid by %s: %s ₹%d ref=%s",
+                account_id, _actor_label(caller), plan, amt, ref or "-")
+    return {"ok": True, "plan": plan, "amount": amt}
+
+
+@app.get("/nidaan/ops/api/accounts/{account_id}/payments")
+async def nidaan_ops_account_payments(account_id: int, request: Request):
+    """Full verified payment trail for one account (unified ledger). Super-admin / admin."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    rows = await nidaan.get_account_payments(account_id)
+    total = sum(int(r.get("total_paise") or 0) for r in rows if (r.get("status") or "") != "refunded")
+    return {"payments": rows, "count": len(rows), "total_rupees": round(total / 100.0, 2)}
+
+
+@app.get("/nidaan/ops/api/claims/{claim_id}/payments")
+async def nidaan_ops_claim_payments(claim_id: int, request: Request):
+    """Full payment trail for one claim (unified ledger). Super-admin / admin."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    rows = await nidaan.get_claim_payments(claim_id)
+    total = sum(int(r.get("total_paise") or 0) for r in rows if (r.get("status") or "") != "refunded")
+    return {"payments": rows, "count": len(rows), "total_rupees": round(total / 100.0, 2)}
+
+
+class NidaanReattributeReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    ref_code: str = ""
+    clear: bool = False
+
+
+@app.post("/nidaan/ops/api/accounts/{account_id}/reattribute")
+@limiter.limit("30/minute")
+async def nidaan_ops_reattribute_account(account_id: int, body: NidaanReattributeReq, request: Request):
+    """Super-admin: CORRECT an account's referral attribution (bypasses first-touch lock)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "super_admin")
+    res = await nidaan.reattribute_account(account_id, body.ref_code, clear=body.clear)
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error", "Could not update"))
+    new_info = await nidaan.resolve_ref_info(res["new_code"]) if res["new_code"] else {"name": "Direct"}
+    await _ops_audit(request, "account.reattribute", "account", str(account_id),
+                     f"{res['old_code'] or 'Direct'} → {res['new_code'] or 'Direct'} "
+                     f"({new_info.get('name','')})")
+    logger.info("🔗 Account %d re-attributed by %s: %s → %s",
+                account_id, _actor_label(caller), res["old_code"] or "-", res["new_code"] or "-")
+    return {"ok": True, **res, "referrer": new_info.get("name", "")}
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/reattribute")
+@limiter.limit("30/minute")
+async def nidaan_ops_reattribute_claim(claim_id: int, body: NidaanReattributeReq, request: Request):
+    """Super-admin: CORRECT a single claim's OWN attribution (takes precedence over the account)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "super_admin")
+    res = await nidaan.reattribute_claim(claim_id, body.ref_code, clear=body.clear)
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error", "Could not update"))
+    new_info = await nidaan.resolve_ref_info(res["new_code"]) if res["new_code"] else {"name": "Account default"}
+    await _ops_audit(request, "claim.reattribute", "claim", str(claim_id),
+                     f"{res['old_code'] or 'Account default'} → {res['new_code'] or 'Account default'} "
+                     f"({new_info.get('name','')})")
+    logger.info("🔗 Claim %d re-attributed by %s: %s → %s",
+                claim_id, _actor_label(caller), res["old_code"] or "-", res["new_code"] or "-")
+    return {"ok": True, **res, "referrer": new_info.get("name", "")}
+
+
+@app.get("/nidaan/ops/api/wa/overview")
+async def nidaan_ops_wa_overview(request: Request):
+    """The WhatsApp screen's header: number status, opt-in counts, recent messages and the
+    doc-collection defaults.
+
+    Open to everyone who may read the inbox - super-admins, sub-super-admins and whoever is
+    rostered on WhatsApp today - because it is the same oversight, and none of it is a secret:
+    `env_needed` is a list of variable NAMES, never their values, and the message bodies are the
+    conversations those same people are allowed to read. CHANGING any of it stays super-admin,
+    which its own endpoint enforces.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = await _require_wa_inbox(request)
+    _is_sa = (caller or {}).get("role") == "super_admin"
+    import biz_nidaan_whatsapp as _nwa
+    configured = _nwa.is_configured()
+    health = await _nwa.number_health() if configured else {"configured": False}
+    _wa_keys = ["wa_doc_collection_enabled", "wa_reminder_hour_ist", "wa_cadence_hours",
+                "wa_quiet_start_ist", "wa_quiet_end_ist", "wa_escalate_days", "wa_default_language"]
+    settings = {k: await nidaan.get_ops_setting(k) for k in _wa_keys}
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+        _c.row_factory = __import__("aiosqlite").Row
+        contacts = dict(await (await _c.execute(
+            "SELECT COUNT(*) total, COALESCE(SUM(opted_in),0) opted_in, "
+            "COALESCE(SUM(status='stopped'),0) stopped FROM nidaan_wa_contacts")).fetchone())
+        msg_counts = dict(await (await _c.execute(
+            "SELECT COALESCE(SUM(direction='out'),0) sent, COALESCE(SUM(direction='in'),0) received "
+            "FROM nidaan_wa_messages")).fetchone())
+        recent = [dict(r) for r in await (await _c.execute(
+            "SELECT direction, msisdn, claim_id, msg_type, template_name, body, status, created_at "
+            "FROM nidaan_wa_messages ORDER BY wam_row_id DESC LIMIT 25")).fetchall()]
+    return {"configured": configured, "webhook_ready": bool(_nwa.verify_token()),
+            "health": health, "settings": settings, "contacts": contacts,
+            "messages": msg_counts, "recent": recent,
+            # The screen uses this to decide whether to draw the settings and campaign controls
+            # at all. It is a convenience for the screen, never the security boundary - every
+            # one of those endpoints checks the caller itself.
+            "can_configure": _is_sa,
+            "env_needed": ["WA_NIDAAN_ACCESS_TOKEN", "WA_NIDAAN_PHONE_NUMBER_ID",
+                           "WA_NIDAAN_WABA_ID", "WA_NIDAAN_APP_SECRET", "WA_NIDAAN_VERIFY_TOKEN"]}
+
+
+class OpsWaSettingsReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    wa_doc_collection_enabled: Optional[str] = None
+    wa_reminder_hour_ist: Optional[str] = None
+    wa_cadence_hours: Optional[str] = None
+    wa_quiet_start_ist: Optional[str] = None
+    wa_quiet_end_ist: Optional[str] = None
+    wa_escalate_days: Optional[str] = None
+    wa_default_language: Optional[str] = None
+    wa_lead_capture_enabled: Optional[str] = None
+    wa_journey_enabled: Optional[str] = None
+
+
+@app.post("/nidaan/ops/api/wa/settings")
+async def nidaan_ops_wa_settings(body: OpsWaSettingsReq, request: Request):
+    """Super-admin: set the WhatsApp doc-collection DASHBOARD DEFAULTS (a claim can override)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "super_admin")
+    sid = str((caller or {}).get("staff_id") or "")
+    changed = 0
+    for k, v in body.model_dump(exclude_none=True).items():
+        await nidaan.set_ops_setting(k, str(v), updated_by=sid)
+        changed += 1
+    await _ops_audit(request, "wa.settings", "settings", "wa", f"updated {changed} default(s)")
+    return {"ok": True, "updated": changed}
+
+
+# ── Live pulse: what has landed since the staffer last looked ────────────────
+# Ops was refresh-to-see. A claim could arrive and sit unseen until somebody happened to reload,
+# which on a 30-40 claims/day pipeline is the difference between answering in minutes and
+# answering tomorrow. This rides the notification bell's existing 45-second poll rather than
+# adding a second timer, and returns only what is NEW to that staffer.
+
+@app.get("/nidaan/ops/api/pulse")
+async def nidaan_ops_pulse(request: Request, since: str = ""):
+    """Claims created since `since` (UTC, as this endpoint last reported it).
+
+    The server hands back its own clock as `now`, and the client echoes it next time, so no
+    client/server clock skew can make a claim invisible or announce the same one twice.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    # This module imports both of these per-function by convention, not at the top.
+    import re as _re_pulse
+    from datetime import datetime as _dt
+    import aiosqlite as _aio
+    _now = _dt.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    since = (since or "").strip()[:19]
+    if not _re_pulse.match(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$", since):
+        # First call of a session: report nothing, just anchor the clock. Otherwise a staffer
+        # opening ops would be greeted by every claim ever filed.
+        return {"now": _now, "new_claims": [], "anchored": True}
+    rows = []
+    try:
+        async with _aio.connect(nidaan.DB_PATH) as c:
+            c.row_factory = _aio.Row
+            rows = [dict(r) for r in await (await c.execute(
+                "SELECT claim_id, claim_type, insured_name, complainant_name, insurer_name, "
+                "disputed_amount, branch_code, created_at "
+                "FROM nidaan_claims WHERE COALESCE(archived,0)=0 AND created_at > ? "
+                "ORDER BY claim_id DESC LIMIT 20", (since,))).fetchall()]
+    except Exception as e:  # noqa: BLE001
+        logger.info("pulse query failed: %s", e)
+        return {"now": _now, "new_claims": []}
+    return {"now": _now, "new_claims": [
+        {"claim_id": r["claim_id"],
+         "who": (r.get("complainant_name") or r.get("insured_name") or "").strip(),
+         "claim_type": r.get("claim_type") or "",
+         "insurer": r.get("insurer_name") or "",
+         "amount": r.get("disputed_amount") or 0,
+         "branch_code": r.get("branch_code") or "",
+         "created_at": r.get("created_at")}
+        for r in rows]}
+
+
+# ── Case board: where every case is and what it waits for ────────────────────
+# Read-only and derived from columns the live flows already maintain, so it cannot affect any
+# existing path. It answers the two questions status alone cannot: where is this case, and who
+# owes the next move.
+
+@app.get("/nidaan/ops/api/desk")
+async def nidaan_ops_desk(request: Request, lang: str = "en"):
+    """One screen answering "what do I do today" — duties, what is on fire, and my buckets.
+
+    Deliberately shaped like the folders staff already know: a duty IS a bucket, so the rota
+    tells someone which buckets are theirs today without anyone learning a new idea.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_case_state as _cs
+    return await _cs.desk(caller.get("staff_id") or caller.get("sub"),
+                          role=(caller or {}).get("role") or "",
+                          lang=("hi" if lang == "hi" else "en"))
+
+
+@app.get("/nidaan/ops/api/payments/incidents")
+async def ops_payment_incidents(request: Request, all: int = 0):
+    """What the payment guardian is holding open (and, with all=1, what it has closed)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    import biz_nidaan_pay_guard as _pg
+    return {"incidents": await _pg.open_incidents(include_resolved=bool(all))}
+
+
+@app.post("/nidaan/ops/api/payments/incidents/{inc_id}/ack")
+@limiter.limit("30/minute")
+async def ops_payment_incident_ack(inc_id: int, request: Request):
+    """"Seen" from the dashboard - the same act as tapping Seen on Telegram."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "super_admin")
+    import biz_nidaan_pay_guard as _pg
+    res = await _pg.acknowledge(inc_id, caller.get("staff_id"), _actor_label(caller))
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("error") or "Could not record that")
+    await _ops_audit(request, "payment.incident_ack", "incident", str(inc_id), res.get("title", ""))
+    return res
+
+
+@app.post("/nidaan/ops/api/payments/incidents/{inc_id}/mute")
+@limiter.limit("30/minute")
+async def ops_payment_incident_mute(inc_id: int, request: Request):
+    """"Stop telling me" from the dashboard — the same act as the Telegram button.
+
+    Founder, 25 Sep: "there has to be a button also to stop these notifications on telegram and
+    on dashboard bell icon". Seen says somebody is on it and buys time; this ends the
+    interruption. Neither closes the incident: it stays open, listed and counted on Payment
+    Health. What stops is the message, and it is recorded against a name.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "super_admin")
+    import biz_nidaan_pay_guard as _pg
+    res = await _pg.mute(inc_id, caller.get("staff_id"), _actor_label(caller))
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("error") or "Could not silence that")
+    await _ops_audit(request, "payment.incident_mute", "incident", str(inc_id), res.get("title", ""))
+    return res
+
+
+@app.post("/nidaan/ops/api/payments/guardian/run")
+@limiter.limit("6/minute")
+async def ops_payment_guardian_run(request: Request):
+    """Run the checks now (they also run by themselves every 5 minutes)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    import biz_nidaan_pay_guard as _pg
+    return await _pg.run_guardian()
+
+
+@app.get("/nidaan/ops/api/stats/line")
+@limiter.limit("60/minute")
+async def nidaan_ops_line_stats(request: Request):
+    """How the two work screens are performing — the queue waiting to be handed over, and the
+    line itself. Every number answers "is this moving?"; the ones that matter most are the oldest
+    thing waiting and the count stuck, because those name the claims going quiet."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    import biz_nidaan_stats as _stats
+    return await _stats.both()
+
+
+@app.get("/nidaan/ops/api/changes")
+async def nidaan_ops_changes(request: Request):
+    """One number that goes up whenever a claim, move, field, document, note, payment or task
+    changes. The ops page asks for it every few seconds and refreshes what it shows only when it
+    has moved - so everyone sees everyone's work without a page reload or a flicker."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    import aiosqlite as _aio
+    try:
+        async with _aio.connect(nidaan.DB_PATH) as c:
+            r = await (await c.execute("SELECT seq FROM nidaan_change_seq WHERE id=1")).fetchone()
+        return {"seq": int(r[0]) if r else 0}
+    except Exception:
+        return {"seq": 0}
+
+
+@app.get("/nidaan/ops/api/cases/board")
+async def nidaan_ops_case_board(request: Request, stage: str = "", blocker: str = "",
+                                flag: str = "", mine: int = 0, limit: int = 300):
+    """The work board. Cases nobody else is holding up come first, oldest waiting at the top.
+
+    `mine=1` narrows to the caller's own assigned cases — the queue a staff member opens to see
+    what THEY need to do today, which is the whole point of the board for most of the team.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_case_state as _cs
+    _me = caller.get("staff_id") or caller.get("sub") if mine else None
+    out = await _cs.board(stage=stage.strip(), blocker=blocker.strip(),
+                          flag=flag.strip(), assigned_to=_me, limit=limit)
+    out["staff"] = await _cs.assignable_staff()
+    out["me"] = caller.get("staff_id") or caller.get("sub")
+    # The bucket list travels with the board so the screen never keeps its own copy of the stage
+    # names. It used to, and that copy went stale the moment the buckets were renamed - the
+    # "move somewhere else" dropdown then offered six buckets that no longer existed.
+    out["buckets"] = [{"key": k, **_cs.stage_label(k, "en")} for k in _cs.PIPELINE]
+    return out
+
+
+@app.get("/nidaan/ops/api/cases/{claim_id}/state")
+async def nidaan_ops_case_state(claim_id: int, request: Request):
+    """Derived stage, blocker and flags for one case — for the claim drawer."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    import biz_nidaan_case_state as _cs
+    st = await _cs.for_claim(claim_id)
+    if not st:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    return st
+
+
+class _CaseBlockerReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    blocker: str = Field("", max_length=20)      # '' = go back to working it out automatically
+    note: str = Field("", max_length=400)
+    hold_until: str = Field("", max_length=10)   # YYYY-MM-DD, required for a park
+
+
+@app.post("/nidaan/ops/api/cases/{claim_id}/blocker")
+@limiter.limit("60/minute")
+async def nidaan_ops_case_blocker(claim_id: int, body: _CaseBlockerReq, request: Request):
+    """Record what a case is waiting for, or hand it back to the automatic working-out."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_case_state as _cs
+    res = await _cs.set_blocker(claim_id, body.blocker, note=body.note,
+                                hold_until=body.hold_until,
+                                actor=_actor_label(caller),
+                                actor_id=str(caller.get("staff_id") or ""))
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "Could not save that")
+    await _ops_audit(request, "case.blocker", "claim", claim_id,
+                     f"{body.blocker or 'automatic'} {body.hold_until} {body.note}"[:160])
+    return res
+
+
+class _CaseAssignReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    staff_id: Optional[int] = None               # null / 0 = nobody
+
+
+@app.post("/nidaan/ops/api/cases/{claim_id}/assign")
+@limiter.limit("60/minute")
+async def nidaan_ops_case_assign(claim_id: int, body: _CaseAssignReq, request: Request):
+    """Hand a case to someone, or to nobody."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_case_state as _cs
+    res = await _cs.assign(claim_id, body.staff_id, actor=_actor_label(caller),
+                           actor_id=(caller or {}).get("staff_id"))
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "Could not save that")
+    await _ops_audit(request, "case.assign", "claim", claim_id,
+                     res.get("assigned_name") or "unassigned")
+    return res
+
+
+class _PipelineMoveReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    to: str = Field("", max_length=24)            # "" = the next bucket
+    note: str = Field("", max_length=400)         # required when going backwards
+
+
+@app.post("/nidaan/ops/api/cases/{claim_id}/pipeline/start")
+@limiter.limit("60/minute")
+async def nidaan_ops_pipeline_start(claim_id: int, request: Request):
+    """Start Level-2 processing - the act that puts a case into the buckets.
+
+    It does not refuse a case for being untidy. Whatever is still outstanding is recorded on the
+    claim's timeline so the Level-2 team opens it knowing exactly what was left open and who
+    started it anyway. The only refusals are the two that would make the act meaningless: the
+    case is closed, or it is already in a bucket.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    # Intake duty, not admins: starting a case is everyday work for whoever is rostered.
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_buckets as _bk
+    res = await _bk.start_l2(claim_id, actor=_actor_label(caller))
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "Could not start that")
+    await _ops_audit(request, "case.pipeline_start", "claim", claim_id, res.get("stage") or "")
+    return res
+
+
+@app.post("/nidaan/ops/api/cases/{claim_id}/pipeline/move")
+@limiter.limit("60/minute")
+async def nidaan_ops_pipeline_move(claim_id: int, body: _PipelineMoveReq, request: Request):
+    """Move a case to the next bucket, or to a named one. Backwards needs a reason."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_buckets as _bk
+    res = await _bk.move(claim_id, body.to, reason=body.note, actor=_actor_label(caller),
+                         actor_role=caller.get("role") or "")
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "Could not move that")
+    await _ops_audit(request, "case.pipeline_move", "claim", claim_id,
+                     f"{res.get('from')} -> {res.get('stage')} {body.note}"[:160])
+    return res
+
+
+@app.post("/nidaan/ops/api/pipeline/auto-advance")
+@limiter.limit("6/minute")
+async def nidaan_ops_pipeline_auto(request: Request):
+    """Move on every case whose current bucket can be PROVEN finished.
+
+    One transition qualifies today - Documents to Drafting, when the checklist is complete.
+    Everything else is a judgement, and moving a case on a guess is worse than leaving it visible.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "sub_super_admin")
+    import biz_nidaan_case_state as _cs
+    res = await _cs.auto_advance_ready(actor=_actor_label(caller))
+    if res.get("count"):
+        await _ops_audit(request, "case.pipeline_auto", "claim", "",
+                         f"{res['count']} case(s) advanced")
+    return res
+
+
+# ── Raising a claim for a subscriber who will not use the dashboard ─────────────
+# Plenty of subscribers will never log in. The claim still belongs to THEM - their account, their
+# quota, their dashboard - but the office must be able to see whose hands were actually on it, so
+# the staff member is recorded on the claim permanently rather than left implied.
+
+class _BucketMoveReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    to: str = Field(..., max_length=40)
+    sub: str = Field("", max_length=40)
+    reason: str = Field("", max_length=400)
+    hold_until: str = Field("", max_length=10)
+
+
+class _BucketSubReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    sub: str = Field(..., max_length=40)
+
+
+class _BucketFieldReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    field_key: str = Field(..., max_length=60)
+    # A formatted legal draft runs well past 8,000 characters, and a paste from Word carries
+    # tens of thousands of characters of hidden formatting on top (NP-112's 2,400-character
+    # letter arrived as 89,000). set_field sanitises FIRST and then enforces the real per-type
+    # limit on the cleaned text, refusing rather than truncating; this cap only bounds the request.
+    value: str = Field("", max_length=400000)
+
+
+class _BucketSaveReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    bucket_key: str = Field("", max_length=40)
+    name_en: str = Field("", max_length=60)
+    name_hi: str = Field("", max_length=60)
+    icon: str = Field("", max_length=8)
+    colour: str = Field("", max_length=16)
+    amber_days: Optional[int] = None
+    red_days: Optional[int] = None
+    waits_on: str = Field("", max_length=20)
+    sort_order: Optional[int] = None
+    active: Optional[int] = None
+    guide: dict = Field(default_factory=dict)
+
+
+class _SubSaveReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    bucket_key: str = Field(..., max_length=40)
+    sub_key: str = Field("", max_length=40)
+    name_en: str = Field("", max_length=60)
+    name_hi: str = Field("", max_length=60)
+    amber_days: Optional[int] = None
+    red_days: Optional[int] = None
+    waits_on: str = Field("", max_length=20)
+    sort_order: Optional[int] = None
+    is_default: Optional[int] = None
+    active: Optional[int] = None
+
+
+class _FieldSaveReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    bucket_key: str = Field(..., max_length=40)
+    field_key: str = Field("", max_length=60)
+    label_en: str = Field("", max_length=80)
+    label_hi: str = Field("", max_length=80)
+    field_type: str = Field("text", max_length=16)
+    choices: str = Field("", max_length=2000)
+    hint: str = Field("", max_length=300)
+    required_exit: Optional[int] = None
+    sort_order: Optional[int] = None
+    active: Optional[int] = None
+
+
+class _RouteSaveReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    from_key: str = Field(..., max_length=40)
+    to_key: str = Field(..., max_length=40)
+    kind: str = Field("forward", max_length=12)
+    needs_reason: Optional[int] = None
+    remove: bool = False
+
+
+@app.get("/nidaan/ops/api/buckets/designer")
+async def ops_bucket_designer(request: Request):
+    """The whole process, with how much work each part holds. Super-admin only."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    import biz_nidaan_buckets as _bk
+    return await _bk.designer_view()
+
+
+@app.post("/nidaan/ops/api/buckets/designer/bucket")
+@limiter.limit("60/minute")
+async def ops_bucket_save(body: _BucketSaveReq, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "super_admin")
+    import biz_nidaan_buckets as _bk
+    res = await _bk.save_bucket(
+        bucket_key=body.bucket_key, name_en=body.name_en, name_hi=body.name_hi, icon=body.icon,
+        colour=body.colour, amber_days=body.amber_days, red_days=body.red_days,
+        waits_on=body.waits_on, sort_order=body.sort_order, active=body.active,
+        guide=body.guide, actor=_actor_label(caller))
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "Could not save")
+    await _ops_audit(request, "bucket.design", "bucket", res.get("bucket_key", ""),
+                     f"{body.name_en} active={body.active}"[:160])
+    return res
+
+
+@app.post("/nidaan/ops/api/buckets/designer/substate")
+@limiter.limit("60/minute")
+async def ops_bucket_sub_save(body: _SubSaveReq, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "super_admin")
+    import biz_nidaan_buckets as _bk
+    res = await _bk.save_substate(
+        bucket_key=body.bucket_key, sub_key=body.sub_key, name_en=body.name_en,
+        name_hi=body.name_hi, amber_days=body.amber_days, red_days=body.red_days,
+        waits_on=body.waits_on, sort_order=body.sort_order, is_default=body.is_default,
+        active=body.active, actor=_actor_label(caller))
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "Could not save")
+    await _ops_audit(request, "bucket.design_sub", "bucket", body.bucket_key,
+                     f"{body.name_en or body.sub_key}"[:160])
+    return res
+
+
+@app.post("/nidaan/ops/api/buckets/designer/field")
+@limiter.limit("60/minute")
+async def ops_bucket_field_save(body: _FieldSaveReq, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "super_admin")
+    import biz_nidaan_buckets as _bk
+    res = await _bk.save_field(
+        bucket_key=body.bucket_key, field_key=body.field_key, label_en=body.label_en,
+        label_hi=body.label_hi, field_type=body.field_type, choices=body.choices,
+        hint=body.hint, required_exit=body.required_exit, sort_order=body.sort_order,
+        active=body.active, actor=_actor_label(caller))
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "Could not save")
+    await _ops_audit(request, "bucket.design_field", "bucket", body.bucket_key,
+                     f"{body.label_en or body.field_key}"[:160])
+    return res
+
+
+@app.post("/nidaan/ops/api/buckets/designer/route")
+@limiter.limit("60/minute")
+async def ops_bucket_route_save(body: _RouteSaveReq, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "super_admin")
+    import biz_nidaan_buckets as _bk
+    res = await _bk.save_route(from_key=body.from_key, to_key=body.to_key, kind=body.kind,
+                                needs_reason=body.needs_reason, remove=body.remove,
+                                actor=_actor_label(caller))
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "Could not save")
+    await _ops_audit(request, "bucket.design_route", "bucket", body.from_key,
+                     f"{'removed' if body.remove else body.kind} -> {body.to_key}")
+    return res
+
+
+# The claim's own columns the gist form edits. Deliberately short: the gist is Level-2 work done
+# by whoever is on duty, so it can correct the facts of the case - but NOT the phone and email
+# that messages go to, which stay with the admin-only claim edit.
+_GIST_CORE = {
+    "insured_name": 120, "complainant_name": 120, "insurer_name": 120,
+    "policy_no": 80, "policy_inception_date": 10, "disputed_amount": 12,
+}
+
+
+class _GistSaveReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    core: dict = Field(default_factory=dict)
+    fields: dict = Field(default_factory=dict)
+
+
+# What the six claim columns are called on the gist, so a remark reads the way the screen does.
+_GIST_CORE_LABELS = {
+    "insured_name": "Patient name", "complainant_name": "Complainant name",
+    "insurer_name": "Company name", "policy_no": "Policy number",
+    "policy_inception_date": "Date of policy inception", "disputed_amount": "Claim amount",
+}
+
+
+def _gist_show(v) -> str:
+    """One field's value, short enough to read in a remarks line."""
+    t = "" if v is None else str(v).strip()
+    if "<" in t and ">" in t:          # a draft, not a fact - its text does not belong in remarks
+        return ""
+    return (t[:57] + "\u2026") if len(t) > 60 else t
+
+
+def _gist_remark(label: str, before, after, secret: bool = False) -> str:
+    """What changed, in the words a person would use.
+
+    Deliberately says the OLD value as well as the new one. Six months on, the question asked of
+    a case file is never "what does it say" - it is "who changed this, and what did it say
+    before".
+    """
+    if secret:
+        return "\u270f\ufe0f %s was changed" % label
+    a, b = _gist_show(before), _gist_show(after)
+    nb = "" if after is None else str(after).strip()
+    na = "" if before is None else str(before).strip()
+    if not a and not b:
+        return "\u270f\ufe0f %s was updated" % label
+    if not na:
+        return "\u270f\ufe0f %s set to \u201c%s\u201d" % (label, b) if b else \
+               "\u270f\ufe0f %s was updated" % label
+    if not nb:
+        return "\u270f\ufe0f %s cleared (it was \u201c%s\u201d)" % (label, a) if a else \
+               "\u270f\ufe0f %s cleared" % label
+    if not a or not b:
+        return "\u270f\ufe0f %s was updated" % label
+    return "\u270f\ufe0f %s: \u201c%s\u201d \u2192 \u201c%s\u201d" % (label, a, b)
+
+
+def _gist_same(key: str, before, after) -> bool:
+    """Did this actually change? A form that re-submits every box must not fill the remarks with
+    news that nothing happened."""
+    a = "" if before is None else str(before).strip()
+    b = "" if after is None else str(after).strip()
+    if key == "disputed_amount":
+        try:
+            return (int(float(a)) if a else None) == (int(float(b)) if b else None)
+        except ValueError:
+            return a == b
+    if key.endswith("_date") or key == "policy_inception_date":
+        return a[:10] == b[:10]
+    return a == b
+
+
+@app.get("/nidaan/ops/api/cases/{claim_id}/report")
+async def ops_case_report(claim_id: int, request: Request):
+    """Everything the Initial Claim Assessment Sheet and the Case Report print, in one call.
+
+    It reads every field from every bucket, so the report grows on its own as each bucket's work
+    is done - which is exactly how the ClaimShield case report behaves.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(404)
+    caller = _require_staff(request, "team_member")
+    import aiosqlite as _aio
+    import biz_nidaan_buckets as _bk
+    _locks = await _bk.locked_fields(await _bk._claim_row(claim_id), caller.get("role") or "")
+    async with _aio.connect(nidaan.DB_PATH) as c:
+        c.row_factory = _aio.Row
+        r = await (await c.execute(
+            "SELECT c.*, s.name AS handler_name FROM nidaan_claims c "
+            "LEFT JOIN nidaan_staff s ON s.staff_id=c.assigned_to_staff_id "
+            "WHERE c.claim_id=?", (claim_id,))).fetchone()
+        if not r:
+            raise HTTPException(404, "Claim not found")
+        claim = dict(r)
+        cp = None
+        if claim.get("channel_partner_id"):
+            cp = await (await c.execute(
+                "SELECT name FROM nidaan_channel_partners WHERE cp_id=?",
+                (claim["channel_partner_id"],))).fetchone()
+        # Remarks: what PEOPLE said, oldest first - the same list ClaimShield prints. Automated
+        # entries are left out; they would bury the three lines somebody actually wrote.
+        acts = [dict(x) for x in await (await c.execute(
+            "SELECT created_at, actor, summary, kind FROM nidaan_claim_activity "
+            "WHERE claim_id=? AND COALESCE(actor,'') NOT IN ('','system','bot','automatic nudge') "
+            "ORDER BY act_id ASC LIMIT 300", (claim_id,))).fetchall()]
+    vals = await _bk.claim_fields(claim_id)
+    labels, rich = {}, set()
+    async with _aio.connect(nidaan.DB_PATH) as c:
+        for k, lab, ft in await (await c.execute(
+                "SELECT field_key, label_en, field_type FROM nidaan_bucket_fields")).fetchall():
+            labels.setdefault(k, lab)
+            if ft == "richtext":
+                rich.add(k)
+    # Sanitised on the way OUT as well as in. Drafts saved before they became rich text went in
+    # as plain text and were never cleaned; the screens now render these as HTML - inside the
+    # ops page, where a staff session is live - so nothing unsanitised may reach them.
+    for k in rich:
+        if vals.get(k):
+            vals[k] = _bk.sanitize_rich(vals[k])
+    # The case report prints the gist, and the gist carries the case email password. Mask it for
+    # anyone whose role does not include credentials - the same rule as the case sheet.
+    vals = _bk.mask_secrets(vals, caller.get("role") or "")
+    link = ""
+    try:
+        import biz_nidaan_claimant as _cl
+        p = await _cl.get_portal(claim_id)
+        if p and p.get("access_token"):
+            link = "%s/nidaan/claim/magic?token=%s" % (_cl._public_base(), p["access_token"])
+    except Exception:
+        link = ""
+    # "Manager" on ClaimShield's report is, in Nidaan's terms, the claim's CHAIN: where it came
+    # from and who raised it (founder, 14 Sep).
+    chain = [_bk._origin_of(claim)]
+    if cp and cp[0]:
+        chain.append("via partner %s" % cp[0])
+    if claim.get("branch_code") and not str(claim["branch_code"]).startswith("SP-"):
+        try:
+            _b = await nidaan.get_branch(claim["branch_code"])
+            if _b and _b.get("name"):
+                chain.append(_b["name"])
+        except Exception:
+            pass
+    # Processing fee: what the ledger says was actually paid. A subscriber raising a claim for
+    # themselves pays no processing fee, and the report says so rather than showing a blank.
+    fee = ""
+    if (claim.get("payment_status") or "").lower() == "subscription":
+        fee = "Subscriber raised \u2014 no processing fee"
+    else:
+        async with _aio.connect(nidaan.DB_PATH) as c:
+            pr = await (await c.execute(
+                "SELECT total_paise, source FROM nidaan_payments WHERE claim_id=? "
+                "AND source IN ('per_claim_review','branch_l2') "
+                "AND (verified=1 OR status IN ('captured','paid','success')) "
+                "ORDER BY pay_id DESC LIMIT 1", (claim_id,))).fetchone()
+        if pr and pr[0]:
+            fee = "\u20b9%s paid (%s)" % (
+                ("%.2f" % (pr[0] / 100.0)).rstrip("0").rstrip("."),
+                "review fee" if pr[1] == "per_claim_review" else "branch Level-2 fee")
+        else:
+            fee = "Not paid"
+
+    # "Complainant", as the founder asked for everywhere a person reads. Remarks written before the
+    # rename on 12 Sep still say "claimant"; this changes what is SHOWN and printed, never what is
+    # stored - the history stays exactly as it was written.
+    import re as _re
+    _cw = _re.compile(r"\b([Cc])laimant(s?)\b")
+    for a in acts:
+        for k in ("summary", "actor"):
+            if a.get(k):
+                a[k] = _cw.sub(lambda m: m.group(1) + "omplainant" + m.group(2), a[k])
+    return {
+        "claim_id": claim_id,
+        "created_at": claim.get("created_at"),
+        "handler": claim.get("handler_name") or "",
+        # Who will prepare the draft - #15 on the founder's list, and a dropdown on the gist, so
+        # the form needs the id and not only the name it already sent.
+        "assigned_to": claim.get("assigned_to_staff_id"),
+        "insured_name": claim.get("insured_name") or "",
+        "insured_phone": claim.get("insured_phone") or "",
+        "complainant_name": claim.get("complainant_name") or "",
+        "complainant_phone": claim.get("complainant_phone") or claim.get("insured_phone") or "",
+        "claim_kind": claim.get("claim_type") or "",
+        "disputed_amount": claim.get("disputed_amount"),
+        "policy_no": claim.get("policy_no") or "",
+        "policy_inception_date": claim.get("policy_inception_date") or "",
+        "insurer_name": claim.get("insurer_name") or "",
+        "channel_partner": (cp[0] if cp else "") or "",
+        "raised_by": claim.get("raised_by_name") or "",
+        "handed_over_by": claim.get("l2_handover_by") or "",
+        "docs_complete_by": claim.get("docs_complete_by") or "",
+        "manager": " \u00b7 ".join(x for x in chain if x),
+        "processing_fee": fee,
+        "bucket": claim.get("pipeline_stage") or "",
+        "upload_link": link,
+        "fields": vals,
+        "labels": labels,
+        "remarks": acts,
+        "locked": _locks,
+        "locked_all": await _bk.locked_fields(await _bk._claim_row(claim_id), ""),
+        "is_super": (caller.get("role") or "") == "super_admin",
+        # Whether this person is seeing the case email password or a row of dots. The screen needs
+        # to know: offering "Change" on a value you cannot see leads to saving the dots back,
+        # which the server now refuses - and a refusal that looks like a save is worse than
+        # no button at all.
+        "can_see_secrets": _bk.may_see_secrets(caller.get("role") or ""),
+    }
+
+
+@app.post("/nidaan/ops/api/cases/{claim_id}/gist")
+@limiter.limit("60/minute")
+async def ops_case_gist(claim_id: int, body: _GistSaveReq, request: Request):
+    """The gist form and the draft form, saved in one go.
+
+    `core` corrects the case's own facts (patient, complainant, policy, company, amount) - the
+    short list in _GIST_CORE and nothing else. `fields` are the gist and draft answers, each one
+    validated and, for the drafts, sanitised by set_field. Every change is audited by name.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(404)
+    caller = _require_staff(request, "team_member")
+    who = _actor_label(caller)
+    role = caller.get("role") or ""
+    import biz_nidaan_buckets as _bk
+    changed = []
+    # Read the case as it stands before a single write, so each remark can say what the field
+    # said before. Taken here, once, rather than per field - the gist form submits in one go.
+    import aiosqlite as _aiob
+    async with _aiob.connect(nidaan.DB_PATH) as _c:
+        _c.row_factory = _aiob.Row
+        _row0 = await (await _c.execute(
+            "SELECT %s FROM nidaan_claims WHERE claim_id=?" % ", ".join(_GIST_CORE),
+            (claim_id,))).fetchone()
+        _labels0 = {k: (lab or k) for k, lab in await (await _c.execute(
+            "SELECT field_key, label_en FROM nidaan_bucket_fields")).fetchall()}
+    before_core = dict(_row0) if _row0 else {}
+    before_fields = await _bk.claim_fields(claim_id)
+    remarks = []
+
+    core = {k: v for k, v in (body.core or {}).items() if k in _GIST_CORE}
+    # Finished work is locked: a core fact that is locked may be re-sent unchanged, never changed.
+    if core:
+        locks = await _bk.locked_fields(await _bk._claim_row(claim_id), role)
+        locked_core = [k for k in core if k in locks]
+        if locked_core:
+            import aiosqlite as _aio0
+            async with _aio0.connect(nidaan.DB_PATH) as c:
+                cur = await (await c.execute(
+                    "SELECT %s FROM nidaan_claims WHERE claim_id=?" % ", ".join(locked_core),
+                    (claim_id,))).fetchone()
+            curv = dict(zip(locked_core, cur or [None] * len(locked_core)))
+            def _same(k):
+                a, b = curv.get(k), core.get(k)
+                a = "" if a is None else str(a).strip()
+                b = "" if b is None else str(b).strip()
+                if k == "disputed_amount":
+                    try:
+                        return (int(float(a)) if a else None) == (int(float(b)) if b else None)
+                    except ValueError:
+                        return False
+                if k == "policy_inception_date":
+                    return a[:10] == b[:10]
+                return a.lower() == b.lower()
+            changed_locked = [k for k in locked_core if not _same(k)]
+            if changed_locked:
+                raise HTTPException(400, _bk.lock_message(locks[changed_locked[0]]))
+            for k in locked_core:
+                core.pop(k, None)
+    unknown = [k for k in (body.core or {}) if k not in _GIST_CORE]
+    if unknown:
+        raise HTTPException(400, "These cannot be changed from the gist: %s" % ", ".join(unknown))
+    if core:
+        sets, vals = [], []
+        for k, v in core.items():
+            v = "" if v is None else str(v).strip()
+            if len(v) > _GIST_CORE[k]:
+                raise HTTPException(400, "%s is too long." % k.replace("_", " "))
+            if k in ("insured_name", "complainant_name"):
+                v = nidaan._capname(v)
+            elif k == "disputed_amount":
+                if v == "":
+                    v = None
+                else:
+                    try:
+                        v = int(float(v))
+                    except ValueError:
+                        raise HTTPException(400, "The claim amount must be a number.")
+                    if v < 0 or v > 100000000:
+                        raise HTTPException(400, "That claim amount is not believable.")
+            elif k == "policy_inception_date" and v:
+                import re as _re
+                if not _re.match(r"^\d{4}-\d{2}-\d{2}$", v):
+                    raise HTTPException(400, "The policy date must be a date.")
+            sets.append("%s=?" % k)
+            vals.append(v)
+            changed.append(k)
+            if not _gist_same(k, before_core.get(k), v):
+                remarks.append(_gist_remark(_GIST_CORE_LABELS.get(k, k.replace("_", " ")),
+                                            before_core.get(k), v))
+        import aiosqlite as _aio
+        async with _aio.connect(nidaan.DB_PATH) as c:
+            cur = await c.execute("UPDATE nidaan_claims SET %s WHERE claim_id=?" % ", ".join(sets),
+                                  (*vals, claim_id))
+            await c.commit()
+        if not cur.rowcount:
+            raise HTTPException(404, "Claim not found")
+
+    errors = []
+    for k, v in (body.fields or {}).items():
+        res = await _bk.set_field(claim_id, str(k)[:60], "" if v is None else str(v), actor=who,
+                                  role=role)
+        if res.get("ok"):
+            changed.append(k)
+            if not res.get("unchanged") and not _gist_same(k, before_fields.get(k), v):
+                remarks.append(_gist_remark(
+                    _labels0.get(k, str(k).replace("_", " ")).strip(),
+                    before_fields.get(k), v, secret=(k in _bk.SECRET_FIELDS)))
+        else:
+            errors.append("%s: %s" % (k, res.get("error")))
+    if errors and not changed:
+        raise HTTPException(400, "; ".join(errors))
+
+    if remarks:
+        # ONE LINE PER CHANGE (founder, 21 Sep: "each change should be adding to remarks").
+        # The old single line said "7 items" and named none of them, and counted boxes that were
+        # merely re-submitted unchanged. Capped so a bulk submit cannot bury the remarks a person
+        # actually wrote; the audit trail holds the full list either way.
+        for line in remarks[:12]:
+            await nidaan.record_claim_activity(claim_id, "gist", actor=who, summary=line)
+        if len(remarks) > 12:
+            await nidaan.record_claim_activity(
+                claim_id, "gist", actor=who,
+                summary="\u270f\ufe0f and %d more case details were updated" % (len(remarks) - 12))
+    if changed:
+        # The audit trail records every box that was SENT, changed or not - it answers a
+        # different question from the remarks, so it keeps its own, fuller list.
+        await _ops_audit(request, "claim.gist", "claim", str(claim_id),
+                         ", ".join(changed)[:160])
+    return {"ok": True, "saved": changed, "errors": errors}
+
+
+@app.get("/nidaan/ops/api/buckets/config")
+async def ops_buckets_config(request: Request):
+    """Every bucket, its steps, its fields and its routes - one call, so the workspace can draw
+    the whole system without knowing any of it in advance."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    import biz_nidaan_buckets as _bk
+    cfg = await _bk.config()
+    cfg["counts"] = await _bk.counts()
+    return cfg
+
+
+@app.get("/nidaan/ops/api/buckets/counts")
+async def ops_buckets_counts(request: Request):
+    """Sidebar numbers: how many in each bucket and how many have gone past their clock."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    import biz_nidaan_buckets as _bk
+    return {"counts": await _bk.counts(),
+            "waiting_to_start": len(await _bk.waiting_to_start())}
+
+
+@app.get("/nidaan/ops/api/buckets/{bucket_key}/claims")
+async def ops_bucket_claims(bucket_key: str, request: Request, sub: str = "",
+                            q: str = "", limit: int = 300):
+    """The claims in one bucket, most overdue first."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    import biz_nidaan_buckets as _bk
+    return await _bk.board(bucket_key.strip(), sub=sub.strip(), q=q.strip(), limit=limit)
+
+
+@app.get("/nidaan/ops/api/buckets/waiting-to-start")
+async def ops_bucket_waiting(request: Request):
+    """Paid and winnable, and nobody has begun. The most expensive list in the office."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    import biz_nidaan_buckets as _bk
+    rows = await _bk.waiting_to_start()
+    rd = await _bk.readiness_many([r["claim_id"] for r in rows])
+    for r in rows:
+        x = rd.get(r["claim_id"]) or {}
+        r["ready"] = x.get("ready", False)
+        r["can_start"] = x.get("can_start", True)
+        r["missing_count"] = x.get("missing_count", 0)
+        r["blocks"] = x.get("blocks", [])
+        r["fixes"] = x.get("fixes", [])
+    return {"claims": rows}
+
+
+class _HandoverReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    note: str = Field("", max_length=600)
+    checks: dict = Field(default_factory=dict)
+
+
+class _UndoHandoverReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    reason: str = Field("", max_length=400)
+
+
+@app.get("/nidaan/ops/api/l2/pending-handover")
+async def ops_l2_pending_handover(request: Request):
+    """Qualified for Level-2 but not yet handed across. Shown on L2 Claims."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    import biz_nidaan_buckets as _bk
+    rows = await _bk.pending_handover()
+    rd = await _bk.readiness_many([r["claim_id"] for r in rows])
+    for r in rows:
+        x = rd.get(r["claim_id"]) or {}
+        r["ready"] = x.get("ready", False)
+        r["can_hand_over"] = x.get("can_start", True)
+        r["missing_count"] = x.get("missing_count", 0)
+        r["blocks"] = x.get("blocks", [])
+        r["fixes"] = x.get("fixes", [])
+    return {"claims": rows}
+
+
+@app.get("/nidaan/ops/api/cases/{claim_id}/handover-questions")
+async def ops_case_handover_questions(claim_id: int, request: Request):
+    """What intake must confirm before handing this claim across."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    import biz_nidaan_buckets as _bk
+    return await _bk.probing_questions(claim_id)
+
+
+@app.post("/nidaan/ops/api/cases/{claim_id}/handover")
+@limiter.limit("60/minute")
+async def ops_case_handover(claim_id: int, body: _HandoverReq, request: Request):
+    """Hand a claim to Level-2, with the mover's name on it."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_buckets as _bk
+    _force = ((request.query_params.get("force") or "") == "1"
+              and (caller or {}).get("role") == "super_admin")
+    res = await _bk.hand_over(claim_id, note=body.note, checks=body.checks,
+                              actor=_actor_label(caller), force=_force)
+    if not res.get("ok"):
+        # Send back WHAT is outstanding, not only that something is - the dialog lists it, so
+        # nobody has to go looking across three screens for what we already knew.
+        raise HTTPException(status_code=400, detail={
+            "error": res.get("error") or "Could not hand that over",
+            "concerns": res.get("concerns") or []})
+    await _ops_audit(request, "l2.handover", "claim", claim_id,
+                     f"gaps={res.get('acknowledged_gaps')} {body.note}"[:160])
+    return res
+
+
+@app.post("/nidaan/ops/api/cases/{claim_id}/handover/undo")
+@limiter.limit("30/minute")
+async def ops_case_handover_undo(claim_id: int, body: _UndoHandoverReq, request: Request):
+    """Pull a claim back out of the Level-2 waiting list. Super-admin only."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "super_admin")
+    import biz_nidaan_buckets as _bk
+    res = await _bk.undo_handover(claim_id, reason=body.reason, actor=_actor_label(caller))
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "Could not undo that")
+    await _ops_audit(request, "l2.handover_undo", "claim", claim_id, body.reason[:160])
+    return res
+
+
+@app.get("/nidaan/ops/api/cases/{claim_id}/readiness")
+async def ops_case_readiness(claim_id: int, request: Request):
+    """What is still missing before this claim can be worked in the buckets."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    import biz_nidaan_buckets as _bk
+    return await _bk.readiness(claim_id)
+
+
+@app.get("/nidaan/ops/api/cases/{claim_id}/bucket")
+async def ops_case_bucket(claim_id: int, request: Request):
+    """Where this claim is, what it needs, and where it may go - for the case report."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_buckets as _bk
+    return await _bk.for_claim(claim_id, role=caller.get("role") or "")
+
+
+@app.post("/nidaan/ops/api/cases/{claim_id}/bucket/move")
+@limiter.limit("60/minute")
+async def ops_case_bucket_move(claim_id: int, body: _BucketMoveReq, request: Request):
+    """Move a claim between buckets. The engine decides whether the route is allowed."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_buckets as _bk
+    res = await _bk.move(claim_id, body.to, sub=body.sub, reason=body.reason,
+                         hold_until=body.hold_until, actor=_actor_label(caller),
+                         actor_role=caller.get("role") or "")
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "Could not move that")
+    await _ops_audit(request, "bucket.move", "claim", claim_id,
+                     f"{body.to} {body.sub} {body.reason}"[:160])
+    return res
+
+
+@app.post("/nidaan/ops/api/cases/{claim_id}/bucket/substate")
+@limiter.limit("60/minute")
+async def ops_case_bucket_sub(claim_id: int, body: _BucketSubReq, request: Request):
+    """Move a claim between steps inside its bucket."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_buckets as _bk
+    res = await _bk.set_substate(claim_id, body.sub, actor=_actor_label(caller))
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "Could not save that")
+    return res
+
+
+@app.post("/nidaan/ops/api/cases/{claim_id}/bucket/field")
+@limiter.limit("120/minute")
+async def ops_case_bucket_field(claim_id: int, body: _BucketFieldReq, request: Request):
+    """Record one field captured in a bucket."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_buckets as _bk
+    res = await _bk.set_field(claim_id, body.field_key, body.value, _actor_label(caller),
+                              role=caller.get("role") or "")
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "Could not save that")
+    return res
+
+
+class _QueryRaiseReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    text: str = Field(..., min_length=5, max_length=1000)
+
+
+class _QueryResolveReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    staff_id: int = Field(..., ge=1)
+    note: str = Field(..., min_length=3, max_length=1000)
+
+
+class _QueryContactReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    text: str = Field(..., min_length=5, max_length=300)
+    whatsapp: bool = True
+    email: bool = True
+    cc: bool = True
+
+
+@app.post("/nidaan/ops/api/cases/{claim_id}/query/raise")
+@limiter.limit("20/minute")
+async def ops_case_query_raise(claim_id: int, body: _QueryRaiseReq, request: Request):
+    """Pending Draft: raise a draft query - the claim goes back to Live Cases, marked, and Live's
+    people are told now."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_buckets as _bk
+    res = await _bk.raise_query(claim_id, body.text, actor=_actor_label(caller),
+                                actor_id=caller.get("staff_id"), actor_role=caller.get("role") or "")
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("error") or "Could not raise the query")
+    await _ops_audit(request, "case.draft_query", "claim", claim_id, body.text[:160])
+    return res
+
+
+@app.post("/nidaan/ops/api/cases/{claim_id}/query/resolve")
+@limiter.limit("20/minute")
+async def ops_case_query_resolve(claim_id: int, body: _QueryResolveReq, request: Request):
+    """Live Cases: the query is fixed - back to Pending Draft, to the doctor/advocate chosen."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_buckets as _bk
+    res = await _bk.resolve_query(claim_id, body.staff_id, body.note, actor=_actor_label(caller),
+                                  actor_id=caller.get("staff_id"), actor_role=caller.get("role") or "")
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("error") or "Could not resolve the query")
+    await _ops_audit(request, "case.draft_query_resolved", "claim", claim_id, body.note[:160])
+    return res
+
+
+@app.get("/nidaan/ops/api/cases/{claim_id}/query/contact")
+async def ops_case_query_contact_info(claim_id: int, request: Request):
+    """Who a query message would go to, and the last one sent."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    import biz_nidaan_buckets as _bk
+    return await _bk.contact_recipients(claim_id)
+
+
+@app.post("/nidaan/ops/api/cases/{claim_id}/query/contact")
+@limiter.limit("10/minute")
+async def ops_case_query_contact(claim_id: int, body: _QueryContactReq, request: Request):
+    """Ask the complainant ONE thing - WhatsApp (approved template carrying the exact words, or
+    free text inside the 24-hour window) and/or email, copied by email to the branch/subscriber."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_buckets as _bk
+    res = await _bk.send_query_to_complainant(
+        claim_id, body.text, whatsapp=body.whatsapp, email=body.email, cc=body.cc,
+        actor=_actor_label(caller), actor_id=caller.get("staff_id"))
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("error") or "Nothing was sent")
+    await _ops_audit(request, "case.query_contact", "claim", claim_id, body.text[:160])
+    return res
+
+
+class _ChangeReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    what: str = Field("", max_length=80)
+    note: str = Field(..., min_length=5, max_length=1000)
+
+
+@app.post("/nidaan/ops/api/cases/{claim_id}/change-request")
+@limiter.limit("10/minute")
+async def ops_case_change_request(claim_id: int, body: _ChangeReq, request: Request):
+    """Ask the super admins to change locked work. They are told on the bell, Telegram and email,
+    and the request is written into the claim's remarks where everyone can see it."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    import aiosqlite as _aio
+    import biz_nidaan_buckets as _bk
+    import biz_nidaan_notifications as _nnot
+    row = await _bk._claim_row(claim_id)
+    if not row:
+        raise HTTPException(404, "Claim not found")
+    who = _actor_label(caller)
+    what = (body.what or "this claim's finished work").strip()[:80]
+    note = body.note.strip()
+    patient = (row.get("complainant_name") or row.get("insured_name") or "").strip()
+    await _bk._log(claim_id, "\u270b Change requested on %s - %s" % (what, note), who)
+    async with _aio.connect(nidaan.DB_PATH) as c:
+        ids = [r[0] for r in await (await c.execute(
+            "SELECT staff_id FROM nidaan_staff WHERE role='super_admin' AND status='active' "
+            "AND deleted_at IS NULL")).fetchall()]
+    subj = "\u270b Change requested - NP-%s %s" % (claim_id, patient)
+    msg = ("%s asks for a change to %s on NP-%s (%s).\n\n\"%s\"\n\n"
+           "It is locked for everyone but a super admin. Open the case in Level-2 -> Settlement."
+           % (who, what, claim_id, patient or "claim", note))
+    sent = await _nnot.notify_staff_inapp(ids, subj, msg, event_key="case.change_request",
+                                          email=True, claim_id=claim_id)
+    await _ops_audit(request, "case.change_request", "claim", claim_id, (what + ": " + note)[:160])
+    return {"ok": True, "told": sent}
+
+
+class _PayFollowReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    contact: str = Field(..., max_length=160)
+    status: str = Field("", max_length=20)
+    note: str = Field("", max_length=400)
+
+
+@app.get("/nidaan/ops/api/payments/followups")
+async def ops_payment_followups(request: Request, days: int = 90, show: str = "open"):
+    """Everyone who reached a payment screen and never completed one.
+
+    This is a call list, not a chart. One row per person, with the reason we know, so somebody
+    can pick up the phone. Anyone who has since paid drops out.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    rows = await nidaan.payment_followups(days=days,
+                                          show=show if show in ("open", "closed", "all") else "open")
+    return {"followups": rows, "count": len(rows)}
+
+
+@app.post("/nidaan/ops/api/payments/followups")
+@limiter.limit("60/minute")
+async def ops_payment_followup_set(body: _PayFollowReq, request: Request):
+    """Record that somebody chased this person, and how it went."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "sub_super_admin")
+    ok = await nidaan.set_payment_followup(body.contact, body.status, body.note,
+                                           handled_by=_actor_label(caller))
+    if not ok:
+        raise HTTPException(status_code=400, detail="Could not save that.")
+    await _ops_audit(request, "payment.followup", "contact", body.contact,
+                     f"{body.status} {body.note}"[:160])
+    return {"ok": True}
+
+
+@app.get("/nidaan/ops/api/subscribers/pick")
+async def nidaan_ops_subscriber_pick(request: Request, q: str = "", limit: int = 20):
+    """Subscribers an admin can raise a claim for. Only accounts with a LIVE subscription."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    # Any staff member can raise a claim for a subscriber who rings the office - it is everyday
+    # work, and making it an admin privilege just means the call gets transferred.
+    _require_staff(request, "team_member")
+    q = (q or "").strip()
+    rows = await nidaan.search_subscribers_for_ops(q, limit=max(1, min(int(limit or 20), 50)))
+    return {"subscribers": rows, "count": len(rows)}
+
+
+class _RaiseForSubReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    account_id: int
+    claim_type: str = Field(..., max_length=60)
+    insured_name: str = Field(..., max_length=120)
+    insured_phone: str = Field("", max_length=20)
+    insured_email: str = Field("", max_length=160)
+    # WHO WE WILL ACTUALLY DEAL WITH. On many claims this is not the patient - a son raising it
+    # for his mother, a wife for her husband - and every message, document request and
+    # authorisation goes to this person. A claim that records only the patient leaves the team
+    # ringing the wrong number (founder, 17 Sep).
+    complainant_name: str = Field("", max_length=120)
+    complainant_phone: str = Field("", max_length=20)
+    complainant_email: str = Field("", max_length=160)
+    insurer_name: str = Field("", max_length=120)
+    policy_no: str = Field("", max_length=80)
+    disputed_amount: Optional[int] = None
+    notes_from_agent: str = Field("", max_length=2000)
+    # Why the rejection letter is not attached. The founder allowed the claim through without one
+    # "but it should be recorded who is the staff and it's their responsibility later" (17 Sep),
+    # so the reason is a field of its own and lands on the timeline with the raiser's name —
+    # buried in a notes blob it is neither findable nor attributable.
+    no_letter_reason: str = Field("", max_length=300)
+
+
+@app.post("/nidaan/ops/api/subscribers/raise-claim")
+@limiter.limit("30/minute")
+async def nidaan_ops_raise_for_subscriber(body: _RaiseForSubReq, request: Request):
+    """Raise a claim on a subscriber's behalf, stamped with who actually raised it."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    acct = await nidaan.get_account_by_id(body.account_id)
+    if not acct:
+        raise HTTPException(status_code=404, detail="That subscriber does not exist.")
+    sub = await nidaan.get_active_subscription(body.account_id)
+    if not sub:
+        raise HTTPException(
+            status_code=400,
+            detail="That account has no live subscription, so a claim cannot be raised against it.")
+
+    claim_id, msg = await nidaan.submit_claim(
+        account_id=body.account_id,
+        user_id=None,
+        claim_type=body.claim_type,
+        insured_name=body.insured_name,
+        insured_phone=(body.insured_phone or "").strip(),
+        insured_email=(body.insured_email or "").strip(),
+        insurer_name=body.insurer_name,
+        policy_no=body.policy_no,
+        disputed_amount=body.disputed_amount,
+        notes_from_agent=body.notes_from_agent,
+        payment_status="subscription",
+        origin="ops_on_behalf",
+        # Who we deal with. Left blank it falls back to the patient, which is right when they are
+        # the same person and wrong - silently - when they are not.
+        complainant_name=(body.complainant_name or "").strip(),
+        complainant_phone=(body.complainant_phone or "").strip(),
+        complainant_email=(body.complainant_email or "").strip(),
+        raised_by_staff_id=caller.get("staff_id"),
+        raised_by_name=_actor_label(caller),
+        raised_via="on_behalf",
+    )
+    if not claim_id:
+        raise HTTPException(status_code=400, detail=msg or "Could not raise that claim.")
+    _why = (body.no_letter_reason or "").strip()
+    await _ops_audit(request, "claim.raised_on_behalf", "claim", claim_id,
+                     (f"for account {body.account_id} ({acct.get('owner_name') or ''})"
+                      + (f" — NO rejection letter: {_why}" if _why else ""))[:160])
+    if _why:
+        # On the timeline, with a name against it. The whole case is built on the rejection
+        # letter, so a claim that starts without one must say who decided that and why.
+        await nidaan.record_claim_activity(
+            claim_id, "raised_without_letter", actor=_actor_label(caller),
+            summary=f"Raised without the rejection letter by {_actor_label(caller)} — {_why}")
+    # The complainant hears from us whichever door their claim came through — this one used to
+    # be silent. Fire-and-forget: a WhatsApp hiccup must not fail the staff member's request.
+    try:
+        import biz_nidaan_notifications as _nnot
+        asyncio.create_task(_nnot.on_ops_claim_raised(
+            claim_id, raised_by=f"{_actor_label(caller)} (on behalf)"))
+    except Exception:
+        pass
+    return {"ok": True, "claim_id": claim_id, "message": msg,
+            "on_behalf_of": acct.get("owner_name") or acct.get("firm_name") or "",
+            "raised_by": _actor_label(caller)}
+
+
+# ── Shared design document + stakeholder feedback ────────────────────────────
+# A review surface for an operating-model document, so people who are not staff users can read it
+# and comment section by section. Deliberately narrow: it serves ONE static file, holds only what
+# reviewers type, and touches nothing to do with claims.
+#
+# Access is a share key held in ops settings, passed as ?k=. A staff session also opens it, so the
+# team never needs the key. The page carries process design and aggregate figures - no customer
+# records - but the key still keeps it off the open web.
+
+_DOC_KEYS = {
+    "end-to-end": "nidaan_end_to_end.html",
+    # The Level-2 operating manual — how a paid claim travels through the buckets. Shared with
+    # staff on an ordinary browser link so it can be forwarded and read on a phone; one page,
+    # Hinglish and English, because the people doing the work do not read release notes.
+    "l2-manual": "nidaan_l2_manual.html",
+    # The bucket architecture: every bucket, sub-state, field and movement, with a real case
+    # walked through. Design only - shared so it can be argued with before anything is built.
+    "l2-design": "nidaan_l2_design.html",
+    # Screen by screen: what staff actually see, click by click, including a backward move.
+    "l2-screens": "nidaan_l2_screens.html",
+    # Merging the three claim screens into one. Discussion only.
+    "claims-view": "nidaan_claims_view.html",
+    # How a bucket joins the flow: order as the spine, routes as shortcuts, and what a bucket
+    # does when a claim lands in it. Discussion only.
+    "bucket-flow": "nidaan_bucket_flow.html",
+    # The pending-document window - the one a claim lives or dies in. Discussion only.
+    "doc-collect": "nidaan_doccollect.html",
+}
+
+
+async def _doc_share_key() -> str:
+    """The current share key, created on first use so there is never a blank-key window."""
+    k = (await nidaan.get_ops_setting("doc_share_key", "") or "").strip()
+    if not k:
+        import secrets as _sec
+        k = _sec.token_urlsafe(24)
+        await nidaan.set_ops_setting("doc_share_key", k, updated_by="system")
+    return k
+
+
+async def _doc_access_ok(request: Request, key: str) -> bool:
+    """A valid share key, or any signed-in staff member."""
+    import hmac as _h
+    real = await _doc_share_key()
+    if key and _h.compare_digest(key, real):
+        return True
+    try:
+        return bool(_get_staff_from_request(request))
+    except Exception:
+        return False
+
+
+async def _serve_shared_doc(request: Request, slug: str, k: str) -> HTMLResponse:
+    """One handler for every shared document, so a new one is a line in _DOC_KEYS and nothing
+    else. The access rule, the refusal page and the no-index headers stay in a single place —
+    a second copy of this is how one document quietly ends up world-readable."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    if not await _doc_access_ok(request, k):
+        return HTMLResponse(
+            "<div style='font-family:system-ui;max-width:30rem;margin:18vh auto;padding:0 1.5rem;"
+            "line-height:1.6'><h2 style='margin:0 0 .5rem'>This page needs its share link</h2>"
+            "<p style='color:#555'>Ask whoever sent it for the full link, including the part after "
+            "<code>?k=</code>. If you are on the Nidaan team, sign in to ops first and open it "
+            "again.</p></div>", status_code=403)
+    f = static_dir / _DOC_KEYS[slug]
+    if not f.exists():
+        raise HTTPException(status_code=404)
+    return HTMLResponse(f.read_text(encoding="utf-8"),
+                        headers={"Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow"})
+
+
+# Every shared document gets its route from _DOC_KEYS, so adding one really is a single line up
+# there - which is what the comment on _serve_shared_doc has always claimed. It used to need a
+# hand-written six-line function as well, and six near-identical copies of an ACCESS RULE is
+# exactly where one of them eventually drifts and quietly serves a document to the world.
+def _register_doc_routes() -> None:
+    for _slug in _DOC_KEYS:
+        def _make(slug: str):
+            async def _doc(request: Request, k: str = ""):
+                return await _serve_shared_doc(request, slug, k)
+            _doc.__name__ = "nidaan_doc_" + slug.replace("-", "_")
+            _doc.__doc__ = ("Shared document '%s'. Opens with the share key, or directly for a "
+                            "signed-in staff session." % slug)
+            return _doc
+        app.get("/" + _slug, include_in_schema=False)(_make(_slug))
+
+
+_register_doc_routes()
+
+
+@app.get("/nidaan/api/doc/feedback", include_in_schema=False)
+async def nidaan_doc_feedback_get(request: Request, doc: str = "", k: str = ""):
+    """Everything reviewers have left on this document."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    if doc not in _DOC_KEYS:
+        raise HTTPException(status_code=404)
+    if not await _doc_access_ok(request, k):
+        raise HTTPException(status_code=403, detail="Share link required")
+    import aiosqlite as _aio
+    async with _aio.connect(nidaan.DB_PATH) as c:
+        c.row_factory = _aio.Row
+        rows = [dict(r) for r in await (await c.execute(
+            "SELECT section, kind, name, text, vote, created_at FROM nidaan_doc_feedback "
+            "WHERE doc_key=? ORDER BY fb_id LIMIT 2000", (doc,))).fetchall()]
+    comments = [{"section": r["section"], "name": r["name"], "text": r["text"], "at": r["created_at"]}
+                for r in rows if r["kind"] == "comment"]
+    # One vote per person per section — the latest wins.
+    latest: dict = {}
+    for r in rows:
+        if r["kind"] == "vote":
+            latest[(r["section"], (r["name"] or "").strip().lower())] = {
+                "section": r["section"], "vote": r["vote"], "name": r["name"], "at": r["created_at"]}
+    return {"comments": comments, "votes": list(latest.values())}
+
+
+class _DocFeedbackReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    doc: str = Field(..., max_length=40)
+    section: str = Field(..., max_length=40)
+    kind: str = Field(..., max_length=10)          # comment | vote
+    name: str = Field("", max_length=80)
+    text: str = Field("", max_length=4000)
+    vote: str = Field("", max_length=10)
+    k: str = Field("", max_length=120)
+
+
+@app.post("/nidaan/api/doc/feedback", include_in_schema=False)
+@limiter.limit("20/minute")
+async def nidaan_doc_feedback_post(body: _DocFeedbackReq, request: Request):
+    """Record one comment or verdict. Stored as typed; the page renders it as text, never as HTML."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    if body.doc not in _DOC_KEYS:
+        raise HTTPException(status_code=404)
+    if not await _doc_access_ok(request, body.k):
+        raise HTTPException(status_code=403, detail="Share link required")
+    if body.kind not in ("comment", "vote"):
+        raise HTTPException(status_code=400, detail="Unknown kind")
+    if body.kind == "comment" and not body.text.strip():
+        raise HTTPException(status_code=400, detail="Nothing to say")
+    if body.kind == "vote" and body.vote not in ("agreed", "change", "open"):
+        raise HTTPException(status_code=400, detail="Unknown verdict")
+    import aiosqlite as _aio
+    async with _aio.connect(nidaan.DB_PATH) as c:
+        await c.execute(
+            "INSERT INTO nidaan_doc_feedback (doc_key, section, kind, name, text, vote) "
+            "VALUES (?,?,?,?,?,?)",
+            (body.doc, body.section[:40], body.kind,
+             (body.name or "Anonymous").strip()[:80], body.text.strip()[:4000], body.vote))
+        await c.commit()
+    return {"ok": True}
+
+
+# ── WhatsApp INBOX (conversations, takeover, human reply) ────────────────────
+# Gated at sub_super_admin, not super_admin: the whole point of takeover is that a senior human
+# can answer a customer, and there are only three super-admins. Settings and campaigns (below)
+# stay super-admin — reading and replying is day-to-day work, changing automation is not.
+
+async def _require_wa_inbox(request: Request) -> dict:
+    """Who may read and answer WhatsApp conversations.
+
+    Super-admins and sub-super-admins keep it for oversight. Beyond that it belongs to whoever is
+    ROSTERED onto WhatsApp today — the same duty roster the support chat uses, so nobody has to
+    learn a second way of saying who is answering. A team member rostered on can work the inbox;
+    the same person tomorrow, off duty, cannot.
+    """
+    caller = _require_staff(request, "team_member")
+    role = (caller or {}).get("role") or ""
+    if role in ("super_admin", "sub_super_admin"):
+        return caller
+    try:
+        if int(caller.get("staff_id") or 0) in await nidaan.on_duty_rep_ids("whatsapp"):
+            return caller
+    except Exception:
+        pass
+    raise HTTPException(status_code=403,
+                        detail="The WhatsApp inbox is open to whoever is on WhatsApp duty today. "
+                               "Ask a super-admin to add you to the roster.")
+
+
+async def _require_wa_reply(request: Request) -> dict:
+    """READING the inbox and REPLYING in it are different privileges.
+
+    Every admin can read, because they need to see what customers are being told. Replying is
+    narrower: a super-admin, or whoever is actually rostered on WhatsApp today. A customer should
+    get one voice, from the person holding the conversation - not four admins answering at once
+    because they all happened to have the screen open.
+    """
+    caller = await _require_wa_inbox(request)
+    role = (caller or {}).get("role") or ""
+    if role == "super_admin":
+        return caller
+    try:
+        if int(caller.get("staff_id") or 0) in await nidaan.on_duty_rep_ids("whatsapp"):
+            return caller
+    except Exception:
+        pass
+    raise HTTPException(
+        status_code=403,
+        detail="You can read this inbox, but replying is for whoever is on WhatsApp duty today. "
+               "Ask a super-admin to put you on the roster if you need to answer.")
+
+
+def _wa_number_or_400(msisdn: str) -> str:
+    """E.164 digits only. Rejects anything else before it reaches a query or the Graph API."""
+    import re as _re_wa
+    n = (msisdn or "").strip()
+    if not _re_wa.fullmatch(r"\d{8,15}", n):
+        raise HTTPException(status_code=400, detail="Invalid number")
+    return n
+
+
+@app.get("/nidaan/ops/api/wa/conversations")
+async def nidaan_ops_wa_conversations(request: Request, scope: str = "all", limit: int = 60):
+    """Conversation list: one row per number, newest first, with owner + unread + reply window."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = await _require_wa_inbox(request)
+    import biz_nidaan_wa_inbox as _inbox
+    scope = scope if scope in ("all", "unread", "human", "bot", "stopped", "verified") else "all"
+    # The screen needs to know whether THIS person may answer, so it can show a read-only notice
+    # instead of a Send button that would be refused.
+    _on_duty = False
+    try:
+        _on_duty = int((caller or {}).get("staff_id") or 0) in await nidaan.on_duty_rep_ids("whatsapp")
+    except Exception:
+        pass
+    return {"conversations": await _inbox.conversations(limit=limit, scope=scope),
+            "counters": await _inbox.counters(),
+            "may_reply": ((caller or {}).get("role") == "super_admin") or _on_duty,
+            "on_duty": _on_duty}
+
+
+@app.get("/nidaan/ops/api/wa/thread/{msisdn}")
+async def nidaan_ops_wa_thread(msisdn: str, request: Request, limit: int = 200):
+    """Full message history for one number, oldest-first, with who-said-it on every message."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    await _require_wa_inbox(request)
+    import biz_nidaan_wa_inbox as _inbox
+    n = _wa_number_or_400(msisdn)
+    d = await _inbox.thread(n, limit=limit)
+    await _inbox.mark_read(n)
+    return d
+
+
+class _WaOwnerReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    human: bool = True          # True = a person takes over, False = hand back to the bot
+
+
+@app.post("/nidaan/ops/api/wa/thread/{msisdn}/owner")
+async def nidaan_ops_wa_owner(msisdn: str, body: _WaOwnerReq, request: Request):
+    """Take a conversation over from the bot, or hand it back."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = await _require_wa_reply(request)
+    import biz_nidaan_wa_inbox as _inbox
+    res = await _inbox.set_owner(_wa_number_or_400(msisdn), human=body.human,
+                                 by_id=str(caller.get("staff_id") or ""),
+                                 by_name=_actor_label(caller))
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "Could not change owner")
+    await _ops_audit(request, "wa.owner", "wa_contact", msisdn,
+                     "took over from the bot" if body.human else "handed back to the bot")
+    return res
+
+
+class _WaReplyReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    text: str = Field(..., min_length=1, max_length=4000)
+
+
+@app.post("/nidaan/ops/api/wa/thread/{msisdn}/reply")
+@limiter.limit("30/minute")
+async def nidaan_ops_wa_reply(msisdn: str, body: _WaReplyReq, request: Request):
+    """Send a staffer's own WhatsApp reply, attributed to the real person behind the session."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = await _require_wa_reply(request)
+    import biz_nidaan_wa_inbox as _inbox
+    res = await _inbox.send_human(_wa_number_or_400(msisdn), body.text,
+                                  staff_id=str(caller.get("staff_id") or ""),
+                                  staff_name=_actor_label(caller))
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "Could not send")
+    await _ops_audit(request, "wa.reply", "wa_contact", msisdn, body.text[:120])
+    return res
+
+
+# ── WhatsApp bulk campaigns (super_admin) ────────────────────────────────────
+class _WaCampaignFilters(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    language: Optional[str] = "any"     # any | hinglish | hi | en
+    segment: Optional[str] = "all"      # all | has_claim | no_claim
+
+
+class _WaCampaignReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field("Campaign", max_length=120)
+    template_name: str = Field("", max_length=80)   # approved Meta template (cold send)
+    kind: str = Field("intro_value", max_length=40)  # composer kind (in-session free-form)
+    lang: str = Field("hinglish", max_length=12)
+    filters: _WaCampaignFilters = _WaCampaignFilters()
+    test_to: str = Field("", max_length=20)          # if set → send ONE test to this number only
+
+
+@app.post("/nidaan/ops/api/wa/campaign/preview")
+async def nidaan_ops_wa_campaign_preview(body: _WaCampaignFilters, request: Request):
+    """Count the eligible (opted-in, non-stopped) audience for a campaign filter."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    import biz_nidaan_wa_campaigns as _camp
+    return {"count": await _camp.count_audience(body.model_dump())}
+
+
+@app.post("/nidaan/ops/api/wa/campaign")
+@limiter.limit("10/minute")
+async def nidaan_ops_wa_campaign(body: _WaCampaignReq, request: Request):
+    """Create + launch a WhatsApp campaign (or send a single test). Consent is always enforced."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "super_admin")
+    import biz_nidaan_wa_campaigns as _camp
+    if body.test_to.strip():
+        res = await _camp.send_test(template_name=body.template_name, kind=body.kind,
+                                    lang=body.lang, to=body.test_to)
+        if not res.get("ok"):
+            _m = {"needs_template": "This contact isn't in an open chat — a test needs an approved template name.",
+                  "WhatsApp is not configured": "WhatsApp is not configured."}
+            raise HTTPException(status_code=400, detail=_m.get(res.get("error"), res.get("error") or "Test failed"))
+        await _ops_audit(request, "wa.campaign.test", "wa", body.test_to, body.template_name or body.kind)
+        return {"ok": True, "test": True}
+    res = await _camp.create_and_run(
+        name=body.name, template_name=body.template_name, kind=body.kind, lang=body.lang,
+        filters=body.filters.model_dump(), by_id=(caller or {}).get("staff_id"),
+        by_name=_actor_label(caller))
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "Could not start the campaign")
+    await _ops_audit(request, "wa.campaign.launch", "wa_campaign", str(res.get("campaign_id")),
+                     f"{res.get('total')} recipient(s); {body.template_name or body.kind}")
+    return res
+
+
+@app.get("/nidaan/ops/api/wa/campaigns")
+async def nidaan_ops_wa_campaigns_list(request: Request):
+    """Recent WhatsApp campaigns + their live stats."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    import biz_nidaan_wa_campaigns as _camp
+    return {"campaigns": await _camp.list_campaigns(30)}
+
+
+@app.post("/nidaan/ops/api/wa/contacts/{msisdn}/lead")
+async def nidaan_ops_wa_promote_lead(msisdn: str, request: Request):
+    """Manually record a WhatsApp contact as a CRM lead (sub_super_admin+)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    import biz_nidaan_wa_flow as _flow
+    digits = "".join(ch for ch in (msisdn or "") if ch.isdigit())
+    if len(digits) < 10:
+        raise HTTPException(status_code=400, detail="Invalid number")
+    await _flow.maybe_capture_lead(digits)
+    await _ops_audit(request, "wa.lead.capture", "wa_contact", digits, "promoted to CRM lead")
+    return {"ok": True}
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/doc-reminder/email")
+@limiter.limit("30/minute")
+async def nidaan_ops_doc_reminder_email(claim_id: int, request: Request):
+    """Email the complainant their pending documents + upload link (in-house L2 doc-collection).
+    Gated on a valid complainant email. sub_super_admin+."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "sub_super_admin")
+    import biz_nidaan_doc_collect as _dc
+    res = await _dc.send_email_reminder(claim_id, by=_actor_label(caller))
+    if not res.get("ok"):
+        _m = {"no_email": "This claim has no complainant email yet — add one on the claim first.",
+              "no_pending": "All required documents are already received — nothing to remind.",
+              "claim_not_found": "Claim not found."}
+        raise HTTPException(status_code=400, detail=_m.get(res.get("error"), "Could not send the reminder"))
+    return res
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  THE PENDING-DOCUMENT WINDOW
+#
+#  A staffer looks at what a claim is still missing, fixes the list, decides who to ask, reads it
+#  back once, and pushes it. Every endpoint below is one step of that, and every one of them is
+#  open to any staff member - the people doing intake are the people who chase documents.
+#
+#  The one thing that is NOT open: sending. /doc-window/send refuses unless it is handed the
+#  checksum that /doc-window/preview returned for exactly this list, this wording and these
+#  recipients. So "check again before you send" is enforced here, not only in the browser, and
+#  the row it writes records who read it back.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class _DocAddReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    label: str = Field(..., min_length=1, max_length=120)
+    required: bool = True
+
+
+class _DocRemoveReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    doc_key: str = Field(..., min_length=1, max_length=60)
+    reason: str = Field("", max_length=400)
+
+
+class _DocTypeReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    claim_type: str = Field(..., min_length=1, max_length=40)
+
+
+class _DocExtraReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field("", max_length=80)
+    phone: str = Field("", max_length=20)
+    email: str = Field("", max_length=160)
+
+
+class _DocPreviewReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    doc_keys: list[str] = Field(default_factory=list, max_length=80)
+    message: str = Field("", max_length=4000)
+    extras: list[_DocExtraReq] = Field(default_factory=list, max_length=20)
+    exclude: list[str] = Field(default_factory=list, max_length=20)
+    # None = the caller did not say, so both. [] = they unticked both, so neither, and the
+    # preview says so rather than quietly sending anyway.
+    channels: Optional[list[str]] = Field(None, max_length=4)
+
+
+class _DocSendReq(_DocPreviewReq):
+    confirm: str = Field(..., min_length=8, max_length=64)
+    kind: str = Field("request", max_length=16)
+    # Why this claim is being asked AGAIN so soon. Only required when a colleague asked inside
+    # the cooling-off window; it goes on the claim so the next person knows it was deliberate.
+    again_reason: str = Field("", max_length=300)
+
+
+class _DocDraftReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    doc_keys: list[str] = Field(default_factory=list, max_length=80)
+    kind: str = Field("request", max_length=16)
+    note: str = Field("", max_length=1000)
+
+
+class _DocCallReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    note: str = Field(..., min_length=1, max_length=600)
+
+
+class _DocPauseReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    paused: bool = True
+
+
+@app.get("/nidaan/ops/api/claims/{claim_id}/doc-window")
+async def ops_doc_window(claim_id: int, request: Request):
+    """Everything the window draws: the list, what was removed and why, who we can reach, the
+    chase clock, and the last few asks that went out."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    import biz_nidaan_doc_request as _dr
+    res = await _dr.window(claim_id)
+    if not res.get("ok"):
+        raise HTTPException(status_code=404, detail=res.get("error") or "Not found")
+    return res
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/doc-window/type")
+@limiter.limit("30/minute")
+async def ops_doc_window_type(claim_id: int, body: _DocTypeReq, request: Request):
+    """Correct the claim type. The document list follows from it, so this re-seeds the standard
+    list - without touching anything already received or added by hand."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_doc_request as _dr
+    res = await _dr.set_claim_type(claim_id, body.claim_type, actor=_actor_label(caller))
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "Could not change it")
+    await _ops_audit(request, "doc.type", "claim", str(claim_id), body.claim_type)
+    return res
+
+
+class _DocTickReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    doc_key: str = Field(..., min_length=1, max_length=60)
+    received: bool = True
+
+
+class _SchedReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    date: str = Field(..., min_length=8, max_length=10)      # YYYY-MM-DD, as the staffer sees it
+    time: str = Field(..., min_length=4, max_length=5)       # HH:MM in IST
+    repeat: str = Field("once", max_length=10)               # once | weekly | days
+    every: int = Field(7, ge=1, le=60)
+    weekday: Optional[int] = Field(None, ge=0, le=6)
+    note: str = Field("", max_length=300)
+    max_sends: int = Field(6, ge=1, le=20)
+    stop_when_complete: bool = True
+
+
+class _SchedStatusReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    status: str = Field(..., max_length=12)                  # active | paused | cancelled
+
+
+@app.get("/nidaan/ops/api/cases/{claim_id}/secret/{field_key}")
+@limiter.limit("20/minute")
+async def ops_case_secret(claim_id: int, field_key: str, request: Request):
+    """Show a credential kept on a claim — today, the case email password.
+
+    It is masked everywhere else, for everyone else. Asking for it is deliberate, allowed only for
+    super admins and sub-super admins (the founder's call, 17 Sep), and written into the audit log
+    with the asker's name: a password nobody can account for looking at is a password nobody
+    should hold."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "sub_super_admin")
+    import biz_nidaan_buckets as _bk
+    if field_key not in _bk.SECRET_FIELDS:
+        raise HTTPException(404, "That is not a credential field")
+    vals = await _bk.claim_fields(claim_id)
+    value = (vals.get(field_key) or "").strip()
+    if not value:
+        raise HTTPException(404, "Nothing recorded there yet")
+    await _ops_audit(request, "case.secret_view", "claim", str(claim_id), field_key)
+    try:
+        await nidaan.record_claim_activity(
+            claim_id, "secret_view", channel="system", actor=_actor_label(caller),
+            summary="Looked at the case email password")
+    except Exception:
+        pass
+    return {"ok": True, "field_key": field_key, "value": value}
+
+
+@app.get("/nidaan/ops/api/claims/{claim_id}/reminders")
+async def ops_claim_reminders(claim_id: int, request: Request):
+    """The document reminders somebody has set on this claim."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    import biz_nidaan_wa_schedule as _sch
+    return {"reminders": await _sch.listing(claim_id)}
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/reminders")
+@limiter.limit("30/minute")
+async def ops_claim_reminder_create(claim_id: int, body: _SchedReq, request: Request):
+    """Schedule a document reminder for when this complainant can actually answer.
+
+    We do not guess the moment - the staffer who has spoken to them picks it. It stops on its own
+    once the documents are in, and goes out through the same door as every other message, so the
+    daily cap and the STOP list still apply."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    claim = await nidaan.get_claim_with_account(claim_id)
+    if not claim:
+        raise HTTPException(404, "Claim not found")
+    import biz_nidaan_wa_schedule as _sch
+    res = await _sch.create(claim_id, when_date=body.date, when_time=body.time,
+                            repeat=body.repeat, every=body.every, weekday=body.weekday,
+                            note=body.note, max_sends=body.max_sends,
+                            stop_when_complete=body.stop_when_complete,
+                            by=_actor_label(caller), by_id=caller.get("staff_id"))
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("error") or "Could not set that reminder")
+    await _ops_audit(request, "wa.reminder_set", "claim", str(claim_id),
+                     "%s %s" % (body.date, body.time))
+    return res
+
+
+@app.patch("/nidaan/ops/api/reminders/{sch_id}")
+@limiter.limit("30/minute")
+async def ops_claim_reminder_status(sch_id: int, body: _SchedStatusReq, request: Request):
+    """Pause, restart or cancel a reminder."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_wa_schedule as _sch
+    res = await _sch.set_status(sch_id, body.status, by=_actor_label(caller))
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("error") or "Could not change that reminder")
+    await _ops_audit(request, "wa.reminder_" + body.status, "reminder", str(sch_id), "")
+    return res
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/doc-window/tick")
+@limiter.limit("120/minute")
+async def ops_doc_window_tick(claim_id: int, body: _DocTickReq, request: Request):
+    """Tick a checklist line by hand. Papers arrive by post, by hand and in somebody's inbox,
+    and a line could only go green if the document's name was chosen from a dropdown as it was
+    uploaded — so the list said 3 of 8 while 9 documents sat on the claim."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_doc_checklist as _ck
+    res = await _ck.set_doc_received(claim_id, body.doc_key, body.received,
+                                     by=_actor_label(caller))
+    await _ops_audit(request, "doc.tick", "claim", str(claim_id),
+                     "%s %s" % (body.doc_key, "received" if body.received else "un-ticked"))
+    return res
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/doc-window/add")
+@limiter.limit("60/minute")
+async def ops_doc_window_add(claim_id: int, body: _DocAddReq, request: Request):
+    """Ask this claim for something the standard list does not cover."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_doc_checklist as _ck
+    res = await _ck.add_custom_doc(claim_id, body.label, by=_actor_label(caller),
+                                   required=body.required)
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "Could not add it")
+    await _ops_audit(request, "doc.add", "claim", str(claim_id), body.label[:120])
+    return res
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/doc-window/remove")
+@limiter.limit("60/minute")
+async def ops_doc_window_remove(claim_id: int, body: _DocRemoveReq, request: Request):
+    """Take a document off this claim's list. The reason is required and is kept for good - the
+    row is never deleted, because "why did we stop asking for the FIR?" gets asked later."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_doc_checklist as _ck
+    res = await _ck.remove_doc(claim_id, body.doc_key, by=_actor_label(caller),
+                               reason=body.reason)
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "Could not remove it")
+    await _ops_audit(request, "doc.remove", "claim", str(claim_id),
+                     f"{body.doc_key}: {body.reason}"[:160])
+    return res
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/doc-window/restore")
+@limiter.limit("60/minute")
+async def ops_doc_window_restore(claim_id: int, body: _DocRemoveReq, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_doc_checklist as _ck
+    res = await _ck.restore_doc(claim_id, body.doc_key, by=_actor_label(caller))
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail="That is not on the removed list.")
+    await _ops_audit(request, "doc.restore", "claim", str(claim_id), body.doc_key)
+    return res
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/doc-window/draft")
+@limiter.limit("60/minute")
+async def ops_doc_window_draft(claim_id: int, body: _DocDraftReq, request: Request):
+    """The suggested wording, with the chosen documents named. A starting point staff edit."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    import biz_nidaan_doc_request as _dr
+    return {"message": await _dr.draft_message(claim_id, body.doc_keys, kind=body.kind,
+                                               note=body.note)}
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/doc-window/preview")
+@limiter.limit("60/minute")
+async def ops_doc_window_preview(claim_id: int, body: _DocPreviewReq, request: Request):
+    """Exactly what will go out and to whom, with anything wrong with it stated plainly."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    import biz_nidaan_doc_request as _dr
+    return await _dr.preview(claim_id, doc_keys=body.doc_keys, message=body.message,
+                             extras=[e.model_dump() for e in body.extras],
+                             exclude=body.exclude, channels=body.channels)
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/doc-window/send")
+@limiter.limit("20/minute")
+async def ops_doc_window_send(claim_id: int, body: _DocSendReq, request: Request):
+    """Push the ask. Refused unless `confirm` is the checksum preview() gave for this exact
+    list, wording and set of recipients - so nothing reaches a customer unread."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_doc_request as _dr
+    res = await _dr.send(claim_id, doc_keys=body.doc_keys, message=body.message,
+                         confirm=body.confirm,
+                         extras=[e.model_dump() for e in body.extras],
+                         exclude=body.exclude, channels=body.channels,
+                         actor=_actor_label(caller),
+                         actor_staff_id=(caller or {}).get("staff_id"), kind=body.kind,
+                         again_reason=body.again_reason)
+    if not res.get("ok"):
+        if res.get("needs_reason"):
+            # 428: the send is fine, it just needs one sentence first. A distinct code so the
+            # screen can ask for it instead of showing a dead-end error.
+            return JSONResponse({"detail": res.get("error"), "needs_reason": True,
+                                 "last": res.get("last") or {}}, status_code=428)
+        raise HTTPException(status_code=409 if res.get("stale") else 400,
+                            detail=res.get("error") or "Could not send it")
+    await _ops_audit(request, "doc.request", "claim", str(claim_id),
+                     f"{len(body.doc_keys)} doc(s) to {res.get('delivered')} recipient(s)")
+    return res
+
+
+class _EscReplyReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    outcome: str = Field(..., max_length=16)      # query (the only one that is acted on)
+    note: str = Field(..., min_length=3, max_length=1000)
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/escalation/answered")
+@limiter.limit("60/minute")
+async def ops_escalation_answered(claim_id: int, body: _EscReplyReq, request: Request):
+    """We answered the insurer's question. The claim goes back to Escalated - nothing moves."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(404)
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_buckets as _bk
+    res = await _bk.escalation_answered(claim_id, note=body.note, actor=_actor_label(caller))
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("error") or "Could not record that.")
+    await _ops_audit(request, "claim.escalation_answered", "claim", str(claim_id), body.note[:160])
+    return res
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/escalation/reply")
+@limiter.limit("30/minute")
+async def ops_escalation_reply(claim_id: int, body: _EscReplyReq, request: Request):
+    """Record that the insurer has asked US something. It moves nothing.
+
+    Only `query` is accepted now (founder, 21 Sep). "accepted" and "refused" used to move the
+    claim - to Completed and to Lokpal - and that was the software deciding the outcome of a case
+    from a menu choice. Both are refused here, so an old page left open in a browser cannot move
+    a claim either. A person reads the letter and presses Move.
+
+    query -> stays here,
+    marked Escalation Query, because from that point they are waiting on us.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    # `buckets` was never a name in this module - every other call site imports it as `_bk`.
+    # This raised NameError on every insurer reply, which the screen reported as the far more
+    # innocent-sounding "Could not record that."
+    import biz_nidaan_buckets as _bk
+    res = await _bk.escalation_reply(claim_id, body.outcome, note=body.note,
+                                     actor=_actor_label(caller),
+                                     actor_role=(caller or {}).get("role", ""))
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "Could not record that.")
+    await _ops_audit(request, "escalation.reply", "claim", str(claim_id),
+                     "%s%s" % (body.outcome, (" -> " + res["moved_to"]) if res.get("moved_to") else ""))
+    return res
+
+
+@app.get("/nidaan/ops/api/claims/awaiting-fee")
+@limiter.limit("30/minute")
+async def ops_claims_awaiting_fee(request: Request):
+    """Reviewed, told they have a case, and not yet paid for — oldest first.
+
+    The step between All Claims and L2 Claims the founder asked for (19 Sep). It carries the three
+    dates that turn "pending" into "nine days since we told them": when the claim started, when the
+    review was delivered, and when it was paid for.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    import biz_nidaan_stats as _st
+    return await _st.awaiting_fee()
+
+
+@app.get("/nidaan/ops/api/escalation/due")
+@limiter.limit("30/minute")
+async def ops_escalation_due(request: Request):
+    """What Escalation needs a person to do today: reminders owed, cases out of reminders, and
+    queries we have not answered. It sends nothing and moves nothing."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    # Same missing name as the reply endpoint above. This one is the REMINDER CLOCK, so while it
+    # was raising NameError the 10/20/30-day reminders surfaced to nobody at all.
+    import biz_nidaan_buckets as _bk
+    return await _bk.escalation_due()
+
+
+@app.get("/nidaan/ops/api/doc-desk")
+@limiter.limit("30/minute")
+async def ops_doc_desk(request: Request):
+    """Every claim still waiting on paper, longest silence first.
+
+    The founder's instruction (19 Sep) was to prefer manual work and "surface only days not been
+    looked at or asked for documents". So this sends nothing and decides nothing - it makes the
+    silence visible, and shows who last asked so two people do not chase the same person.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    import biz_nidaan_doc_request as _dr
+    return await _dr.desk()
+
+
+@app.get("/nidaan/ops/api/claims/{claim_id}/last-ask")
+@limiter.limit("60/minute")
+async def ops_claim_last_ask(claim_id: int, request: Request):
+    """When this claim was last asked and by whom - shown BEFORE somebody asks again."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    import biz_nidaan_doc_request as _dr
+    return await _dr.recent_ask(claim_id)
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/doc-window/pause")
+@limiter.limit("30/minute")
+async def ops_doc_window_pause(claim_id: int, body: _DocPauseReq, request: Request):
+    """Stop (or restart) the automatic reminders on this claim."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_doc_request as _dr
+    res = await _dr.pause_chase(claim_id, paused=body.paused, actor=_actor_label(caller))
+    await _ops_audit(request, "doc.chase", "claim", str(claim_id),
+                     "paused" if body.paused else "resumed")
+    return res
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/doc-window/called")
+@limiter.limit("30/minute")
+async def ops_doc_window_called(claim_id: int, body: _DocCallReq, request: Request):
+    """The phone call happened. What they said is what stops the next person calling them
+    again tomorrow, so the note is required."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_doc_request as _dr
+    res = await _dr.log_call(claim_id, note=body.note, actor=_actor_label(caller))
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "Could not record it")
+    await _ops_audit(request, "doc.called", "claim", str(claim_id), body.note[:160])
+    return res
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/wa/start")
+@limiter.limit("30/minute")
+async def nidaan_ops_wa_start(claim_id: int, request: Request):
+    """Start (or continue) the WhatsApp guided doc-collection for a claim's complainant. Free-form
+    delivery needs an open 24h session (complainant messaged us recently); a cold start needs an
+    approved template. sub_super_admin+."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    # Intake work, so the same people who open the document window beside it.
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_whatsapp as _nwa
+    if not _nwa.is_configured():
+        raise HTTPException(status_code=503, detail="WhatsApp is not connected yet.")
+    import biz_nidaan_wa_orchestrator as _orch
+    res = await _orch.start_for_claim(claim_id, by=_actor_label(caller))
+    if not res.get("ok"):
+        # Anything that was not delivered is a failure, said in words a staffer can act on.
+        # This used to return 200 for a message Meta had refused, and the screen said "Sent".
+        err = str(res.get("error") or "")
+        _m = {"no_phone": "This claim has no phone number for the complainant. Add one on the claim.",
+              "no_claim": "Claim not found.",
+              "opted_out": "The complainant replied STOP, so WhatsApp will not message them. Use email or call.",
+              "nothing_pending": "Every required document is already in — nothing to ask for.",
+              "human_takeover": "A staff member is handling this chat by hand, so the bot is paused."}
+        detail = _m.get(err)
+        if not detail:
+            detail = ("WhatsApp refused the message to %s: %s"
+                      % (res.get("to") or "the complainant", err or "no reason given"))
+        raise HTTPException(status_code=400, detail=detail)
+    return res
+
+
+@app.get("/nidaan/ops/api/claims/{claim_id}/activity")
+async def nidaan_ops_claim_activity(claim_id: int, request: Request, limit: int = 200):
+    """Unified claim timeline — automation messages, customer responses, status changes,
+    WhatsApp, and payments merged chronologically. Staff+ (team_member sees their own scope)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    rows = await nidaan.get_claim_activity(claim_id, limit=limit)
+    return {"activity": rows, "count": len(rows)}
+
+
+@app.get("/nidaan/ops/api/claims/{claim_id}/parties")
+async def nidaan_ops_claim_parties(claim_id: int, request: Request):
+    """Everyone who should be notified on this claim + which channel we're MISSING for each,
+    so the case handler can chase the detail. Notifications start flowing from the moment a
+    detail is added — nothing historical is replayed."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    import biz_nidaan_claim_parties as _cp
+    parties = await _cp.get_claim_parties(claim_id)
+    return {"parties": parties,
+            "gaps": sum(1 for p in parties if p.get("missing"))}
+
+
+# ── CRM (marketing/sales) — leads pipeline ────────────────────────────────────
+class _CrmLeadReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(..., min_length=1, max_length=120)
+    phone: str = Field("", max_length=20)
+    email: str = Field("", max_length=120)
+    company: str = Field("", max_length=120)
+    city: str = Field("", max_length=80)
+    source: str = Field("", max_length=40)
+    owner_staff_id: Optional[int] = None
+    interest: str = Field("", max_length=200)
+    notes: str = Field("", max_length=2000)
+    next_action: str = Field("", max_length=200)
+    next_followup_at: str = Field("", max_length=25)
+
+
+class _CrmUpdateReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    stage: Optional[str] = None
+    owner_staff_id: Optional[int] = None
+    next_action: Optional[str] = None
+    next_followup_at: Optional[str] = None
+    interest: Optional[str] = None
+    notes: Optional[str] = None
+    lost_reason: Optional[str] = None
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    company: Optional[str] = None
+    city: Optional[str] = None
+    archived: Optional[bool] = None
+
+
+class _CrmCommentReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    body: str = Field(..., min_length=1, max_length=2000)
+
+
+async def _crm_notify_assignment(lead_id: int, owner_staff_id: int, lead_name: str, by: str) -> None:
+    try:
+        import biz_nidaan_notifications as _nnot
+        subj = f"🎯 New lead assigned: {lead_name}"
+        body = f"{by} assigned you a CRM lead: {lead_name} (#{lead_id}).\nOpen ops → CRM to work it."
+        # notify_staff_inapp sends the Telegram too - a second call here buzzed twice.
+        await _nnot.notify_staff_inapp([owner_staff_id], subj, body, event_key="crm.assigned", email=True)
+    except Exception:
+        pass
+
+
+@app.get("/nidaan/ops/api/crm/leads")
+async def crm_list_leads(request: Request, stage: str = "", owner: Optional[int] = None,
+                         search: str = "", archived: bool = False):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "team_member")
+    import biz_nidaan_crm as _crm
+    is_admin = staff.get("role") in ("super_admin", "sub_super_admin")
+    mine = None if is_admin else staff["staff_id"]
+    leads = await _crm.list_leads(stage=stage, owner_staff_id=owner, search=search,
+                                  archived=archived, mine_staff_id=mine)
+    counts = await _crm.pipeline_counts(mine_staff_id=mine)
+    return {"leads": leads, "counts": counts, "stages": _crm.STAGES,
+            "stage_labels": _crm.STAGE_LABELS, "is_admin": is_admin}
+
+
+@app.post("/nidaan/ops/api/crm/leads")
+@limiter.limit("60/minute")
+async def crm_create_lead(body: _CrmLeadReq, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "team_member")
+    import biz_nidaan_crm as _crm
+    owner = body.owner_staff_id or staff["staff_id"]
+    lead_id = await _crm.create_lead(
+        name=body.name, phone=body.phone, email=body.email, company=body.company, city=body.city,
+        source=body.source, owner_staff_id=owner, interest=body.interest, notes=body.notes,
+        next_action=body.next_action, next_followup_at=body.next_followup_at,
+        created_by_staff_id=staff["staff_id"], created_by_name=_actor_label(staff))
+    if owner and owner != staff["staff_id"]:
+        await _crm_notify_assignment(lead_id, owner, body.name, _actor_label(staff))
+    await _ops_audit(request, "crm.lead_create", "crm_lead", str(lead_id), body.name)
+    return {"ok": True, "lead_id": lead_id}
+
+
+@app.get("/nidaan/ops/api/crm/leads/{lead_id}")
+async def crm_get_lead(lead_id: int, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    import biz_nidaan_crm as _crm
+    lead = await _crm.get_lead(lead_id)
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    return lead
+
+
+@app.patch("/nidaan/ops/api/crm/leads/{lead_id}")
+async def crm_update_lead(lead_id: int, body: _CrmUpdateReq, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "team_member")
+    import biz_nidaan_crm as _crm
+    fields = body.model_dump(exclude_none=True)
+    prev = await _crm.get_lead(lead_id)
+    if not prev:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    ok = await _crm.update_lead(lead_id, by_staff_id=staff["staff_id"], by_name=_actor_label(staff), **fields)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    new_owner = fields.get("owner_staff_id")
+    if new_owner and new_owner != prev.get("owner_staff_id") and new_owner != staff["staff_id"]:
+        await _crm_notify_assignment(lead_id, new_owner, prev.get("name", ""), _actor_label(staff))
+    return {"ok": True}
+
+
+@app.post("/nidaan/ops/api/crm/leads/{lead_id}/comment")
+async def crm_add_comment(lead_id: int, body: _CrmCommentReq, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "team_member")
+    import biz_nidaan_crm as _crm
+    cid = await _crm.add_comment(lead_id, body.body, by_staff_id=staff["staff_id"], by_name=_actor_label(staff))
+    return {"ok": True, "act_id": cid}
+
+
+@app.post("/nidaan/ops/api/crm/leads/{lead_id}/convert")
+async def crm_convert_lead(lead_id: int, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "team_member")
+    import biz_nidaan_crm as _crm
+    await _crm.convert_lead(lead_id, by_staff_id=staff["staff_id"], by_name=_actor_label(staff))
+    await _ops_audit(request, "crm.lead_won", "crm_lead", str(lead_id), "marked won")
+    return {"ok": True}
+
+
+@app.get("/nidaan/ops/api/payments/health")
+async def nidaan_ops_payment_health(request: Request, run: bool = False):
+    """Payment-health funnel + anomalies (from the watchdog). super_admin. `run=true` re-scans now."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    import biz_nidaan_payment_watch as _pw
+    snap = await _pw.run_payment_health_check(alert=False) if run else await _pw.get_snapshot()
+    return {"snapshot": snap}
+
+
+@app.get("/nidaan/ops/api/payments")
+async def nidaan_ops_payments_ledger(request: Request, limit: int = 200,
+                                     source: str = "", verified_only: bool = False):
+    """Unified payment ledger (recent) + revenue rollup + reconciliation vs the legacy
+    source-table formula. Super-admin only — this is the money view."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    rows = await nidaan.get_payments_ledger(limit=limit, source=source, verified_only=verified_only)
+    summary = await nidaan.ledger_revenue_summary()
+    return {"payments": rows, "count": len(rows), "summary": summary}
+
+
+@app.get("/nidaan/api/admin/review-requests")
+async def nidaan_api_admin_reviews(
+    request: Request,
+    status: Optional[str] = None,
+    limit: int = 100,
+):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    if not _nidaan_admin_auth(request):
+        raise HTTPException(status_code=401, detail="Admin access required")
+    reviews = await nidaan.get_review_requests_admin(status=status, limit=limit)
+    return {"reviews": reviews, "count": len(reviews)}
+
+
+class NidaanReviewStatusUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
+    new_status: str
+    note: str = ""
+
+
+@app.patch("/nidaan/api/admin/review-requests/{purchase_id}/status")
+async def nidaan_api_admin_update_review(
+    purchase_id: int,
+    body: NidaanReviewStatusUpdate,
+    request: Request,
+):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    if not _nidaan_admin_auth(request):
+        raise HTTPException(status_code=401, detail="Admin access required")
+    try:
+        ok = await nidaan.update_review_request_status(
+            purchase_id=purchase_id,
+            new_status=body.new_status,
+            note=body.note,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if not ok:
+        raise HTTPException(status_code=404, detail="Review request not found")
+    return {"purchase_id": purchase_id, "status": body.new_status}
+
+
+class NidaanClaimStatusUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
+    new_status: str
+    note: str = ""
+
+
+@app.patch("/nidaan/api/admin/claims/{claim_id}/status")
+async def nidaan_api_admin_update_claim(
+    claim_id: int,
+    body: NidaanClaimStatusUpdate,
+    request: Request,
+):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    if not _nidaan_admin_auth(request):
+        raise HTTPException(status_code=401, detail="Admin access required")
+    ok = await nidaan.update_claim_status(
+        claim_id=claim_id,
+        new_status=body.new_status,
+        changed_by_type="super_admin",
+        changed_by_id=0,
+        note=body.note,
+    )
+    if not ok:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    # Fire status-update email to the advisor (non-blocking)
+    try:
+        claim = await nidaan.get_claim_with_account(claim_id)
+        if claim and claim.get("email"):
+            import asyncio as _asyncio_email
+            _asyncio_email.ensure_future(
+                email_svc.send_nidaan_claim_status_email(
+                    to_email=claim["email"],
+                    owner_name=claim.get("owner_name", ""),
+                    claim_id=claim_id,
+                    insured_name=claim.get("insured_name", ""),
+                    claim_type=claim.get("claim_type", ""),
+                    new_status=body.new_status,
+                    note=body.note or "",
+                )
+            )
+    except Exception:
+        pass  # email failure must never break the API response
+    return {"claim_id": claim_id, "status": body.new_status}
+
+
+# =============================================================================
+#  NIDAAN OPS PORTAL  (/nidaan/ops/*)
+# =============================================================================
+
+# Staff JWTs carry no expiry, and the token alone can't tell us if the staffer was
+# later archived/deactivated. Re-check the DB (cached ~30s) so a removed staffer's live
+# session stops working promptly instead of lingering forever. {staff_id: (active, ts)}
+_staff_active_cache: dict = {}
+_STAFF_ACTIVE_TTL = 30.0  # seconds
+
+
+def _staff_still_active(staff_id: int) -> bool:
+    import time as _t, sqlite3 as _sq
+    now = _t.monotonic()
+    hit = _staff_active_cache.get(staff_id)
+    if hit and (now - hit[1]) < _STAFF_ACTIVE_TTL:
+        return hit[0]
+    active = True
+    try:
+        conn = _sq.connect(nidaan.DB_PATH, timeout=3)
+        try:
+            row = conn.execute(
+                "SELECT status, deleted_at FROM nidaan_staff WHERE staff_id=?",
+                (staff_id,)).fetchone()
+        finally:
+            conn.close()
+        active = bool(row) and (row[1] is None) and (row[0] == "active")
+    except Exception:
+        active = True   # fail-open on a DB blip — don't lock out all staff at once
+    _staff_active_cache[staff_id] = (active, now)
+    return active
+
+
+def _get_staff_from_request(request: Request) -> Optional[dict]:
+    """Extract and verify staff JWT from Authorization header, and confirm the staffer
+    is still active (not archived/deactivated) — tokens never expire, so we re-check."""
+    h = request.headers.get("Authorization", "")
+    if not h.startswith("Bearer "):
+        return None
+    payload = nidaan.verify_staff_token(h[7:])
+    if not payload:
+        return None
+    try:
+        sid = int(payload.get("sub"))
+    except (TypeError, ValueError):
+        return None
+    if not _staff_still_active(sid):
+        return None
+    return payload
+
+
+def _require_staff(request: Request, min_role: str = "team_member") -> dict:
+    """Dependency-style helper: returns staff payload or raises 401/403."""
+    role_rank = {"team_member": 0, "sub_super_admin": 1, "super_admin": 2}
+    staff = _get_staff_from_request(request)
+    if not staff:
+        raise HTTPException(status_code=401, detail="Staff authentication required")
+    if role_rank.get(staff.get("role"), -1) < role_rank.get(min_role, 99):
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+    return staff
+
+
+def _actor_label(staff: dict) -> str:
+    """The REAL person behind an action, for accountability. If this is a staff-
+    impersonation session, surface the real super-admin — never let the impersonated
+    identity mask who actually acted: returns 'RealName (as ImpersonatedName)'."""
+    if not staff:
+        return ""
+    name = (staff.get("name") or staff.get("email")
+            or ("staff#" + str(staff.get("staff_id") or staff.get("sub") or ""))).strip()
+    imp = staff.get("imp_by") or {}
+    if isinstance(imp, dict) and imp.get("name"):
+        return f"{imp['name']} (as {name})"
+    return name
+
+
+async def _ops_audit(request: Request, action: str, target_type: str = "",
+                     target_id="", detail: str = ""):
+    """Best-effort: record a superadmin ops action to the activity trail."""
+    try:
+        staff = _get_staff_from_request(request) or {}
+        ip = request.client.host if request.client else ""
+        await nidaan.log_activity(
+            action=action, actor_type="staff", actor_id=staff.get("staff_id"),
+            actor_name=_actor_label(staff),
+            actor_role=staff.get("role", ""), target_type=target_type,
+            target_id=target_id, detail=detail, ip=ip)
+    except Exception:
+        pass
+
+
+@app.get("/nidaan/ops", response_class=HTMLResponse)
+async def nidaan_ops_page(request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    return _nidaan_page("nidaan_ops.html", request)
+
+
+# ── Auth ──────────────────────────────────────────────────────────────────────
+
+class OpsLoginReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3 — reject unknown fields
+    email: str
+    password: str
+
+@app.post("/nidaan/ops/api/login")
+@limiter.limit("5/minute")
+async def ops_login(body: OpsLoginReq, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = await nidaan.authenticate_staff(body.email, body.password)
+    if not staff:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    token = nidaan.create_staff_token(staff["staff_id"], staff["role"], staff["name"])
+    return {"token": token, "staff_id": staff["staff_id"],
+            "role": staff["role"], "name": staff["name"],
+            "email": staff.get("email", "")}
+
+
+# ── Telegram one-tap login (password-free for linked, telegram-enabled staff) ──
+@app.post("/nidaan/ops/api/tg-login/start")
+@limiter.limit("10/minute")
+async def ops_tg_login_start(request: Request):
+    """Create a short-lived login nonce + the bot deep link. The staffer opens it in the
+    already-linked @NidaanOpsBot, which authorizes the nonce; the login page then polls status."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    cfg = await tg.get_config()
+    bot_user = (cfg or {}).get("bot_username") or ""
+    if not bot_user:
+        raise HTTPException(status_code=503, detail="Telegram login is not available right now")
+    nonce = await tg.create_tg_login_nonce()
+    return {"nonce": nonce,
+            "deep_link": f"https://t.me/{bot_user.lstrip('@')}?start=weblogin_{nonce}"}
+
+
+@app.get("/nidaan/ops/api/tg-login/status")
+@limiter.limit("60/minute")
+async def ops_tg_login_status(request: Request, nonce: str = ""):
+    """Poll a login nonce. Returns {status:'pending'} until the staffer authorizes in Telegram,
+    then {status:'ok', token, ...} once — the nonce is single-use and consumed here."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff_id = await tg.consume_tg_login(nonce)
+    if not staff_id:
+        return {"status": "pending"}
+    rec = await nidaan.get_staff_by_id(staff_id)
+    if not rec or rec.get("status") != "active":
+        raise HTTPException(status_code=403, detail="Account not active")
+    token = nidaan.create_staff_token(rec["staff_id"], rec["role"], rec["name"])
+    return {"status": "ok", "token": token, "staff_id": rec["staff_id"],
+            "role": rec["role"], "name": rec["name"], "email": rec.get("email", "")}
+
+
+@app.get("/nidaan/ops/api/me")
+async def ops_me(request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request)
+    record = await nidaan.get_staff_by_id(staff["staff_id"])
+    if not record:
+        raise HTTPException(status_code=404)
+    return record
+
+
+@app.get("/nidaan/ops/api/me/profile")
+async def ops_me_profile(request: Request):
+    """The signed-in staffer's own profile — details are view-only; they may change
+    only their photo and bot language (email/phone stay locked for non-admins)."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    rec = await nidaan.get_staff_by_id(staff["staff_id"]) or {}
+    pic = rec.get("profile_pic")
+    tg_info = await tg.get_staff_telegram(staff["staff_id"])
+    return {
+        "staff_id": rec.get("staff_id"),
+        "name": rec.get("name", ""),
+        "email": rec.get("email", ""),
+        "notify_email": rec.get("notify_email", ""),
+        "phone": rec.get("phone", ""),
+        "role": rec.get("role", ""),
+        "telegram_lang": rec.get("telegram_lang") or "en",
+        "profile_pic_url": (_nidaan_doc_url(pic) if pic else ""),
+        "telegram": {"linked": tg_info.get("linked", False),
+                     "device_count": tg_info.get("count", 0)},
+        # Only super admins/admins can edit other people; nobody edits their own
+        # email/phone here — that stays with Staff management (admin-controlled).
+        "can_edit_details": staff.get("role") in ("super_admin", "sub_super_admin"),
+    }
+
+
+@app.post("/nidaan/ops/api/me/profile-pic")
+@limiter.limit("10/minute")
+async def ops_me_profile_pic(request: Request, file: UploadFile = File(...)):
+    """Upload/replace my profile photo (image only, ≤5 MB)."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    if not (file.filename or ""):
+        raise HTTPException(400, "No file")
+    content = await file.read()
+    # Was: extension taken from the client filename with no look at the bytes, so any content
+    # named x.jpg was stored and served back. Now the bytes decide, through the shared gate.
+    ext = await validate_upload_scanned(content, images_only=True, max_bytes=5 * 1024 * 1024, what="image")
+    import uuid as _uuid
+    stored = f"avatar_{_uuid.uuid4().hex}{ext}"
+    (_NIDAAN_DOCS_DIR / stored).write_bytes(content)
+    await nidaan.set_staff_profile_pic(staff["staff_id"], stored)
+    return {"ok": True, "profile_pic_url": _nidaan_doc_url(stored)}
+
+
+class _MeLangReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    lang: str = Field(pattern=r"^(en|hi|hinglish)$")
+
+
+@app.post("/nidaan/ops/api/me/language")
+async def ops_me_language(body: _MeLangReq, request: Request):
+    """Set my bot/UI language preference (also used by the Telegram bot)."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    await tg.set_staff_lang(staff["staff_id"], body.lang)
+    return {"ok": True, "lang": body.lang}
+
+
+class _StaffSavedNumbersReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
+    phone: str = ""
+
+@app.post("/nidaan/ops/api/me/saved-numbers")
+async def ops_me_saved_numbers(body: _StaffSavedNumbersReq, request: Request):
+    """Mark current staff as having saved all 3 official numbers (Phase 4)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request)
+    phone = (body.phone or "").strip()
+    await nidaan.mark_staff_saved_numbers(staff["staff_id"], phone)
+    # Phase 4: register staff phone for round-robin notification routing.
+    if phone:
+        try:
+            digits = "".join(ch for ch in phone if ch.isdigit())[-10:]
+            if len(digits) == 10:
+                logger.info("Staff %s saved phone for WA routing: %s", staff["staff_id"], digits)
+        except Exception:
+            pass
+    return {"ok": True, "saved_at": "now"}
+
+
+# ── Staff management (super_admin only) ───────────────────────────────────────
+
+class CreateStaffReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
+    name: str
+    email: str
+    password: str = Field(min_length=8)
+    role: str
+    phone: str = Field(..., min_length=10, max_length=15)  # internal notification routing
+    notify_email: str = ""  # personal/Gmail inbox for email notifications (optional)
+
+class UpdateStaffReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
+    name: Optional[str] = None
+    role: Optional[str] = None
+    status: Optional[str] = None
+    password: Optional[str] = None
+    phone: Optional[str] = None
+    notify_email: Optional[str] = None
+
+@app.get("/nidaan/ops/api/staff")
+async def ops_list_staff(request: Request, include_inactive: bool = False,
+                          archived: bool = False):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    if archived:
+        rows = await nidaan.list_deleted_staff()
+        return {"staff": rows, "count": len(rows), "archived": True}
+    staff_list = await nidaan.list_staff(include_inactive=include_inactive)
+    return {"staff": staff_list, "count": len(staff_list)}
+
+
+@app.post("/nidaan/ops/api/staff")
+async def ops_create_staff(body: CreateStaffReq, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "super_admin")
+    if not body.email.lower().endswith("@nidaanpartner.com"):
+        raise HTTPException(status_code=400, detail="Staff email must be a @nidaanpartner.com address")
+    try:
+        staff_id = await nidaan.create_staff(
+            name=body.name, email=body.email,
+            password=body.password, role=body.role, phone=body.phone,
+            notify_email=body.notify_email,
+            created_by=caller["staff_id"],
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if not staff_id:
+        raise HTTPException(status_code=409, detail="Email already exists")
+    await _ops_audit(request, "staff.create", "staff", staff_id, f"Created {body.name} ({body.role})")
+    # Welcome the new staffer (email + WhatsApp) with their Login ID + portal link.
+    try:
+        new_staff = await nidaan.get_staff_by_id(staff_id)
+        if new_staff:
+            import asyncio as _asyncio
+            _asyncio.create_task(nnot.on_staff_welcome(new_staff))
+    except Exception as we:
+        logger.warning("Staff welcome notification failed: %s", we)
+    return {"staff_id": staff_id, "name": body.name, "role": body.role}
+
+
+@app.patch("/nidaan/ops/api/staff/{staff_id}")
+async def ops_update_staff(staff_id: int, body: UpdateStaffReq, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "super_admin")
+    # Lockout guards: a super admin can't be deactivated, and nobody can
+    # deactivate themselves (prevents the accidental "inactivate everyone").
+    if body.status == "inactive":
+        target = await nidaan.get_staff_by_id(staff_id)
+        if target and target.get("role") == "super_admin":
+            raise HTTPException(status_code=403, detail="Super admins cannot be deactivated")
+        if staff_id == caller["staff_id"]:
+            raise HTTPException(status_code=403, detail="You cannot deactivate your own account")
+    try:
+        ok = await nidaan.update_staff(
+            staff_id=staff_id, name=body.name, role=body.role,
+            status=body.status, password=body.password, phone=body.phone,
+            notify_email=body.notify_email,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if not ok:
+        raise HTTPException(status_code=400, detail="Nothing to update")
+    _bits = [f"{k}={v}" for k, v in (("name", body.name), ("role", body.role), ("status", body.status)) if v is not None]
+    if body.password:
+        _bits.append("password reset")
+    await _ops_audit(request, "staff.update", "staff", staff_id, "; ".join(_bits) or "updated")
+    return {"staff_id": staff_id, "updated": True}
+
+
+@app.delete("/nidaan/ops/api/staff/{staff_id}")
+async def ops_delete_staff(staff_id: int, request: Request):
+    """Archive a staffer (soft delete, restorable). Super admins are protected."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "super_admin")
+    if staff_id == caller["staff_id"]:
+        raise HTTPException(status_code=403, detail="You cannot delete your own account")
+    try:
+        ok = await nidaan.soft_delete_staff(staff_id)
+    except ValueError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    if not ok:
+        raise HTTPException(status_code=404, detail="Staff not found")
+    await _ops_audit(request, "staff.delete", "staff", staff_id, "archived")
+    return {"staff_id": staff_id, "deleted": True}
+
+
+@app.post("/nidaan/ops/api/staff/{staff_id}/restore")
+async def ops_restore_staff(staff_id: int, request: Request):
+    """Bring an archived staffer back (as inactive)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    await nidaan.restore_staff(staff_id)
+    await _ops_audit(request, "staff.restore", "staff", staff_id, "restored (inactive)")
+    return {"staff_id": staff_id, "restored": True}
+
+
+@app.post("/nidaan/ops/api/staff/delete-inactive")
+async def ops_delete_inactive_staff(request: Request):
+    """Bulk-archive every inactive staffer except super admins."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    n = await nidaan.delete_inactive_staff()
+    await _ops_audit(request, "staff.delete_inactive", "staff", 0, f"archived {n} inactive")
+    return {"archived": n}
+
+
+@app.post("/nidaan/ops/api/staff/{staff_id}/reset-password")
+@limiter.limit("10/hour")
+async def ops_reset_staff_password(staff_id: int, request: Request):
+    """One-click password reset (super admin). Generates a temporary password,
+    sets it, and returns it once so the admin can share it securely."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    target = await nidaan.get_staff_by_id(staff_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="Staff not found")
+    import secrets as _secrets
+    temp_pw = "Nidaan@" + "".join(_secrets.choice("23456789") for _ in range(5))
+    ok = await nidaan.update_staff(staff_id=staff_id, password=temp_pw)
+    if not ok:
+        raise HTTPException(status_code=400, detail="Could not reset password")
+    await _ops_audit(request, "staff.password_reset", "staff", staff_id,
+                     f"reset password for {target.get('name','')}")
+    return {"staff_id": staff_id, "name": target.get("name", ""),
+            "login_id": target.get("email", ""), "temp_password": temp_pw}
+
+
+# ── Claims ops ────────────────────────────────────────────────────────────────
+
+# ── Affiliate branches (superadmin: create/list/disable city branch codes) ────
+@app.get("/nidaan/ops/api/branches")
+async def ops_list_branches(request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    return {"branches": await nidaan.list_branches()}
+
+
+class OpsBranchCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    branch_code: str
+    city: str
+    name: str = ""
+    contact_email: str = ""   # where 'attributed lead unpaid' alerts are sent
+
+
+@app.post("/nidaan/ops/api/branches")
+async def ops_create_branch(body: OpsBranchCreate, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    res = await nidaan.create_branch(body.branch_code, body.city, body.name, body.contact_email)
+    if "error" in res:
+        raise HTTPException(status_code=400, detail=res["error"])
+    # Welcome the branch with a one-click login email (magic link valid 72h for first login).
+    _bemail = (body.contact_email or "").strip().lower()
+    if _bemail and "@" in _bemail:
+        try:
+            _magic = nidaan.create_branch_magic_token(res["branch_code"], _bemail, minutes=72 * 60)
+            _magic_url = f"{_nidaan_origin(request)}/nidaan/branch/magic?token={_magic}"
+            import asyncio as _aio_bw
+            _aio_bw.create_task(email_svc.send_nidaan_branch_login_email(
+                _bemail, _magic_url, otp="", name=(body.name or ""), welcome=True))
+        except Exception as _bwe:
+            logger.error("branch welcome email failed %s: %s", res["branch_code"], _bwe)
+    await _ops_audit(request, "branch.create", "branch", body.branch_code.strip().upper(),
+                     f"{body.city} {('('+body.contact_email+')') if body.contact_email else ''}".strip())
+    return res
+
+
+class OpsBranchUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    status: Optional[str] = None          # active | disabled
+    contact_email: Optional[str] = None
+    contact_phone: Optional[str] = Field(None, max_length=20)  # WhatsApp number for claim updates
+    share_pct: Optional[float] = Field(None, ge=0, le=100)   # profit-share % (super-admin only)
+
+
+@app.patch("/nidaan/ops/api/branches/{branch_code}")
+async def ops_update_branch(branch_code: str, body: OpsBranchUpdate, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    # Profit-share % is money config → super_admin only; status/email/phone → sub_super_admin.
+    _require_staff(request, "super_admin" if body.share_pct is not None else "sub_super_admin")
+    if not await nidaan.update_branch(branch_code, status=body.status,
+                                      contact_email=body.contact_email, share_pct=body.share_pct,
+                                      contact_phone=body.contact_phone):
+        raise HTTPException(status_code=404, detail="Branch not found, invalid number, or nothing to update")
+    _bb = [x for x in ((f"status={body.status}" if body.status else ""),
+                       ("email updated" if body.contact_email is not None else ""),
+                       ("WhatsApp updated" if body.contact_phone is not None else ""),
+                       (f"share_pct={body.share_pct}" if body.share_pct is not None else "")) if x]
+    await _ops_audit(request, "branch.update", "branch", branch_code.strip().upper(), "; ".join(_bb) or "updated")
+    return {"ok": True}
+
+
+# ── Staff-as-branch: personal referral business ───────────────────────────────
+@app.get("/nidaan/ops/api/my-business")
+async def ops_my_business(request: Request):
+    """The signed-in staffer's own referral business — code, shareable link, signups,
+    subscribers, attributed revenue, commission earned, claims. Any staffer sees their own."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request)
+    biz = await nidaan.get_staff_business(staff["staff_id"])
+    if not biz:
+        raise HTTPException(status_code=404)
+    base = str(request.base_url).rstrip("/")
+    # Same entry path branches use (/nidaan/start reads ?ref= and carries it into signup).
+    biz["referral_link"] = (f"{base}/nidaan/start?ref={biz['referral_code']}"
+                            if biz.get("referral_code") else "")
+    biz["referrals"] = await nidaan.get_referred_accounts(biz.get("referral_code") or "")
+    return biz
+
+
+@app.get("/nidaan/ops/api/my-business/account/{account_id}")
+async def ops_my_business_account(account_id: int, request: Request):
+    """A referrer's SCOPED drill-down into ONE account they referred — claims + statuses +
+    plan/payment status, so staff/branch can track their referrals' progress (locked model).
+    Strictly limited: a non-admin staffer may open ONLY accounts that joined via their own
+    referral code (admins may open any). Customer phone is MASKED and internal legal notes are
+    omitted — enough to see progress, no raw PII."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request)
+    _is_admin = staff.get("role") in ("super_admin", "sub_super_admin")
+    import aiosqlite as _aio
+    async with _aio.connect(nidaan.DB_PATH) as conn:
+        conn.row_factory = _aio.Row
+        # The caller's own referral code (from DB, not the token).
+        _sc = await (await conn.execute(
+            "SELECT referral_code FROM nidaan_staff WHERE staff_id=?",
+            (staff.get("staff_id") or staff.get("sub"),))).fetchone()
+        my_code = ((_sc["referral_code"] if _sc else "") or "").strip().upper()
+        # Account + active subscription.
+        cur = await conn.execute(
+            """SELECT a.account_id, a.owner_name, a.phone, a.branch_code, a.created_at,
+                      COALESCE(s.plan,'free') AS plan, s.status AS sub_status, s.current_period_end
+               FROM nidaan_accounts a
+               LEFT JOIN nidaan_subscriptions s ON s.account_id=a.account_id AND s.status='active'
+               WHERE a.account_id=?""", (account_id,))
+        account = dict(cur) if (cur := await cur.fetchone()) else None
+        if not account:
+            raise HTTPException(status_code=404, detail="Account not found")
+        # Ownership gate: must be the referrer, unless admin.
+        if not _is_admin:
+            acct_code = (account.get("branch_code") or "").strip().upper()
+            if not my_code or acct_code != my_code:
+                raise HTTPException(status_code=403, detail="Not your referral")
+        # Mask the phone — a referrer sees progress, not raw contact details.
+        _ph = str(account.get("phone") or "")
+        account["phone_masked"] = ("•••••" + _ph[-4:]) if len(_ph) >= 4 else ""
+        account.pop("phone", None)
+        # Claims — status-focused (no policy_no / full phone / legal findings).
+        claims = [dict(r) for r in await (await conn.execute(
+            """SELECT claim_id, claim_type, insurer_name, disputed_amount, status,
+                      created_at, last_status_at
+               FROM nidaan_claims WHERE account_id=? ORDER BY created_at DESC""",
+            (account_id,))).fetchall()]
+        # ₹499 reviews — status only, no findings_note.
+        reviews = [dict(r) for r in await (await conn.execute(
+            """SELECT claim_type, amount_paid, status, created_at, reviewed_at
+               FROM nidaan_per_claim_purchase
+               WHERE account_id=? AND status NOT IN ('pending_payment','cancelled')
+               ORDER BY created_at DESC""", (account_id,))).fetchall()]
+    return {"account": account, "claims": claims, "reviews": reviews}
+
+
+# ══════════ EMAIL UPDATE RADAR — P1: mailbox vault + Test-Connection ══════════
+class _RadarMailboxReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    mailbox_id: Optional[int] = None
+    label: str = Field("", max_length=120)
+    email_address: str = Field(..., min_length=3, max_length=160)
+    app_password: str = Field("", max_length=200)   # blank on edit = keep the stored secret
+    imap_host: str = Field("imap.gmail.com", max_length=120)
+    imap_port: int = Field(993, ge=1, le=65535)
+    account_id: Optional[int] = None
+    is_active: bool = True
+    pod: str = Field("", max_length=60)
+    pod_staff_ids: str = Field("", max_length=200)   # comma list of assigned staff_ids
+
+
+class _RadarTestReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    email_address: str = Field(..., min_length=3, max_length=160)
+    app_password: str = Field(..., min_length=1, max_length=200)
+    imap_host: str = Field("imap.gmail.com", max_length=120)
+    imap_port: int = Field(993, ge=1, le=65535)
+
+
+@app.get("/nidaan/ops/api/radar/mailboxes")
+async def ops_radar_mailboxes(request: Request):
+    """Email Radar config table — every mailbox (the app-password is NEVER returned). Admin+ only."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    return {"mailboxes": await radar.list_mailboxes()}
+
+
+@app.post("/nidaan/ops/api/radar/mailboxes")
+async def ops_radar_mailbox_save(body: _RadarMailboxReq, request: Request):
+    """Create/update a mailbox. App-password is encrypted at rest; blank on edit keeps the stored one."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "sub_super_admin")
+    if not body.mailbox_id and not (body.app_password or "").strip():
+        raise HTTPException(status_code=400, detail="App password is required for a new mailbox")
+    try:
+        mid = await radar.upsert_mailbox(
+            mailbox_id=body.mailbox_id, label=body.label, email_address=body.email_address,
+            app_password=body.app_password, imap_host=body.imap_host, imap_port=body.imap_port,
+            account_id=body.account_id, is_active=body.is_active, pod=body.pod,
+            pod_staff_ids=body.pod_staff_ids,
+            created_by=(staff.get("staff_id") or staff.get("sub")))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="Could not save (duplicate email?): " + str(e)[:100])
+    await _ops_audit(request, "radar.mailbox_save", "radar", str(mid), body.email_address)
+    return {"ok": True, "mailbox_id": mid}
+
+
+@app.post("/nidaan/ops/api/radar/mailboxes/test")
+async def ops_radar_test_adhoc(body: _RadarTestReq, request: Request):
+    """Test IMAP credentials BEFORE saving — the config drawer's 'Test Connection' button."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    ok, status = await radar.test_connection(body.imap_host, body.imap_port,
+                                             body.email_address, body.app_password)
+    return {"ok": ok, "status": status}
+
+
+@app.post("/nidaan/ops/api/radar/mailboxes/{mailbox_id}/test")
+async def ops_radar_test_saved(mailbox_id: int, request: Request):
+    """Test a SAVED mailbox (decrypts its secret in-memory) and record the result."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    ok, status = await radar.test_mailbox(mailbox_id)
+    return {"ok": ok, "status": status}
+
+
+@app.delete("/nidaan/ops/api/radar/mailboxes/{mailbox_id}")
+async def ops_radar_mailbox_delete(mailbox_id: int, request: Request):
+    """Remove a mailbox from the radar (confirmed in the UI)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    if not await radar.delete_mailbox(mailbox_id):
+        raise HTTPException(status_code=404, detail="Mailbox not found")
+    await _ops_audit(request, "radar.mailbox_delete", "radar", str(mailbox_id), "")
+    return {"ok": True}
+
+
+@app.get("/nidaan/ops/api/radar/items")
+async def ops_radar_items(request: Request, flag: str = "", limit: int = 120, bucket: str = ""):
+    """Radar items by lifecycle bucket (act|waiting|resolved) or flag, + counts. Admin+."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    return {"items": await radar.list_items(flag, limit, bucket=bucket),
+            "stats": await radar.radar_stats()}
+
+
+@app.get("/nidaan/ops/api/radar/items/{item_id}/email")
+async def ops_radar_read_email(item_id: int, request: Request):
+    """Read the FULL email for a radar item, live from the mailbox — so staff never open Gmail. Admin+."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    return await radar.read_full_email(item_id)
+
+
+@app.get("/nidaan/ops/api/radar/items/{item_id}/attachments")
+async def ops_radar_attachments(item_id: int, request: Request):
+    """Files attached to this email + the claim we'd suggest filing them against. Read-only —
+    nothing is attached to a claim until a human confirms."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    return await radar.list_attachments(item_id)
+
+
+class _RadarFileReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    claim_id: int = Field(..., ge=1)
+
+
+@app.post("/nidaan/ops/api/radar/items/{item_id}/file-to-claim")
+@limiter.limit("20/minute")
+async def ops_radar_file_to_claim(item_id: int, body: _RadarFileReq, request: Request):
+    """Attach this email's files to a claim (human-confirmed). Each is normalised to PDF and
+    saved as a claim document, and the claim timeline records it."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "sub_super_admin")
+    res = await radar.file_attachments_to_claim(item_id, body.claim_id, by=_actor_label(caller))
+    if not res.get("ok"):
+        _m = {"not_found": "That email is no longer available",
+              "no_attachments": "This email has no attachments we can file",
+              "claim_not_found": "Claim not found"}
+        raise HTTPException(status_code=400, detail=_m.get(res.get("error"), "Could not file the attachments"))
+    await _ops_audit(request, "radar.file_to_claim", "claim", str(body.claim_id),
+                     f"{res.get('filed')} attachment(s) from radar item {item_id}")
+    return res
+
+
+class _RadarReplyReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    message: str = Field(..., min_length=1, max_length=8000)
+
+
+@app.post("/nidaan/ops/api/radar/items/{item_id}/reply")
+async def ops_radar_reply(item_id: int, body: _RadarReplyReq, request: Request):
+    """Reply to the sender FROM the customer's mailbox (SMTP). Moves the item to 'Waiting'. Audited.
+
+    DISABLED (founder Sep 3 2026): Email Radar is strictly read-only — read + flag, never send-as.
+    The send path (radar.send_reply / _smtp_send) is retained but this route is off. Re-enable by
+    removing this guard if the policy changes."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    raise HTTPException(status_code=403,
+                        detail="Email Radar is read-only — replying from the customer's mailbox is disabled.")
+    # --- retained (unreachable) original send path ---
+    staff = _require_staff(request, "sub_super_admin")
+    res = await radar.send_reply(item_id, body.message, staff.get("staff_id"))
+    if not res.get("ok"):
+        _m = {"not_found": "Update not found", "no_recipient": "No sender address to reply to",
+              "auth_failed": "Mailbox login failed — the app-password may be wrong/expired",
+              "decrypt_failed": "Could not read the stored credential"}
+        raise HTTPException(status_code=400, detail=_m.get(res.get("error"), "Could not send: " + str(res.get("error"))))
+    await _ops_audit(request, "radar.reply", "radar_item", str(item_id), "replied from mailbox")
+    return {"ok": True}
+
+
+@app.post("/nidaan/ops/api/radar/items/{item_id}/resolve")
+async def ops_radar_resolve(item_id: int, request: Request):
+    """Mark a radar update resolved (case handled) → moves to the Resolved bucket. Admin+."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    if not await radar.set_item_status(item_id, "resolved"):
+        raise HTTPException(status_code=404, detail="Update not found")
+    return {"ok": True}
+
+
+@app.post("/nidaan/ops/api/radar/mailboxes/{mailbox_id}/purge")
+async def ops_radar_purge(mailbox_id: int, request: Request):
+    """Disconnect + PURGE a mailbox once its case is decided — removes creds + all its data (nothing
+    retained). Super-admin only; audited."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    if not await radar.purge_mailbox(mailbox_id):
+        raise HTTPException(status_code=404, detail="Mailbox not found")
+    await _ops_audit(request, "radar.purge", "radar_mailbox", str(mailbox_id), "disconnected + purged")
+    return {"ok": True}
+
+
+class _RadarConfigReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    priority_senders: str = Field("", max_length=4000)
+    custom_rules: str = Field("", max_length=4000)
+    silence_days: int = Field(5, ge=1, le=60)
+
+
+@app.get("/nidaan/ops/api/radar/config")
+async def ops_radar_config_get(request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    return await radar.get_config()
+
+
+@app.post("/nidaan/ops/api/radar/config")
+async def ops_radar_config_set(body: _RadarConfigReq, request: Request):
+    """Priority senders (always-🔴 domains), the founder's own surfacing rules, and the
+    silence threshold. Admin+."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    await radar.set_config(body.priority_senders, body.silence_days, body.custom_rules)
+    # Rules decide what the whole team sees, so record how many are in force, not their text.
+    _n_rules = len(radar._parse_rules(body.custom_rules or ""))
+    await _ops_audit(request, "radar.config", "radar", "1",
+                     f"silence_days={body.silence_days} rules={_n_rules}")
+    return {"ok": True, "rules_active": _n_rules}
+
+
+@app.post("/nidaan/ops/api/radar/poll")
+async def ops_radar_poll_now(request: Request):
+    """Manually trigger a poll of all mailboxes (for testing without waiting for the 15-min loop)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    created = await radar.poll_all_mailboxes()
+    return {"ok": True, "new_items": created}
+
+
+@app.get("/nidaan/ops/api/radar/metrics")
+async def ops_radar_metrics(request: Request):
+    """Efficiency metrics (auto-triage rate = the 5→1 proof, coverage, backlog). Admin+."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    return await radar.radar_metrics()
+
+
+@app.get("/nidaan/ops/api/staff-business")
+async def ops_staff_business(request: Request):
+    """Super-admin reconciliation: every staffer's referral business + commission owed."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    return {"staff": await nidaan.list_staff_business()}
+
+
+@app.get("/nidaan/ops/api/analytics")
+async def ops_business_analytics(request: Request, days: int = 30):
+    """Business Analytics: real-time acquisition by channel + funnel + failures. Super-admin
+    only (revenue-sensitive, mirrors the Revenue panel's gating)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    return await nidaan.get_business_analytics(days=days)
+
+
+class OpsStaffCommission(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    commission_pct: float = Field(..., ge=0, le=100)
+
+
+@app.patch("/nidaan/ops/api/staff/{staff_id}/commission")
+async def ops_set_staff_commission(staff_id: int, body: OpsStaffCommission, request: Request):
+    """Super-admin: set a staffer's referral commission % (money config → super_admin only)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    if not await nidaan.set_staff_commission(staff_id, body.commission_pct):
+        raise HTTPException(status_code=404, detail="Staffer not found")
+    await _ops_audit(request, "staff.commission", "staff", str(staff_id),
+                     f"commission_pct={body.commission_pct}")
+    return {"ok": True}
+
+
+class OpsStaffTgAccess(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    allowed: bool
+
+
+@app.patch("/nidaan/ops/api/staff/{staff_id}/telegram-access")
+async def ops_set_staff_tg_access(staff_id: int, body: OpsStaffTgAccess, request: Request):
+    """Super-admin: allow/deny a staffer's Telegram (link + one-tap login). Deny = password-only."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    if not await nidaan.set_staff_telegram_access(staff_id, body.allowed):
+        raise HTTPException(status_code=404, detail="Staffer not found")
+    await _ops_audit(request, "staff.telegram_access", "staff", str(staff_id),
+                     f"allowed={body.allowed}")
+    return {"ok": True}
+
+
+# ── Staff claim desk: a staffer raises claims like a branch, from their OWN ops login.
+# Uses the staffer's personal referral code (SP-XXXXXX) as the attribution code, reusing
+# the ENTIRE proven branch pipeline (house account, submit_claim, review, L2 pay). No change
+# to the live branch endpoints — these are additive, ops-JWT-authed parallels. ────────────
+async def _staff_claim_code(request: Request) -> tuple[dict, str]:
+    """Return (staff, referral_code) for the signed-in staffer, or 400 if no code yet."""
+    staff = _require_staff(request)
+    rec = await nidaan.get_staff_by_id(staff["staff_id"])
+    code = ((rec or {}).get("referral_code") or "").strip().upper()
+    if not code:
+        # Self-heal: assign codes if this staffer somehow lacks one, then re-read.
+        await nidaan.ensure_staff_referral_codes()
+        rec = await nidaan.get_staff_by_id(staff["staff_id"])
+        code = ((rec or {}).get("referral_code") or "").strip().upper()
+    if not code:
+        raise HTTPException(status_code=400, detail="No referral code assigned to your account yet")
+    return staff, code
+
+
+@app.post("/nidaan/ops/api/my-claims")
+async def ops_my_raise_claim(body: _BranchClaimReq, request: Request):
+    """A staffer raises a claim FOR a customer (free at intake) — attributed to their own code,
+    exactly like a branch. The L2 fee (if any) is charged later only on a GO review."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _staff, code = await _staff_claim_code(request)
+    _cname = (body.complainant_name or body.insured_name or "").strip()
+    cphone, cemail = _clean_complainant_contact(body.complainant_phone or body.insured_phone,
+                                                body.complainant_email or body.insured_email)
+    _iname = (body.insured_name or _cname).strip()
+    _iphone = "".join(ch for ch in (body.insured_phone or "") if ch.isdigit()) or cphone
+    house_account = await nidaan.get_or_create_branch_house_account(code)
+    # Resolve the credited Channel Partner SERVER-SIDE. The client sends only an id, and we
+    # accept it only if that CP is APPROVED - otherwise a staffer could type any name and
+    # walk straight past the super-admin approval gate that governs who gets paid.
+    _cp_id, _cp_name = None, ""
+    if body.channel_partner_id:
+        import biz_nidaan_channel_partners as _cpm
+        _cp = await _cpm.get_partner(int(body.channel_partner_id))
+        if not _cp or _cp.get("status") != "approved":
+            raise HTTPException(status_code=400,
+                                detail="That channel partner is not approved for selection")
+        _cp_id, _cp_name = _cp["cp_id"], _cp["name"]
+    claim_id, msg = await nidaan.submit_claim(
+        account_id=house_account, user_id=None,
+        claim_type=(body.claim_type or "").strip(), insured_name=_iname,
+        insured_phone=_iphone, insured_email=cemail, insurer_name=(body.insurer_name or "").strip(),
+        policy_no=(body.policy_no or "").strip(), disputed_amount=body.disputed_amount,
+        notes_from_agent=(body.notes or "").strip(), branch_code=code,
+        payment_status="unpaid_lead", skip_eligibility=True, origin="branch",
+        associate_referrer=_cp_name, channel_partner_id=_cp_id,
+        complainant_name=_cname, complainant_phone=cphone, complainant_email=cemail,
+        complainant_role="staff")
+    if not claim_id:
+        raise HTTPException(400, msg or "Could not raise claim")
+    try:
+        import biz_nidaan_notifications as _nnot
+        _rb = (_staff or {}).get("name") or "A staff member"
+        asyncio.create_task(_nnot.on_ops_claim_raised(claim_id, raised_by=f"{_rb} (staff)"))
+    except Exception:
+        pass
+    try:
+        await nidaan.record_event("claim_raised", channel="staff", ref_code=code,
+                                  claim_id=claim_id, status="ok", purpose="staff_claim")
+    except Exception:
+        pass
+    return {"claim_id": claim_id, "status": "intimated"}
+
+
+@app.get("/nidaan/ops/api/my-claims")
+async def ops_my_list_claims(request: Request):
+    """List the claims this staffer has raised (with review + L2-payment state)."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _staff, code = await _staff_claim_code(request)
+    return {"claims": await nidaan.list_branch_claims(code),
+            "l2": await nidaan.branch_l2_pricing()}
+
+
+@app.post("/nidaan/ops/api/my-claims/{claim_id}/documents/upload")
+@limiter.limit("20/minute")
+async def ops_my_upload_claim_doc(claim_id: int, request: Request,
+                                  files: list[UploadFile] = File(...)):
+    """Staffer attaches documents (e.g. the rejection letter) to a claim THEY raised —
+    same rules/limits as the branch upload, scoped to the staffer's own claim code."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _staff, code = await _staff_claim_code(request)
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+        _c.row_factory = __import__("aiosqlite").Row
+        r = await (await _c.execute(
+            "SELECT account_id FROM nidaan_claims WHERE claim_id=? AND origin='branch' "
+            "AND UPPER(branch_code)=?", (claim_id, code.upper()))).fetchone()
+    if not r: raise HTTPException(404, "Claim not found")
+    account_id = r["account_id"]
+    _guard_upload_batch(files)
+    saved = []
+    for f in files:
+        content = await f.read()
+        if len(content) > _MAX_DOC_SIZE:
+            raise HTTPException(413, f"{f.filename} is over the {_MAX_DOC_SIZE // (1024*1024)} MB limit")
+        if not _doc_magic_ok(content):
+            raise HTTPException(415, _upload_refusal(f.filename, content))
+        ext = await validate_upload_scanned(content, (f.content_type or ""), what="document")
+        content, ext = _as_viewable(content, ext)
+        stored = f"{uuid.uuid4().hex}{ext}"
+        (_NIDAAN_DOCS_DIR / stored).write_bytes(content)
+        doc_id = await nidaan.save_claim_document(
+            account_id=account_id, stored_name=stored, original_name=f.filename or stored,
+            file_size=len(content), mime_type=f.content_type or "", claim_id=claim_id)
+        saved.append({"doc_id": doc_id, "original_name": f.filename})
+    return {"uploaded": saved, "count": len(saved)}
+
+
+@app.get("/nidaan/ops/api/my-claims/{claim_id}/documents")
+async def ops_my_claim_docs(claim_id: int, request: Request):
+    """Documents on a claim this staffer raised under their own My Business code."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _staff, code = await _staff_claim_code(request)
+    if not await _branch_claim_row(claim_id, code):
+        raise HTTPException(status_code=404, detail="Claim not found")
+    docs = await nidaan.get_claim_documents(claim_id=claim_id)
+    for d in docs:
+        d["url"] = _nidaan_doc_url(d["stored_name"])
+    return {"docs": docs}
+
+
+@app.delete("/nidaan/ops/api/my-claims/{claim_id}/documents/{doc_id}")
+async def ops_my_claim_doc_delete(claim_id: int, doc_id: int, request: Request):
+    """Remove a wrongly-attached document from a claim this staffer raised."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _staff, code = await _staff_claim_code(request)
+    if not await _branch_claim_row(claim_id, code):
+        raise HTTPException(status_code=404, detail="Claim not found")
+    stored = await nidaan.delete_claim_document(doc_id, claim_id=claim_id, allow_any=True)
+    if stored is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+    _nidaan_remove_doc_file(stored)
+    try:
+        import biz_nidaan_doc_checklist as _ck
+        await _ck.unmark_doc_by_doc_id(claim_id, doc_id)
+    except Exception as e:  # noqa: BLE001
+        logger.info("could not reopen the checklist line for doc %s: %s", doc_id, e)
+    await _ops_audit(request, "myclaim.doc_delete", "claim", str(claim_id), f"doc {doc_id}")
+    return {"ok": True}
+
+
+@app.post("/nidaan/ops/api/my-claims/{claim_id}/l2-pay")
+@limiter.limit("10/minute")
+async def ops_my_l2_pay(claim_id: int, request: Request):
+    """Create a Razorpay order for the staffer's Level-2 fee on a reviewed-GO claim."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _staff, code = await _staff_claim_code(request)
+    pricing = await nidaan.branch_l2_fee_for_claim(claim_id)
+    if not pricing["charge_required"]:
+        raise HTTPException(400, "No Level-2 fee is configured — use Send to Level-2 instead")
+    fee = int(pricing["fee"])
+    row = await _branch_claim_row(claim_id, code)
+    if not row: raise HTTPException(404, "Claim not found")
+    if row["review_outcome"] != "can_fight":
+        raise HTTPException(400, "This claim is not eligible for Level-2 yet")
+    if row["l2_payment_status"] == "paid":
+        raise HTTPException(400, "Level-2 fee already paid for this claim")
+    rzp_key_id = _nidaan_rzp_id(); rzp_key_secret = _nidaan_rzp_secret()
+    if not rzp_key_id or not rzp_key_secret:
+        raise HTTPException(503, "Payments not configured")
+    _l2_paise = (await nidaan.charge_with_gst(fee))["total_paise"]
+    import httpx as _httpx4, time as _time4
+    receipt = f"sl2_{claim_id}_{int(_time4.time())}"[:40]
+    async with _httpx4.AsyncClient() as _cl:
+        _r = await _cl.post(
+            "https://api.razorpay.com/v1/orders",
+            auth=(rzp_key_id, rzp_key_secret),
+            json={"amount": _l2_paise, "currency": "INR", "receipt": receipt,
+                  "notes": {"product": "nidaan_branch_l2", "claim_id": str(claim_id), "branch": code}},
+            timeout=20.0)
+        result = _r.json()
+    if "id" not in result:
+        raise HTTPException(502, result.get("error", {}).get("description", "Order creation failed"))
+    return {"order_id": result["id"], "amount": _l2_paise, "currency": "INR",
+            "razorpay_key_id": rzp_key_id, "fee": fee}
+
+
+@app.post("/nidaan/ops/api/my-claims/{claim_id}/l2-pay-verify")
+@limiter.limit("10/minute")
+async def ops_my_l2_pay_verify(claim_id: int, body: _BranchL2VerifyReq, request: Request):
+    """Verify the staffer's Level-2 payment and queue the claim for the legal team."""
+    import hmac as _hm, hashlib as _hs
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _staff, code = await _staff_claim_code(request)
+    secret = _nidaan_rzp_secret()
+    if not secret: raise HTTPException(503, "Payments not configured")
+    _msg = f"{body.razorpay_order_id}|{body.razorpay_payment_id}".encode()
+    _expected = _hm.new(secret.encode(), _msg, _hs.sha256).hexdigest()
+    if not _hm.compare_digest(_expected, body.razorpay_signature):
+        raise HTTPException(400, "Invalid payment signature")
+    # Confirm the L2 fee was actually CAPTURED (not just authorized) before queuing for legal —
+    # the webhook (nidaan_branch_l2 payment.captured) finalizes a genuine late capture.
+    if not await _nidaan_payment_captured(body.razorpay_payment_id):
+        return {"status": "pending", "claim_id": claim_id,
+                "message": "Payment is still processing — we'll confirm it shortly. No need to pay again."}
+    pricing = await nidaan.branch_l2_fee_for_claim(claim_id)
+    ok = await nidaan.mark_l2_paid(claim_id, code, int(pricing["fee"]), body.razorpay_payment_id)
+    if not ok:
+        raise HTTPException(400, "Could not record the Level-2 payment for this claim")
+    try:
+        import biz_nidaan_notifications as _nnot
+        asyncio.create_task(_nnot.on_branch_l2_paid(claim_id, code))
+    except Exception:
+        pass
+    return {"status": "paid", "claim_id": claim_id}
+
+
+@app.post("/nidaan/ops/api/my-claims/{claim_id}/l2-advance")
+@limiter.limit("10/minute")
+async def ops_my_l2_advance(claim_id: int, request: Request):
+    """Free-policy path: queue a reviewed-GO staff claim for legal with no charge."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _staff, code = await _staff_claim_code(request)
+    pricing = await nidaan.branch_l2_fee_for_claim(claim_id)
+    if pricing["charge_required"]:
+        raise HTTPException(400, "A Level-2 fee is configured — please pay to proceed")
+    row = await _branch_claim_row(claim_id, code)
+    if not row: raise HTTPException(404, "Claim not found")
+    if row["review_outcome"] != "can_fight":
+        raise HTTPException(400, "This claim is not eligible for Level-2 yet")
+    ok = await nidaan.mark_l2_paid(claim_id, code, 0, "free_advance")
+    if not ok:
+        raise HTTPException(400, "Could not advance this claim")
+    try:
+        import biz_nidaan_notifications as _nnot
+        asyncio.create_task(_nnot.on_branch_l2_paid(claim_id, code))
+    except Exception:
+        pass
+    return {"status": "queued", "claim_id": claim_id}
+
+
+@app.post("/nidaan/ops/api/my-claims/{claim_id}/l2-payment-link")
+@limiter.limit("10/minute")
+async def ops_my_l2_payment_link(claim_id: int, request: Request):
+    """Generate a shareable payment link for the staffer's L2 fee, bound to this claim — so the
+    staffer can send it to their customer to pay (instead of paying it themselves)."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _staff, code = await _staff_claim_code(request)
+    # A super admin can raise this link for ANY claim, not only one under their own referral
+    # code. Without it the button is invisible to the people who most often chase a fee, and the
+    # link stays unused - which is how we ended up with 5 of these created in total, none since
+    # 8 Sept, while staff shared QR codes that carry no claim id and can never come back.
+    # The link is still tagged with the CLAIM's own code, so attribution is unchanged.
+    if (_staff.get("role") or "") in ("super_admin", "sub_super_admin"):
+        _own = await nidaan.get_claim_with_account(claim_id)
+        if not _own:
+            raise HTTPException(404, "Claim not found")
+        code = ((_own.get("branch_code") or "") or code).strip().upper()
+    pricing = await nidaan.branch_l2_fee_for_claim(claim_id)
+    if not pricing["charge_required"]:
+        raise HTTPException(400, "No Level-2 fee is configured")
+    fee = int(pricing["fee"])
+    row = await _branch_claim_row(claim_id, code)
+    if not row: raise HTTPException(404, "Claim not found")
+    if row["review_outcome"] != "can_fight":
+        raise HTTPException(400, "This claim is not eligible for Level-2 yet")
+    if row["l2_payment_status"] == "paid":
+        raise HTTPException(400, "Level-2 fee already paid for this claim")
+    _l2_paise = (await nidaan.charge_with_gst(fee))["total_paise"]
+    import time as _tt
+    _exp = int(_tt.time()) + 3 * 24 * 3600
+    link = await _create_rzp_payment_link(
+        _l2_paise, f"Nidaan Level-2 fee — claim #{claim_id}",
+        notes={"product": "nidaan_branch_l2", "claim_id": str(claim_id), "branch": code},
+        expire_by=_exp)
+    # Recorded, like the branch route does. Without this the link exists only at Razorpay, so
+    # "who shared a link for this claim, and when" is unanswerable - which is exactly the
+    # question being asked when a claim still reads "Fee not paid yet".
+    try:
+        await nidaan.record_payment_link(
+            link["id"], link.get("short_url", ""), "l2", _l2_paise,
+            claim_id=claim_id, branch_code=code, created_by_type="staff",
+            created_by_id=str(_staff.get("staff_id") or ""),
+            description=f"L2 fee claim #{claim_id} — shared by {_staff.get('name') or 'staff'}",
+            expire_by=_exp)
+    except Exception as _re:  # noqa: BLE001 — a missing audit row must not cost the link
+        logger.warning("could not record the L2 payment link for claim %s: %s", claim_id, _re)
+    await _ops_audit(request, "l2.pay_link", "claim", str(claim_id), f"₹{fee} link shared")
+    return {"short_url": link.get("short_url"), "fee": fee, "claim_id": claim_id}
+
+
+@app.get("/nidaan/ops/api/claims/{claim_id}/payment-attempts")
+async def ops_claim_payment_attempts(claim_id: int, request: Request):
+    """Has anybody been given a way to pay this claim's fee, and did they ever use it?
+
+    Founder, 24 Sep: staff insisted they had generated a QR and it was paid; the claim said Due.
+    Both were true. Razorpay's ORDERS api held the answer - three orders for that claim, all
+    `attempts=0`, meaning nobody ever TRIED to pay against the QR. Not a failure: not one
+    attempt.
+
+    That answer should not require somebody to query an API by hand, so the claim carries it.
+    Read-only, and it asks Razorpay for the live attempt count because our own tables only know
+    what we created, not what the customer did with it.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    links = await nidaan.list_payment_links(limit=20, claim_id=claim_id)
+    paid = False
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+        r = await (await _c.execute(
+            "SELECT 1 FROM nidaan_payments WHERE claim_id=? AND status='captured' LIMIT 1",
+            (claim_id,))).fetchone()
+        paid = bool(r)
+    # Orders are what the "pay now" button makes; links are what the share button makes. Both
+    # end up at Razorpay, and only Razorpay knows whether the customer got as far as trying.
+    orders: list = []
+    bounced: list = []
+    kid, sec = _nidaan_rzp_id(), _nidaan_rzp_secret()
+    if kid and sec:
+        try:
+            import httpx as _hx
+            since = int(_time.time()) - 30 * 86400
+            async with _hx.AsyncClient(timeout=15, auth=(kid, sec)) as _cl:
+                _r = await _cl.get("https://api.razorpay.com/v1/orders",
+                                   params={"from": since, "to": int(_time.time()), "count": 100})
+                for o in ((_r.json() or {}).get("items") or []):
+                    if str((o.get("notes") or {}).get("claim_id") or "") != str(claim_id):
+                        continue
+                    orders.append({
+                        "id": o.get("id"), "created_at": o.get("created_at"),
+                        "amount": int(o.get("amount") or 0) // 100,
+                        "status": o.get("status"),
+                        # The number that answers the argument.
+                        "attempts": int(o.get("attempts") or 0)})
+                # MONEY THAT ARRIVED AND CAME STRAIGHT BACK. A screenshotted checkout QR dies
+                # with the browser window, and whoever scans it afterwards is auto-refunded -
+                # having seen "successful" on their phone first. That payment carries no order
+                # and no notes, so it cannot be tied to a claim by id; it is matched on amount
+                # and on being close in time to something we created for this claim, and it is
+                # offered as "look at this", not as proof.
+                _win = [o.get("created_at") or 0 for o in orders]
+                if _win:
+                    _lo, _hi = min(_win) - 3600, max(_win) + 6 * 3600
+                    _p = await _cl.get("https://api.razorpay.com/v1/payments",
+                                       params={"from": _lo, "to": _hi, "count": 100})
+                    _amts = {int(o.get("amount") or 0) for o in
+                             ((_r.json() or {}).get("items") or [])
+                             if str((o.get("notes") or {}).get("claim_id") or "") == str(claim_id)}
+                    for pm in ((_p.json() or {}).get("items") or []):
+                        if (pm.get("status") or "") != "refunded" or pm.get("captured"):
+                            continue
+                        if pm.get("order_id") or (int(pm.get("amount") or 0) not in _amts):
+                            continue
+                        reason = ""
+                        try:
+                            _rf = await _cl.get(
+                                "https://api.razorpay.com/v1/payments/%s/refunds" % pm.get("id"))
+                            for rf in ((_rf.json() or {}).get("items") or []):
+                                reason = (rf.get("notes") or {}).get("refund_reason") or ""
+                                if reason:
+                                    break
+                        except Exception:  # noqa: BLE001
+                            pass
+                        bounced.append({"id": pm.get("id"), "created_at": pm.get("created_at"),
+                                        "amount": int(pm.get("amount") or 0) // 100,
+                                        "reason": reason})
+        except Exception as e:  # noqa: BLE001 — the claim must open even if Razorpay is slow
+            logger.info("payment attempts lookup failed for claim %s: %s", claim_id, e)
+    return {"claim_id": claim_id, "paid": paid, "bounced": bounced,
+            "links": [{"short_url": l.get("short_url"), "status": l.get("status"),
+                       "created_at": l.get("created_at"),
+                       "by": l.get("created_by_type"), "amount": (l.get("amount_paise") or 0) // 100}
+                      for l in links],
+            "orders": sorted(orders, key=lambda o: o.get("created_at") or 0, reverse=True)}
+
+
+# ── Plans & billing config (SUPER-ADMIN only — sensitive) ─────────────────────
+@app.get("/nidaan/api/content")
+@limiter.limit("60/minute")
+async def nidaan_public_content(request: Request):
+    """Canonical business facts (both languages) — the homepage reads these so a fact edited in
+    ops updates the site + chat together. Public, read-only."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    return {"content": await nidaan.public_content()}
+
+
+class _CpReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(..., min_length=1, max_length=120)
+    email: str = Field("", max_length=160)
+    phone: str = Field("", max_length=20)
+    company: str = Field("", max_length=120)
+    notes: str = Field("", max_length=500)
+
+
+class _CpStatusReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    status: str = Field(..., pattern=r"^(approved|rejected|disabled|pending)$")
+
+
+@app.get("/nidaan/ops/api/channel-partners")
+async def ops_cp_list(request: Request, approved_only: bool = False):
+    """Channel Partners. Any staffer may read the APPROVED list (that is what the My Business
+    claim form offers); the full list including pending/rejected is admin-only."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request)
+    import biz_nidaan_channel_partners as _cp
+    is_admin = (caller or {}).get("role") in ("super_admin", "sub_super_admin")
+    if approved_only or not is_admin:
+        # A staffer sees the selectable list plus anything they proposed themselves, so their
+        # own pending entry does not disappear the moment they add it.
+        return {"partners": await _cp.list_partners(
+            approved_only=True,
+            include_proposed_by=None if approved_only else (caller or {}).get("staff_id")),
+            "can_approve": False}
+    return {"partners": await _cp.list_partners(),
+            "pending": await _cp.pending_count(),
+            "can_approve": (caller or {}).get("role") == "super_admin"}
+
+
+@app.post("/nidaan/ops/api/channel-partners")
+@limiter.limit("30/minute")
+async def ops_cp_create(body: _CpReq, request: Request):
+    """Propose a Channel Partner.
+
+    ANY staff member may propose one - they are the people who meet partners. It starts PENDING
+    and is invisible on the claim form until a super-admin approves it; a super-admin's own entry
+    is approved on creation and recorded as approved by them.
+
+    This used to require sub_super_admin AND lived on a super-admin-only screen, so in practice
+    only super-admins could create one - and their own entries auto-approve. The approval step
+    existed and never ran.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_channel_partners as _cp
+    res = await _cp.create_partner(
+        name=body.name, email=body.email, phone=body.phone, company=body.company,
+        notes=body.notes, by_staff_id=(caller or {}).get("staff_id"),
+        by_name=_actor_label(caller),
+        is_super_admin=((caller or {}).get("role") == "super_admin"))
+    if not res.get("ok"):
+        _m = {"name_required": "A name is required",
+              "duplicate": "A channel partner with that name already exists"}
+        raise HTTPException(status_code=400, detail=_m.get(res.get("error"), "Could not add"))
+    await _ops_audit(request, "cp.create", "channel_partner", str(res["cp_id"]),
+                     f"{body.name} ({res['status']})")
+    # A pending CP needs a super-admin to act, so tell them rather than hoping someone looks.
+    if res.get("status") == "pending":
+        try:
+            import aiosqlite as _aio
+            async with _aio.connect(nidaan.DB_PATH) as _c:
+                _ids = [r[0] for r in await (await _c.execute(
+                    "SELECT staff_id FROM nidaan_staff WHERE role='super_admin' AND status='active' "
+                    "AND deleted_at IS NULL")).fetchall()]
+            if _ids:
+                _lines = [f"{_actor_label(caller)} added the channel partner: {body.name}"]
+                if body.company:
+                    _lines.append(f"Company: {body.company}")
+                if body.phone:
+                    _lines.append(f"Phone: {body.phone}")
+                _lines += [
+                    "",
+                    "It cannot be put on a claim until a super-admin approves it.",
+                    "Approve straight from Telegram, or open the link below.",
+                ]
+                # Bell + Telegram (with Approve / Reject buttons) + email. Email is ON because a
+                # pending partner blocks real work: a claim raised in the meantime simply cannot
+                # credit them, and nobody downstream can tell why.
+                await nnot.notify_staff_inapp(
+                    _ids, "🤝 Channel Partner needs approval",
+                    "\n".join(_lines),
+                    event_key="cp.pending", email=True, cp_id=res["cp_id"])
+        except Exception as _e:
+            logger.info("CP pending alert failed: %s", _e)
+    return res
+
+
+@app.patch("/nidaan/ops/api/channel-partners/{cp_id}")
+async def ops_cp_update(cp_id: int, body: _CpReq, request: Request):
+    """Edit a CP's details. Status is deliberately NOT editable here."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    import biz_nidaan_channel_partners as _cp
+    ok = await _cp.update_partner(cp_id, name=body.name, email=body.email, phone=body.phone,
+                                  company=body.company, notes=body.notes)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Channel partner not found")
+    await _ops_audit(request, "cp.update", "channel_partner", str(cp_id), body.name[:80])
+    return {"ok": True}
+
+
+@app.patch("/nidaan/ops/api/channel-partners/{cp_id}/status")
+async def ops_cp_status(cp_id: int, body: _CpStatusReq, request: Request):
+    """Approve / reject / disable a Channel Partner. SUPER-ADMIN ONLY — this is the gate that
+    decides whose name a commission can later be paid against, and approval stamps who did it."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "super_admin")
+    import biz_nidaan_channel_partners as _cp
+    ok = await _cp.set_status(cp_id, body.status, by_staff_id=(caller or {}).get("staff_id"),
+                              by_name=_actor_label(caller))
+    if not ok:
+        raise HTTPException(status_code=404, detail="Channel partner not found")
+    await _ops_audit(request, "cp.status", "channel_partner", str(cp_id), body.status)
+    return {"ok": True}
+
+
+@app.get("/nidaan/ops/api/content")
+async def ops_content_get(request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    return {"content": await nidaan.all_content()}
+
+
+class OpsContentUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    value_en: str = Field(..., max_length=600)
+    value_hi: str = Field("", max_length=600)
+
+
+@app.patch("/nidaan/ops/api/content/{content_key}")
+@limiter.limit("30/minute")
+async def ops_content_set(content_key: str, body: OpsContentUpdate, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    try:
+        updated = await nidaan.update_content(content_key, body.value_en, body.value_hi)
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    await _ops_audit(request, "content.update", "content", content_key, body.value_en[:150])
+    return {"ok": True, "content": updated}
+
+
+# ── Our Offices (super-admin editable; shown on homepage for both audiences) ──
+@app.get("/nidaan/api/offices")
+@limiter.limit("60/minute")
+async def nidaan_public_offices(request: Request):
+    """Public office list — the homepage renders these (advisor + policyholder views)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    return {"offices": await nidaan.get_offices()}
+
+
+@app.get("/nidaan/api/ref-info")
+@limiter.limit("60/minute")
+async def nidaan_ref_info(request: Request, code: str = ""):
+    """Public: resolve a referral code → {valid, type, name} so the signup page can show
+    'Referred by ___' and lock the code (bulletproofs staff/branch attribution)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    return await nidaan.resolve_ref_info(code)
+
+
+@app.get("/nidaan/ops/api/offices")
+async def ops_offices_get(request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")   # any staff can view; only SA can save
+    return {"offices": await nidaan.get_offices()}
+
+
+class OpsOffice(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    city_en: str = Field("", max_length=120)
+    city_hi: str = Field("", max_length=120)
+    addr: str = Field("", max_length=300)
+
+
+class OpsOfficesUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    offices: list[OpsOffice] = Field(default_factory=list, max_length=50)
+
+
+@app.put("/nidaan/ops/api/offices")
+async def ops_offices_set(body: OpsOfficesUpdate, request: Request):
+    """Replace the whole office list (add/edit/delete via one save). Super-admin only."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "super_admin")
+    saved = await nidaan.set_offices([o.model_dump() for o in body.offices],
+                                     updated_by=staff.get("staff_id"))
+    await _ops_audit(request, "offices.update", "content", "offices", f"{len(saved)} office(s)")
+    return {"ok": True, "offices": saved}
+
+
+@app.get("/nidaan/ops/api/plans-config")
+async def ops_plans_config(request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    # GST-inclusive pricing per plan (base + GST + total) so every surface (mark-paid, checkout)
+    # charges the SAME correct amount — single source of truth for price.
+    gst = await nidaan.gst_config()
+    pricing = {}
+    for key in ("silver", "gold", "platinum", "silver_annual", "gold_annual", "platinum_annual"):
+        _cfg = await nidaan.get_plan_cfg(key)
+        _base = int(_cfg.get("price_paise") or 0) / 100
+        g = await nidaan.charge_with_gst(_base)
+        pricing[key] = {"base": g["base"], "gst": g["gst"], "total": g["total"]}
+    return {"plans": await nidaan.all_plans_config_full(),
+            "gst": {"enabled": gst["enabled"], "rate": gst["rate"]},
+            "pricing": pricing}
+
+
+class OpsPlanConfigUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")   # reject any unexpected field
+    label: Optional[str] = Field(None, max_length=40)
+    price: Optional[int] = Field(None, ge=1, le=1_000_000)   # in RUPEES; new price for NEW checkouts only (existing subs grandfathered)
+    claims_per_month: Optional[int] = Field(None, ge=-1, le=1_000_000_000)   # -1 = unlimited
+    disputed_cap: Optional[int] = Field(None, ge=-1, le=1_000_000_000)       # -1 = unlimited
+    max_users: Optional[int] = Field(None, ge=-1, le=1_000_000)              # -1 = unlimited
+    features: Optional[list[str]] = Field(None, max_length=12)
+    badge: Optional[str] = Field(None, max_length=30)
+    active: Optional[bool] = None
+    sort_order: Optional[int] = Field(None, ge=0, le=999)
+
+
+@app.patch("/nidaan/ops/api/plans-config/{plan_key}")
+@limiter.limit("20/minute")
+async def ops_update_plan_config(plan_key: str, body: OpsPlanConfigUpdate, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    if plan_key not in (await nidaan.get_plans_config()):
+        raise HTTPException(status_code=404, detail="Unknown plan")
+    changes = body.model_dump(exclude_none=True)
+    if not changes:
+        raise HTTPException(status_code=400, detail="Nothing to update")
+    try:
+        updated = await nidaan.update_plan_config(plan_key, changes)
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    await _ops_audit(request, "plan.config_update", "plan", plan_key,
+                     ", ".join(f"{k}={v}" for k, v in changes.items())[:200])
+    return {"ok": True, "plan": updated}
+
+
+# ── Ops: customer-support inbox (staff read + reply) ──────────────────────────
+@app.get("/nidaan/ops/api/support/threads")
+async def ops_support_threads(request: Request, status: Optional[str] = None,
+                              channel: Optional[str] = None):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    return {"threads": await nidaan.list_support_threads_ops(status=status, channel=channel)}
+
+
+@app.get("/nidaan/ops/api/support/analytics")
+async def ops_support_analytics(request: Request, days: int = 30):
+    """Chat/support analytics for the ops Support panel: sessions, ratings (CSAT),
+    escalation rate, per-channel and plan-wise breakdowns over the last `days`."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    return await nidaan.support_analytics(days=days)
+
+
+@app.get("/nidaan/ops/api/support/threads/{thread_id}")
+async def ops_support_thread(thread_id: int, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    meta = await nidaan.get_support_thread_meta(thread_id)
+    if not meta:
+        raise HTTPException(status_code=404, detail="Thread not found")
+    msgs = _attach_message_urls(await nidaan.get_support_messages(thread_id))
+    # Opening the thread IS reading it - advance our pointer so the customer sees the read tick.
+    try:
+        await nidaan.mark_support_read(thread_id, "staff")
+    except Exception:
+        pass
+    return {"thread": meta, "messages": msgs,
+            "read": await nidaan.get_support_read_marks(thread_id)}
+
+
+class OpsSupportReplyReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    message: str = Field(..., min_length=1, max_length=4000)
+
+
+@app.post("/nidaan/ops/api/support/threads/{thread_id}/reply")
+@limiter.limit("60/minute")
+async def ops_support_reply(thread_id: int, body: OpsSupportReplyReq, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    meta = await nidaan.get_support_thread_meta(thread_id)
+    if not meta:
+        raise HTTPException(status_code=404, detail="Thread not found")
+    _staff_msg_id = await nidaan.add_support_message(thread_id, "staff", body.message.strip())
+    # A staff reply takes the thread out of the escalation queue (mark handled = 'ai'
+    # so it's no longer flagged as waiting; 'closed' is explicit via the close action).
+    if meta.get("status") == "escalated":
+        await nidaan.set_support_status(thread_id, "ai")
+    # Clear the SLA super-admin-escalation flag so a later unanswered message can escalate afresh.
+    await nidaan.clear_support_sa_escalation(thread_id)
+    # Visitor-fallback: if the visitor has left the chat, email them a reopen link (delayed, idempotent).
+    try:
+        import biz_nidaan_notifications as _nnot
+        asyncio.create_task(_nnot.on_support_reply_nudge(thread_id, _staff_msg_id))
+    except Exception:
+        pass
+    return {"ok": True}
+
+
+@app.post("/nidaan/ops/api/support/threads/{thread_id}/close")
+async def ops_support_close(thread_id: int, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    await nidaan.set_support_status(thread_id, "closed")
+    return {"ok": True}
+
+
+@app.get("/nidaan/ops/api/support/hours")
+async def ops_support_hours_get(request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    return {"hours": await nidaan.get_business_hours()}
+
+
+class OpsSupportHoursReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    days: list[int] = Field(..., max_length=7)   # Mon=0 … Sun=6
+    start: str = Field(..., pattern=r"^\d{2}:\d{2}$")
+    end: str = Field(..., pattern=r"^\d{2}:\d{2}$")
+
+
+@app.patch("/nidaan/ops/api/support/hours")
+async def ops_support_hours_set(body: OpsSupportHoursReq, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    try:
+        cfg = await nidaan.set_business_hours(body.days, body.start, body.end)
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    await _ops_audit(request, "support.hours_update", "support", "hours", str(cfg)[:200])
+    return {"ok": True, "hours": cfg}
+
+
+# ── Support-rep duty roster (super-admin assigns who's on support duty) ────────
+@app.get("/nidaan/ops/api/support/reps")
+async def ops_support_reps_get(request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    duty = (request.query_params.get("duty") or "").strip()
+    # Labels travel with the list so the roster screen never keeps its own copy of the duty names.
+    # It used to, and that copy knew only "support" and "whatsapp" — so My Desk could point at a
+    # bucket nobody could actually be rostered onto.
+    # The duty list comes from the BUCKET TABLE, so a bucket created in the Bucket Designer is
+    # something you can roster somebody onto the same minute - and the roster can never again be
+    # offering a name the rest of the system has stopped using.
+    import biz_nidaan_case_state as _cs
+    await _cs.refresh_vocab()
+    keys = list(await nidaan.duty_keys())
+    return {"reps": await nidaan.list_support_reps(duty if duty in keys else None),
+            "duties": keys,
+            "stage_duties": [k for k in keys if k not in ("support", "whatsapp")],
+            "duty_labels": {k: _cs.stage_label(k, "en") for k in keys}}
+
+
+class OpsSupportRepReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    staff_id: int
+    start_date: str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}$")
+    end_date: str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}$")
+    duty: str = Field("support", max_length=20)
+
+
+@app.post("/nidaan/ops/api/support/reps")
+async def ops_support_reps_add(body: OpsSupportRepReq, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "super_admin")
+    try:
+        rep_id = await nidaan.add_support_rep(body.staff_id, body.start_date, body.end_date,
+                                              created_by=staff["staff_id"], duty=body.duty)
+    except ValueError as ve:
+        _m = {"bad_date_format": "Use dates in the form YYYY-MM-DD.",
+              "end_before_start": "The end date is before the start date.",
+              "bad_duty": "That is not a duty someone can be rostered onto."}
+        raise HTTPException(status_code=400, detail=_m.get(str(ve), str(ve)))
+    await _ops_audit(request, "support.rep_add", "support",
+                     str(body.staff_id), f"{body.duty} {body.start_date}..{body.end_date}")
+    return {"ok": True, "rep_id": rep_id}
+
+
+@app.delete("/nidaan/ops/api/support/reps/{rep_id}")
+async def ops_support_reps_remove(rep_id: int, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    if not await nidaan.remove_support_rep(rep_id):
+        raise HTTPException(status_code=404, detail="Roster entry not found")
+    await _ops_audit(request, "support.rep_remove", "support", str(rep_id), "removed")
+    return {"ok": True}
+
+
+@app.get("/nidaan/ops/api/branches/{branch_code}/unpaid-leads")
+async def ops_branch_unpaid_leads(branch_code: str, request: Request):
+    """Attributed accounts for this branch that haven't paid yet — the fallback
+    list so a branch can't quietly service an unpaid lead offline."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    return {"leads": await nidaan.get_branch_unpaid_leads(branch_code)}
+
+
+@app.get("/nidaan/ops/api/claims")
+async def ops_list_claims(
+    request: Request,
+    status: Optional[str] = None,
+    assigned_to: Optional[int] = None,
+    claim_type: Optional[str] = None,
+    search: Optional[str] = None,
+    payment_status: Optional[str] = None,
+    branch: Optional[str] = None,
+    plan: Optional[str] = None,
+    account_id: Optional[int] = None,
+    review_outcome: Optional[str] = None,
+    archived_only: bool = False,
+    limit: int = 100,
+    offset: int = 0,
+):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "team_member")
+    _stats: dict = {}
+    claims = await nidaan.get_claims_ops(
+        staff_id=staff["staff_id"], role=staff["role"],
+        status=status, assigned_to=assigned_to,
+        claim_type=claim_type, search=search,
+        payment_status=payment_status,
+        branch=branch, plan=plan, account_id=account_id,
+        review_outcome=review_outcome, archived_only=archived_only,
+        limit=limit, offset=offset, stats=_stats,
+    )
+    # Pipeline counters (global, independent of the active filter) so the ops UI
+    # can badge the unpaid-lead funnel vs paid work and keep counts while filtering.
+    counts = {"unpaid_lead": 0, "paid": 0, "subscription": 0}
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+        _c.row_factory = __import__("aiosqlite").Row
+        # team_member sees claims where they are the primary OR an additional assignee (grant-only).
+        _sid = int(staff['staff_id'])
+        _scope = "" if staff["role"] != "team_member" else (
+            f" WHERE (assigned_to_staff_id={_sid} OR EXISTS(SELECT 1 FROM nidaan_claim_assignees ca "
+            f"WHERE ca.claim_id=nidaan_claims.claim_id AND ca.staff_id={_sid}))")
+        for r in await (await _c.execute(
+                f"SELECT payment_status, COUNT(*) n FROM nidaan_claims{_scope} GROUP BY payment_status")).fetchall():
+            counts[r["payment_status"] or "paid"] = r["n"]
+    # `count` keeps its meaning (this page's size) because callers read it. `total` is how many
+    # match the filters — what a pager needs, and what nothing could previously ask for.
+    return {"claims": claims, "count": len(claims),
+            "total": _stats.get("total", len(claims)),
+            "limit": limit, "offset": offset, "pipeline": counts}
+
+
+class OpsClaimArchiveReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    claim_ids: list[int]
+    archived: bool = True   # True = archive, False = restore
+
+
+@app.post("/nidaan/ops/api/claims/archive")
+@limiter.limit("30/minute")
+async def ops_archive_claims(body: OpsClaimArchiveReq, request: Request):
+    """Super-admin/admin: move test/garbage claims to the Archive (or restore them). Claims are
+    hidden from every working view but never deleted. Audited with the real actor."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "sub_super_admin")
+    ids = [int(c) for c in (body.claim_ids or [])][:500]
+    if not ids:
+        raise HTTPException(status_code=400, detail="No claims selected")
+    n = await nidaan.set_claims_archived(ids, body.archived, actor=_actor_label(caller))
+    await _ops_audit(request, "claim.archive" if body.archived else "claim.restore",
+                     "claim", ",".join(str(i) for i in ids[:20]),
+                     f"{'archived' if body.archived else 'restored'} {n} claim(s)")
+    return {"ok": True, "updated": n, "archived": body.archived}
+
+
+@app.get("/nidaan/ops/api/claims/{claim_id}")
+async def ops_get_claim(claim_id: int, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "team_member")
+    # Build full detail
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as conn:
+        conn.row_factory = __import__("aiosqlite").Row
+        cur = await conn.execute(
+            """SELECT c.*,
+                    a.owner_name, a.firm_name, a.email AS advisor_email, a.phone AS advisor_phone,
+                    s.name AS assigned_staff_name
+               FROM nidaan_claims c
+               JOIN nidaan_accounts a ON a.account_id = c.account_id
+               LEFT JOIN nidaan_staff s ON s.staff_id = c.assigned_to_staff_id
+               WHERE c.claim_id=?""",
+            (claim_id,),
+        )
+        row = await cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404)
+        claim = dict(row)
+        # team_member can only see claims they're assigned to (primary or additional assignee)
+        if staff["role"] == "team_member" and claim.get("assigned_to_staff_id") != staff["staff_id"] \
+                and not await nidaan.is_claim_assignee(claim_id, staff["staff_id"]):
+            raise HTTPException(status_code=403)
+        # Status log
+        log_cur = await conn.execute(
+            "SELECT * FROM nidaan_claim_status_log WHERE claim_id=? ORDER BY changed_at ASC",
+            (claim_id,),
+        )
+        claim["status_log"] = [dict(r) for r in await log_cur.fetchall()]
+    claim["notes"] = _enrich_note_attachments(
+        await nidaan.get_claim_notes(claim_id), staff["staff_id"],
+        staff.get("role") in ("super_admin", "sub_super_admin"))
+    claim["followups"] = await nidaan.get_followups_for_claim(claim_id)
+    claim["assignees"] = await nidaan.get_claim_assignees(claim_id)
+    # Where it came from, with NAMES. The claims LIST already resolved a branch code into a human
+    # name; this endpoint never did, so the one screen where somebody actually works a claim was
+    # the one screen that could only show a code. Never allowed to fail the claim itself.
+    try:
+        claim["origin_detail"] = await nidaan.claim_origin(
+            claim_id, lang=(request.query_params.get("lang") or "en"))
+    except Exception as _oe:  # noqa: BLE001
+        logger.info("could not resolve the origin of claim %s: %s", claim_id, _oe)
+        claim["origin_detail"] = {}
+    return claim
+
+
+class OpsClaimAssign(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
+    staff_id: Optional[int] = None                       # back-compat (single assignee)
+    staff_ids: Optional[list[int]] = Field(None, max_length=20)   # multi-assign
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/assign")
+async def ops_assign_claim(claim_id: int, body: OpsClaimAssign, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request)  # claim (re)assignment open to all staff — audited via _ops_audit below
+    # Assignee list from staff_ids (preferred) or the legacy single staff_id. staff_ids[0] = PRIMARY.
+    ids, seen = [], set()
+    for s in ((body.staff_ids or []) + ([body.staff_id] if body.staff_id else [])):
+        try:
+            s = int(s)
+        except (TypeError, ValueError):
+            continue
+        if s and s not in seen:
+            seen.add(s); ids.append(s)
+    if not ids:
+        raise HTTPException(status_code=400, detail="Select at least one staff member")
+    ok = await nidaan.set_claim_assignees(
+        claim_id, ids, assigned_by_id=caller["staff_id"], assigned_by_role=caller["role"])
+    if not ok:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    # Non-blocking email to every assignee.
+    try:
+        import asyncio as _ae3
+        async def _notify_all():
+            claim = await nidaan.get_claim_with_account(claim_id)
+            if not claim:
+                return
+            for sid in ids:
+                try:
+                    staff = await nidaan.get_staff_by_id(sid)
+                    if staff and staff.get("email"):
+                        await email_svc.send_nidaan_claim_assigned_staff_email(
+                            to_email=staff["email"], staff_name=staff["name"], claim_id=claim_id,
+                            insured_name=claim.get("insured_name", ""),
+                            claim_type=claim.get("claim_type", ""),
+                            advisor_name=claim.get("owner_name", ""),
+                            advisor_phone=claim.get("advisor_phone", ""))
+                except Exception:
+                    pass
+        _ae3.ensure_future(_notify_all())
+        # Dashboard bell + Telegram mirror for each assignee (email is sent above),
+        # so assignees are notified on all three channels.
+        import biz_nidaan_notifications as _nnot_asg
+        _ae3.ensure_future(_nnot_asg.on_claim_assigned(claim_id, ids, caller["staff_id"]))
+        # Make assignees "watchers" too, so they keep getting ALL ongoing claim activity
+        # (notes/messages/status) on every channel — not just this one assignment ping.
+        try:
+            await nidaan.add_claim_watchers(claim_id, ids, caller["staff_id"], relation="assignee")
+        except Exception:
+            pass
+    except Exception:
+        pass
+    await _ops_audit(request, "claim.assign", "claim", claim_id, f"Assigned to {len(ids)} staff: {ids}")
+    return {"claim_id": claim_id, "assigned_to": ids}
+
+
+@app.get("/nidaan/ops/api/claims-auto-assign")
+async def ops_claims_auto_assign_get(request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    return {"on": await nidaan.is_claim_auto_assign()}
+
+
+class OpsAutoAssignReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    on: bool
+
+
+@app.patch("/nidaan/ops/api/claims-auto-assign")
+async def ops_claims_auto_assign_set(body: OpsAutoAssignReq, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    await nidaan.set_claim_auto_assign(body.on)
+    await _ops_audit(request, "claim.auto_assign_toggle", "claims", "auto_assign",
+                     "on" if body.on else "off")
+    return {"ok": True, "on": body.on}
+
+
+class OpsClaimInfoUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    insured_name: Optional[str] = Field(None, max_length=120)
+    insured_phone: Optional[str] = Field(None, max_length=15)
+    insured_email: Optional[str] = Field(None, max_length=120)
+    claim_type: Optional[str] = Field(None, max_length=40)
+    insurer_name: Optional[str] = Field(None, max_length=120)
+    policy_no: Optional[str] = Field(None, max_length=80)
+    disputed_amount: Optional[int] = Field(None, ge=0, le=100000000)
+    # The complainant is often not the insured - a son handling his mother's claim - and theirs
+    # is the number we ring and the address the dashboard link goes to (founder, 22 Sep).
+    complainant_name: Optional[str] = Field(None, max_length=120)
+    complainant_phone: Optional[str] = Field(None, max_length=15)
+    complainant_email: Optional[str] = Field(None, max_length=120)
+
+
+@app.patch("/nidaan/ops/api/claims/{claim_id}/info")
+async def ops_update_claim_info(claim_id: int, body: OpsClaimInfoUpdate, request: Request):
+    """Super-admin/Admin: correct a claim's core details (name/phone/email/type/insurer/policy/
+    disputed amount). Only supplied fields change."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "sub_super_admin")
+    data = {k: v for k, v in body.model_dump().items() if v is not None}
+    if not data:
+        raise HTTPException(400, "Nothing to update")
+    # The gist's facts lock once the drafts are finished - here as on the gist form, or this
+    # would be a second way round the lock.
+    import biz_nidaan_buckets as _bk
+    locks = await _bk.locked_fields(await _bk._claim_row(claim_id), caller.get("role") or "")
+    hit = [k for k in data if k in locks]
+    if hit:
+        import aiosqlite as _aio0
+        async with _aio0.connect(nidaan.DB_PATH) as c:
+            cur = await (await c.execute(
+                "SELECT %s FROM nidaan_claims WHERE claim_id=?" % ", ".join(hit), (claim_id,))).fetchone()
+        for k, old in zip(hit, cur or [None] * len(hit)):
+            if str(old if old is not None else "").strip().lower() != str(data[k]).strip().lower():
+                raise HTTPException(400, _bk.lock_message(locks[k]))
+    # What the claim could be reached on BEFORE the edit, so we can tell whether this is the
+    # moment it became reachable at all.
+    had_email = ""
+    try:
+        import aiosqlite as _aioc
+        async with _aioc.connect(nidaan.DB_PATH) as c:
+            r0 = await (await c.execute(
+                "SELECT COALESCE(complainant_email, insured_email, '') FROM nidaan_claims "
+                "WHERE claim_id=?", (claim_id,))).fetchone()
+        had_email = ((r0[0] if r0 else "") or "").strip().lower()
+    except Exception:
+        had_email = ""
+
+    if not await nidaan.update_claim_info(claim_id, **data):
+        raise HTTPException(404, "Claim not found or nothing changed")
+    await _ops_audit(request, "claim.info_edit", "claim", str(claim_id),
+                     ", ".join(f"{k}" for k in data))
+
+    # PUTTING AN EMAIL ON A CLAIM IS THE MOMENT IT BECOMES REACHABLE, and it is exactly when
+    # somebody expects the dashboard link to arrive (founder, 22 Sep). Sent only when the address
+    # actually changed, so correcting a policy number does not re-send it; and never allowed to
+    # fail the edit, because a saved correction must not be undone by a mail server.
+    emailed = None
+    new_email = ((data.get("complainant_email") or data.get("insured_email") or "")).strip().lower()
+    if new_email and new_email != had_email:
+        try:
+            res = await claimant.send_greeting_email(claim_id, force=True)
+            emailed = bool(res.get("ok"))
+            await _ops_audit(request, "claimant_portal.email", "claim", str(claim_id),
+                             f"link sent to the new address; sent={emailed}")
+        except Exception as e:  # noqa: BLE001
+            logger.warning("portal email after info edit failed claim=%s: %s", claim_id, e)
+            emailed = False
+    return {"ok": True, "emailed": emailed}
+
+
+class OpsAdvisorUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    owner_name: Optional[str] = Field(None, max_length=120)
+    firm_name: Optional[str] = Field(None, max_length=160)
+    phone: Optional[str] = Field(None, max_length=15)
+    email: Optional[str] = Field(None, max_length=120)
+
+
+@app.patch("/nidaan/ops/api/claims/{claim_id}/advisor")
+async def ops_update_claim_advisor(claim_id: int, body: OpsAdvisorUpdate, request: Request):
+    """Super-admin/Admin: correct the advisor/account details behind a claim."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    claim = await nidaan.get_claim_with_account(claim_id)
+    if not claim:
+        raise HTTPException(404, "Claim not found")
+    acct_id = claim.get("account_id")
+    if not acct_id:
+        raise HTTPException(400, "This claim has no linked account")
+    data = {k: v for k, v in body.model_dump().items() if v is not None}
+    if not data:
+        raise HTTPException(400, "Nothing to update")
+    try:
+        if not await nidaan.update_account_profile(int(acct_id), **data):
+            raise HTTPException(404, "Account not found or nothing changed")
+    except ValueError as ve:
+        raise HTTPException(400, detail=str(ve))
+    await _ops_audit(request, "claim.advisor_edit", "account", str(acct_id),
+                     ", ".join(f"{k}" for k in data))
+    return {"ok": True}
+
+
+class OpsClaimStatusUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
+    new_status: str
+    note: str = ""
+
+@app.patch("/nidaan/ops/api/claims/{claim_id}/status")
+async def ops_update_claim_status(claim_id: int, body: OpsClaimStatusUpdate, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "team_member")
+    # team_member: verify they are an assignee (primary or additional) of this claim
+    if staff["role"] == "team_member" and not await nidaan.is_claim_assignee(claim_id, staff["staff_id"]):
+        raise HTTPException(status_code=403, detail="Not assigned to this claim")
+    try:
+        ok = await nidaan.update_claim_status(
+            claim_id=claim_id, new_status=body.new_status,
+            changed_by_type=staff["role"], changed_by_id=staff["staff_id"],
+            note=body.note,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if not ok:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    await _ops_audit(request, "claim.status", "claim", claim_id,
+                     f"→ {body.new_status}" + (f" ({body.note[:80]})" if body.note else ""))
+    # Non-blocking advisor email
+    try:
+        claim = await nidaan.get_claim_with_account(claim_id)
+        if claim and claim.get("email"):
+            import asyncio as _ae2
+            _ae2.ensure_future(
+                email_svc.send_nidaan_claim_status_email(
+                    to_email=claim["email"],
+                    owner_name=claim.get("owner_name", ""),
+                    claim_id=claim_id,
+                    insured_name=claim.get("insured_name", ""),
+                    claim_type=claim.get("claim_type", ""),
+                    new_status=body.new_status,
+                    note=body.note,
+                )
+            )
+    except Exception:
+        pass
+    # Everyone else involved — complainant, branch / My Business, and the referring staff — used
+    # to learn nothing on a status change (only the account holder was emailed above).
+    try:
+        import biz_nidaan_claim_parties as _cp
+        from biz_nidaan_notifications import _cn as _claim_no
+        _st = (body.new_status or "").replace("_", " ")
+        _who = ""
+        try:
+            _who = f" for {claim.get('insured_name','')}" if claim else ""
+        except Exception:
+            _who = ""
+        # `_asyncio` was never imported in this function. The call raised NameError, the
+        # `except` below swallowed it, and the status-change fan-out has never once run - which
+        # is why nidaan_notifications holds ZERO rows for claim.status. Found by
+        # deploy/verify-python-names.py, written the same day for the identical bug in the
+        # webhook stamp.
+        import asyncio as _asyncio
+        _asyncio.create_task(_cp.notify_claim_parties(
+            claim_id, event_key="claim.status",
+            subject=f"Claim #{_claim_no(claim_id)} update — {_st}",
+            body=(f"The claim #{_claim_no(claim_id)}{_who} has moved to: {_st}."
+                  + (f"\n\nNote: {body.note}" if body.note else "")
+                  + "\n\nOpen it on your dashboard for the full trail."),
+            roles=["complainant", "branch", "staff"]))
+    except Exception as _pe:
+        logger.info("claim-party fan-out failed for claim %s: %s", claim_id, _pe)
+    return {"claim_id": claim_id, "status": body.new_status}
+
+
+# ── Go/no-go review templates (staff pick at delivery; super-admin manages) ───
+@app.get("/nidaan/ops/api/review-templates")
+async def ops_review_templates_list(request: Request, outcome: Optional[str] = None,
+                                     include_inactive: bool = False):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    return {"templates": await nidaan.list_review_templates(
+        outcome=outcome, active_only=not include_inactive)}
+
+
+class OpsReviewTemplateCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    outcome: str = Field(..., pattern=r"^(can_fight|no_scope)$")
+    title: str = Field(..., min_length=1, max_length=120)
+    body: str = Field(..., min_length=1, max_length=4000)
+
+
+@app.post("/nidaan/ops/api/review-templates")
+async def ops_review_template_create(body: OpsReviewTemplateCreate, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    try:
+        tid = await nidaan.create_review_template(body.outcome, body.title, body.body)
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    await _ops_audit(request, "review_template.create", "review_template", str(tid), body.title[:80])
+    return {"ok": True, "template_id": tid}
+
+
+class OpsReviewTemplateUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    title: Optional[str] = Field(None, max_length=120)
+    body: Optional[str] = Field(None, max_length=4000)
+    active: Optional[bool] = None
+
+
+@app.patch("/nidaan/ops/api/review-templates/{template_id}")
+async def ops_review_template_update(template_id: int, body: OpsReviewTemplateUpdate, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    try:
+        ok = await nidaan.update_review_template(template_id, title=body.title, body=body.body, active=body.active)
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    if not ok:
+        raise HTTPException(status_code=404, detail="Template not found / nothing to update")
+    await _ops_audit(request, "review_template.update", "review_template", str(template_id), "")
+    return {"ok": True}
+
+
+@app.delete("/nidaan/ops/api/review-templates/{template_id}")
+async def ops_review_template_delete(template_id: int, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    if not await nidaan.delete_review_template(template_id):
+        raise HTTPException(status_code=404, detail="Template not found")
+    await _ops_audit(request, "review_template.delete", "review_template", str(template_id), "")
+    return {"ok": True}
+
+
+class OpsDeliverReviewReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    outcome: str   # 'can_fight' | 'no_scope'
+    findings: str  # the assessment text shared with the customer
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/deliver-review")
+@limiter.limit("20/minute")
+async def ops_deliver_review(claim_id: int, body: OpsDeliverReviewReq, request: Request):
+    """Ops delivers the legal assessment: sets status='review_delivered', records
+    outcome + findings, and notifies the customer (dashboard + WhatsApp + email)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "team_member")
+    if staff["role"] == "team_member" and not await nidaan.is_claim_assignee(claim_id, staff["staff_id"]):
+        raise HTTPException(status_code=403, detail="Not assigned to this claim")
+    try:
+        ok = await nidaan.deliver_review(
+            claim_id=claim_id, outcome=body.outcome, findings=body.findings,
+            changed_by_type=staff["role"], changed_by_id=staff["staff_id"])
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if not ok:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    try:
+        import biz_nidaan_notifications as _nnot
+        asyncio.create_task(_nnot.on_report_ready(claim_id))
+        # #7: a GO outcome moves the claim into the L2 section → alert SA/admins/assignees.
+        if body.outcome == "can_fight":
+            asyncio.create_task(_nnot.on_moved_to_l2(claim_id))
+    except Exception as _e:
+        logger.warning("on_report_ready dispatch failed for claim %s: %s", claim_id, _e)
+    return {"claim_id": claim_id, "status": "review_delivered", "outcome": body.outcome}
+
+
+# ── Review Requests ₹499 (ops staff, sub_super_admin+) ───────────────────────
+
+@app.get("/nidaan/ops/api/review-requests")
+async def ops_list_review_requests(
+    request: Request,
+    status: Optional[str] = None,
+    limit: int = 100,
+    offset: int = 0,
+):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    reviews = await nidaan.get_review_requests_admin(status=status, limit=limit, offset=offset)
+    return {"reviews": reviews, "count": len(reviews)}
+
+
+class OpsReviewStatusUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
+    new_status: str
+    note: str = ""
+    findings_note: str = ""
+
+
+@app.patch("/nidaan/ops/api/review-requests/{purchase_id}/status")
+async def ops_update_review_status(
+    purchase_id: int,
+    body: OpsReviewStatusUpdate,
+    request: Request,
+):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "sub_super_admin")
+    try:
+        ok = await nidaan.update_review_request_status(
+            purchase_id=purchase_id,
+            new_status=body.new_status,
+            note=body.note,
+            findings_note=body.findings_note or None,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if not ok:
+        raise HTTPException(status_code=404, detail="Review request not found")
+    logger.info("Review request %d status updated to %s by staff %d",
+                purchase_id, body.new_status, staff["staff_id"])
+    return {"purchase_id": purchase_id, "status": body.new_status}
+
+
+# ── Notes ─────────────────────────────────────────────────────────────────────
+
+class OpsAddNote(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
+    note: str = ""
+    parent_note_id: Optional[int] = None       # threaded reply (flattened one level)
+    mentions: Optional[list[int]] = None        # staff_ids to @mention on this note
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/notes")
+async def ops_add_note(claim_id: int, body: OpsAddNote, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "team_member")
+    note_txt = (body.note or "").strip()
+    if not note_txt:
+        raise HTTPException(status_code=400, detail="Empty note")
+    note_id = await nidaan.add_claim_note(claim_id, staff["staff_id"], note_txt,
+                                          parent_note_id=body.parent_note_id,
+                                          source=_req_source(request))
+    # @mentions → record participants + persist them as 'involved' watchers + alert
+    # the newly-tagged staff (fire-and-forget).
+    mention_ids = [int(x) for x in (body.mentions or []) if int(x) != staff["staff_id"]]
+    if mention_ids:
+        try:
+            stored = await nidaan.set_claim_note_mentions(note_id, claim_id, mention_ids)
+            await nidaan.add_claim_watchers(claim_id, mention_ids, staff["staff_id"])
+            import biz_nidaan_notifications as _nnot
+            asyncio.create_task(_nnot.on_claim_note_mention(
+                {"claim_id": claim_id}, stored, staff["staff_id"], staff.get("name", ""), note_txt))
+        except Exception:
+            pass
+    # Keep already-involved watchers in the loop on the new note (minus author + those
+    # just @mentioned, who are alerted above), on dashboard + Telegram.
+    try:
+        import biz_nidaan_notifications as _nnot2
+        _wsubj = f"📝 New note on claim #{claim_id}"
+        _wbody = (f"{staff.get('name','A teammate')} added a note on claim #{claim_id}:\n"
+                  f"\"{note_txt[:140]}\"\n\nOpen: /admin?claim={claim_id}")
+        asyncio.create_task(_nnot2.notify_claim_watchers(
+            claim_id, _wsubj, _wbody, exclude_ids=[staff["staff_id"]] + mention_ids))
+    except Exception:
+        pass
+    return {"note_id": note_id, "claim_id": claim_id}
+
+
+def _enrich_note_attachments(notes: list, staff_id: Optional[int] = None,
+                             is_admin: bool = False) -> list:
+    """Add a signed view URL to each claim-note attachment (files live behind the signed-URL guard)
+    and a server-authoritative `deletable` flag on notes + attachments (uploader/author within 1h, or
+    admin any time — same rule the DELETE endpoints enforce). Mutates + returns the list."""
+    from datetime import datetime as _dtm
+    _now = _dtm.utcnow()
+    _WIN = 3600
+
+    def _fresh(ts) -> bool:
+        try:
+            return (_now - _dtm.fromisoformat(str(ts).replace(" ", "T"))).total_seconds() <= _WIN
+        except Exception:
+            return False
+
+    for n in notes or []:
+        n["deletable"] = bool(is_admin or (staff_id and n.get("staff_id") == staff_id and _fresh(n.get("created_at"))))
+        for a in n.get("attachments", []) or []:
+            try:
+                a["url"] = _nidaan_doc_url(a["stored_name"])
+            except Exception:
+                pass
+            a["deletable"] = bool(is_admin or (staff_id and a.get("uploaded_by") == staff_id and _fresh(a.get("uploaded_at"))))
+    return notes
+
+
+@app.get("/nidaan/ops/api/claims/{claim_id}/notes")
+async def ops_get_notes(claim_id: int, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "team_member")
+    is_admin = staff.get("role") in ("super_admin", "sub_super_admin")
+    return {"notes": _enrich_note_attachments(await nidaan.get_claim_notes(claim_id),
+                                              staff["staff_id"], is_admin)}
+
+
+@app.get("/nidaan/ops/api/claims/{claim_id}/mention-candidates")
+async def ops_claim_mention_candidates(claim_id: int, request: Request):
+    """Staff who can be @mentioned on a claim note (assignees first, then other active staff)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    return {"candidates": await nidaan.get_claim_mention_candidates(claim_id)}
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/notes/mark-read")
+async def ops_claim_notes_mark_read(claim_id: int, request: Request):
+    """Mark all of this claim's notes read by the current staffer (WhatsApp-style receipts)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "team_member")
+    await nidaan.mark_claim_notes_read(claim_id, staff["staff_id"])
+    return {"ok": True}
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/notes/{note_id}/attachments")
+@limiter.limit("30/minute")
+async def ops_claim_note_attachments(claim_id: int, note_id: int, request: Request,
+                                     files: Optional[list[UploadFile]] = File(None),
+                                     file: Optional[UploadFile] = File(None)):
+    """Attach one or more files (≤10, ≤10 MB each) to a claim note. Mirrors the quick-task flow."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "team_member")
+    _incoming = [f for f in (files or []) if f is not None and (f.filename or "")]
+    if file is not None and (file.filename or ""):
+        _incoming.append(file)
+    if not _incoming:
+        raise HTTPException(400, "No files")
+    if len(_incoming) > 10:
+        raise HTTPException(400, "Up to 10 attachments per note")
+    import uuid as _uuid
+    saved: list[dict] = []
+    for _f in _incoming:
+        content = await _f.read()
+        # Shared gate: size, real bytes, allowed type, and an extension taken from those bytes.
+        # This previously trusted the client filename for the extension with no content check.
+        ext = await validate_upload_scanned(content, (_f.content_type or ""), what="attachment")
+        _stored = f"{_uuid.uuid4().hex}{ext}"
+        (_NIDAAN_DOCS_DIR / _stored).write_bytes(content)
+        saved.append({"stored_name": _stored, "original_name": _f.filename})
+    await nidaan.add_claim_note_attachments(claim_id=claim_id, note_id=note_id,
+                                            files=saved, uploaded_by=staff["staff_id"])
+    return {"ok": True, "count": len(saved)}
+
+
+@app.delete("/nidaan/ops/api/claims/{claim_id}/notes/attachments/{attachment_id}")
+async def ops_claim_note_attachment_delete(claim_id: int, attachment_id: int, request: Request):
+    """Delete a claim-note attachment — uploader within 1h, or an admin any time. Removes disk + row."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request)
+    is_admin = staff.get("role") in ("super_admin", "sub_super_admin")
+    try:
+        row = await nidaan.delete_claim_note_attachment(attachment_id, staff["staff_id"], is_admin)
+    except PermissionError as pe:
+        if str(pe) == "too_late":
+            raise HTTPException(403, "You can delete your own attachment within 1 hour of uploading. "
+                                     "After that, please ask a super-admin to remove it.")
+        raise HTTPException(403, "You can only delete attachments you uploaded.")
+    if not row:
+        raise HTTPException(404, "Attachment not found")
+    try:
+        _p = _NIDAAN_DOCS_DIR / row["stored_name"]
+        if _p.exists():
+            _p.unlink()
+    except Exception:
+        pass
+    await _ops_audit(request, "claim.note_attachment_delete", "claim", str(claim_id),
+                     f"attachment={attachment_id}")
+    return {"ok": True}
+
+
+@app.delete("/nidaan/ops/api/claims/{claim_id}/notes/{note_id}")
+async def ops_claim_note_delete(claim_id: int, note_id: int, request: Request):
+    """Delete a claim note — author within 1h, or an admin any time. Replies are promoted to top-level;
+    the note's own attachments are removed from disk."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request)
+    is_admin = staff.get("role") in ("super_admin", "sub_super_admin")
+    try:
+        res = await nidaan.delete_claim_note(note_id, staff["staff_id"], is_admin)
+    except PermissionError as pe:
+        if str(pe) == "too_late":
+            raise HTTPException(403, "You can delete your own note within 1 hour. "
+                                     "After that, please ask a super-admin.")
+        raise HTTPException(403, "You can only delete your own notes.")
+    if res is None:
+        raise HTTPException(404, "Note not found")
+    for sn in (res.get("attachments") or []):
+        try:
+            _p = _NIDAAN_DOCS_DIR / sn
+            if _p.exists():
+                _p.unlink()
+        except Exception:
+            pass
+    await _ops_audit(request, "claim.note_delete", "claim", str(claim_id), f"note={note_id}")
+    return {"ok": True}
+
+
+# ── Follow-ups ────────────────────────────────────────────────────────────────
+
+class OpsAddFollowup(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
+    due_date: str        # YYYY-MM-DD
+    note: str = ""
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/followups")
+async def ops_add_followup(claim_id: int, body: OpsAddFollowup, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "team_member")
+    fid = await nidaan.add_followup(claim_id, staff["staff_id"], body.due_date, body.note)
+    return {"followup_id": fid, "claim_id": claim_id}
+
+
+@app.patch("/nidaan/ops/api/followups/{followup_id}/done")
+async def ops_complete_followup(followup_id: int, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "team_member")
+    await nidaan.complete_followup(followup_id, staff["staff_id"])
+    return {"followup_id": followup_id, "status": "done"}
+
+
+@app.get("/nidaan/ops/api/my-followups")
+async def ops_my_followups(request: Request, status: str = "pending"):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "team_member")
+    items = await nidaan.get_followups_for_staff(staff["staff_id"], status=status)
+    return {"followups": items}
+
+
+# ── Advisor accounts (super_admin) ────────────────────────────────────────────
+
+class OpsCreateAccount(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
+    owner_name: str
+    email: str
+    phone: str
+    firm_name: str = ""
+
+class OpsUpdateAccount(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
+    owner_name: Optional[str] = None
+    firm_name: Optional[str] = None
+    phone: Optional[str] = None
+    status: Optional[str] = None
+    new_password: Optional[str] = None
+
+@app.get("/nidaan/ops/api/accounts")
+async def ops_list_accounts(request: Request, limit: int = 200, offset: int = 0):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    accounts = await nidaan.get_all_accounts_admin(limit=limit, offset=offset)
+    return {"accounts": accounts, "count": len(accounts)}
+
+
+@app.get("/nidaan/ops/api/accounts/duplicates")
+async def ops_account_duplicates(request: Request):
+    """Possible-duplicate account groups — strong (shared phone/email) + weak (same name). Admin+.
+    Read-only; the merge is a separate, super-admin, human-confirmed action."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    return {"groups": await nidaan.find_duplicate_accounts()}
+
+
+class _MergeAccountsReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    keeper_id: int
+    duplicate_id: int
+
+
+@app.post("/nidaan/ops/api/accounts/merge")
+async def ops_account_merge(body: _MergeAccountsReq, request: Request):
+    """Merge a DUPLICATE account into a KEEPER — moves the duplicate's claims to the keeper and archives
+    the duplicate (status='merged', never hard-deleted). super_admin only; audited."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    res = await nidaan.merge_accounts(body.keeper_id, body.duplicate_id)
+    if not res.get("ok"):
+        _emap = {"same_account": "Keeper and duplicate are the same account",
+                 "not_found": "Account not found",
+                 "already_merged": "That account is already merged",
+                 "duplicate_has_active_subscription":
+                     "The duplicate has an ACTIVE subscription — cancel or transfer it first, then merge"}
+        raise HTTPException(status_code=400,
+                            detail=_emap.get(res.get("error"), res.get("error") or "Merge failed"))
+    await _ops_audit(request, "account.merge", "account", str(body.duplicate_id),
+                     f"merged into {body.keeper_id}; moved {res.get('moved_claims', 0)} claim(s)")
+    return res
+
+
+# ══════════ DOCUMENT SPLITTER — standalone ops tool (all staff) ══════════
+@app.post("/nidaan/ops/api/docsplit/upload")
+@limiter.limit("20/minute")
+async def ops_docsplit_upload(request: Request, files: list[UploadFile] = File(...)):
+    """Upload one or more mixed files (PDF / JPEG / PNG / …) → merge → AI-detect the distinct documents
+    + page ranges → return them for human review. Any staff."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request)
+    raw = []
+    skipped_bad: list = []
+    for f in (files or [])[:12]:
+        b = await f.read()
+        if not b or len(b) > 30 * 1024 * 1024:   # 30 MB per file cap
+            continue
+        # Confirm it really is a document/image before it reaches the PDF pipeline. Silently
+        # skipping (rather than erroring) matches the existing tolerant behaviour of this tool.
+        if not _doc_magic_ok(b):
+            skipped_bad.append(f.filename or "file")
+            continue
+        raw.append((f.filename or "file", b))
+    if not raw:
+        raise HTTPException(status_code=400, detail="No readable files (max 30 MB each)")
+    pdf, n, skipped = docsplit.normalize_to_pdf(raw)
+    if n == 0:
+        raise HTTPException(status_code=400,
+                            detail="Couldn't read any pages. Supported: PDF, JPG, PNG (DOC/DOCX not yet).")
+    if n > docsplit.MAX_PAGES:
+        raise HTTPException(status_code=400,
+                            detail=f"Too many pages ({n}). Please split into batches of ≤{docsplit.MAX_PAGES}.")
+    job = docsplit.save_job(pdf)
+    documents = await docsplit.segment(pdf, n)
+    # Report files rejected as not-a-real-document alongside the pipeline's own skips, so the
+    # staffer sees WHY something didn't make it in rather than silently losing a page.
+    return {"job_id": job, "page_count": n, "documents": documents,
+            "skipped": list(skipped or []) + skipped_bad}
+
+
+@app.get("/nidaan/ops/api/docsplit/{job}/thumb/{page}")
+async def ops_docsplit_thumb(job: str, page: int, request: Request):
+    """A page thumbnail (PNG) for the review grid."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request)
+    pdf = docsplit.load_job(job)
+    if not pdf:
+        raise HTTPException(status_code=404, detail="Job expired — please re-upload")
+    png = docsplit.render_thumb(pdf, page)
+    if not png:
+        raise HTTPException(status_code=404, detail="No such page")
+    return Response(content=png, media_type="image/png",
+                    headers={"Cache-Control": "private, max-age=3600"})
+
+
+class _DocSplitDoc(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field("Document", max_length=100)
+    start: int = Field(..., ge=1)
+    end: int = Field(..., ge=1)
+
+
+class _DocSplitExportReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    documents: list[_DocSplitDoc]
+
+
+@app.post("/nidaan/ops/api/docsplit/{job}/export")
+async def ops_docsplit_export(job: str, body: _DocSplitExportReq, request: Request):
+    """Reviewer confirmed the split → export one PDF per document, as a zip."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request)
+    pdf = docsplit.load_job(job)
+    if not pdf:
+        raise HTTPException(status_code=404, detail="Job expired — please re-upload")
+    docs = docsplit.extract(pdf, [d.model_dump() for d in body.documents])
+    if not docs:
+        raise HTTPException(status_code=400, detail="No valid documents to export")
+    zbytes = docsplit.zip_docs(docs)
+    await _ops_audit(request, "docsplit.export", "docsplit", job, f"{len(docs)} document(s)")
+    return Response(content=zbytes, media_type="application/zip",
+                    headers={"Content-Disposition": "attachment; filename=segregated_documents.zip"})
+
+
+@app.get("/nidaan/ops/api/docsplit/{job}/pdf")
+async def ops_docsplit_collate(job: str, request: Request):
+    """Collator: return the whole uploaded batch as ONE clean merged PDF (all pages, in order).
+    Zero-AI, deterministic — the mixed files were already normalised + merged on upload. Any staff."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request)
+    pdf = docsplit.load_job(job)
+    if not pdf:
+        raise HTTPException(status_code=404, detail="Job expired — please re-upload")
+    await _ops_audit(request, "docsplit.collate", "docsplit", job, "merged to one PDF")
+    return Response(content=pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": "attachment; filename=merged_document.pdf"})
+
+
+@app.get("/nidaan/ops/api/docsplit/tasks")
+async def ops_docsplit_tasks(request: Request):
+    """The AI prompt-library: ready-made tasks staff can run on an uploaded file (or copy the
+    prompt to run in their own AI)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request)
+    return {"tasks": [{"key": k, "label": v["label"], "desc": v["desc"], "prompt": v["prompt"]}
+                      for k, v in docsplit.AI_TASKS.items()]}
+
+
+class _DocSplitTaskReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    task: str = Field(..., max_length=40)
+
+
+@app.post("/nidaan/ops/api/docsplit/{job}/ai-task")
+@limiter.limit("20/minute")
+async def ops_docsplit_ai_task(job: str, body: _DocSplitTaskReq, request: Request):
+    """Run one prompt-library task on the uploaded file → text result. AI cost is logged."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request)
+    pdf = docsplit.load_job(job)
+    if not pdf:
+        raise HTTPException(status_code=404, detail="Job expired — please re-upload")
+    res = await docsplit.run_ai_task(pdf, body.task)
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "Task failed")
+    await _ops_audit(request, "docsplit.ai_task", "docsplit", job, body.task)
+    return res
+
+
+@app.get("/nidaan/ops/api/accounts/{account_id}/detail")
+async def ops_account_detail(account_id: int, request: Request):
+    """Sub-admin+: full account detail — account info + claims + review purchases."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    import aiosqlite as _aio
+    async with _aio.connect(nidaan.DB_PATH) as conn:
+        conn.row_factory = _aio.Row
+        # Account info
+        cur = await conn.execute(
+            """SELECT a.*, COALESCE(s.plan, 'free') AS plan,
+                      s.status AS sub_status, s.current_period_end
+               FROM nidaan_accounts a
+               LEFT JOIN nidaan_subscriptions s
+                      ON s.account_id = a.account_id AND s.status = 'active'
+               WHERE a.account_id = ?""",
+            (account_id,),
+        )
+        account = dict(cur) if (cur := await cur.fetchone()) else None
+        if not account:
+            raise HTTPException(status_code=404, detail="Account not found")
+        # Claims
+        cur2 = await conn.execute(
+            """SELECT c.claim_id, c.insured_name, c.insured_phone, c.policy_no,
+                      c.insurer_name, c.disputed_amount, c.status, c.claim_type,
+                      c.created_at, c.last_status_at,
+                      n.name AS assigned_staff_name
+               FROM nidaan_claims c
+               LEFT JOIN nidaan_staff n ON n.staff_id = c.assigned_to_staff_id
+               WHERE c.account_id = ?
+               ORDER BY c.created_at DESC""",
+            (account_id,),
+        )
+        claims = [dict(r) for r in await cur2.fetchall()]
+        # Review purchases (₹499)
+        cur3 = await conn.execute(
+            """SELECT purchase_id, claim_type, amount_paid, status,
+                      linked_claim_id, findings_note, created_at, reviewed_at
+               FROM nidaan_per_claim_purchase
+               WHERE account_id = ? AND status NOT IN ('pending_payment', 'cancelled')
+               ORDER BY created_at DESC""",
+            (account_id,),
+        )
+        reviews = [dict(r) for r in await cur3.fetchall()]
+    return {"account": account, "claims": claims, "reviews": reviews}
+
+
+@app.post("/nidaan/ops/api/accounts")
+async def ops_create_account(body: OpsCreateAccount, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    account_id = await nidaan.create_account_by_admin(
+        body.owner_name, body.email, body.phone, body.firm_name
+    )
+    if not account_id:
+        raise HTTPException(status_code=409, detail="Email already registered")
+    return {"account_id": account_id, "email": body.email}
+
+
+@app.patch("/nidaan/ops/api/accounts/{account_id}")
+async def ops_update_account(account_id: int, body: OpsUpdateAccount, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    await nidaan.admin_update_account(
+        account_id=account_id,
+        owner_name=body.owner_name,
+        firm_name=body.firm_name,
+        phone=body.phone,
+        status=body.status,
+    )
+    if body.new_password:
+        if len(body.new_password) < 8:
+            raise HTTPException(status_code=400, detail="Password min 8 characters")
+        await nidaan.admin_set_account_password(account_id, body.new_password)
+    _ab = [f"{k}={v}" for k, v in (("status", body.status), ("name", body.owner_name)) if v is not None]
+    if body.new_password:
+        _ab.append("password reset")
+    await _ops_audit(request, "account.update", "account", account_id, "; ".join(_ab) or "updated")
+    return {"account_id": account_id, "updated": True}
+
+
+@app.delete("/nidaan/ops/api/accounts/{account_id}")
+async def ops_delete_account(account_id: int, request: Request):
+    """Superadmin hard-delete of a customer account (DPDP-safe purge: removes
+    claims/docs/PII, keeps an anonymised billing shell). Audit-logged."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    acct = await nidaan.get_account_by_id(account_id)
+    if not acct:
+        raise HTTPException(status_code=404, detail="Account not found")
+    if acct.get("status") == "deleted":
+        return {"account_id": account_id, "already_deleted": True}
+    label = f"{acct.get('owner_name','')} <{acct.get('email','')}>"
+    res = await nidaan.execute_account_erasure(account_id)
+    await _ops_audit(request, "account.delete", "account", account_id,
+                     f"Deleted {label} — {res.get('claims_deleted',0)} claims, {res.get('files_deleted',0)} files")
+    return {"account_id": account_id, "deleted": True, **res}
+
+
+class OpsBulkDelete(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    account_ids: list[int]
+
+
+@app.post("/nidaan/ops/api/accounts/bulk-delete")
+async def ops_bulk_delete_accounts(body: OpsBulkDelete, request: Request):
+    """Superadmin bulk hard-delete of accounts. Audit-logged per account."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    ids = list(dict.fromkeys(body.account_ids))[:200]  # de-dup, cap
+    deleted, skipped = [], []
+    for aid in ids:
+        acct = await nidaan.get_account_by_id(aid)
+        if not acct or acct.get("status") == "deleted":
+            skipped.append(aid); continue
+        label = f"{acct.get('owner_name','')} <{acct.get('email','')}>"
+        try:
+            res = await nidaan.execute_account_erasure(aid)
+            await _ops_audit(request, "account.delete", "account", aid,
+                             f"[bulk] Deleted {label} — {res.get('claims_deleted',0)} claims")
+            deleted.append(aid)
+        except Exception as e:
+            logger.warning("bulk delete failed for account %s: %s", aid, e)
+            skipped.append(aid)
+    return {"deleted": deleted, "skipped": skipped, "count": len(deleted)}
+
+
+@app.post("/nidaan/ops/api/accounts/{account_id}/impersonate")
+async def ops_impersonate(account_id: int, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "super_admin")
+    result = await nidaan.impersonate_account(account_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Account not found")
+    logger.warning("IMPERSONATE: staff_id=%d impersonating account_id=%d (%s)",
+                   caller["staff_id"], account_id, result["email"])
+    return {"advisor_token": result["token"], "account_id": account_id,
+            "owner_name": result["owner_name"], "plan": result["plan"],
+            "dashboard_url": "/nidaan/dashboard"}
+
+
+@app.get("/nidaan/ops/api/accounts/{account_id}/sarathi-link")
+async def ops_account_sarathi_link(account_id: int, request: Request):
+    """Super admin: check if this Nidaan account has a linked Sarathi CRM tenant."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    link = await nidaan.get_sarathi_tenant_for_nidaan(account_id)
+    return {"account_id": account_id, "link": link}
+
+
+@app.post("/nidaan/ops/api/staff/{staff_id}/impersonate")
+async def ops_impersonate_staff(staff_id: int, request: Request):
+    """Super admin: generate a staff token to act as another staff member."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "super_admin")
+    if caller["staff_id"] == staff_id:
+        raise HTTPException(status_code=400, detail="Cannot impersonate yourself")
+    target = await nidaan.get_staff_by_id(staff_id)
+    if not target or target.get("status") != "active":
+        raise HTTPException(status_code=404, detail="Staff not found or inactive")
+    token = nidaan.create_staff_token(
+        target["staff_id"], target["role"], target["name"],
+        imp_by_id=caller["staff_id"],
+        imp_by_name=(caller.get("name") or caller.get("email") or ("staff#" + str(caller["staff_id"]))))
+    logger.warning("STAFF_IMPERSONATE: staff_id=%d impersonating staff_id=%d (%s role=%s)",
+                   caller["staff_id"], staff_id, target["email"], target["role"])
+    return {"staff_token": token, "staff_id": staff_id, "role": target["role"],
+            "name": target["name"], "ops_url": "/admins"}
+
+
+@app.post("/nidaan/ops/api/branches/{branch_code}/impersonate")
+async def ops_impersonate_branch(branch_code: str, request: Request):
+    """Super admin / admin: enter a branch's own dashboard (mint a short-lived branch token to view
+    what the branch sees). Audited. Branches self-serve password via email OTP, so no reset here —
+    this is purely 'see inside their dashboard'."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "sub_super_admin")
+    branch = await nidaan.get_branch(branch_code)
+    if not branch:
+        raise HTTPException(status_code=404, detail="Branch not found")
+    token = nidaan.create_branch_token(branch["branch_code"])
+    logger.warning("BRANCH_IMPERSONATE: staff_id=%d entering branch=%s dashboard",
+                   caller["staff_id"], branch["branch_code"])
+    try:
+        await _ops_audit(request, "branch.impersonate", "branch", branch["branch_code"],
+                         "super-admin entered branch dashboard")
+    except Exception:
+        pass
+    return {"branch_token": token, "branch_code": branch["branch_code"], "url": "/nidaan/branch"}
+
+
+# ── Revenue + Refunds: gated to the platform owner only ──────────────────────
+# Other super_admins do NOT see revenue or refund admin. Owner is matched by
+# email (case-insensitive). Configurable later via system flag if needed.
+NIDAAN_OWNER_EMAIL = "dushyant@nidaanpartner.com"
+
+
+async def _require_owner(request):
+    staff = _require_staff(request, "super_admin")
+    # JWT carries staff_id but not email; do the lookup once.
+    email = (staff.get("email", "") or "").lower()
+    if not email:
+        record = await nidaan.get_staff_by_id(staff["staff_id"])
+        email = ((record or {}).get("email", "") or "").lower()
+        if record:
+            staff["email"] = record.get("email", "")
+    if email != NIDAAN_OWNER_EMAIL.lower():
+        raise HTTPException(status_code=403, detail="Owner-only view")
+    return staff
+
+
+@app.get("/nidaan/ops/api/revenue")
+async def ops_revenue(request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    await _require_owner(request)
+    return await nidaan.get_revenue_stats()
+
+
+# ── Refunds (owner only — lives inside Revenue tab) ──────────────────────────
+@app.get("/nidaan/ops/api/refunds")
+async def ops_refunds_list(request: Request, status: Optional[str] = None, limit: int = 200):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    await _require_owner(request)
+    rows = await nidaan.list_refunds(status=status, limit=limit)
+    pending_review = await nidaan.find_eligible_unrefunded_cancellations(days=30)
+    return {"refunds": rows, "needs_review": pending_review,
+            "policy": {"window_days": nidaan.REFUND_WINDOW_DAYS,
+                       "require_zero_usage": nidaan.REFUND_REQUIRE_ZERO_USAGE}}
+
+
+class _ManualRefundReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
+    sub_id: int
+    amount: Optional[int] = None  # rupees; defaults to full subscription amount
+    reason: str = "manual_sa_override"
+
+
+@app.post("/nidaan/ops/api/refunds/{refund_id}/retry")
+async def ops_refund_retry(refund_id: int, request: Request):
+    """Re-attempt a refund that previously failed (e.g. Razorpay balance was 0)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = await _require_owner(request)
+    refund = await nidaan.get_refund(refund_id)
+    if not refund:
+        raise HTTPException(status_code=404, detail="refund_not_found")
+    if refund["status"] not in ("failed", "pending"):
+        raise HTTPException(status_code=409,
+                            detail=f"cannot_retry_status_{refund['status']}")
+
+    rzp_key_id = _nidaan_rzp_id()
+    rzp_secret = _nidaan_rzp_secret()
+    if not rzp_secret:
+        raise HTTPException(status_code=503, detail="razorpay_not_configured")
+
+    payment_id = refund.get("razorpay_payment_id", "") or ""
+    if not payment_id and refund.get("razorpay_order_id"):
+        payment_id = await nidaan.find_payment_id_via_razorpay(
+            refund["razorpay_order_id"], rzp_key_id, rzp_secret)
+    if not payment_id:
+        raise HTTPException(status_code=400, detail="cannot_resolve_payment_id")
+
+    await nidaan.update_refund_status(refund_id, "processing",
+                                      razorpay_payment_id=payment_id)
+    result = await nidaan.issue_razorpay_refund(
+        payment_id, int(refund["amount"]) * 100, rzp_key_id, rzp_secret,
+        notes={"refund_id": str(refund_id), "retry_by_staff": str(staff["staff_id"])})
+    if result.get("ok"):
+        await nidaan.update_refund_status(refund_id, "processed",
+                                          razorpay_refund_id=result.get("refund_id", ""))
+        logger.info("Refund retry succeeded: refund_id=%d staff=%d razorpay=%s",
+                    refund_id, staff["staff_id"], result.get("refund_id"))
+        return {"ok": True, "razorpay_refund_id": result.get("refund_id", "")}
+    await nidaan.update_refund_status(refund_id, "failed",
+                                      last_error=result.get("error", "")[:500])
+    raise HTTPException(status_code=502,
+                        detail=f"razorpay_failed: {result.get('error','')[:300]}")
+
+
+@app.post("/nidaan/ops/api/refunds/manual")
+@limiter.limit("10/minute")
+async def ops_refund_manual(body: _ManualRefundReq, request: Request):
+    """Owner-triggered refund (bypasses policy A — e.g. user complains beyond window)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = await _require_owner(request)
+
+    async with aiosqlite.connect(nidaan.DB_PATH) as _c:
+        _c.row_factory = aiosqlite.Row
+        sub = await (await _c.execute(
+            "SELECT * FROM nidaan_subscriptions WHERE sub_id=?", (body.sub_id,))).fetchone()
+        if not sub:
+            raise HTTPException(status_code=404, detail="subscription_not_found")
+        sub = dict(sub)
+        existing = await (await _c.execute(
+            "SELECT refund_id, status FROM nidaan_refunds WHERE sub_id=? "
+            "AND status IN ('pending','processing','processed') LIMIT 1",
+            (body.sub_id,))).fetchone()
+    if existing:
+        raise HTTPException(status_code=409,
+                            detail=f"refund_already_{existing['status']}")
+
+    amount_rupees = int(body.amount) if body.amount else int(sub.get("amount_paid", 0))
+    if amount_rupees <= 0:
+        raise HTTPException(status_code=400, detail="amount_must_be_positive")
+    if amount_rupees > int(sub.get("amount_paid", 0)):
+        raise HTTPException(status_code=400, detail="amount_exceeds_payment")
+
+    rzp_key_id = _nidaan_rzp_id()
+    rzp_secret = _nidaan_rzp_secret()
+    order_id = sub.get("razorpay_subscription_id", "") or ""
+    payment_id = sub.get("razorpay_payment_id", "") or ""
+    if not payment_id and order_id and rzp_secret:
+        payment_id = await nidaan.find_payment_id_via_razorpay(order_id, rzp_key_id, rzp_secret)
+
+    refund_id = await nidaan.create_refund_row(
+        sub_id=body.sub_id, account_id=sub["account_id"], amount=amount_rupees,
+        razorpay_order_id=order_id, razorpay_payment_id=payment_id,
+        reason=body.reason, requested_by_staff_id=staff["staff_id"])
+
+    if not payment_id or not rzp_secret:
+        await nidaan.update_refund_status(refund_id, "failed",
+                                          last_error="missing_payment_id_or_credentials")
+        raise HTTPException(status_code=502,
+                            detail=f"created_row_but_cannot_call_razorpay: refund_id={refund_id}")
+
+    await nidaan.update_refund_status(refund_id, "processing")
+    result = await nidaan.issue_razorpay_refund(
+        payment_id, amount_rupees * 100, rzp_key_id, rzp_secret,
+        notes={"sub_id": str(body.sub_id), "manual_by_staff": str(staff["staff_id"]),
+               "reason": body.reason[:200]})
+    if result.get("ok"):
+        await nidaan.update_refund_status(refund_id, "processed",
+                                          razorpay_refund_id=result.get("refund_id", ""))
+        logger.info("Manual refund processed by staff %d: refund_id=%d rzp=%s amount=₹%d",
+                    staff["staff_id"], refund_id, result.get("refund_id"), amount_rupees)
+        return {"ok": True, "refund_id": refund_id, "amount": amount_rupees,
+                "razorpay_refund_id": result.get("refund_id", "")}
+    await nidaan.update_refund_status(refund_id, "failed",
+                                      last_error=result.get("error", "")[:500])
+    raise HTTPException(status_code=502,
+                        detail=f"razorpay_refund_failed: {result.get('error','')[:200]}")
+
+
+# ── App health (super_admin only) ─────────────────────────────────────────────
+
+async def _subsystem_checks() -> list:
+    """Health of the subsystems added after this panel was first built (WhatsApp Cloud API,
+    Email Radar, Gemini, Doc Splitter, SMTP, renewals, reachability, backups).
+
+    Extracted so the App Health panel AND the proactive watchdog run the SAME checks -
+    two copies would drift, and a monitor that disagrees with the dashboard is worse than
+    no monitor. Returns [{name, ok, note}]."""
+    checks: list = []
+
+    def _chk(name, ok, note="", level="", where=""):
+        # level: "" lets ok/not-ok decide, as every existing caller expects. Pass "attention"
+        # for something that is TRUE but is work to do rather than a subsystem being down -
+        # those are shown amber and never counted as a failing subsystem.
+        lv = level or ("ok" if ok else "down")
+        checks.append({"name": name, "ok": lv != "down", "level": lv,
+                       "note": note, "where": where})
+
+    # ── Subsystems added since this panel was first built ────────────────────
+    # WhatsApp Cloud API (the live NidaanPartner number). The block above still reports the
+    # legacy Evolution slots; this is the one that actually sends today.
+    try:
+        import biz_nidaan_whatsapp as _cwa
+        if not _cwa.is_configured():
+            _chk("WhatsApp Cloud API", False, "not configured — WA_NIDAAN_* missing in biz.env")
+        else:
+            _h = await _cwa.number_health()
+            _st = (_h or {}).get("status") or ""
+            _plat = (_h or {}).get("platform_type") or ""
+            _ok = (_st == "CONNECTED")
+            _note = f"{(_h or {}).get('display_phone_number','')} · {_st or 'unknown'}"
+            if _plat and _plat != "CLOUD_API":
+                _note += f" · platform={_plat} (number NOT registered → every send fails 133010)"
+            _q = (_h or {}).get("quality_rating")
+            if _q and _q not in ("GREEN", "UNKNOWN"):
+                _note += f" · quality {_q}"
+            _chk("WhatsApp Cloud API", _ok, _note)
+    except Exception as _e:
+        _chk("WhatsApp Cloud API", False, f"check failed: {str(_e)[:70]}")
+    # WhatsApp journey master switch + approved-template wiring.
+    try:
+        import biz_nidaan_wa_orchestrator as _orch
+        _jon = str(await nidaan.get_ops_setting("wa_journey_enabled", "1")) in ("1", "true", "True")
+        _tmpl = sum(1 for v in _orch.JOURNEY_TEMPLATES.values() if v)
+        _chk("WA journey", _jon, ("ON" if _jon else "PAUSED by super-admin")
+             + f" · {_tmpl}/{len(_orch.JOURNEY_TEMPLATES)} templates wired")
+    except Exception as _e:
+        _chk("WA journey", False, f"check failed: {str(_e)[:70]}")
+    # IS THE WHATSAPP BOT ACTUALLY ANSWERING PEOPLE?
+    #
+    # Founder, 23 Sep: "until I message, I didn't know it's not working". He was right, and the
+    # check above is exactly why: "WhatsApp Cloud API" read CONNECTED / quality GREEN throughout,
+    # because it asks Meta about the NUMBER. The number was fine. Nobody was being answered.
+    #
+    # So this reads outcomes, and only outcomes:
+    #   1. of the inbound messages we DID receive, how many got a reply?
+    #   2. has ANY webhook reached us at all recently - a delivery status counts, and proves the
+    #      pipe from Meta is open even on a day nobody writes in.
+    #
+    # Silence is deliberately NOT a failure. This is a low-traffic number; a quiet Sunday must
+    # not page anybody. What IS a failure is somebody writing to us and getting nothing back.
+    try:
+        import biz_nidaan_whatsapp as _wab
+        if not _wab.is_configured():
+            _chk("WhatsApp bot replies", False, "not configured")
+        else:
+            async with aiosqlite.connect(nidaan.DB_PATH) as _wc:
+                _wc.row_factory = aiosqlite.Row
+                _in = [dict(r) for r in await (await _wc.execute(
+                    "SELECT msisdn, created_at FROM nidaan_wa_messages WHERE direction='in' "
+                    "AND created_at >= datetime('now','-24 hours') ORDER BY created_at")).fetchall()]
+                _unans = 0
+                for _m in _in:
+                    _r = await (await _wc.execute(
+                        "SELECT 1 FROM nidaan_wa_messages WHERE direction='out' AND msisdn=? "
+                        "AND created_at >= ? AND created_at <= datetime(?, '+15 minutes') LIMIT 1",
+                        (_m["msisdn"], _m["created_at"], _m["created_at"]))).fetchone()
+                    if not _r:
+                        _unans += 1
+                _last_in = await (await _wc.execute(
+                    "SELECT MAX(created_at) FROM nidaan_wa_messages WHERE direction='in'")).fetchone()
+            _li = (_last_in[0] if _last_in else "") or "never"
+            if _in and _unans >= len(_in) and len(_in) >= 2:
+                # NOBODY got an answer. That is not a backlog, that is a bot that is not
+                # replying - the outage this check was built for after "CONNECTED" read green
+                # for days while nobody was being answered.
+                _chk("WhatsApp bot replies", False,
+                     "NOBODY who wrote in the last 24h got a reply (%d people) — the bot is not "
+                     "answering" % len(_in))
+            elif _in and _unans:
+                # Some answered, some not. The connection is fine and messages are going out;
+                # this is a queue, and it belongs on the WhatsApp automation screen, not here.
+                _chk("WhatsApp bot replies", True,
+                     "working — %d of %d answered within 15 min; %d still waiting"
+                     % (len(_in) - _unans, len(_in), _unans),
+                     level="attention", where="WhatsApp automation")
+            elif _in:
+                _chk("WhatsApp bot replies", True,
+                     "%d inbound in 24h, every one answered" % len(_in))
+            else:
+                # Nobody wrote. Not a fault - but say when somebody last did, so a week of
+                # silence is visible as a week of silence rather than as "fine".
+                _chk("WhatsApp bot replies", True, "nobody wrote in 24h · last inbound %s" % _li)
+    except Exception as _e:
+        _chk("WhatsApp bot replies", False, f"check failed: {str(_e)[:70]}")
+    # DID THE LOGIN CODES ACTUALLY REACH ANYBODY? On 17 Sep every branch was locked out while
+    # every screen said fine: the endpoint answered "otp_sent", Brevo returned 201, and Google
+    # discarded the lot. biz_nidaan_login_health has recorded the OUTCOME of every code since.
+    # Reading it here puts it in front of the watchdog too, so staff are told before a
+    # complainant rings up saying the code never came — which is what the founder asked for.
+    try:
+        _lh = await _login_health.summary()
+        _bad, _sent_all, _fail_all = [], 0, 0
+        for _sys, _row in (_lh or {}).items():
+            _sent = int(_row.get("sent") or 0)
+            _fail = int(_row.get("failed") or 0)
+            _sent_all += _sent
+            _fail_all += _fail
+            # One failure is a phone off the network. Half of them failing is us.
+            if _sent >= 3 and _fail * 2 >= _sent:
+                _why = (_row.get("last_error") or "").strip()
+                _bad.append("%s %d of %d failed%s" % (
+                    _login_health.SYSTEMS.get(_sys, _sys), _fail, _sent,
+                    (" — " + _why[:70]) if _why else ""))
+        if _bad:
+            _chk("Login codes", False, " · ".join(_bad))
+        else:
+            _chk("Login codes", True,
+                 ("%d sent in 24h, %d failed" % (_sent_all, _fail_all)) if _sent_all
+                 else "none sent in the last 24h")
+    except Exception as _e:
+        _chk("Login codes", False, f"check failed: {str(_e)[:70]}")
+    # Email Radar — the two collection inboxes must be connected AND polling.
+    #
+    # ONE MAILBOX, ONE OPINION ON WHETHER IT IS DOWN. Radar polls every 15 minutes over IMAP, and
+    # a single poll failing is ordinary weather: a dropped connection, a slow Gmail. Radar itself
+    # has always known that — it waits for FAIL_ALERT_THRESHOLD consecutive failures before it
+    # alerts anybody, and the count resets the moment a poll succeeds.
+    #
+    # This check used to disagree with it. It went red on the FIRST failed poll, so on 19 Sep a
+    # blip on np@ that healed itself fifteen minutes later went out as "🔴 STOPPED WORKING" to ten
+    # super-admins, while radar's own alerting — correctly — stayed quiet. Two alarms on the same
+    # fact with different triggers is how people learn to ignore the alarm.
+    #
+    # So the threshold is radar's, read from radar. Below it the wobble is named in the note (the
+    # panel is where you look on purpose); at or above it, this goes red at the same moment radar
+    # pages, and the two agree.
+    try:
+        _mbs = await radar.list_mailboxes()
+        _act = [m for m in _mbs if m.get("is_active")]
+        _thr = getattr(radar, "FAIL_ALERT_THRESHOLD", 3)
+        _bad = [m for m in _act if (m.get("last_sync_status") or "") != "ok"]
+        _down = [m for m in _bad if int(m.get("fail_count") or 0) >= _thr]
+        # Split by id, not by dict equality: `m not in _down` would compare whole rows.
+        _dids = {m.get("mailbox_id") for m in _down}
+        _wobble = [m for m in _bad if m.get("mailbox_id") not in _dids]
+        if not _act:
+            _chk("Email Radar", False, "no collection inbox connected (cs@ / np@)")
+        else:
+            # A mailbox that has never completed a single poll is not wobbling — it has never
+            # worked, and no number of retries will reveal that on its own.
+            _stale = sum(1 for m in _act if not str(m.get("last_synced_at") or ""))
+            _note = f"{len(_act)} inbox(es) · {len(_act)-len(_bad)} healthy"
+            if _down:
+                _note += " · ⚠️ " + ", ".join(
+                    f"{(b.get('label') or b.get('email_masked'))}: {b.get('last_sync_status')}"
+                    f" ({b.get('fail_count')} polls in a row)" for b in _down[:2])
+            if _wobble:
+                _note += " · one poll failed for " + ", ".join(
+                    str(b.get("label") or b.get("email_masked")) for b in _wobble[:2]
+                ) + " — retrying, nothing to do yet"
+            if _stale:
+                _note += f" · {_stale} never polled"
+            _chk("Email Radar", not _down and not _stale, _note)
+    except Exception as _e:
+        _chk("Email Radar", False, f"check failed: {str(_e)[:70]}")
+    # Gemini — powers radar triage, the WhatsApp brain, doc-splitter segmentation + AI tasks.
+    try:
+        import biz_ai as _bai
+        _chk("AI (Gemini)", bool(_bai._get_client()),
+             "configured — radar triage, WhatsApp brain, doc splitter" if _bai._get_client()
+             else "NOT configured — radar triage, WA brain and doc splitter all degrade")
+    except Exception as _e:
+        _chk("AI (Gemini)", False, f"check failed: {str(_e)[:70]}")
+    # Doc splitter — needs a writable job dir (workers share it; /tmp would break under PrivateTmp).
+    try:
+        import biz_doc_splitter as _ds
+        from pathlib import Path as _P
+        _p = _P(_ds.TMP_ROOT)
+        _p.mkdir(parents=True, exist_ok=True)
+        _t = _p / ".healthcheck"
+        _t.write_text("ok", encoding="utf-8")
+        _t.unlink()
+        _chk("Doc Splitter", True, f"job dir writable ({_ds.TMP_ROOT})")
+    except Exception as _e:
+        _chk("Doc Splitter", False, f"job dir NOT writable: {str(_e)[:70]}")
+    # Antivirus — uploads FAIL CLOSED when clamd is down, so a dead scanner blocks every
+    # document upload. That must be loudly visible, not discovered by a confused customer.
+    try:
+        import biz_av_scan as _av
+        _ok = await _av.available()
+        _chk("Virus scanner", _ok,
+             "clamd reachable — every upload is scanned" if _ok
+             else "clamd DOWN — uploads are being refused (fail-closed). Run: systemctl start clamav-daemon")
+    except Exception as _e:
+        _chk("Virus scanner", False, f"check failed: {str(_e)[:70]}")
+    # SMTP — the rail every party notification falls back to.
+    try:
+        _su = bool(os.getenv("SMTP_USER", "").strip() and os.getenv("SMTP_PASSWORD", "").strip())
+        _chk("SMTP (email out)", _su, "configured" if _su else "SMTP_USER/PASSWORD missing — emails will not send")
+    except Exception:
+        pass
+    # Payment integrity — the ledger must reconcile and renewals must be landing.
+    try:
+        async with aiosqlite.connect(db.DB_PATH) as _pc:
+            _pc.row_factory = aiosqlite.Row
+            _due = (await (await _pc.execute(
+                "SELECT COUNT(*) FROM nidaan_subscriptions WHERE status='active' "
+                "AND current_period_end IS NOT NULL AND current_period_end < datetime('now')"
+            )).fetchone())[0]
+            _soon = (await (await _pc.execute(
+                "SELECT COUNT(*) FROM nidaan_subscriptions WHERE status='active' "
+                "AND current_period_end BETWEEN datetime('now') AND datetime('now','+7 days')"
+            )).fetchone())[0]
+        _chk("Subscription renewals", _due == 0,
+             (f"⚠️ {_due} active sub(s) PAST their period end — renewal webhook may not be landing"
+              if _due else f"none overdue · {_soon} due in the next 7 days"))
+    except Exception as _e:
+        _chk("Subscription renewals", False, f"check failed: {str(_e)[:70]}")
+    # Contact reachability — a party we cannot reach silently misses every update.
+    try:
+        async with aiosqlite.connect(db.DB_PATH) as _cc:
+            _nob = (await (await _cc.execute(
+                "SELECT COUNT(*) FROM nidaan_branches WHERE status='active' "
+                "AND COALESCE(contact_phone,'')=''")).fetchone())[0]
+            _noc = (await (await _cc.execute(
+                "SELECT COUNT(*) FROM nidaan_claims WHERE COALESCE(archived,0)=0 AND "
+                "COALESCE(complainant_phone,'')='' AND COALESCE(insured_phone,'')=''")).fetchone())[0]
+        # A missing phone number is a record to complete, not a system that is down. It stays
+        # visible - it is why a complainant never hears from us - but amber, and it says where.
+        _chk("Contact reachability", True,
+             (f"{_nob} branch(es) without WhatsApp, {_noc} claim(s) with no phone at all"
+              if (_nob + _noc) else "every branch and claim has a contact"),
+             level=("attention" if (_nob + _noc) else "ok"),
+             where="Branches · Claims")
+    except Exception as _e:
+        _chk("Contact reachability", False, f"check failed: {str(_e)[:70]}")
+    # Backups — silent backup failure is the classic invisible disaster.
+    try:
+        from pathlib import Path as _BP
+        _bd = _BP(os.getenv("BACKUP_DIR", "/opt/sarathi/backups"))
+        _files = sorted([f for f in _bd.iterdir() if f.is_file()],
+                        key=lambda f: f.stat().st_mtime, reverse=True) if _bd.exists() else []
+        if _files:
+            import time as _tm
+            _age_h = (_tm.time() - _files[0].stat().st_mtime) / 3600
+            _chk("Backups", _age_h < 48, f"newest {_files[0].name} · {_age_h:.0f}h old · {len(_files)} kept")
+        else:
+            _chk("Backups", False, f"no backup files found in {_bd}")
+    except Exception as _e:
+        _chk("Backups", False, f"check failed: {str(_e)[:70]}")
+    # Scheduled jobs — the check above watches the local tarballs, and stayed GREEN for four days
+    # while the six-hourly OFF-SERVER code backup failed every single run. Nobody knew, because a
+    # systemd unit that fails on a timer tells no one: it just sits in 'failed' until somebody
+    # types systemctl. Each of those failed runs also abandoned a ~3GB temp pack, which is how
+    # 30GB of disk quietly disappeared.
+    #
+    # So this asks the one question the tarball check cannot: did any of our scheduled jobs FAIL?
+    # It is deliberately about state, not output — a job that fails is worth a person's attention
+    # whatever it was doing.
+    try:
+        _units = ["sarathi-worker", "sarathi-web@1", "sarathi-web@2",
+                  "git-backup", "git-db-backup", "backup-db", "sarathi-deploy"]
+        _failed = []
+        _proc = await asyncio.create_subprocess_exec(
+            "systemctl", "is-failed", *[u + ".service" for u in _units],
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
+        _out, _ = await asyncio.wait_for(_proc.communicate(), timeout=8)
+        # One line per unit, in the order asked. "failed" is the only state we act on: inactive is
+        # normal for a timer-driven job between runs, and activating is normal mid-deploy.
+        for _u, _state in zip(_units, (_out or b"").decode().split()):
+            if _state.strip() == "failed":
+                _failed.append(_u)
+        _chk("Scheduled jobs", not _failed,
+             ("⚠️ failed: " + ", ".join(_failed)) if _failed
+             else f"{len(_units)} job(s) checked · none in a failed state")
+    except Exception as _e:
+        # Cannot ask systemd (not on this host, no permission)? Say so rather than claim health.
+        _chk("Scheduled jobs", True, f"not checked here ({str(_e)[:50]})")
+
+    # ── Email sending allowance ─────────────────────────────────────────────
+    # The worst kind of failure: Brevo's free plan does not refuse when it runs out, it returns
+    # 201 with a messageId and delivers nothing. On 17 Sep that turned 49 complainant login codes
+    # into 7 logins while every log line read "Brevo ✓". Nothing can detect that after the fact —
+    # only the balance can, in advance, which is the whole point of watching it here.
+    try:
+        import biz_email as _es
+        _left = await _es.brevo_credits()
+        if not os.getenv("BREVO_API_KEY", "").strip():
+            pass                       # not configured; the panel already says so
+        elif _left is None:
+            _chk("Email sending allowance", True, "Brevo balance could not be read just now")
+        elif _left <= 0:
+            _chk("Email sending allowance", False,
+                 "Brevo has NO sends left — it accepts mail and delivers nothing, so it is being "
+                 "skipped. Mail is going out over Workspace/Gmail SMTP instead.")
+        elif _left < 50:
+            _chk("Email sending allowance", False,
+                 "Brevo is nearly out: %d sends left. It fails SILENTLY at zero." % _left)
+        else:
+            _chk("Email sending allowance", True, "Brevo has %d sends left" % _left)
+    except Exception as _e:  # noqa: BLE001
+        _chk("Email sending allowance", False, "check failed: %s" % str(_e)[:70])
+
+    checks.extend(await _login_checks())
+    return checks
+
+
+async def _login_checks() -> list:
+    """CAN EACH KIND OF PERSON ACTUALLY GET IN — and if not, why.
+
+    Founder, 17 Sep: "mention visibility in app health about branch login system, subscriber login
+    system, or whosoever is having dashboard mechanics and login methods all should be present in
+    app health to see what's not working and why."
+
+    Two different things break a way in, so each is checked separately:
+      • NO WAY IN — the person has no address and no mobile, so no code can be addressed to them.
+        A data problem, and invisible until someone tries to log in and fails.
+      • DELIVERY — the code was addressed but did not arrive. This is what happened on 17 Sep, and
+        no amount of configuration-checking would have caught it: every key was set, every API
+        returned success, and Google was discarding the mail. So delivery is judged on what
+        actually happened to the last codes we sent, not on what is configured.
+
+    Lives in _subsystem_checks so the watchdog runs it too — a login outage that waits for someone
+    to open a dashboard is the outage we just had. Returns [{name, ok, note}]; never raises.
+    """
+    out: list = []
+
+    def _chk(name, ok, note="", level="", where=""):
+        lv = level or ("ok" if ok else "down")
+        out.append({"name": name, "ok": lv != "down", "level": lv,
+                    "note": note, "where": where})
+
+    try:
+        sent = await _login_health.summary()
+    except Exception:
+        sent = {}
+
+    def _delivery(system: str, label: str, idle_note: str) -> None:
+        """Judge a way in by its last 24 hours of real attempts."""
+        s = sent.get(system) or {}
+        n, failed = int(s.get("sent") or 0), int(s.get("failed") or 0)
+        if not n:
+            # Nothing to judge. Say so plainly rather than showing a green tick nobody earned.
+            _chk(label, True, "no login codes sent in the last 24h · " + idle_note)
+            return
+        if failed >= n:
+            _chk(label, False, "ALL %d code%s in the last 24h failed — %s"
+                 % (n, "" if n == 1 else "s", s.get("last_error") or "no reason recorded"))
+            return
+        if failed:
+            _chk(label, False, "%d of %d codes failed in the last 24h — %s"
+                 % (failed, n, s.get("last_error") or "no reason recorded"))
+            return
+        _chk(label, True, "%d code%s delivered in the last 24h via %s"
+             % (n, "" if n == 1 else "s", s.get("last_via") or "email"))
+
+    # ── Branch login ────────────────────────────────────────────────────────
+    try:
+        async with aiosqlite.connect(db.DB_PATH) as _c:
+            _c.row_factory = aiosqlite.Row
+            rows = [dict(r) for r in await (await _c.execute(
+                "SELECT branch_code, COALESCE(contact_email,'') AS email, "
+                "COALESCE(contact_phone,'') AS phone FROM nidaan_branches "
+                "WHERE status='active'")).fetchall()]
+        total = len(rows)
+        stranded = [r["branch_code"] for r in rows if not r["email"] and not r["phone"]]
+        with_phone = [r for r in rows if r["phone"]]
+        # Serious, and still not a subsystem failure: the login system works, these records are
+        # incomplete. Amber with the branch codes in it is more actionable than a red ✗ on a
+        # working service.
+        _chk("Branch login — a way in", True,
+             "all %d active branches have an email or a mobile" % total if not stranded
+             else "%d of %d branches have NEITHER an email nor a mobile and cannot log in at "
+                  "all: %s" % (len(stranded), total, ", ".join(stranded[:8])),
+             level=("attention" if stranded else "ok"), where="Branches")
+        # Email is the only channel most branches have today; the founder's plan is to make
+        # WhatsApp primary once every branch has a mobile on file, so track the gap.
+        _chk("Branch login — WhatsApp fallback", bool(with_phone),
+             "%d of %d branches have a mobile, so the rest have email as their only way in"
+             % (len(with_phone), total) if total else "no active branches")
+    except Exception as _e:  # noqa: BLE001
+        _chk("Branch login — a way in", False, "check failed: %s" % str(_e)[:70])
+
+    _delivery("branch", "Branch login — code delivery",
+              "codes to our own domain go via Gmail SMTP (Workspace discards our domain "
+              "arriving from a third party)")
+
+    # WHOSE NAME IS ON IT. A login code that arrives from a gmail address, tagged "External",
+    # asks a branch to trust a code from a stranger — the opposite of what a login mail should
+    # do (founder, 17 Sep: "ideally it should trigger from info@nidaanpartner.com"). The only
+    # way to put our own address on mail to our own domain is to send THROUGH Workspace, which
+    # needs a working app password for that mailbox.
+    try:
+        import biz_email as _es
+        _ws_on = os.getenv("NIDAAN_SMTP_ENABLED", "0") == "1"
+        _ws_user = _es.NIDAAN_SMTP_USER or os.getenv("NIDAAN_SMTP_USER", "")
+        _ws_pass = bool(_es.NIDAAN_SMTP_PASSWORD or os.getenv("NIDAAN_SMTP_PASSWORD", ""))
+        _last_via = ((sent.get("branch") or {}).get("last_via") or "")
+        if _ws_on and _ws_user and _ws_pass:
+            # Switched on is not the same as working. If the last code still went out on the
+            # Gmail fallback, Workspace refused the password and the branch still saw the wrong
+            # name — saying "healthy" here would be the same lie that hid the outage all morning.
+            #
+            # But evidence from BEFORE this configuration was loaded proves nothing about it.
+            # Blaming the password for a code sent under the old settings would send someone off
+            # to regenerate a password that is perfectly good.
+            _fell_back = bool(_last_via) and not _last_via.startswith("Workspace")
+            _stale = False
+            if _fell_back:
+                try:
+                    from datetime import datetime as _dt, timezone as _tz
+                    _last_at = (sent.get("branch") or {}).get("last_at") or ""
+                    # The ring stores a NAIVE utcnow string. Read back without saying so it is
+                    # taken as LOCAL time, and on this box (Europe/Berlin) every record then looks
+                    # two hours old — stale enough to excuse a real failure.
+                    _stale = (_dt.fromisoformat(_last_at).replace(tzinfo=_tz.utc).timestamp() < SERVER_START_TIME)
+                except (TypeError, ValueError):
+                    _stale = False
+            if _fell_back and not _stale:
+                _chk("Branch login — sender name", False,
+                     "switched on, but the last code still went out via %s — Workspace is "
+                     "refusing the %s password. Press Test the sender for the exact reason."
+                     % (_last_via, _ws_user))
+            elif _fell_back:
+                _chk("Branch login — sender name", True,
+                     "now sent through Workspace as %s. The last code (before this was switched "
+                     "on) went via %s — the next one will confirm the new setting."
+                     % (_ws_user, _last_via))
+            else:
+                _chk("Branch login — sender name", True,
+                     "mail to our own domain is sent through Workspace as %s%s"
+                     % (_ws_user, (" · last code confirmed via %s" % _last_via) if _last_via
+                        else " · no code sent yet to confirm it"))
+        else:
+            _chk("Branch login — sender name", False,
+                 "branch codes go out as %s and show as \"External\" — the %s app password is "
+                 "%s. Regenerate it in Google Workspace, put it in biz.env, then set "
+                 "NIDAAN_SMTP_ENABLED=1 and press Test the sender."
+                 % (os.getenv("SMTP_USER") or "the Gmail account",
+                    _ws_user or "info@nidaanpartner.com",
+                    "not switched on" if (_ws_user and _ws_pass) else "not configured"))
+    except Exception as _e:  # noqa: BLE001
+        _chk("Branch login — sender name", False, "check failed: %s" % str(_e)[:70])
+
+    # ── Subscriber (advisor) login ──────────────────────────────────────────
+    try:
+        async with aiosqlite.connect(db.DB_PATH) as _c:
+            _r = await (await _c.execute(
+                "SELECT COUNT(*) FROM nidaan_accounts WHERE status='active' "
+                "AND COALESCE(email,'')='' AND COALESCE(phone,'')=''")).fetchone()
+        _stuck = int((_r or [0])[0] or 0)
+        _chk("Subscriber login — a way in", _stuck == 0,
+             "every active account has an email or a mobile"
+             if not _stuck else "%d active accounts have neither an email nor a mobile" % _stuck)
+    except Exception as _e:  # noqa: BLE001
+        _chk("Subscriber login — a way in", False, "check failed: %s" % str(_e)[:70])
+
+    _delivery("subscriber", "Subscriber login — code delivery",
+              "subscriber addresses are mostly outside our domain, so these go via Brevo")
+
+    # ── Staff (ops) login ───────────────────────────────────────────────────
+    try:
+        async with aiosqlite.connect(db.DB_PATH) as _c:
+            _r = await (await _c.execute(
+                "SELECT COUNT(*) FROM nidaan_staff WHERE status='active' "
+                "AND deleted_at IS NULL AND COALESCE(email,'')=''")).fetchone()
+        _no_mail = int((_r or [0])[0] or 0)
+        _chk("Staff login", _no_mail == 0,
+             "every active staff member has a login email"
+             if not _no_mail else "%d active staff have no email" % _no_mail)
+    except Exception as _e:  # noqa: BLE001
+        _chk("Staff login", False, "check failed: %s" % str(_e)[:70])
+
+    # ── Complainant portal ──────────────────────────────────────────────────
+    # The portal is opened by a code sent to the registered mobile or email, so a claim with
+    # neither cannot be opened by anyone — including the complainant it belongs to.
+    try:
+        async with aiosqlite.connect(db.DB_PATH) as _c:
+            _r = await (await _c.execute(
+                "SELECT COUNT(*) FROM nidaan_claimant_portal p "
+                "JOIN nidaan_claims c ON c.claim_id = p.claim_id "
+                "WHERE COALESCE(NULLIF(c.complainant_phone,''), c.insured_phone, '') = '' "
+                "AND COALESCE(NULLIF(c.complainant_email,''), c.insured_email, '') = ''"
+            )).fetchone()
+        _unreachable = int((_r or [0])[0] or 0)
+        _chk("Complainant portal — a way in", _unreachable == 0,
+             "every portal has a mobile or an email to send its code to"
+             if not _unreachable
+             else "%d portals have no mobile and no email — nobody can open them" % _unreachable)
+    except Exception as _e:  # noqa: BLE001
+        _chk("Complainant portal — a way in", False, "check failed: %s" % str(_e)[:70])
+
+    _delivery("portal", "Complainant portal — code delivery",
+              "codes go to the mobile or email already on the claim")
+
+    return out
+
+
+@app.get("/nidaan/ops/api/health")
+async def ops_health(request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    health = await nidaan.get_app_health()
+    # Live service checks for the control center.
+    checks = []
+    def _chk(name, ok, note="", level="", where=""):
+        # level: "" lets ok/not-ok decide, as every existing caller expects. Pass "attention"
+        # for something that is TRUE but is work to do rather than a subsystem being down -
+        # those are shown amber and never counted as a failing subsystem.
+        lv = level or ("ok" if ok else "down")
+        checks.append({"name": name, "ok": lv != "down", "level": lv,
+                       "note": note, "where": where})
+    _chk("Database", health is not None, "SQLite reachable")
+    # Brevo's balance is checked in _subsystem_checks (so the watchdog sees it too) — here we
+    # only say whether it is wired up at all.
+    _chk("Email (Brevo)", bool(os.getenv("BREVO_API_KEY", "").strip()), "API key configured")
+    # NIDAAN's own Razorpay account, not Sarathi's. This line used to read RAZORPAY_KEY_ID on
+    # Nidaan's own health page, so it went green on the strength of the other product's keys.
+    _nrz = os.getenv("NIDAAN_RAZORPAY_KEY_ID", "").strip()
+    _srz = os.getenv("RAZORPAY_KEY_ID", "").strip()
+    if _nrz and _nrz != _srz:
+        _chk("Payments (Razorpay)", True,
+             "Nidaan's own account · %s" % ("TEST MODE" if _nrz.startswith("rzp_test_") else "live"))
+    elif _nrz or _srz:
+        # Falling back to the shared keys. Payments work; the money lands in the wrong account.
+        _chk("Payments (Razorpay)", False,
+             "Running on Sarathi's Razorpay account — set NIDAAN_RAZORPAY_KEY_ID/SECRET")
+    else:
+        _chk("Payments (Razorpay)", False, "Not configured — no keys")
+    # Telegram (@NidaanOpsBot) — internal-ops notification channel. Reachable via getMe
+    # (same Bot API the send path uses), delivery enabled, and staff actually linked.
+    try:
+        import biz_nidaan_telegram as _tg
+        _tok = await _tg.get_bot_token()
+        if not _tok:
+            _chk("Telegram Bot", False, "not configured — no bot token")
+        else:
+            _tg_enabled = (await _tg._get_setting("telegram_enabled", "1")) == "1"
+            _me = await _tg._call("getMe", {}, token=_tok)
+            if _me and _me.get("ok"):
+                _uname = ((_me.get("result") or {}).get("username")) or "NidaanOpsBot"
+                _chk("Telegram Bot", _tg_enabled,
+                     f"@{_uname} reachable & delivering" if _tg_enabled
+                     else f"@{_uname} reachable — delivery DISABLED")
+            else:
+                _chk("Telegram Bot", False,
+                     f"unreachable / invalid token ({(_me or {}).get('error') or (_me or {}).get('description') or 'no response'})")
+        async with aiosqlite.connect(db.DB_PATH) as _tc:
+            _cur = await _tc.execute("SELECT COUNT(DISTINCT staff_id) FROM nidaan_staff_telegram")
+            _linked = (await _cur.fetchone())[0]
+        _chk("Telegram Staff Linked", _linked > 0,
+             f"{_linked} staff linked" if _linked else "no staff linked — alerts reach no one")
+    except Exception as _te:
+        _chk("Telegram Bot", False, f"check failed: {str(_te)[:80]}")
+    # WhatsApp status comes from the NIDAAN official instances (not the Sarathi
+    # wa_instances table). health_state 'open' == connected.
+    try:
+        wa_insts = await nnot.list_official_instances()
+        connected = [i for i in wa_insts if (i.get("health_state") == "open")]
+        # Reset-aware "sent today" — mirror compute_effective_caps so App Health and
+        # the Official Numbers page always agree (a stale yesterday counter reads 0).
+        from datetime import date as _date
+        _today = _date.today().isoformat()
+        def _sent_today(i):
+            return (i.get("daily_sent_count") or 0) if str(i.get("daily_count_reset_at")) == _today else 0
+        _sh = await nnot.wa_send_health()
+        health["wa_instances"] = [
+            {"slot": i.get("instance_slot"), "name": i.get("display_name"),
+             "phone": i.get("phone_number"), "state": i.get("health_state"),
+             "sent_today": _sent_today(i),
+             "send_broken": bool(_sh.get(i.get("instance_slot"), {}).get("broken")),
+             "last_error": _sh.get(i.get("instance_slot"), {}).get("last_error", "")}
+            for i in wa_insts]
+        # A number that's "open" but whose sends are failing is a ghost connection.
+        _ghost = [i for i in wa_insts if i.get("health_state") == "open"
+                  and _sh.get(i.get("instance_slot"), {}).get("broken")]
+        if wa_insts:
+            _can_send = [i for i in connected
+                         if not _sh.get(i.get("instance_slot"), {}).get("broken")]
+            note = f"{len(connected)}/{len(wa_insts)} connected"
+            if _ghost:
+                note += f" · ⚠️ {len(_ghost)} connected but sends FAILING — re-pair (QR)"
+            _chk("WhatsApp", len(_can_send) > 0, note)
+        elif not wa_insts:
+            # Legacy Evolution slots are decommissioned - WhatsApp now runs on the Cloud API,
+            # which is checked separately below. Reporting "not configured" here was a permanent
+            # false alarm on a subsystem we no longer use, which trains people to ignore the panel.
+            pass
+    except Exception as _we:
+        health["wa_instances"] = []
+        _chk("WhatsApp", False, f"status check failed: {_we}")
+    try:
+        import shutil as _sh
+        du = _sh.disk_usage(".")
+        pct = round(du.used / du.total * 100, 1)
+        _chk("Disk", pct < 90, f"{pct}% used")
+    except Exception:
+        pass
+
+    checks.extend(await _subsystem_checks())
+
+    health["checks"] = checks
+    # Only genuinely-down machinery. An "attention" item is true and worth doing, and it is not
+    # a subsystem failure - counting it as one is what made the banner cry wolf.
+    health["failing"] = [c["name"] for c in checks if c.get("level") == "down"]
+    health["attention"] = [{"name": c["name"], "note": c.get("note", ""),
+                            "where": c.get("where", "")}
+                           for c in checks if c.get("level") == "attention"]
+    health["errors_recent"] = len(_ERROR_RING)
+    health["system"] = _system_metrics()
+    health["latency"] = _latency_stats()
+    return health
+
+
+# ── App Health: super-admin CSV export (tabular data) ────────────────────────
+# Whitelist ONLY — key is the URL name, value is (table, order-clause). No arbitrary tables/SQL.
+_EXPORT_TABLES = {
+    "claims":   ("nidaan_claims",      "ORDER BY claim_id DESC"),
+    "accounts": ("nidaan_accounts",    "ORDER BY account_id DESC"),
+    "branches": ("nidaan_branches",    "ORDER BY branch_code ASC"),
+    "tasks":    ("nidaan_quick_tasks", "WHERE deleted_at IS NULL ORDER BY quick_task_id DESC"),
+}
+
+
+@app.get("/nidaan/ops/api/export/{table}.csv")
+async def ops_export_csv(table: str, request: Request):
+    """Super-admin CSV export of a whitelisted table (tasks / claims / accounts / branches).
+    Sensitive columns (password/token/secret/otp/hmac/thread_key) are auto-excluded. Audited."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    spec = _EXPORT_TABLES.get(table)
+    if not spec:
+        raise HTTPException(status_code=404, detail="Unknown export")
+    tbl, order = spec
+    _bad = ("password", "secret", "token", "otp", "hmac", "thread_key", "hash")
+    import csv as _csv, io as _io
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cols = [r[1] for r in await (await conn.execute(f"PRAGMA table_info({tbl})")).fetchall()]
+        safe = [c for c in cols if not any(b in c.lower() for b in _bad)]
+        if not safe:
+            raise HTTPException(status_code=400, detail="No exportable columns")
+        rows = await (await conn.execute(
+            f"SELECT {','.join(safe)} FROM {tbl} {order} LIMIT 100000")).fetchall()
+    buf = _io.StringIO()
+    w = _csv.writer(buf)
+    w.writerow(safe)
+    for r in rows:
+        w.writerow(["" if r[c] is None else r[c] for c in safe])
+    try:
+        await _ops_audit(request, "data.export", "table", table, f"rows={len(rows)}")
+    except Exception:
+        pass
+    from datetime import datetime as _dt
+    fn = f"nidaan_{table}_{_dt.utcnow().strftime('%Y%m%d')}.csv"
+    return Response(content=buf.getvalue(), media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="{fn}"'})
+
+
+class OpsHealthAction(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    action: str
+
+
+@app.post("/nidaan/ops/api/health/action")
+async def ops_health_action(body: OpsHealthAction, request: Request):
+    """Super-admin self-serve fixes — a strict allow-list of SAFE, reversible, idempotent actions only.
+    NO arbitrary shell / service control. Every action is audited."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "super_admin")
+    action = (body.action or "").strip()
+    result: dict = {}
+    if action == "reseed":
+        # Idempotent — seeds only fill missing defaults; existing config is never overwritten.
+        await nidaan.seed_plans_config()
+        await nidaan.seed_content_config()
+        await nidaan.seed_review_templates()
+        result = {"message": "Config seeds re-run (idempotent — existing values kept)."}
+    elif action == "clear_cache":
+        try: nidaan.invalidate_content_cache()
+        except Exception: pass
+        try: await nidaan.get_content(force=True)
+        except Exception: pass
+        try: await nidaan.get_plans_config(force=True)
+        except Exception: pass
+        result = {"message": "Content + plans caches refreshed (re-read from DB)."}
+    elif action == "wa_watchdog":
+        res = await nnot.run_wa_watchdog_cycle()
+        result = {"message": "WhatsApp watchdog cycle run.", "detail": res}
+    elif action == "toggle_wa_pause":
+        cur = (await ntasks.get_flag("wa_automation_paused", "0")) == "1"
+        newv = "0" if cur else "1"
+        await ntasks.set_flag("wa_automation_paused", newv, by_staff_id=staff["staff_id"],
+                              description="toggled via App Health self-serve")
+        result = {"message": f"WhatsApp automation {'PAUSED' if newv == '1' else 'RESUMED'}.",
+                  "paused": newv == "1"}
+    elif action == "radar_poll":
+        created = await radar.poll_all_mailboxes()
+        result = {"message": f"Email Radar polled — {created} new email(s) picked up."}
+    elif action == "radar_test":
+        # Re-test every connected inbox so a silent auth failure surfaces immediately.
+        out = []
+        for m in await radar.list_mailboxes():
+            if not m.get("is_active"):
+                continue
+            ok, note = await radar.test_mailbox(m["mailbox_id"])
+            out.append(f"{m.get('label') or m.get('email_masked')}: {'OK' if ok else note}")
+        result = {"message": "Mailbox connections tested.", "detail": out or ["no inbox connected"]}
+    elif action == "payment_rescan":
+        import biz_nidaan_payment_watch as _pw
+        res = await _pw.run_payment_health_check(alert=False)
+        result = {"message": "Payment watchdog re-scan complete.", "detail": res}
+    elif action == "login_selftest":
+        # PROVE the way in works, instead of inferring it from configuration. On 17 Sep every
+        # key was set, every API returned success, and every branch login code was being
+        # discarded in silence. This sends a real message down the EXACT path a branch login
+        # code takes — same sender, same delivery-critical flag, same own-domain routing — to
+        # the super-admin's OWN address, and reports which transport carried it.
+        async with aiosqlite.connect(db.DB_PATH) as _c:
+            _r = await (await _c.execute(
+                "SELECT email, name FROM nidaan_staff WHERE staff_id=?",
+                (staff["staff_id"],))).fetchone()
+        _to = ((_r[0] if _r else "") or "").strip()
+        if not _to:
+            result = {"message": "Your staff account has no email address, so there is nowhere "
+                                 "to send the test."}
+        else:
+            _t: dict = {}
+            _sent = await email_svc.send_email(
+                _to,
+                "Nidaan Partner login path test",
+                "<h2>Login delivery test</h2><p>This message travelled the same path a branch "
+                "login code takes. If you are reading it in your inbox, that path works. If you "
+                "found it in spam, the codes are arriving but people will not see them.</p>",
+                from_name="Nidaan Partner",
+                from_email=(email_svc.NIDAAN_FROM or None),
+                delivery_critical=True,
+                transport_out=_t)
+            _via = _t.get("via") or "unknown transport"
+            result = {
+                "message": ("Test sent to %s via %s — check your inbox AND your spam folder. "
+                            "Spam means the codes arrive but nobody sees them."
+                            % (_login_health.mask(_to), _via)) if _sent
+                           else ("Test could NOT be sent: %s"
+                                 % (_t.get("error") or "every transport failed")),
+                "ok_send": bool(_sent), "via": _via,
+            }
+    elif action == "sender_test":
+        # Does the info@nidaanpartner.com app password work RIGHT NOW? Logs in and logs out —
+        # sends nothing. This is the one question standing between branch codes arriving under
+        # our own name and arriving as "External" from a gmail address, so it gets a button:
+        # regenerate the password, press this, and know in two seconds.
+        _u = os.getenv("NIDAAN_SMTP_USER", "")
+        _p = os.getenv("NIDAAN_SMTP_PASSWORD", "")
+        _h = os.getenv("NIDAAN_SMTP_HOST", "smtp.gmail.com")
+        _pt = int(os.getenv("NIDAAN_SMTP_PORT", "465") or 465)
+        if not (_u and _p):
+            result = {"message": "No NIDAAN_SMTP_USER / NIDAAN_SMTP_PASSWORD is configured, so "
+                                 "there is no sender identity to test."}
+        else:
+            try:
+                import aiosmtplib
+                _sm = aiosmtplib.SMTP(hostname=_h, port=_pt, use_tls=(_pt == 465),
+                                      start_tls=(_pt != 465), timeout=20)
+                await _sm.connect()
+                await _sm.login(_u, _p)
+                await _sm.quit()
+                _on = os.getenv("NIDAAN_SMTP_ENABLED", "0") == "1"
+                result = {"message": ("%s accepted the password. %s" % (_u,
+                          "Mail to our own domain already goes out under this name." if _on
+                          else "Now set NIDAAN_SMTP_ENABLED=1 in biz.env and restart, and branch "
+                               "codes will go out as this address instead of the Gmail one.")),
+                          "ok_auth": True}
+            except Exception as _se:  # noqa: BLE001
+                result = {"message": "%s was REFUSED: %s — regenerate the app password in Google "
+                                     "Workspace for this mailbox." % (_u, str(_se)[:130]),
+                          "ok_auth": False}
+    elif action == "toggle_wa_journey":
+        cur = str(await nidaan.get_ops_setting("wa_journey_enabled", "1")) in ("1", "true", "True")
+        newv = "0" if cur else "1"
+        await nidaan.set_ops_setting("wa_journey_enabled", newv, updated_by=str(staff["staff_id"]))
+        result = {"message": f"WhatsApp customer journey {'PAUSED' if newv == '0' else 'RESUMED'}.",
+                  "journey_on": newv == "1"}
+    else:
+        raise HTTPException(status_code=400, detail="Unknown action")
+    try:
+        await _ops_audit(request, "health.action", "action", action, str(result.get("message", "")))
+    except Exception:
+        pass
+    logger.warning("HEALTH_ACTION: staff=%d action=%s", staff["staff_id"], action)
+    return {"ok": True, **result}
+
+
+@app.get("/nidaan/ops/api/health/flags")
+async def ops_health_flags(request: Request):
+    """Current state of the toggleable flags shown in App Health (super-admin)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    return {"wa_paused": (await ntasks.get_flag("wa_automation_paused", "0")) == "1",
+            "wa_journey_on": str(await nidaan.get_ops_setting("wa_journey_enabled", "1")) in ("1", "true", "True")}
+
+
+@app.get("/nidaan/ops/api/activity")
+async def ops_activity(request: Request, limit: int = 100, offset: int = 0,
+                       action: Optional[str] = None, target_type: Optional[str] = None,
+                       search: Optional[str] = None):
+    """Control-center activity trail (who did what)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    rows = await nidaan.get_activity_log(limit=min(limit, 500), offset=offset,
+                                         action=action, target_type=target_type, search=search)
+    return {"activity": rows, "count": len(rows)}
+
+
+@app.get("/nidaan/ops/api/errors")
+async def ops_errors(request: Request, limit: int = 100):
+    """Recent WARNING+ application log records (in-memory ring buffer)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    items = list(_ERROR_RING)[-min(limit, 300):]
+    items.reverse()
+    return {"errors": items, "count": len(items)}
+
+
+# ── Stats (super_admin + sub_super_admin) ─────────────────────────────────────
+
+@app.get("/nidaan/ops/api/stats")
+async def ops_stats(request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    return await nidaan.get_admin_stats()
+
+
+@app.get("/nidaan/ops/api/overview-widgets")
+async def ops_overview_widgets(request: Request):
+    """Aggregated Overview widgets: task pipeline, pending reviews,
+    follow-ups due, overdue claims, refunds needing action."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "team_member")
+    return await nidaan.get_overview_widgets(
+        staff["staff_id"], staff["role"], staff.get("email", ""))
+
+
+@app.get("/nidaan/ops/api/accounts/{account_id}/birds-eye")
+async def ops_account_birds_eye(account_id: int, request: Request):
+    """Bird's-eye account drawer payload: profile + subs + reviews + claims
+    + open tasks + activity timeline in one call."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    data = await nidaan.get_account_birds_eye(account_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="account_not_found")
+    return data
+
+
+@app.get("/nidaan/ops/api/analytics")
+async def ops_analytics(request: Request, days: int = 30):
+    """30-day office analytics — closure/win rate, cycle time, by-stage,
+    daily trends, top reasons, top assignees. Admin+ only."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    return await nidaan.get_office_analytics(days=days)
+
+
+@app.get("/nidaan/ops/api/escalations")
+async def ops_escalations(request: Request):
+    """Pending dual-approval queue + claims sitting in ombudsman/escalation."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    return await nidaan.get_internal_escalations()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  QUICK TASKS — lightweight personal/team to-dos
+# ─────────────────────────────────────────────────────────────────────────────
+
+class _QuickTaskCreateReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
+    title: str = Field(min_length=2, max_length=200)
+    description: str = ""
+    assigned_to_staff_id: Optional[int] = None
+    priority: str = Field("normal", pattern=r"^(low|normal|high|urgent)$")
+    claim_id: Optional[int] = None
+    due_date: Optional[str] = None
+    initial_comment: str = ""
+    requires_approval: bool = False
+    task_type: str = Field("assignment", pattern=r"^(assignment|request)$")
+    category_code: Optional[str] = Field(None, max_length=12)
+    approver_staff_id: Optional[int] = None      # who must approve (else SA fallback)
+    mention_ids: list[int] = Field(default_factory=list)   # involve people at creation
+    complainant_name: Optional[str] = Field(None, max_length=120)
+    complainant_phone: Optional[str] = Field(None, max_length=20)
+
+
+class _QuickTaskUpdateReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
+    status: Optional[str] = Field(None, pattern=r"^(open|in_progress|done|cancelled)$")
+    assigned_to_staff_id: Optional[int] = None
+    # Content edits (creator or super-admin only) — for typos/mistakes after creation.
+    title: Optional[str] = Field(None, min_length=2, max_length=200)
+    description: Optional[str] = Field(None, max_length=4000)
+    category_code: Optional[str] = Field(None, max_length=12)
+    due_date: Optional[str] = None
+    priority: Optional[str] = Field(None, pattern=r"^(low|normal|high|urgent)$")
+    complainant_name: Optional[str] = Field(None, max_length=120)
+    complainant_phone: Optional[str] = Field(None, max_length=20)
+
+
+class _QuickTaskApprovalReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    decision: str = Field(pattern=r"^(approved|rejected)$")
+    note: str = Field("", max_length=2000)
+
+
+class _QuickTaskNoteReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
+    note: str = Field(min_length=1, max_length=4000)
+    parent_note_id: Optional[int] = None
+
+
+@app.get("/nidaan/ops/api/quick-tasks/priorities")
+async def ops_quick_task_priorities(request: Request):
+    """Return the priority taxonomy + descriptions so the create panel can
+    show each option's notification behaviour upfront."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request)
+    return {"priorities": nidaan.QUICK_TASK_PRIORITIES}
+
+
+@app.get("/nidaan/ops/api/quick-tasks")
+async def ops_quick_tasks_list(request: Request,
+                                status: Optional[str] = None,
+                                assignee: Optional[str] = None,
+                                claim_id: Optional[int] = None,
+                                task_type: Optional[str] = None,
+                                category: Optional[str] = None,
+                                q: Optional[str] = None,
+                                sort: Optional[str] = None,
+                                scope: Optional[str] = None,
+                                overdue: bool = False,
+                                pending_approval: bool = False,
+                                include_done: bool = False,
+                                include_deleted: bool = False,
+                                with_counts: bool = False,
+                                limit: int = 200):
+    """List quick tasks (also powers the full registry). Scope:
+       - team_member: only their own assigned (regardless of `assignee` param)
+       - admin/SA: everyone's; `assignee=me` filters to self, `assignee=<id>` to one.
+       include_done=true returns done/cancelled too; include_deleted=true (admin
+       only) surfaces soft-deleted rows for audit.
+    """
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    role = staff.get("role", "")
+    is_admin = role in ("super_admin", "sub_super_admin")
+    assignee_id: Optional[int] = None
+    viewer_id: Optional[int] = None
+    if role == "team_member":
+        # Associates see tasks assigned to them OR created by them.
+        viewer_id = staff["staff_id"]
+    elif assignee == "me":
+        assignee_id = staff["staff_id"]
+    elif assignee and assignee.isdigit():
+        assignee_id = int(assignee)
+    # Only admins may view soft-deleted rows.
+    incl_deleted = bool(include_deleted) and is_admin
+    items = await nidaan.list_quick_tasks(
+        status=status, assigned_to_staff_id=assignee_id, viewer_staff_id=viewer_id,
+        claim_id=claim_id, task_type=task_type, category_code=category, search=q,
+        for_staff_id=staff["staff_id"], overdue=overdue, pending_approval=pending_approval,
+        include_done=include_done, include_deleted=incl_deleted, sort=sort,
+        scope=scope, scope_staff_id=staff["staff_id"], limit=limit)
+    for it in items:
+        it["assignee_avatar"] = _nidaan_doc_url(it["assignee_pic"]) if it.get("assignee_pic") else ""
+        it["creator_avatar"] = _nidaan_doc_url(it["creator_pic"]) if it.get("creator_pic") else ""
+    out = {"quick_tasks": items, "count": len(items)}
+    if with_counts:
+        out["counts"] = await nidaan.quick_task_status_counts(
+            assigned_to_staff_id=assignee_id, viewer_staff_id=viewer_id)
+    return out
+
+
+# ── Task categories (admin-editable tags) ────────────────────────────────────
+class _TaskCategoryCreateReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    code: str = Field(min_length=1, max_length=12)
+    label: str = Field(min_length=1, max_length=60)
+    color: str = Field("#64748b", max_length=16)
+    sort_order: int = 100
+    requires_complainant: bool = False
+
+
+class _TaskCategoryUpdateReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    label: Optional[str] = Field(None, max_length=60)
+    color: Optional[str] = Field(None, max_length=16)
+    sort_order: Optional[int] = None
+    active: Optional[bool] = None
+    requires_complainant: Optional[bool] = None
+
+
+@app.get("/nidaan/ops/api/task-categories")
+async def ops_task_categories_list(request: Request, include_inactive: bool = False):
+    """Any staffer reads the active categories (for the picker/filter). Admins may
+    ask for the full list (incl. deactivated) to manage them."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    is_admin = staff.get("role") in ("super_admin", "sub_super_admin")
+    cats = await nidaan.list_task_categories(include_inactive=bool(include_inactive) and is_admin)
+    return {"categories": cats}
+
+
+@app.post("/nidaan/ops/api/task-categories")
+async def ops_task_category_create(body: _TaskCategoryCreateReq, request: Request):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request, "super_admin")
+    try:
+        cid = await nidaan.create_task_category(
+            code=body.code, label=body.label, color=body.color, sort_order=body.sort_order)
+    except Exception as e:
+        raise HTTPException(400, f"Could not create category (code may already exist): {e}")
+    return {"category_id": cid, "categories": await nidaan.list_task_categories(include_inactive=True)}
+
+
+@app.patch("/nidaan/ops/api/task-categories/{category_id}")
+async def ops_task_category_update(category_id: int, body: _TaskCategoryUpdateReq, request: Request):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request, "super_admin")
+    await nidaan.update_task_category(
+        category_id, label=body.label, color=body.color,
+        sort_order=body.sort_order, active=body.active,
+        requires_complainant=body.requires_complainant)
+    return {"ok": True, "categories": await nidaan.list_task_categories(include_inactive=True)}
+
+
+@app.delete("/nidaan/ops/api/task-categories/{category_id}")
+async def ops_task_category_delete(category_id: int, request: Request):
+    """Soft-deactivate — historic tasks keep their tag."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request, "super_admin")
+    await nidaan.deactivate_task_category(category_id)
+    return {"ok": True, "categories": await nidaan.list_task_categories(include_inactive=True)}
+
+
+@app.get("/nidaan/ops/api/quick-tasks/{qid}")
+async def ops_quick_task_get(qid: int, request: Request):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    qt = await nidaan.get_quick_task(qid)
+    if not qt:
+        raise HTTPException(404)
+    # Team members can view tasks they're assigned to / created / @mentioned into.
+    if staff.get("role") == "team_member" and \
+       not await nidaan.is_task_participant(qid, staff["staff_id"]):
+        raise HTTPException(403)
+    # Opening the task = reading its comments (read-receipts).
+    await nidaan.mark_quick_task_notes_read(qid, staff["staff_id"])
+    notes = await nidaan.list_quick_task_notes(qid)
+    _atts = await nidaan.list_note_attachments(qid)
+    from datetime import datetime as _dtm
+    _is_admin = staff.get("role") in ("super_admin", "sub_super_admin")
+    _now = _dtm.utcnow()
+    for _n in notes:
+        if _n.get("attachment_stored_name"):
+            _n["attachment_url"] = _nidaan_doc_url(_n["attachment_stored_name"])
+        # Multi-attachment list (falls back to the legacy single file for old notes).
+        _rows = _atts.get(_n.get("note_id")) or []
+        if not _rows and _n.get("attachment_stored_name"):
+            _rows = [{"stored_name": _n["attachment_stored_name"],
+                      "original_name": _n.get("attachment_original_name")}]
+
+        def _deletable(a):
+            if _is_admin:
+                return True
+            if a.get("uploaded_by") != staff["staff_id"]:
+                return False
+            try:
+                up = _dtm.fromisoformat(str(a.get("uploaded_at")).replace(" ", "T"))
+                return (_now - up).total_seconds() <= nidaan.ATTACHMENT_DELETE_WINDOW_SEC
+            except Exception:
+                return False
+        _n["attachments"] = [{"url": _nidaan_doc_url(a["stored_name"]),
+                              "name": a.get("original_name") or "attachment",
+                              "id": a.get("attachment_id"),
+                              "deletable": _deletable(a)}
+                             for a in _rows]
+    participants = await nidaan.get_task_participants(qid)
+    for _p in participants:
+        _p["avatar_url"] = _nidaan_doc_url(_p["profile_pic"]) if _p.get("profile_pic") else ""
+    me_muted = any(p["staff_id"] == staff["staff_id"] and p.get("muted") for p in participants)
+    return {"quick_task": qt, "notes": notes, "me": staff["staff_id"],
+            "participants": participants, "me_muted": me_muted}
+
+
+class _TaskMuteReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    muted: bool = True
+
+
+@app.post("/nidaan/ops/api/quick-tasks/{qid}/mute")
+async def ops_quick_task_mute(qid: int, body: _TaskMuteReq, request: Request):
+    """Mute/unmute a task's progress notifications for the current staffer. They keep
+    full access — this only silences the pings (for busy multi-person tasks)."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    qt = await nidaan.get_quick_task(qid)
+    if not qt:
+        raise HTTPException(404)
+    if staff.get("role") == "team_member" and \
+       not await nidaan.is_task_participant(qid, staff["staff_id"]):
+        raise HTTPException(403)
+    await nidaan.set_task_watch_mute(qid, staff["staff_id"], body.muted)
+    return {"ok": True, "muted": body.muted}
+
+
+class _NoteApprovalReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    approve: bool = True
+
+
+@app.post("/nidaan/ops/api/quick-tasks/{qid}/notes/{note_id}/approval")
+async def ops_quick_task_note_approval(qid: int, note_id: int,
+                                       body: _NoteApprovalReq, request: Request):
+    """Approve (or un-approve) a specific comment. Admins only."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request, "sub_super_admin")
+    await nidaan.set_quick_task_note_approval(
+        note_id, staff["staff_id"] if body.approve else None)
+    await _ops_audit(request, "quick_task.note_approval", "quick_task", qid,
+                     f"note #{note_id} {'approved' if body.approve else 'unapproved'}")
+    return {"ok": True}
+
+
+def _req_source(request: Request) -> str:
+    """Where a web/app action came from — 'mobile-web' vs 'web' — for task-history
+    traceability. (Telegram actions pass 'telegram' from the bot.)"""
+    ua = (request.headers.get("user-agent") or "").lower()
+    return "mobile-web" if any(m in ua for m in
+        ("iphone", "android", "ipad", "ipod", "mobile")) else "web"
+
+
+@app.post("/nidaan/ops/api/quick-tasks")
+async def ops_quick_task_create(body: _QuickTaskCreateReq, request: Request):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    # Everyone can create. A permission setting can require a minimum role for
+    # DIRECT assignments; lower roles are nudged to an upward "request" instead.
+    staff = _require_staff(request)
+    task_type = body.task_type
+    min_role = await nidaan.get_ops_setting("task_create_min_role", "team_member")
+    if task_type == "assignment" and \
+       nidaan.role_rank(staff.get("role", "")) < nidaan.role_rank(min_role):
+        task_type = "request"  # nudge, don't block
+    # Categories flagged requires_complainant (e.g. Review Task) must carry the
+    # complainant's name + mobile. Enforced server-side, not just in the form.
+    if await nidaan.category_requires_complainant(body.category_code):
+        if not (body.complainant_name or "").strip() or not (body.complainant_phone or "").strip():
+            raise HTTPException(400, "Complainant name and mobile number are required for this task category")
+    qid = await nidaan.create_quick_task(
+        title=body.title, description=body.description,
+        created_by_staff_id=staff["staff_id"],
+        assigned_to_staff_id=body.assigned_to_staff_id,
+        priority=body.priority, claim_id=body.claim_id,
+        due_date=body.due_date, requires_approval=body.requires_approval,
+        task_type=task_type, category_code=body.category_code,
+        approver_staff_id=body.approver_staff_id,
+        complainant_name=body.complainant_name,
+        complainant_phone=body.complainant_phone,
+        source=_req_source(request))
+    # Involve people right at creation (same collaborator model as @mention).
+    _new_watchers = []
+    if body.mention_ids:
+        _mids = [m for m in body.mention_ids if m and m != staff["staff_id"]]
+        if _mids:
+            _new_watchers = await nidaan.add_task_watchers(
+                qid, _mids, added_by=staff["staff_id"])
+    if body.initial_comment.strip():
+        try:
+            await nidaan.add_quick_task_note(
+                quick_task_id=qid, staff_id=staff["staff_id"],
+                note=body.initial_comment)
+        except Exception as ce:
+            logger.warning("Initial comment failed on quick task %d: %s", qid, ce)
+    # Notification dispatch — requests alert admins; assignments notify the pair.
+    try:
+        qt = await nidaan.get_quick_task(qid)
+        if qt:
+            import asyncio as _asyncio
+            if task_type == "request":
+                _asyncio.create_task(nnot.on_quick_task_request(qt))
+            else:
+                _asyncio.create_task(nnot.on_quick_task_assigned(qt))
+            # A task that needs approval alerts the approver (named on the task, else
+            # super-admins) — no longer every admin.
+            if qt.get("requires_approval"):
+                _asyncio.create_task(nnot.on_quick_task_approval_request(qt))
+            # Tell anyone involved at creation that they're on this task.
+            if _new_watchers:
+                _asyncio.create_task(nnot.on_quick_task_mention(
+                    qt, _new_watchers, staff["staff_id"], staff.get("name", ""),
+                    body.initial_comment or ""))
+    except Exception as ne:
+        logger.warning("Quick task notification dispatch failed: %s", ne)
+    return {"quick_task_id": qid, "quick_task": await nidaan.get_quick_task(qid),
+            "task_type": task_type}
+
+
+@app.patch("/nidaan/ops/api/quick-tasks/{qid}")
+async def ops_quick_task_update(qid: int, body: _QuickTaskUpdateReq, request: Request):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    qt = await nidaan.get_quick_task(qid)
+    if not qt:
+        raise HTTPException(404)
+    role = staff.get("role", "")
+    is_admin = role in ("super_admin", "sub_super_admin")
+    is_creator = qt.get("created_by_staff_id") == staff["staff_id"]
+    is_assignee = qt.get("assigned_to_staff_id") == staff["staff_id"]
+    # Per-operation permissions (checked independently so a creator who isn't the
+    # assignee can still fix a typo on their own task).
+    _edit_fields = {"title": body.title, "description": body.description,
+                    "category_code": body.category_code,
+                    "due_date": body.due_date, "priority": body.priority,
+                    "complainant_name": body.complainant_name,
+                    "complainant_phone": body.complainant_phone}
+    _wants_edit = any(v is not None for v in _edit_fields.values())
+    if _wants_edit and not (is_creator or role == "super_admin"):
+        raise HTTPException(403, "Only the task creator or a super admin can edit task details")
+    if body.status is not None and not (is_assignee or is_admin):
+        raise HTTPException(403)
+    # Reassignment is open to ALL staff (every change is written to the immutable
+    # task history via reassign_quick_task → changed_by). Previously admin/SA only.
+    if _wants_edit:
+        # Content edit (typo/mistake fix) — every field change is written to the
+        # immutable task history. Deliberately does NOT notify (avoids noise).
+        await nidaan.update_quick_task_fields(qid, _edit_fields, changed_by=staff["staff_id"], source=_req_source(request))
+    if body.status is not None:
+        await nidaan.update_quick_task_status(qid, body.status, changed_by=staff["staff_id"], source=_req_source(request))
+        # Notify the assignee that their task changed status (reopened/rejected/etc.)
+        try:
+            _sqt = await nidaan.get_quick_task(qid)
+            if _sqt:
+                import asyncio as _asyncio
+                _asyncio.create_task(nnot.on_quick_task_status_changed(
+                    _sqt, body.status, staff.get("name", ""), by_id=staff["staff_id"]))
+        except Exception:
+            pass
+    if body.assigned_to_staff_id is not None:
+        await nidaan.reassign_quick_task(qid, body.assigned_to_staff_id, changed_by=staff["staff_id"], source=_req_source(request))
+        # Notify new assignee if priority demands it
+        try:
+            new_qt = await nidaan.get_quick_task(qid)
+            if new_qt:
+                import asyncio as _asyncio
+                _asyncio.create_task(nnot.on_quick_task_assigned(new_qt))
+        except Exception:
+            pass
+    return {"ok": True, "quick_task": await nidaan.get_quick_task(qid)}
+
+
+@app.delete("/nidaan/ops/api/quick-tasks/{qid}")
+async def ops_quick_task_delete(qid: int, request: Request):
+    """Soft-delete a quick task (admin/SA, or the creator). History is kept."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    qt = await nidaan.get_quick_task(qid)
+    if not qt:
+        raise HTTPException(404)
+    role = staff.get("role", "")
+    if role == "team_member" and qt.get("created_by_staff_id") != staff["staff_id"]:
+        raise HTTPException(403, "Only admin/SA or the creator can delete")
+    ok = await nidaan.soft_delete_quick_task(qid, changed_by=staff["staff_id"])
+    return {"ok": ok}
+
+
+@app.get("/nidaan/ops/api/quick-tasks/{qid}/history")
+async def ops_quick_task_history(qid: int, request: Request):
+    """Immutable lifecycle history for a quick task (status/reassign/reopen/delete/approval)."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request)
+    return {"history": await nidaan.get_quick_task_history(qid)}
+
+
+@app.post("/nidaan/ops/api/quick-tasks/{qid}/approval")
+async def ops_quick_task_approval(qid: int, body: _QuickTaskApprovalReq, request: Request):
+    """Approve or reject a task created with requires_approval.
+    Only admins (super_admin / sub_super_admin) may decide."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request, "sub_super_admin")
+    qt = await nidaan.get_quick_task(qid)
+    if not qt:
+        raise HTTPException(404)
+    if not qt.get("requires_approval"):
+        raise HTTPException(400, "This task does not require approval")
+    await nidaan.set_quick_task_approval(qid, body.decision,
+                                         changed_by=staff["staff_id"], note=body.note,
+                                         source=_req_source(request))
+    # Notify creator + assignee of the decision (deep-linked).
+    try:
+        fresh = await nidaan.get_quick_task(qid)
+        if fresh:
+            import asyncio as _asyncio
+            _asyncio.create_task(nnot.on_quick_task_approval(fresh, body.decision))
+    except Exception as ne:
+        logger.warning("Quick task approval notification failed: %s", ne)
+    return {"ok": True, "quick_task": await nidaan.get_quick_task(qid)}
+
+
+class _QuickTaskMergeReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    duplicate_id: int
+
+
+@app.post("/nidaan/ops/api/quick-tasks/{qid}/merge")
+async def ops_quick_task_merge(qid: int, body: _QuickTaskMergeReq, request: Request):
+    """Merge the duplicate task INTO this one (qid is retained). Admin/SA only.
+    Comments move to the retained task; both timelines record the merge; the
+    duplicate is archived pointing back here."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request, "sub_super_admin")
+    try:
+        res = await nidaan.merge_quick_tasks(qid, body.duplicate_id,
+                                             changed_by=staff["staff_id"])
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    await _ops_audit(request, "quick_task.merge", "quick_task", qid,
+                     f"merged #{body.duplicate_id} into #{qid}")
+    return {"ok": True, **res, "quick_task": await nidaan.get_quick_task(qid)}
+
+
+@app.post("/nidaan/ops/api/quick-tasks/{qid}/notes")
+@limiter.limit("60/minute")
+async def ops_quick_task_note_add(qid: int, request: Request,
+                                  note: str = Form(""),
+                                  parent_note_id: Optional[int] = Form(None),
+                                  mentions: str = Form(""),
+                                  file: Optional[UploadFile] = File(None),
+                                  files: Optional[list[UploadFile]] = File(None)):
+    """Add a task comment, optionally with attachments and @mentions (multipart).
+    `mentions` = comma-separated staff_ids to tag as collaborators on this task.
+    `files` accepts MULTIPLE attachments; `file` is kept for backward compatibility."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    qt = await nidaan.get_quick_task(qid)
+    if not qt:
+        raise HTTPException(404)
+    role = staff.get("role", "")
+    # Participants (creator / assignee / anyone @mentioned) may comment too.
+    if role == "team_member" and not await nidaan.is_task_participant(qid, staff["staff_id"]):
+        raise HTTPException(403)
+    note = (note or "").strip()
+    # Collect every uploaded file (multi `files[]` plus the legacy single `file`).
+    _incoming = [f for f in (files or []) if f is not None and (f.filename or "")]
+    if file is not None and (file.filename or ""):
+        _incoming.append(file)
+    if len(_incoming) > 10:
+        raise HTTPException(400, "Up to 10 attachments per comment")
+    saved: list[dict] = []
+    import uuid as _uuid
+    for _f in _incoming:
+        content = await _f.read()
+        # Shared gate: size, real bytes, allowed type, and an extension taken from those bytes.
+        # This previously trusted the client filename for the extension with no content check.
+        ext = await validate_upload_scanned(content, (_f.content_type or ""), what="attachment")
+        _stored = f"{_uuid.uuid4().hex}{ext}"
+        (_NIDAAN_DOCS_DIR / _stored).write_bytes(content)
+        saved.append({"stored_name": _stored, "original_name": _f.filename})
+    if not note and not saved:
+        raise HTTPException(400, "Empty comment")
+    if not note and saved:
+        note = ("📎 " + saved[0]["original_name"]) if len(saved) == 1 \
+               else f"📎 {len(saved)} attachments"
+    # First file also fills the legacy single-attachment columns (old readers).
+    nid = await nidaan.add_quick_task_note(
+        quick_task_id=qid, staff_id=staff["staff_id"],
+        note=note, parent_note_id=parent_note_id,
+        attachment_stored_name=(saved[0]["stored_name"] if saved else None),
+        attachment_original_name=(saved[0]["original_name"] if saved else None),
+        source=_req_source(request))
+    if saved:
+        await nidaan.add_note_attachments(quick_task_id=qid, note_id=nid,
+                                          files=saved, uploaded_by=staff["staff_id"])
+    # @mentions → add the tagged staff as participants and alert the new ones.
+    mention_ids = [int(x) for x in (mentions or "").split(",") if x.strip().isdigit()]
+    mention_ids = [m for m in mention_ids if m != staff["staff_id"]]
+    try:
+        import asyncio as _asyncio
+        if mention_ids:
+            newly = await nidaan.add_task_watchers(qid, mention_ids, added_by=staff["staff_id"])
+            if newly:
+                _asyncio.create_task(nnot.on_quick_task_mention(
+                    qt, newly, staff["staff_id"], staff.get("name", ""), note))
+        # Notify everyone involved (assignee + creator + participants) of the comment.
+        _asyncio.create_task(nnot.on_quick_task_comment(qt, staff["staff_id"], note))
+    except Exception:
+        pass
+    return {"note_id": nid}
+
+
+@app.delete("/nidaan/ops/api/quick-tasks/{qid}/attachments/{attachment_id}")
+async def ops_quick_task_attachment_delete(qid: int, attachment_id: int, request: Request):
+    """Delete a task-comment attachment. Allowed for the uploader within 1 hour of upload, or
+    for an admin (super/sub-super) any time. Removes the DB row + the file from disk."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(404)
+    staff = _require_staff(request)
+    is_admin = staff.get("role") in ("super_admin", "sub_super_admin")
+    try:
+        row = await nidaan.delete_note_attachment(attachment_id, staff["staff_id"], is_admin)
+    except PermissionError as pe:
+        if str(pe) == "too_late":
+            raise HTTPException(403, "You can delete your own attachment within 1 hour of uploading. "
+                                     "After that, please ask a super-admin to remove it.")
+        raise HTTPException(403, "You can only delete attachments you uploaded.")
+    if not row:
+        raise HTTPException(404, "Attachment not found")
+    try:
+        _p = _NIDAAN_DOCS_DIR / row["stored_name"]
+        if _p.exists():
+            _p.unlink()
+    except Exception:
+        pass
+    await _ops_audit(request, "task.attachment_delete", "quick_task", str(qid), f"attachment={attachment_id}")
+    return {"ok": True}
+
+
+# ── Leave management (P4) ─────────────────────────────────────────────────────
+class _LeaveCreateReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    start_date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    end_date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    reason: str = Field("", max_length=2000)
+    leave_type: str = Field("full_day", pattern=r"^(full_day|half_day)$")
+    half_period: str = Field("", pattern=r"^(first_half|second_half|)$")
+    handover_notes: str = Field("", max_length=4000)
+    cover_staff_id: Optional[int] = None
+    start_time: str = Field("", pattern=r"^(\d{2}:\d{2}|)$")
+    end_time: str = Field("", pattern=r"^(\d{2}:\d{2}|)$")
+    request_kind: str = Field("leave", pattern=r"^(leave|wfh)$")
+
+
+class _LeaveDecisionReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    decision: str = Field(pattern=r"^(approved|rejected)$")
+    note: str = Field("", max_length=2000)
+
+
+@app.post("/nidaan/ops/api/leave")
+async def ops_leave_create(body: _LeaveCreateReq, request: Request):
+    """Any staffer applies for leave OR work-from-home; admins/SA are notified."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    if body.end_date < body.start_date:
+        raise HTTPException(400, "End date cannot be before start date")
+    leave_id = await nidaan.create_leave_request(
+        staff_id=staff["staff_id"], start_date=body.start_date,
+        end_date=body.end_date, reason=body.reason,
+        leave_type=body.leave_type, half_period=body.half_period,
+        handover_notes=body.handover_notes, cover_staff_id=body.cover_staff_id,
+        start_time=body.start_time, end_time=body.end_time,
+        request_kind=body.request_kind)
+    try:
+        leave = await nidaan.get_leave_request(leave_id)
+        if leave:
+            import asyncio as _asyncio
+            _asyncio.create_task(nnot.on_leave_requested(leave))
+    except Exception as ne:
+        logger.warning("Leave-requested notification failed: %s", ne)
+    await _ops_audit(request, "leave.request", "leave", leave_id,
+                     f"{body.start_date}→{body.end_date}")
+    return {"leave_id": leave_id}
+
+
+@app.get("/nidaan/ops/api/leave")
+async def ops_leave_list(request: Request, scope: str = "auto", status: str = ""):
+    """List leave requests. team_member sees own; admin/SA see all (scope=mine
+    to force own). Also returns the current on-leave roster for admins."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    is_admin = staff.get("role") in ("super_admin", "sub_super_admin")
+    own_only = (not is_admin) or (scope == "mine")
+    rows = await nidaan.list_leave_requests(
+        staff_id=staff["staff_id"] if own_only else None,
+        status=status or None)
+    # Who's on leave today is visible to EVERYONE (team awareness / handover).
+    out = {"leave": rows, "is_admin": is_admin,
+           "on_leave_now": await nidaan.list_staff_on_leave_now()}
+    # Admins additionally see approved leaves in the next 30 days (planning).
+    if is_admin:
+        out["upcoming_leaves"] = await nidaan.list_upcoming_leaves(30)
+    return out
+
+
+@app.post("/nidaan/ops/api/leave/{leave_id}/decision")
+async def ops_leave_decide(leave_id: int, body: _LeaveDecisionReq, request: Request):
+    """Approve/reject a pending leave request (admin/SA)."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request, "sub_super_admin")
+    leave = await nidaan.get_leave_request(leave_id)
+    if not leave:
+        raise HTTPException(404)
+    if leave.get("status") != "pending":
+        raise HTTPException(400, "This request was already decided")
+    await nidaan.decide_leave_request(leave_id, body.decision,
+                                      decided_by=staff["staff_id"], note=body.note)
+    try:
+        fresh = await nidaan.get_leave_request(leave_id)
+        if fresh:
+            import asyncio as _asyncio
+            _asyncio.create_task(nnot.on_leave_decided(fresh, body.decision))
+    except Exception as ne:
+        logger.warning("Leave-decided notification failed: %s", ne)
+    await _ops_audit(request, "leave.decide", "leave", leave_id, body.decision)
+    return {"ok": True}
+
+
+@app.post("/nidaan/ops/api/leave/{leave_id}/cancel")
+async def ops_leave_cancel(leave_id: int, request: Request):
+    """A staffer withdraws their own still-pending leave request."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    leave = await nidaan.get_leave_request(leave_id)
+    if not leave:
+        raise HTTPException(404)
+    if leave.get("staff_id") != staff["staff_id"]:
+        raise HTTPException(403, "You can only cancel your own request")
+    await nidaan.cancel_leave_request(leave_id, staff["staff_id"])
+    return {"ok": True}
+
+
+@app.get("/nidaan/ops/api/leave/history")
+async def ops_leave_history(request: Request, date_from: str = "", date_to: str = "",
+                            staff_id: int = 0, status: str = "", kind: str = ""):
+    """Leave/WFH history report for super admins: filtered rows + per-staff totals.
+
+    Filters (all optional): date_from/date_to (YYYY-MM-DD, matches any request whose
+    leave period overlaps the window), staff_id, status, kind ('leave'|'wfh').
+    Per-staff totals count APPROVED days only (i.e. leave actually taken)."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request, "super_admin")
+    rows = await nidaan.list_leave_history(
+        date_from=date_from or None, date_to=date_to or None,
+        staff_id=staff_id or None, status=status or None, kind=kind or None)
+
+    from datetime import date as _date
+    def _row_days(r) -> float:
+        if (r.get("leave_type") or "full_day") == "half_day":
+            return 0.5
+        try:
+            sd = _date.fromisoformat(r["start_date"]); ed = _date.fromisoformat(r["end_date"])
+            return float(max(1, (ed - sd).days + 1))
+        except Exception:
+            return 0.0
+
+    totals: dict = {}
+    for r in rows:
+        r["days"] = _row_days(r)
+        k = (r.get("request_kind") or "leave")
+        t = totals.setdefault(r["staff_id"], {
+            "staff_id": r["staff_id"], "staff_name": r.get("staff_name"),
+            "staff_role": r.get("staff_role"),
+            "leave_days": 0.0, "wfh_days": 0.0})
+        if r.get("status") == "approved":  # totals reflect leave actually taken
+            if k == "wfh": t["wfh_days"] += r["days"]
+            else:          t["leave_days"] += r["days"]
+    totals_list = sorted(totals.values(),
+                         key=lambda x: (-(x["leave_days"] + x["wfh_days"]),
+                                        (x["staff_name"] or "")))
+    return {"rows": rows, "totals": totals_list, "count": len(rows)}
+
+
+# ── Ops permission settings (P5) ──────────────────────────────────────────────
+class _OpsSettingReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    task_create_min_role: str = Field(pattern=r"^(team_member|sub_super_admin|super_admin)$")
+
+
+class _GrievanceReq(BaseModel):
+    """Who to name on the privacy policy as the Grievance Officer."""
+    model_config = ConfigDict(extra="forbid")
+    grievance_officer_name: str = Field("", max_length=120)
+    grievance_officer_email: str = Field("", max_length=160)
+    grievance_officer_phone: str = Field("", max_length=40)
+
+
+@app.get("/nidaan/ops/api/grievance-officer")
+async def ops_grievance_get(request: Request):
+    """Who is named on the published privacy policy right now."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request, "super_admin")
+    return {k: await nidaan.get_ops_setting(k, "") for k in
+            ("grievance_officer_name", "grievance_officer_email", "grievance_officer_phone")}
+
+
+@app.put("/nidaan/ops/api/grievance-officer")
+async def ops_grievance_set(body: _GrievanceReq, request: Request):
+    """Name the Grievance Officer. Takes effect on the published policy immediately.
+
+    This is a public legal statement about who is accountable, so it is super-admin only and
+    every change is in the audit trail - being able to say later WHO named WHOM and WHEN is
+    the point of naming somebody at all.
+    """
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request, "super_admin")
+    email = body.grievance_officer_email.strip()
+    if email and ("@" not in email or " " in email):
+        raise HTTPException(400, "That does not look like an email address.")
+    for k, v in (("grievance_officer_name", body.grievance_officer_name.strip()),
+                 ("grievance_officer_email", email),
+                 ("grievance_officer_phone", body.grievance_officer_phone.strip())):
+        await nidaan.set_ops_setting(k, v, updated_by=staff["staff_id"])
+    await _ops_audit(request, "grievance_officer.set", "settings", 0,
+                     "named %s <%s>" % (body.grievance_officer_name.strip() or "(nobody)", email))
+    return {"ok": True, "name": body.grievance_officer_name.strip(),
+            "shown_on": f"{NIDAAN_BASE_URL}/privacy"}
+
+
+@app.get("/nidaan/ops/api/ops-settings")
+async def ops_settings_get(request: Request):
+    """Office policy settings. Readable by any staff (the create UI adapts to it)."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    settings = await nidaan.get_all_ops_settings()
+    return {"settings": settings,
+            "my_role": staff.get("role"),
+            "can_edit": staff.get("role") == "super_admin"}
+
+
+@app.put("/nidaan/ops/api/ops-settings")
+async def ops_settings_update(body: _OpsSettingReq, request: Request):
+    """Update office policy (super_admin only)."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request, "super_admin")
+    await nidaan.set_ops_setting("task_create_min_role", body.task_create_min_role,
+                                 updated_by=staff["staff_id"])
+    await _ops_audit(request, "ops_settings.update", "settings", 0,
+                     f"task_create_min_role={body.task_create_min_role}")
+    return {"ok": True, "settings": await nidaan.get_all_ops_settings()}
+
+
+class _BranchBillingReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    branch_l2_fee: int = Field(ge=0, le=100000)          # in ₹
+    branch_charge_policy: str = Field(pattern=r"^(l2_only|all_claims|free)$")
+
+
+class _ReviewFeeReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    review_fee_low: int = Field(ge=0, le=1000000)
+    review_fee_high: int = Field(ge=0, le=1000000)
+    review_fee_threshold: int = Field(ge=0, le=1000000000)
+
+
+class _GstReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    gst_enabled: bool
+    gst_rate: float = Field(ge=0, le=100)
+    gst_home_state: str = Field("", max_length=60)
+
+
+@app.put("/nidaan/ops/api/gst")
+async def ops_gst_update(body: _GstReq, request: Request):
+    """Update GST config (super_admin only): master on/off, rate %, and our registered
+    home state (drives CGST/SGST vs IGST). GST is exclusive (added on top). Item: GST."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request, "super_admin")
+    await nidaan.set_ops_setting("gst_enabled", "1" if body.gst_enabled else "0", updated_by=staff["staff_id"])
+    await nidaan.set_ops_setting("gst_rate", str(body.gst_rate), updated_by=staff["staff_id"])
+    await nidaan.set_ops_setting("gst_home_state", body.gst_home_state.strip(), updated_by=staff["staff_id"])
+    await _ops_audit(request, "gst.update", "settings", 0,
+                     f"enabled={body.gst_enabled} rate={body.gst_rate} home={body.gst_home_state}")
+    return {"ok": True, "settings": await nidaan.get_all_ops_settings()}
+
+
+@app.get("/nidaan/api/gst-config")
+async def nidaan_gst_config(request: Request):
+    """Public: GST config so pay UIs can show the base + GST breakup (or nothing when off)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    return await nidaan.gst_config()
+
+
+@app.put("/nidaan/ops/api/review-fee")
+async def ops_review_fee_update(body: _ReviewFeeReq, request: Request):
+    """Update the tiered review-fee config (super_admin only): standard fee, high-tier
+    fee, and the disputed-amount threshold. Config-driven — change any time (Item #4)."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request, "super_admin")
+    await nidaan.set_ops_setting("review_fee_low", str(int(body.review_fee_low)), updated_by=staff["staff_id"])
+    await nidaan.set_ops_setting("review_fee_high", str(int(body.review_fee_high)), updated_by=staff["staff_id"])
+    await nidaan.set_ops_setting("review_fee_threshold", str(int(body.review_fee_threshold)), updated_by=staff["staff_id"])
+    await _ops_audit(request, "review_fee.update", "settings", 0,
+                     f"low=Rs.{body.review_fee_low} high=Rs.{body.review_fee_high} threshold=Rs.{body.review_fee_threshold}")
+    return {"ok": True, "settings": await nidaan.get_all_ops_settings()}
+
+
+@app.put("/nidaan/ops/api/branch-billing")
+async def ops_branch_billing_update(body: _BranchBillingReq, request: Request):
+    """Update branch Level-2 billing config (super_admin only): fee amount + charge
+    policy. Config-driven so the amount / when-to-charge can change any time."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request, "super_admin")
+    await nidaan.set_ops_setting("branch_l2_fee", str(int(body.branch_l2_fee)), updated_by=staff["staff_id"])
+    await nidaan.set_ops_setting("branch_charge_policy", body.branch_charge_policy, updated_by=staff["staff_id"])
+    await _ops_audit(request, "branch_billing.update", "settings", 0,
+                     f"fee=Rs.{body.branch_l2_fee} policy={body.branch_charge_policy}")
+    return {"ok": True, "settings": await nidaan.get_all_ops_settings()}
+
+
+@app.get("/nidaan/ops/api/claim-search")
+async def ops_claims_search(request: Request, q: str = ""):
+    """Claim picker for the Quick Task panel.
+    - Empty `q`: returns 8 most recent OPEN claims (so the dropdown is useful
+      on focus, before the user starts typing).
+    - With `q`: searches claim_id, insured_name, insurer_name, AND the
+      subscriber's owner_name + firm_name.
+    Always includes the linked account's name so the picker shows
+    "account · claim # · insured" together.
+
+    Path is intentionally /claim-search (not /claims/search) to avoid
+    conflicting with /claims/{claim_id:int} route matching."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request)
+    q = (q or "").strip()
+    async with aiosqlite.connect(nidaan.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        select_cols = (
+            "SELECT c.claim_id, c.insured_name, c.insurer_name, c.status, "
+            "       a.owner_name AS account_name, a.firm_name "
+            "FROM nidaan_claims c "
+            "LEFT JOIN nidaan_accounts a ON a.account_id = c.account_id "
+        )
+        if not q:
+            cur = await conn.execute(
+                select_cols +
+                "WHERE c.status NOT IN ('resolved_won','resolved_lost','closed','withdrawn') "
+                "ORDER BY c.created_at DESC LIMIT 8")
+        elif q.isdigit():
+            cur = await conn.execute(
+                select_cols +
+                "WHERE c.claim_id = ? OR c.insured_name LIKE ? "
+                "OR a.owner_name LIKE ? OR a.firm_name LIKE ? "
+                "ORDER BY c.created_at DESC LIMIT 8",
+                (int(q), f"%{q}%", f"%{q}%", f"%{q}%"))
+        else:
+            cur = await conn.execute(
+                select_cols +
+                "WHERE c.insured_name LIKE ? OR c.insurer_name LIKE ? "
+                "OR a.owner_name LIKE ? OR a.firm_name LIKE ? "
+                "ORDER BY c.created_at DESC LIMIT 8",
+                (f"%{q}%", f"%{q}%", f"%{q}%", f"%{q}%"))
+        return {"claims": [dict(r) for r in await cur.fetchall()]}
+
+
+# =============================================================================
+#  NIDAAN ERP — Phase 3: Workflow Engine (Tasks API)
+# =============================================================================
+import biz_nidaan_tasks as ntasks
+
+
+def _staff_role(staff: dict) -> str:
+    return (staff or {}).get("role", "team_member")
+
+
+def _task_visible_to_staff(task: dict, staff: dict) -> bool:
+    """Associate sees only tasks assigned to self; admin+ sees everything."""
+    role = _staff_role(staff)
+    if role in (ntasks.ROLE_SUPER_ADMIN, ntasks.ROLE_ADMIN):
+        return True
+    return task.get("assigned_to_staff_id") == staff.get("staff_id")
+
+
+class _TaskCreateReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
+    claim_id: int
+    title: str = Field(min_length=2, max_length=200)
+    description: str = ""
+    status_slug: str = "intimated"
+    priority: str = Field("normal", pattern=r"^(low|normal|high|urgent)$")
+    assigned_to_staff_id: Optional[int] = None
+    sla_hours_override: Optional[int] = None
+    depends_on_task_id: Optional[int] = None
+    parent_task_id: Optional[int] = None
+    initial_comment: str = ""  # Phase 5: post first thread comment in same call
+
+
+class _TaskUpdateReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
+    title: Optional[str] = Field(None, min_length=2, max_length=200)
+    description: Optional[str] = None
+    priority: Optional[str] = Field(None, pattern=r"^(low|normal|high|urgent)$")
+    sla_hours_override: Optional[int] = None
+    depends_on_task_id: Optional[int] = None
+
+
+class _TaskTransitionReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
+    to_status: str
+    note: str = ""
+
+
+class _TaskNoteReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
+    note: str = Field(min_length=1, max_length=4000)
+    is_internal: bool = True
+    parent_note_id: Optional[int] = None  # 1-level reply threading
+
+
+class _TaskAssignReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
+    assigned_to_staff_id: Optional[int] = None  # None = unassign
+
+
+class _TaskApprovalReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
+    approve: bool
+    note: str = ""
+
+
+class _TaskQCReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
+    approve: bool
+    note: str = ""
+
+
+class _StatusUpsertReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
+    slug: str = Field(min_length=2, max_length=60, pattern=r"^[a-z][a-z0-9_]+$")
+    label_en: str = Field(min_length=1, max_length=80)
+    label_hi: str = ""
+    label_subscriber: str = ""
+    color: str = Field("#94a3b8", pattern=r"^#[0-9a-fA-F]{6}$")
+    stage: str = Field("preparation", pattern=r"^(intake|preparation|engagement|ombudsman|escalation|closed)$")
+    default_sla_hours: Optional[int] = None
+    is_paused: bool = False
+    is_terminal: bool = False
+    is_qc_required: bool = False
+    requires_approval: str = Field("", pattern=r"^(|admin|sa|both)$")
+    sort_order: int = 500
+
+
+class _SystemFlagReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
+    flag_key: str = Field(min_length=2, max_length=60)
+    flag_value: str
+    description: str = ""
+
+
+# ── List / Detail / Kanban ────────────────────────────────────────────────────
+@app.get("/nidaan/ops/api/tasks")
+async def ops_tasks_list(request: Request,
+                         claim_id: Optional[int] = None,
+                         assigned_to: Optional[int] = None,
+                         stage: Optional[str] = None,
+                         status: Optional[str] = None,
+                         include_closed: bool = False,
+                         limit: int = 200, offset: int = 0):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    role = _staff_role(staff)
+    # Associates only see their own
+    if role == ntasks.ROLE_ASSOCIATE:
+        assigned_to = staff["staff_id"]
+    tasks = await ntasks.list_tasks(
+        claim_id=claim_id, assigned_to_staff_id=assigned_to,
+        stage=stage, status_slug=status,
+        include_closed=include_closed, limit=limit, offset=offset)
+    return {"tasks": tasks, "count": len(tasks)}
+
+
+@app.get("/nidaan/ops/api/tasks/kanban")
+async def ops_tasks_kanban(request: Request, claim_id: Optional[int] = None):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    by_stage = await ntasks.kanban_view(claim_id=claim_id)
+    role = _staff_role(staff)
+    if role == ntasks.ROLE_ASSOCIATE:
+        # Filter to only this associate's tasks
+        sid = staff["staff_id"]
+        by_stage = {k: [t for t in v if t.get("assigned_to_staff_id") == sid] for k, v in by_stage.items()}
+    return by_stage
+
+
+@app.get("/nidaan/ops/api/tasks/{task_id}")
+async def ops_task_detail(task_id: int, request: Request):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    t = await ntasks.get_task(task_id)
+    if not t: raise HTTPException(404, "Task not found")
+    if not _task_visible_to_staff(t, staff):
+        raise HTTPException(403, "Forbidden — task not assigned to you")
+    notes = await ntasks.list_task_notes(task_id)
+    log = await ntasks.list_task_status_log(task_id)
+    transitions = await ntasks.list_transitions_from(t["status_slug"])
+    return {"task": t, "notes": notes, "status_log": log, "allowed_transitions": transitions}
+
+
+# ── Create / Update / Reassign ────────────────────────────────────────────────
+@app.post("/nidaan/ops/api/tasks")
+async def ops_task_create(body: _TaskCreateReq, request: Request):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    role = _staff_role(staff)
+    if role not in ntasks.ROLES_ADMIN_OR_ABOVE:
+        raise HTTPException(403, "Only Admin or Super Admin can create tasks")
+    try:
+        tid = await ntasks.create_task(
+            claim_id=body.claim_id, title=body.title, description=body.description,
+            status_slug=body.status_slug, priority=body.priority,
+            assigned_to_staff_id=body.assigned_to_staff_id,
+            created_by_staff_id=staff["staff_id"],
+            sla_hours_override=body.sla_hours_override,
+            depends_on_task_id=body.depends_on_task_id,
+            parent_task_id=body.parent_task_id)
+        # Phase 5 single-screen creation — post the first comment in the same call
+        if body.initial_comment and body.initial_comment.strip():
+            try:
+                await ntasks.add_task_note(
+                    task_id=tid, staff_id=staff["staff_id"],
+                    note=body.initial_comment.strip())
+            except Exception as ce:
+                logger.warning("Initial comment failed on task %d: %s", tid, ce)
+        return {"task_id": tid, "task": await ntasks.get_task(tid)}
+    except ntasks.TaskError as e:
+        raise HTTPException(getattr(e, "status_code", 400), str(e))
+
+
+@app.patch("/nidaan/ops/api/tasks/{task_id}")
+async def ops_task_update(task_id: int, body: _TaskUpdateReq, request: Request):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    t = await ntasks.get_task(task_id)
+    if not t: raise HTTPException(404)
+    role = _staff_role(staff)
+    if role not in ntasks.ROLES_ADMIN_OR_ABOVE and t.get("assigned_to_staff_id") != staff["staff_id"]:
+        raise HTTPException(403, "Forbidden")
+    fields = {}
+    if body.title is not None: fields["title"] = body.title.strip()
+    if body.description is not None: fields["description"] = body.description
+    if body.priority is not None: fields["priority"] = body.priority
+    if body.sla_hours_override is not None: fields["sla_hours_override"] = body.sla_hours_override
+    if body.depends_on_task_id is not None:
+        if body.depends_on_task_id == task_id:
+            raise HTTPException(400, "Task can't depend on itself")
+        await ntasks._assert_no_cycle(body.depends_on_task_id, task_id)
+        fields["depends_on_task_id"] = body.depends_on_task_id
+    if not fields:
+        return {"task": t}
+    set_clause = ", ".join(f"{k}=?" for k in fields) + ", updated_at=datetime('now')"
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        await conn.execute(f"UPDATE nidaan_tasks SET {set_clause} WHERE task_id=?",
+                          list(fields.values()) + [task_id])
+        await conn.commit()
+    return {"task": await ntasks.get_task(task_id)}
+
+
+@app.post("/nidaan/ops/api/tasks/{task_id}/assign")
+async def ops_task_assign(task_id: int, body: _TaskAssignReq, request: Request):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    # Reassignment is open to ALL staff (audited by ntasks.reassign_task via by_staff_id).
+    out = await ntasks.reassign_task(
+        task_id=task_id, new_assignee_staff_id=body.assigned_to_staff_id,
+        by_staff_id=staff["staff_id"])
+    # Phase 4: notify new assignee
+    if body.assigned_to_staff_id:
+        try:
+            import biz_nidaan_notifications as nnot
+            asyncio.create_task(nnot.on_task_assigned(task_id))
+        except Exception:
+            pass
+    return {"task": out}
+
+
+# ── State transition / QC / Approvals ─────────────────────────────────────────
+@app.post("/nidaan/ops/api/tasks/{task_id}/transition")
+async def ops_task_transition(task_id: int, body: _TaskTransitionReq, request: Request):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    t = await ntasks.get_task(task_id)
+    if not t: raise HTTPException(404)
+    if not _task_visible_to_staff(t, staff):
+        raise HTTPException(403, "Forbidden")
+    from_status = t.get("status_slug")
+    try:
+        out = await ntasks.transition_task(
+            task_id=task_id, to_status=body.to_status,
+            by_staff_id=staff["staff_id"], by_staff_role=_staff_role(staff),
+            note=body.note)
+        # Phase 4: fan-out notification
+        try:
+            import biz_nidaan_notifications as nnot
+            new_status = out.get("status_slug")
+            asyncio.create_task(nnot.on_task_status_changed(task_id, from_status, new_status, body.note or ""))
+            # Special events
+            if new_status == "awaiting_qc":
+                asyncio.create_task(nnot.on_qc_required(task_id))
+            elif new_status == "awaiting_approval":
+                asyncio.create_task(nnot.on_approval_required(task_id, body.to_status))
+        except Exception:
+            pass
+        return {"task": out}
+    except ntasks.TaskError as e:
+        raise HTTPException(getattr(e, "status_code", 400), str(e))
+
+
+@app.post("/nidaan/ops/api/tasks/{task_id}/qc-review")
+async def ops_task_qc_review(task_id: int, body: _TaskQCReq, request: Request):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    try:
+        out = await ntasks.review_qc(task_id=task_id,
+            by_staff_id=staff["staff_id"], by_staff_role=_staff_role(staff),
+            approve=body.approve, note=body.note)
+        return {"task": out}
+    except ntasks.TaskError as e:
+        raise HTTPException(getattr(e, "status_code", 400), str(e))
+
+
+@app.post("/nidaan/ops/api/tasks/{task_id}/approve")
+async def ops_task_approve(task_id: int, body: _TaskApprovalReq, request: Request):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    try:
+        out = await ntasks.record_approval(task_id=task_id,
+            by_staff_id=staff["staff_id"], by_staff_role=_staff_role(staff),
+            approve=body.approve, note=body.note)
+        return {"task": out}
+    except ntasks.TaskError as e:
+        raise HTTPException(getattr(e, "status_code", 400), str(e))
+
+
+# ── Notes ─────────────────────────────────────────────────────────────────────
+@app.get("/nidaan/ops/api/tasks/{task_id}/notes")
+async def ops_task_notes_list(task_id: int, request: Request):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    t = await ntasks.get_task(task_id)
+    if not t: raise HTTPException(404)
+    if not _task_visible_to_staff(t, staff):
+        raise HTTPException(403)
+    return {"notes": await ntasks.list_task_notes(task_id)}
+
+
+@app.post("/nidaan/ops/api/tasks/{task_id}/notes")
+async def ops_task_notes_create(task_id: int, body: _TaskNoteReq, request: Request):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    t = await ntasks.get_task(task_id)
+    if not t: raise HTTPException(404)
+    if not _task_visible_to_staff(t, staff):
+        raise HTTPException(403)
+    nid = await ntasks.add_task_note(task_id=task_id, staff_id=staff["staff_id"],
+                                      note=body.note, is_internal=body.is_internal,
+                                      parent_note_id=body.parent_note_id)
+    return {"note_id": nid}
+
+
+# ── Status registry + transitions (config) ────────────────────────────────────
+@app.get("/nidaan/ops/api/status-config")
+async def ops_status_config_list(request: Request, include_inactive: bool = False):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request)
+    return {
+        "statuses": await ntasks.list_statuses(active_only=not include_inactive),
+        "stages": ["intake","preparation","engagement","ombudsman","escalation","closed"],
+    }
+
+
+@app.post("/nidaan/ops/api/status-config")
+async def ops_status_config_create(body: _StatusUpsertReq, request: Request):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request, "super_admin")
+    return {"status": await ntasks.upsert_status(
+        slug=body.slug, label_en=body.label_en, label_hi=body.label_hi,
+        label_subscriber=body.label_subscriber, color=body.color, stage=body.stage,
+        default_sla_hours=body.default_sla_hours, is_paused=body.is_paused,
+        is_terminal=body.is_terminal, is_qc_required=body.is_qc_required,
+        requires_approval=body.requires_approval, sort_order=body.sort_order,
+        created_by=staff["staff_id"])}
+
+
+@app.patch("/nidaan/ops/api/status-config/{slug}")
+async def ops_status_config_update(slug: str, body: _StatusUpsertReq, request: Request):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request, "super_admin")
+    if slug != body.slug:
+        raise HTTPException(400, "Slug mismatch")
+    return {"status": await ntasks.upsert_status(
+        slug=body.slug, label_en=body.label_en, label_hi=body.label_hi,
+        label_subscriber=body.label_subscriber, color=body.color, stage=body.stage,
+        default_sla_hours=body.default_sla_hours, is_paused=body.is_paused,
+        is_terminal=body.is_terminal, is_qc_required=body.is_qc_required,
+        requires_approval=body.requires_approval, sort_order=body.sort_order,
+        created_by=staff["staff_id"])}
+
+
+@app.delete("/nidaan/ops/api/status-config/{slug}")
+async def ops_status_config_delete(slug: str, request: Request):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request, "super_admin")
+    await ntasks.deactivate_status(slug)
+    return {"ok": True}
+
+
+# ── System Flags (SA-controlled toggles) ──────────────────────────────────────
+@app.get("/nidaan/ops/api/system-flags")
+async def ops_flags_list(request: Request):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request)
+    return {"flags": await ntasks.list_flags()}
+
+
+@app.get("/nidaan/ops/api/notifications/registry")
+async def ops_notification_registry(request: Request, lang: str = "en"):
+    """Every notification the app can send, what it is, who gets it, and how.
+
+    Founder, 23 Sep: "notification setup from superadmin itself ... new notifications
+    auto-registering". This is the seeing half. Before it, 75 event keys were spread across 12
+    modules with nothing able to list them - so nobody could tell, on the night of 23 Sep, that
+    three separate paths were each choosing their own cadence.
+
+    Super-admin only: it is a complete map of who hears what, which is worth keeping to the
+    people who set it. Read-only for now - the switches need the founder's answer on whether
+    control is per-event or per-event-per-role.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    import biz_nidaan_notify_registry as _reg
+    import biz_nidaan_notify_policy as _pol
+    import biz_nidaan_notify_prefs as _np
+    return {"events": _reg.describe(lang),
+            "groups": _reg.GROUPS,
+            "lock_reason": _reg.LOCK_REASON,
+            # The routing rules in the policy's own words - the thing summary() was written for
+            # and never connected to anything.
+            "policy": _pol.summary(),
+            # The switches somebody has already set, so the screen can show them beside the
+            # events they act on rather than in a separate list nobody cross-references.
+            "prefs": await _prefs_safe(),
+            "scopes": {"role": "everyone with this job",
+                       "user": "one person, everywhere",
+                       "claim_user": "one person, on one claim"},
+            "frequencies": list(_np.FREQUENCIES),
+            "editable": True}
+
+
+async def _prefs_safe() -> list:
+    """Every switch, or an empty list. A preferences table that will not answer must not stop the
+    register being readable — seeing the events matters more than seeing the switches."""
+    try:
+        import biz_nidaan_notify_prefs as _np2
+        return await _np2.list_prefs()
+    except Exception as e:  # noqa: BLE001
+        logger.info("could not list notification preferences: %s", e)
+        return []
+
+
+class _NotifyPrefReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    scope: str = Field(..., pattern=r"^(role|user|claim_user)$")
+    event_key: str = Field("*", max_length=80)
+    channel: str = Field("*", pattern=r"^(telegram|email|\*)$")
+    enabled: bool = True
+    frequency: str = Field("immediate", pattern=r"^(immediate|daily|off)$")
+    role: str = Field("", max_length=40)
+    staff_id: Optional[int] = None
+    claim_id: Optional[int] = None
+
+
+@app.post("/nidaan/ops/api/notifications/prefs")
+@limiter.limit("60/minute")
+async def ops_notify_pref_set(body: _NotifyPrefReq, request: Request):
+    """Turn one notification on or off, for a role, a person, or a person on one claim.
+
+    Super-admin only: this is a map of the whole company's attention, and one person quietly
+    switching off somebody else's alerts is an outage arranged by accident.
+
+    A switch against a LOCKED event (money, security, system health) is accepted and stored — the
+    person set it and pretending otherwise is how a screen starts lying — and the response says
+    plainly that it will not take effect.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "super_admin")
+    import biz_nidaan_notify_prefs as _np3
+    res = await _np3.set_pref(
+        scope=body.scope, event_key=body.event_key, channel=body.channel,
+        enabled=body.enabled, frequency=body.frequency, role=body.role,
+        staff_id=body.staff_id, claim_id=body.claim_id,
+        updated_by=_actor_label(caller))
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("error") or "Could not save that")
+    await _ops_audit(request, "notify.pref_set", "event", body.event_key,
+                     "%s %s=%s freq=%s" % (body.scope, body.channel,
+                                           "on" if body.enabled else "off", body.frequency))
+    return res
+
+
+@app.delete("/nidaan/ops/api/notifications/prefs")
+@limiter.limit("60/minute")
+async def ops_notify_pref_clear(request: Request, scope: str, event_key: str = "*",
+                                channel: str = "*", role: str = "",
+                                staff_id: Optional[int] = None,
+                                claim_id: Optional[int] = None):
+    """Put one switch back to its default so the chain falls through to the next level.
+
+    This removes a SETTING, never a record. The founder's standing rule about deleting data is
+    about claims, payments and documents; a switch returning to default is the only way to say
+    "go back to whatever my role says".
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "super_admin")
+    import biz_nidaan_notify_prefs as _np4
+    res = await _np4.clear_pref(scope=scope, event_key=event_key, channel=channel,
+                                role=role, staff_id=staff_id, claim_id=claim_id)
+    await _ops_audit(request, "notify.pref_clear", "event", event_key,
+                     "%s back to default" % scope)
+    return res
+
+
+@app.get("/nidaan/ops/api/notifications/explain")
+async def ops_notify_explain(request: Request, event_key: str, staff_id: int,
+                             claim_id: Optional[int] = None):
+    """"Why am I (not) getting these?" — answered without asking me.
+
+    Returns the verdict per channel WITH the reason, naming which level of the chain decided it.
+    That question is the whole reason this module exists, so it gets its own endpoint rather than
+    being something only the code knows.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    import biz_nidaan_notify_prefs as _np5
+    import biz_nidaan_notifications as _nn
+    role = await _nn._staff_role(staff_id)
+    out = {}
+    for ch in ("telegram", "email", "bell"):
+        out[ch] = await _np5.resolve(event_key, channel=ch, staff_id=staff_id,
+                                     role=role, claim_id=claim_id)
+    return {"event_key": event_key, "staff_id": staff_id, "role": role,
+            "claim_id": claim_id, "channels": out}
+
+
+@app.post("/nidaan/ops/api/system-flags")
+async def ops_flags_set(body: _SystemFlagReq, request: Request):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request, "super_admin")
+    await ntasks.set_flag(body.flag_key, body.flag_value,
+                           by_staff_id=staff["staff_id"], description=body.description)
+    return {"ok": True, "flag_key": body.flag_key, "flag_value": body.flag_value}
+
+
+# ── Staff roster (for assignee picker) ────────────────────────────────────────
+#: The people a CLAIM can be handed to — Dr.Ashish (23), Ashwin Kaushal (2), Adv Harish Bhatia
+#: (30), Adv Ambikesh C (26), Chayan Bagga (20), Yamini (22). Deliberately short: a claim landing
+#: with somebody who does not work claims is how a claim goes quiet. It is only the DEFAULT — the
+#: live list is the ops setting `claim_handler_ids`, so it can be changed without a deploy.
+#: Everyone else keeps everything else: tasks, @mentions, notifications, and any claim they are
+#: already assigned to stays theirs.
+_DEFAULT_CLAIM_HANDLERS = "23,2,30,26,20,22"
+
+
+def _handler_ids(raw: Optional[str]) -> set:
+    ids = {int(x) for x in str(raw or "").replace(" ", "").split(",") if x.strip().isdigit()}
+    return ids or {int(x) for x in _DEFAULT_CLAIM_HANDLERS.split(",")}
+
+
+@app.get("/nidaan/ops/api/assignees")
+async def ops_assignees(request: Request):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request)
+    rows = await ntasks.list_active_associates()
+    handlers = _handler_ids(await nidaan.get_ops_setting("claim_handler_ids",
+                                                         _DEFAULT_CLAIM_HANDLERS))
+    for r in rows:
+        r["avatar_url"] = _nidaan_doc_url(r["profile_pic"]) if r.get("profile_pic") else ""
+        # Additive flag: every existing caller of this list ignores it and behaves as before.
+        r["claim_handler"] = int(r.get("staff_id") or 0) in handlers
+    # If not one of them is active any more, offer everybody rather than an empty dropdown.
+    if not any(r.get("claim_handler") for r in rows):
+        for r in rows:
+            r["claim_handler"] = True
+    return {"staff": rows}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  TELEGRAM OPS BOT (Phase 5) — official Bot API, no ban risk, no phone to keep
+#  online. Super admin configures the bot once; each staffer self-links.
+# ══════════════════════════════════════════════════════════════════════════════
+class _TelegramTokenReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    bot_token: str = Field(min_length=20, max_length=120)
+
+
+class _TelegramToggleReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = True
+
+
+@app.get("/nidaan/ops/api/telegram/config")
+async def ops_telegram_config(request: Request):
+    """Bot status + MY personal link state. Any staffer can read this — they need
+    their own connect link; only the token hint is exposed, never the token."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    cfg = await tg.get_config()
+    mine = await tg.get_staff_telegram(staff["staff_id"])
+    out = {
+        "bot": cfg,
+        "is_super_admin": staff.get("role") == "super_admin",
+        "linked": bool((mine or {}).get("linked")),
+        "device_count": (mine or {}).get("count", 0),
+        "devices": (mine or {}).get("devices", []),
+        "telegram_username": (mine or {}).get("telegram_username") or "",
+        "linked_at": (mine or {}).get("telegram_linked_at") or "",
+        "connect_url": "",
+    }
+    # Always issue a fresh, short-lived connect code — a staffer can add MORE devices
+    # (phone + desktop + web) at any time. The deep link opens the bot with the code on
+    # any platform.
+    if cfg.get("configured") and cfg.get("bot_username"):
+        code = await tg.issue_link_code(staff["staff_id"])
+        out["connect_url"] = f"https://t.me/{cfg['bot_username']}?start={code}"
+        out["link_code"] = code
+        out["code_ttl_min"] = tg.LINK_CODE_TTL_MIN
+    if staff.get("role") == "super_admin":
+        out["linked_staff"] = await tg.linked_staff_count()
+    return out
+
+
+@app.post("/nidaan/ops/api/telegram/config")
+async def ops_telegram_save_token(body: _TelegramTokenReq, request: Request):
+    """SA pastes the @BotFather token — we verify it, store it, and register the
+    webhook so the bot starts receiving /start link requests."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request, "super_admin")
+    token = body.bot_token.strip()
+    check = await tg.verify_token(token)
+    if not check.get("ok"):
+        raise HTTPException(400, f"That bot token was rejected by Telegram: {check.get('error')}")
+    new_id = check.get("bot_id") or ""
+    prev_id = await nidaan.get_ops_setting("telegram_bot_id", "")
+    # A chat_id is only meaningful to the bot that issued it. Same bot (even with a
+    # regenerated token) → every existing link keeps working. DIFFERENT bot → the old
+    # links are dead, so clear them rather than let delivery fail silently forever.
+    links_cleared = 0
+    same_bot = bool(prev_id) and prev_id == new_id
+    if prev_id and not same_bot:
+        links_cleared = await tg.clear_all_links()
+    await nidaan.set_ops_setting("telegram_bot_token", token)
+    await nidaan.set_ops_setting("telegram_bot_username", check.get("username", ""))
+    await nidaan.set_ops_setting("telegram_bot_id", new_id)
+    await nidaan.set_ops_setting("telegram_enabled", "1")
+    # verify_token() just proved Telegram accepts this one, so record it as working here rather
+    # than leaving the screen showing the previous failure for the few seconds the worker takes
+    # to pick the token up.
+    await nidaan.set_ops_setting("telegram_poll_active", "1")
+    await nidaan.set_ops_setting("telegram_last_error", "")
+    # We use long-polling (the worker pulls updates), which is immune to Cloudflare's
+    # bot protection that blocks inbound webhooks. Ensure no webhook is set so
+    # getUpdates is allowed; the worker's poll loop picks up the new token within ~8s.
+    try:
+        await tg.delete_webhook()
+    except Exception:
+        pass
+    await _ops_audit(request, "telegram.configure", "telegram", 0,
+                     f"bot @{check.get('username','')} same_bot={same_bot} cleared={links_cleared}")
+    return {"ok": True, "bot_username": check.get("username", ""),
+            "webhook_ok": True, "mode": "polling",
+            "same_bot": same_bot, "links_cleared": links_cleared,
+            "linked_staff": await tg.linked_staff_count()}
+
+
+@app.get("/nidaan/ops/api/telegram/staff-status")
+async def ops_telegram_staff_status(request: Request):
+    """Super-admin bot manager: who's connected, how many devices, who's pending."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request, "super_admin")
+    rows = await tg.staff_connection_status()
+    return {"staff": rows,
+            "connected": sum(1 for r in rows if (r.get("device_count") or 0) > 0),
+            "pending": sum(1 for r in rows if not (r.get("device_count") or 0)),
+            "total": len(rows),
+            "devices": sum((r.get("device_count") or 0) for r in rows)}
+
+
+@app.post("/nidaan/ops/api/telegram/instant-link/{staff_id}")
+async def ops_telegram_instant_link(staff_id: int, request: Request):
+    """Super-admin generates a one-time connect link for a specific staffer who is
+    struggling to connect. The SA shares it directly; one tap links that staffer.
+    Single-use + short-lived, bound to that exact staff_id."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request, "super_admin")
+    cfg = await tg.get_config()
+    if not cfg.get("bot_username"):
+        raise HTTPException(400, "Bot is not configured yet")
+    target = await nidaan.get_staff_by_id(staff_id)
+    if not target:
+        raise HTTPException(404, "Staff not found")
+    code = await tg.issue_link_code(staff_id, force=True)   # fresh, invalidates any prior
+    await _ops_audit(request, "telegram.instant_link", "staff", staff_id,
+                     f"instant connect link for {target.get('name','')}")
+    return {"ok": True, "staff_name": target.get("name", ""),
+            "connect_url": f"https://t.me/{cfg['bot_username']}?start={code}",
+            "code": code, "ttl_min": tg.LINK_CODE_TTL_MIN}
+
+
+@app.post("/nidaan/ops/api/telegram/disconnect")
+async def ops_telegram_disconnect(request: Request):
+    """Turn the bot off completely (removes the token + webhook). Staff links are
+    KEPT, so pasting the SAME bot's token later restores everyone instantly with no
+    re-linking. Notifications fall back to dashboard + push + email meanwhile."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request, "super_admin")
+    await tg.disconnect_bot()
+    await _ops_audit(request, "telegram.disconnect", "telegram", 0, "bot disconnected")
+    return {"ok": True, "links_kept": await tg.linked_staff_count()}
+
+
+@app.get("/nidaan/ops/api/telegram/pending-count")
+async def ops_telegram_pending_count(request: Request):
+    """How many people the invite would actually reach - shown on the button BEFORE it is
+    pressed, so nobody sends to everyone meaning to send to nobody."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request, "super_admin")
+    pending = await tg.list_unlinked_staff()
+    return {"pending": len(pending),
+            "reachable": len([p for p in pending if (p.get("email") or "").strip()]),
+            "unreachable": [p["name"] for p in pending if not (p.get("email") or "").strip()],
+            "bot_username": await tg._get_setting("telegram_bot_username", "")}
+
+
+@app.post("/nidaan/ops/api/telegram/remind-unlinked")
+async def ops_telegram_remind_unlinked(request: Request):
+    """Ask everyone who has not connected yet to connect - on their dashboard bell, app push
+    and email. Never on Telegram, which is the thing they are missing.
+
+    WHAT THIS DELIBERATELY DOES NOT SEND: the person's connect CODE. That code is a bearer
+    credential - whoever opens it links THEIR Telegram to that staff account and then receives
+    that person's claim notifications. It lives 15 minutes and is single-use for exactly that
+    reason, which also makes it useless in an email nobody opens for an hour. So the message
+    carries an ordinary link to the portal instead: signing in is the check, and the
+    short-lived code is minted on the page, in front of the person it belongs to.
+    """
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request, "super_admin")
+    pending = await tg.list_unlinked_staff()
+    if not pending:
+        return {"ok": True, "notified": 0, "pending": 0}
+    bot_name = await tg._get_setting("telegram_bot_username", "")
+    link = f"{NIDAAN_BASE_URL}/nidaan/ops?connect=telegram"
+    # Both languages in the one message: it goes to everybody at once, and nobody should have
+    # to read past a language they do not use to find their own.
+    body = (
+        "Connect Telegram to get your work updates\n"
+        "----------------------------------------\n"
+        "Work given to you, your name mentioned, approvals and claim updates will come to "
+        "you on Telegram. Two taps, once.\n\n"
+        "1. Open this link and sign in:\n"
+        f"   {link}\n"
+        "2. The page opens on Telegram Bot. Tap the blue button.\n"
+        f"3. Telegram opens on @{bot_name}. Press START.\n\n"
+        "You will see 'Verified & connected'. That is all.\n\n"
+        "----------------------------------------\n"
+        "\u091f\u0947\u0932\u0940\u0917\u094d\u0930\u093e\u092e \u091c\u094b\u0921\u093c\u0947\u0902, \u0924\u093e\u0915\u093f \u0915\u093e\u092e \u0915\u0947 \u0905\u092a\u0921\u0947\u091f \u0906\u092a\u0915\u094b \u092e\u093f\u0932\u0947\u0902\n"
+        "----------------------------------------\n"
+        "\u0906\u092a\u0915\u094b \u092e\u093f\u0932\u093e \u0915\u093e\u092e, \u0906\u092a\u0915\u093e \u0928\u093e\u092e \u0932\u093f\u0916\u0947 \u091c\u093e\u0928\u0947 \u092a\u0930, \u0905\u092a\u094d\u0930\u0942\u0935\u0932 \u0914\u0930 "
+        "\u0915\u094d\u0932\u0947\u092e \u0915\u0947 \u0905\u092a\u0921\u0947\u091f - \u0938\u092c \u091f\u0947\u0932\u0940\u0917\u094d\u0930\u093e\u092e \u092a\u0930 \u0906\u090f\u0902\u0917\u0947\u0964 "
+        "\u0938\u093f\u0930\u094d\u095e \u0926\u094b \u091f\u0948\u092a, \u090f\u0915 \u0939\u0940 \u092c\u093e\u0930\u0964\n\n"
+        "1. \u092f\u0939 \u0932\u093f\u0902\u0915 \u0916\u094b\u0932\u0947\u0902 \u0914\u0930 \u0932\u0949\u0917\u093f\u0928 \u0915\u0930\u0947\u0902:\n"
+        f"   {link}\n"
+        "2. \u092a\u0947\u091c 'Telegram Bot' \u092a\u0930 \u0916\u0941\u0932\u0947\u0917\u093e\u0964 \u0928\u0940\u0932\u0947 \u092c\u091f\u0928 \u092a\u0930 \u091f\u0948\u092a \u0915\u0930\u0947\u0902\u0964\n"
+        f"3. \u091f\u0947\u0932\u0940\u0917\u094d\u0930\u093e\u092e \u092e\u0947\u0902 @{bot_name} \u0916\u0941\u0932\u0947\u0917\u093e\u0964 START \u0926\u092c\u093e\u090f\u0902\u0964\n\n"
+        "'Verified & connected' \u0926\u093f\u0916\u0947\u0917\u093e\u0964 \u092c\u0938 \u0907\u0924\u0928\u093e \u0939\u0940\u0964\n")
+    n = await nnot.notify_staff_inapp(
+        [p["staff_id"] for p in pending],
+        subject=("Connect your Telegram \u00b7 "
+                 "\u091f\u0947\u0932\u0940\u0917\u094d\u0930\u093e\u092e \u091c\u094b\u0921\u093c\u0947\u0902"),
+        body=body,
+        event_key="telegram.connect_reminder")
+    await _ops_audit(request, "telegram.invite_all", "telegram", 0,
+                     f"asked {n} of {len(pending)} unconnected staff to connect to @{bot_name}")
+    return {"ok": True, "notified": n, "pending": len(pending), "bot_username": bot_name}
+
+
+@app.post("/nidaan/ops/api/telegram/toggle")
+async def ops_telegram_toggle(body: _TelegramToggleReq, request: Request):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request, "super_admin")
+    await nidaan.set_ops_setting("telegram_enabled", "1" if body.enabled else "0")
+    return {"ok": True, "enabled": body.enabled}
+
+
+@app.post("/nidaan/ops/api/telegram/unlink")
+async def ops_telegram_unlink(request: Request):
+    """Unlink MY Telegram (stops my notifications there)."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    await tg.unlink_staff(staff["staff_id"])
+    return {"ok": True}
+
+
+@app.post("/nidaan/ops/api/telegram/test")
+async def ops_telegram_test(request: Request):
+    """Send myself a test message — proves the link end-to-end."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    ok, err = await tg.notify_staff(
+        staff["staff_id"],
+        f"🔔 Test notification\n\nHi {staff.get('name','')}, your NidaanPartner "
+        f"Telegram notifications are working.",
+        url=f"{NIDAAN_BASE_URL}/admin")
+    if not ok:
+        raise HTTPException(400, f"Could not send: {err}")
+    return {"ok": True}
+
+
+@app.get("/nidaan/ops/api/capabilities")
+async def ops_capabilities(request: Request, lang: str = "en"):
+    """What THIS staffer can do, and where — generated from the single capability
+    registry that also drives the Telegram bot's help and the spoken guide, so the
+    three can never contradict each other."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    import biz_nidaan_capabilities as caps
+    role = staff.get("role", "team_member")
+    guide = caps.build_guide(role, lang)
+    guide["speech"] = caps.speech_text(role, lang)
+    return guide
+
+
+@app.get("/nidaan/ops/api/capabilities/audio")
+async def ops_capabilities_audio(request: Request, lang: str = "en"):
+    """High-quality Gemini narration of the features guide, CACHED to disk (generated once per
+    role×lang, then free to replay). 503 → the page falls back to the free browser voice."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    import biz_nidaan_capabilities as caps
+    import biz_tts
+    role = staff.get("role", "team_member")
+    text = caps.speech_text(role, lang)
+    is_hi = str(lang).lower().startswith("hi")
+    voice = os.getenv("TTS_VOICE_HI" if is_hi else "TTS_VOICE_EN", "Kore")
+    wav = await biz_tts.cached_wav(text, voice=voice)
+    if not wav:
+        raise HTTPException(status_code=503, detail="voice_unavailable")
+    return Response(content=wav, media_type="audio/wav",
+                    headers={"Cache-Control": "private, max-age=3600"})
+
+
+@app.post("/nidaan/ops/api/me/comms-onboarded")
+async def ops_me_comms_onboarded(request: Request):
+    """One-time acknowledgement of the comms/Telegram onboarding popup."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        await conn.execute(
+            "UPDATE nidaan_staff SET comms_onboarded_at=CURRENT_TIMESTAMP WHERE staff_id=?",
+            (staff["staff_id"],))
+        await conn.commit()
+    return {"ok": True}
+
+
+@app.post("/nidaan/telegram/webhook/{secret}")
+async def nidaan_telegram_webhook(secret: str, request: Request):
+    """Telegram pushes updates here. The path secret is derived from the bot token,
+    so only Telegram (which we gave the URL to) can reach it."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    token = await tg.get_bot_token()
+    if not token or secret != tg.webhook_secret(token):
+        raise HTTPException(404)
+    try:
+        update = await request.json()
+    except Exception:
+        return {"ok": True}
+    # Answer Telegram INSTANTLY and do the work in the background. Processing calls the
+    # Telegram API (~1-2s), and if we blocked on it a slow send or a mid-deploy restart
+    # could make the origin look unresponsive (Cloudflare 520) and queue updates.
+    import asyncio as _asyncio
+    async def _bg():
+        try:
+            await tg.handle_update(update)
+        except Exception as e:
+            logger.warning("Telegram update processing error: %s", e)
+    _asyncio.create_task(_bg())
+    return {"ok": True}
+
+
+# ── Broadcast + notification bell (P4) ────────────────────────────────────────
+class _BroadcastReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    message: str = Field(min_length=1, max_length=1000)
+
+
+class _AnnounceReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    title: str = Field(min_length=2, max_length=140)
+    message: str = Field(min_length=2, max_length=2000)
+    roles: list[str] = Field(default_factory=list)   # empty = everyone
+    client_token: str = Field(default="", max_length=80)  # idempotency: same token never re-sends
+
+
+@app.post("/nidaan/ops/api/announce")
+async def ops_announce(body: _AnnounceReq, request: Request):
+    """Super-admin posts a 'what's new / changed' feature update. It reaches every
+    active staffer whose ROLE it's relevant to — on their bell, app push, Telegram and
+    email — so people learn about features that apply to them (and aren't bothered by
+    ones that don't)."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request, "super_admin")
+    valid = {"team_member", "sub_super_admin", "super_admin"}
+    roles = [r for r in (body.roles or []) if r in valid]
+    subject = f"🆕 What's new: {body.title}"
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        await conn.execute("""CREATE TABLE IF NOT EXISTS nidaan_announcements(
+            announce_id INTEGER PRIMARY KEY AUTOINCREMENT, client_token TEXT, title TEXT,
+            message TEXT, roles TEXT, subject TEXT, sent_by INTEGER,
+            sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, reverted_at TIMESTAMP, notified INTEGER DEFAULT 0)""")
+        await conn.commit()
+        # ── Idempotency: the SAME client_token never re-sends; also a backstop that blocks an
+        # identical title+message from the same sender within 60s (defends against double-taps). ──
+        dup = None
+        if body.client_token:
+            dup = await (await conn.execute(
+                "SELECT * FROM nidaan_announcements WHERE client_token=? ORDER BY announce_id DESC LIMIT 1",
+                (body.client_token,))).fetchone()
+        if not dup:
+            dup = await (await conn.execute(
+                "SELECT * FROM nidaan_announcements WHERE sent_by=? AND title=? AND message=? "
+                "AND sent_at > datetime('now','-60 seconds') ORDER BY announce_id DESC LIMIT 1",
+                (staff["staff_id"], body.title, body.message))).fetchone()
+        if dup:
+            return {"ok": True, "duplicate": True, "announce_id": dup["announce_id"],
+                    "notified": dup["notified"], "targeted": dup["notified"],
+                    "sent_at": dup["sent_at"], "reverted": bool(dup["reverted_at"])}
+        if roles:
+            ph = ",".join("?" * len(roles))
+            rows = await (await conn.execute(
+                f"SELECT staff_id FROM nidaan_staff WHERE status='active' AND deleted_at IS NULL "
+                f"AND role IN ({ph})", roles)).fetchall()
+        else:
+            rows = await (await conn.execute(
+                "SELECT staff_id FROM nidaan_staff WHERE status='active' AND deleted_at IS NULL")).fetchall()
+        ids = [r[0] for r in rows]
+        # Record BEFORE sending, so a racing second request finds the token and won't re-send.
+        cur = await conn.execute(
+            "INSERT INTO nidaan_announcements(client_token,title,message,roles,subject,sent_by,notified) "
+            "VALUES(?,?,?,?,?,?,?)",
+            (body.client_token, body.title, body.message, ",".join(roles) or "all", subject, staff["staff_id"], len(ids)))
+        announce_id = cur.lastrowid
+        await conn.commit()
+    n = await nnot.notify_staff_inapp(ids, subject=subject, body=body.message,
+                                      event_key="ops.announcement", announce_id=announce_id)
+    await _ops_audit(request, "announce", "announcement", announce_id,
+                     f"{body.title} → {len(ids)} staff ({','.join(roles) or 'all'})")
+    return {"ok": True, "notified": n, "targeted": len(ids), "announce_id": announce_id}
+
+
+@app.post("/nidaan/ops/api/announce/{announce_id}/revert")
+async def ops_announce_revert(announce_id: int, request: Request):
+    """Undo a sent announcement within 15 minutes — removes it from every staffer's
+    in-app bell. (Telegram/email/push are already delivered and cannot be recalled.)
+    super_admin only. Idempotent: reverting again is a no-op."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request, "super_admin")
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        a = await (await conn.execute(
+            "SELECT *, sent_at > datetime('now','-15 minutes') AS in_window "
+            "FROM nidaan_announcements WHERE announce_id=?", (announce_id,))).fetchone()
+        if not a:
+            raise HTTPException(404, "Announcement not found")
+        if a["reverted_at"]:
+            return {"ok": True, "already_reverted": True, "removed": 0}
+        if not a["in_window"]:
+            raise HTTPException(400, "The 15-minute revert window has passed.")
+        cur = await conn.execute(
+            "DELETE FROM nidaan_notifications WHERE event_key='ops.announcement' AND subject=? "
+            "AND created_at >= datetime(?, '-5 seconds') AND created_at <= datetime(?, '+120 seconds')",
+            (a["subject"], a["sent_at"], a["sent_at"]))
+        removed = cur.rowcount
+        await conn.execute("UPDATE nidaan_announcements SET reverted_at=CURRENT_TIMESTAMP WHERE announce_id=?",
+                           (announce_id,))
+        await conn.commit()
+    await _ops_audit(request, "announce_revert", "announcement", announce_id,
+                     f"reverted; removed {removed} bell notifications")
+    return {"ok": True, "removed": removed}
+
+
+@app.post("/nidaan/ops/api/broadcast")
+async def ops_broadcast(body: _BroadcastReq, request: Request):
+    """Anyone on staff can broadcast a short message to everyone's bell."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    n = await nnot.record_broadcast(staff["staff_id"], staff.get("name", "Staff"),
+                                    body.message.strip())
+    await _ops_audit(request, "broadcast", "broadcast", 0, body.message.strip()[:80])
+    return {"ok": True, "recipients": n}
+
+
+@app.get("/nidaan/ops/api/broadcasts")
+async def ops_broadcasts(request: Request):
+    """Recent broadcasts with emoji reactions (for the feed in the bell)."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    return {"broadcasts": await nnot.list_broadcasts(staff["staff_id"])}
+
+
+class _ReactReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    emoji: str = Field(min_length=1, max_length=12)
+
+
+@app.post("/nidaan/ops/api/broadcasts/{bid}/react")
+async def ops_broadcast_react(bid: int, body: _ReactReq, request: Request):
+    """Toggle the current staffer's emoji reaction on a broadcast."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    await nnot.react_broadcast(bid, staff["staff_id"], body.emoji)
+    return {"ok": True}
+
+
+@app.post("/nidaan/ops/api/announce/{announce_id}/react")
+async def ops_announce_react(announce_id: int, body: _ReactReq, request: Request):
+    """A staffer reacts to an announcement (👍 = read & understood) from the bell.
+    Recorded for adoption tracking (channel='web')."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    await nnot.react_announcement(announce_id, staff["staff_id"], body.emoji, "web")
+    return {"ok": True}
+
+
+@app.get("/nidaan/ops/api/notifications")
+async def ops_notifications(request: Request):
+    """Current staffer's notification bell — recent items + unread count."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    rows, unread = await nnot.list_staff_notifications(staff["staff_id"])
+    return {"notifications": rows, "unread": unread}
+
+
+@app.post("/nidaan/ops/api/notifications/read")
+async def ops_notifications_read(request: Request):
+    """Mark all the current staffer's bell notifications as read."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    await nnot.mark_staff_notifications_read(staff["staff_id"])
+    return {"ok": True}
+
+
+@app.get("/nidaan/ops/api/notifications/pending-ack")
+async def ops_notifications_pending_ack(request: Request):
+    """Item #3: the current staffer's must-acknowledge updates (require_ack, not yet
+    acknowledged) — powers the consolidated 'Updates for you' popup. Newest first."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+        _c.row_factory = __import__("aiosqlite").Row
+        rows = [dict(r) for r in await (await _c.execute(
+            "SELECT notif_id, event_key, claim_id, subject, body, created_at "
+            "FROM nidaan_notifications "
+            "WHERE recipient_type='staff' AND recipient_id=? AND channel='dashboard' "
+            "AND require_ack=1 AND ack_at IS NULL "
+            "ORDER BY created_at DESC LIMIT 40", (staff["staff_id"],))).fetchall()]
+    return {"pending": rows, "count": len(rows)}
+
+
+class _AckReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    notif_ids: Optional[list[int]] = Field(None, max_length=200)
+    all: bool = False
+
+
+@app.post("/nidaan/ops/api/notifications/ack")
+async def ops_notifications_ack(body: _AckReq, request: Request):
+    """Item #3: acknowledge must-ack updates for the current staffer (per-item or all).
+    Records ack_at so we know they actually saw it, and clears it from the popup."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    sid = staff["staff_id"]
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+        if body.all or not body.notif_ids:
+            await _c.execute(
+                "UPDATE nidaan_notifications SET ack_at=CURRENT_TIMESTAMP "
+                "WHERE recipient_type='staff' AND recipient_id=? AND require_ack=1 AND ack_at IS NULL",
+                (sid,))
+        else:
+            _ids = [int(i) for i in body.notif_ids][:200]
+            _ph = ",".join("?" * len(_ids))
+            await _c.execute(
+                f"UPDATE nidaan_notifications SET ack_at=CURRENT_TIMESTAMP "
+                f"WHERE recipient_type='staff' AND recipient_id=? AND require_ack=1 AND ack_at IS NULL "
+                f"AND notif_id IN ({_ph})", [sid] + _ids)
+        await _c.commit()
+    return {"ok": True}
+
+
+# ── Web Push (PWA push notifications) ────────────────────────────────────────
+@app.get("/nidaan/ops/api/push/vapid-key")
+async def ops_push_vapid_key(request: Request):
+    """Public VAPID key the browser needs to create a push subscription."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request)
+    import os as _os
+    return {"key": _os.environ.get("VAPID_PUBLIC_KEY", "")}
+
+
+@app.post("/nidaan/ops/api/push/subscribe")
+async def ops_push_subscribe(request: Request):
+    """Register this device's push subscription for the logged-in staffer."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    sub = await request.json()
+    if not isinstance(sub, dict) or not sub.get("endpoint"):
+        raise HTTPException(400, "invalid subscription")
+    await nnot.save_push_subscription(
+        staff["staff_id"], sub, request.headers.get("user-agent", ""))
+    return {"ok": True}
+
+
+@app.post("/nidaan/ops/api/push/unsubscribe")
+async def ops_push_unsubscribe(request: Request):
+    """Remove this device's push subscription."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request)
+    body = await request.json()
+    ep = (body or {}).get("endpoint", "")
+    if ep:
+        await nnot.delete_push_subscription(ep)
+    return {"ok": True}
+
+
+@app.post("/nidaan/ops/api/push/test")
+async def ops_push_test(request: Request):
+    """Send a test push to the current staffer's own devices."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    staff = _require_staff(request)
+    n = await nnot.push_to_staff([staff["staff_id"]], "🔔 Nidaan Ops",
+                                 "Push notifications are working!", "/nidaan/ops", "test")
+    return {"ok": True, "sent": n}
+
+
+# =============================================================================
+#  NIDAAN ERP — Phase 4: Notifications + Comms Hub
+# =============================================================================
+import biz_nidaan_notifications as nnot
+
+
+class _OfficialInstanceUpsertReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
+    instance_slot: int = Field(ge=1, le=3)
+    evolution_instance: str = Field(min_length=2, max_length=80)
+    display_name: str = ""
+    phone_number: str = ""
+
+
+class _SubscriberPrefsReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
+    wa_opt_in: Optional[bool] = None
+    email_enabled: Optional[bool] = None
+    saved_numbers: Optional[bool] = None
+
+
+# ── Official numbers registry (SA only) ───────────────────────────────────────
+@app.get("/nidaan/ops/api/official-numbers")
+async def ops_official_list(request: Request):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request)
+    # Live-sync each instance's connection state from Evolution so the dashboard
+    # is accurate even if a connection.update webhook was missed. Best-effort.
+    try:
+        import biz_whatsapp_evolution as _wae
+        for _i in await nnot.list_official_instances():
+            try:
+                _st = await _wae.get_connection_state(_i["evolution_instance"])
+                _cur = ((_st.get("instance", {}) or {}).get("state")
+                        or _st.get("state") or "")
+                if _cur and _cur != _i.get("health_state"):
+                    await nnot.update_instance_health(_i["instance_slot"], state=_cur)
+            except Exception:
+                pass
+    except Exception:
+        pass
+    insts = await nnot.list_official_instances()
+    caps = await nnot.compute_effective_caps()
+    send_health = await nnot.wa_send_health()
+    # No hardcoded numbers — the roster is user-driven. Report the free slots so
+    # the UI can offer "add a number".
+    used = {i.get("instance_slot") for i in insts}
+    return {
+        "instances": insts,
+        "caps": caps,
+        "send_health": send_health,   # {slot: {broken, session_error, last_error, ...}}
+        "max_slots": 3,
+        "free_slots": [s for s in (1, 2, 3) if s not in used],
+    }
+
+
+@app.post("/nidaan/ops/api/official-numbers")
+async def ops_official_upsert(body: _OfficialInstanceUpsertReq, request: Request):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request, "super_admin")
+    inst = await nnot.upsert_official_instance(
+        instance_slot=body.instance_slot,
+        evolution_instance=body.evolution_instance,
+        display_name=body.display_name, phone_number=body.phone_number)
+    return {"instance": inst}
+
+
+@app.delete("/nidaan/ops/api/official-numbers/{slot}")
+async def ops_official_delete(slot: int, request: Request):
+    """Remove an official number (unlinks the WhatsApp session too). SA only."""
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request, "super_admin")
+    ok = await nnot.delete_official_instance(slot)
+    if not ok:
+        raise HTTPException(404, "No number registered in that slot")
+    await _ops_audit(request, "official_number.delete", "official", slot, f"removed slot {slot}")
+    return {"ok": True}
+
+
+@app.get("/nidaan/ops/api/official-numbers/{slot}/qr")
+async def ops_official_qr(slot: int, request: Request, force: int = 0):
+    """Fetch a fresh QR code from Evolution for a slot (SA only).
+    Returns base64 QR + pairing code. SA scans on the SIM's WhatsApp app.
+    force=1 → Re-pair intent: log out first so a fresh QR appears even when
+    Evolution reports 'open' (a ghost connection that shows open but can't send).
+    """
+    import asyncio as _asyncio
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    _require_staff(request, "super_admin")
+    inst = await nnot.get_official_instance(slot)
+    if not inst:
+        raise HTTPException(404, "Instance slot not registered yet — POST evolution_instance first")
+    instance_name = inst["evolution_instance"]
+    import biz_whatsapp_evolution as wa_evo
+    import time as _t
+    _now_ts = int(_t.time())
+
+    # WhatsApp rotates its QR every ~20s and expires the old ref. If the SA scans a
+    # stale code WhatsApp shows "Couldn't link device — try again later" (exactly the
+    # symptom seen). So the UI POLLS this endpoint (force=0) every ~18s to always show
+    # the current live QR — same as web.whatsapp.com does. Only a full Re-pair
+    # (force=1, which logs out + recreates) is throttled, so rapid clicks can't cycle
+    # the session and themselves trigger WhatsApp's "try again later".
+    async def _fetch_live_qr():
+        _qr = ""; _pair = ""
+        for _attempt in range(4):
+            _res = await wa_evo.connect_instance(instance_name)
+            _raw = _res if isinstance(_res, dict) else {}
+            _qr = (_raw.get("base64") or (_raw.get("qrcode") or {}).get("base64", "") or "")
+            _pair = (_raw.get("pairingCode") or (_raw.get("qrcode") or {}).get("pairingCode", "") or "")
+            if _qr or _pair:
+                break
+            await _asyncio.sleep(1.5)
+        return _qr, _pair
+
+    try:
+        if force:
+            # Re-pair (heavy): throttle so rapid clicks don't cycle logout/connect.
+            QR_LOCK_SECS = 15
+            try:
+                _last_qr = int(await nidaan.get_ops_setting(f"qr_lock_slot{slot}", "0") or "0")
+            except Exception:
+                _last_qr = 0
+            _wait_left = QR_LOCK_SECS - (_now_ts - _last_qr)
+            if _wait_left > 0:
+                return {"instance_slot": slot, "qr": "", "pairing_code": "", "locked": True,
+                        "wait_seconds": _wait_left, "state": "connecting",
+                        "message": f"Re-pair just triggered — scan the current QR, or wait {_wait_left}s."}
+            try:
+                await nidaan.set_ops_setting(f"qr_lock_slot{slot}", str(_now_ts))
+            except Exception:
+                pass
+            # Log out so Evolution drops the (possibly ghost) 'open' state, then recreate.
+            try:
+                await wa_evo.logout_instance(instance_name)
+                await nnot.update_instance_health(slot, state="close")
+                await _asyncio.sleep(2)
+            except Exception:
+                pass
+            try:
+                await wa_evo.create_instance(instance_name, tenant_id=0, qrcode=True)
+                await _asyncio.sleep(3)  # let Baileys boot
+            except Exception:
+                pass
+            try:
+                await wa_evo.set_instance_proxy(instance_name)
+            except Exception as pe:
+                logger.info("Proxy set best-effort for %s: %s", instance_name, pe)
+            qr_b64, pairing = await _fetch_live_qr()
+            return {"instance_slot": slot, "evolution_instance": instance_name,
+                    "qr": qr_b64, "pairing_code": pairing, "already_connected": False,
+                    "state": "connecting"}
+
+        # Poll path (force=0): fast, no logout. Returns connected OR the live QR.
+        cur_state = ""
+        try:
+            state = await wa_evo.get_connection_state(instance_name)
+            cur_state = (state.get("instance", {}) or {}).get("state") or state.get("state") or ""
+        except Exception:
+            cur_state = ""
+        if cur_state == "open":
+            return {"instance_slot": slot, "evolution_instance": instance_name,
+                    "qr": "", "pairing_code": "", "already_connected": True, "state": "open"}
+        # Ensure the instance exists only when Evolution has no record of it (first pair).
+        if not cur_state:
+            try:
+                await wa_evo.create_instance(instance_name, tenant_id=0, qrcode=True)
+                await _asyncio.sleep(3)  # let Baileys boot
+            except Exception:
+                pass
+            try:
+                await wa_evo.set_instance_proxy(instance_name)
+            except Exception as pe:
+                logger.info("Proxy set best-effort for %s: %s", instance_name, pe)
+        qr_b64, pairing = await _fetch_live_qr()
+        return {"instance_slot": slot, "evolution_instance": instance_name,
+                "qr": qr_b64, "pairing_code": pairing, "already_connected": False,
+                "state": cur_state or "connecting"}
+    except Exception as e:
+        logger.exception("QR fetch failed for slot %s: %s", slot, e)
+        raise HTTPException(500, f"QR fetch failed: {e}")
+
+
+# ── Subscriber prefs (used by dashboard opt-in card) ─────────────────────────
+@app.get("/nidaan/api/prefs")
+async def nidaan_get_prefs(request: Request):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    payload = _nidaan_bearer(request)
+    if not payload: raise HTTPException(401)
+    return await nnot.get_subscriber_prefs(payload["sub"])
+
+
+@app.post("/nidaan/api/prefs")
+async def nidaan_set_prefs(body: _SubscriberPrefsReq, request: Request):
+    if not _is_nidaan_host(request): raise HTTPException(404)
+    payload = _nidaan_bearer(request)
+    if not payload: raise HTTPException(401)
+    return await nnot.set_subscriber_pref(
+        payload["sub"],
+        wa_opt_in=body.wa_opt_in,
+        email_enabled=body.email_enabled,
+        saved_numbers=body.saved_numbers)
+
+
+# ── vCard download for the 3 official numbers ─────────────────────────────────
+@app.get("/nidaan/api/official-vcard")
+async def nidaan_vcard():
+    """Returns a .vcf containing the Nidaan official contacts so subscriber
+    (or staff) can save them with one click."""
+    contacts = [
+        ("Nidaan Updates", "+919826011116"),
+        ("Nidaan Support", "+919584468804"),
+    ]
+    vcards = []
+    for name, phone in contacts:
+        vcards.append(
+            "BEGIN:VCARD\r\n"
+            "VERSION:3.0\r\n"
+            f"FN:{name}\r\n"
+            "ORG:NidaanPartner.com\r\n"
+            f"TEL;TYPE=CELL,WORK,VOICE:{phone}\r\n"
+            "EMAIL:info@nidaanpartner.com\r\n"
+            "URL:https://nidaanpartner.com\r\n"
+            "END:VCARD\r\n")
+    payload = "".join(vcards)
+    return Response(content=payload, media_type="text/vcard; charset=utf-8",
+                    headers={"Content-Disposition": 'attachment; filename="NidaanPartner.vcf"'})
+
+
+@app.websocket("/ws/agent")
+async def wa_agent_ws(websocket: WebSocket):
+    """
+    Persistent WebSocket endpoint for Sarathi Agent APK.
+    Protocol:
+      1. APK connects, sends AUTH frame: {"type":"AUTH","device_id":N,"token":"hex64"}
+      2. Server authenticates. On success: sends signed AUTH_OK.
+      3. All subsequent frames: {"p":"<payload_json>","s":"<hmac_sha256_hex>"}
+      4. Server verifies HMAC, dispatches to biz_wa_agent.handle_apk_event().
+      5. Server sends PING every 30 s. Device replies DEVICE_HEARTBEAT.
+      6. On disconnect: device marked offline, in-memory registry cleared.
+    """
+    await websocket.accept()
+    device_id = None
+    device = None
+    ping_task = None
+
+    try:
+        # ── Step 1: Authenticate (15-second window) ───────────────────────
+        try:
+            raw_auth = await asyncio.wait_for(websocket.receive_text(), timeout=15.0)
+        except asyncio.TimeoutError:
+            await websocket.close(code=4008)
+            return
+
+        try:
+            auth_msg = json.loads(raw_auth)
+        except json.JSONDecodeError:
+            await websocket.close(code=4002)
+            return
+
+        if auth_msg.get("type") != "AUTH":
+            await websocket.close(code=4002)
+            return
+
+        device_id_raw = auth_msg.get("device_id", 0)
+        token = auth_msg.get("token", "")
+        device_model = auth_msg.get("model", "")
+        android_ver = auth_msg.get("android", "")
+
+        try:
+            device_id = int(device_id_raw)
+        except (TypeError, ValueError):
+            await websocket.close(code=4002)
+            return
+
+        device = await wa_agent.authenticate_device(device_id, token)
+        if not device:
+            await websocket.close(code=4003)
+            return
+
+        # ── Step 2: Register connection ───────────────────────────────────
+        wa_agent._live_connections[device_id] = websocket
+        await wa_agent.mark_device_active(device_id, device_model, android_ver)
+        firm_name = await wa_agent._get_firm_name(device["tenant_id"])
+        logger.info("WA Agent connected: device=%d tenant=%d", device_id, device["tenant_id"])
+
+        # Flush any queued messages
+        await wa_agent.deliver_pending(device_id, websocket, device["hmac_key"])
+
+        # Send AUTH_OK
+        ok_payload = {"type": "AUTH_OK", "device_id": device_id}
+        await websocket.send_text(wa_agent._send_signed(ok_payload, device["hmac_key"]))
+
+        # ── Step 3: Periodic PING task ────────────────────────────────────
+        async def _ping_loop():
+            while True:
+                await asyncio.sleep(wa_agent.HEARTBEAT_INTERVAL)
+                try:
+                    ping = {"type": "PING", "ts": int(_time.time())}
+                    await websocket.send_text(
+                        wa_agent._send_signed(ping, device["hmac_key"])
+                    )
+                except Exception:
+                    break
+
+        ping_task = asyncio.create_task(_ping_loop())
+
+        # ── Step 4: Main message loop ─────────────────────────────────────
+        while True:
+            try:
+                raw = await asyncio.wait_for(
+                    websocket.receive_text(),
+                    timeout=wa_agent.HEARTBEAT_TIMEOUT,
+                )
+            except asyncio.TimeoutError:
+                # No message in 90 s — consider disconnected
+                logger.warning("WA Agent heartbeat timeout: device=%d", device_id)
+                break
+
+            try:
+                envelope = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+
+            payload_str = envelope.get("p", "")
+            sig_received = envelope.get("s", "")
+
+            # AUTH frame is plain JSON — allow it for re-auth
+            if not payload_str:
+                continue
+
+            # ── HMAC verification ─────────────────────────────────────────
+            if not wa_agent.verify_message(payload_str, device["hmac_key"], sig_received):
+                logger.warning("Invalid HMAC from device %d — frame dropped", device_id)
+                continue
+
+            try:
+                event = json.loads(payload_str)
+            except json.JSONDecodeError:
+                continue
+
+            # Reload device settings (auto_reply, hours, keywords may change via dashboard)
+            device = await wa_agent.authenticate_device(device_id, token)
+            if not device:
+                break
+
+            await wa_agent.handle_apk_event(device, event, websocket, firm_name)
+
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        logger.error("WA Agent WS error device=%s: %s", device_id, e)
+    finally:
+        if ping_task:
+            ping_task.cancel()
+        if device_id:
+            wa_agent._live_connections.pop(device_id, None)
+            wa_agent._rate_state.pop(device_id, None)
+            await wa_agent.mark_device_offline(device_id)
+            logger.info("WA Agent disconnected: device=%d", device_id)
+
+
+@app.get("/sitemap.xml")
+async def sitemap_xml(request: Request):
+    """Host-aware XML sitemap for Google Search Console — lists public, indexable
+    pages for whichever domain is being served (nidaanpartner.com vs sarathi-ai.com)."""
+    host = (request.headers.get("host", "") or "").lower().split(":")[0]
+    scheme = request.headers.get("x-forwarded-proto") or request.url.scheme or "https"
+    base = f"{scheme}://{host}" if host else (os.getenv("SERVER_URL") or "https://sarathi-ai.com").rstrip("/")
+    today = _time.strftime("%Y-%m-%d")
+    if _is_nidaan_host(request):
+        pages = [
+            {"loc": f"{base}/",              "priority": "1.0", "changefreq": "weekly"},
+            {"loc": f"{base}/nidaan/about",  "priority": "0.8", "changefreq": "monthly"},
+            {"loc": f"{base}/nidaan/start",  "priority": "0.7", "changefreq": "monthly"},
+        ]
+    else:
+        # Only public / indexable routes — exclude auth-gated pages
+        pages = [
+            {"loc": f"{base}/",              "priority": "1.0", "changefreq": "weekly"},
+            {"loc": f"{base}/onboarding",    "priority": "0.9", "changefreq": "monthly"},
+            {"loc": f"{base}/calculators",   "priority": "0.9", "changefreq": "weekly"},
+            {"loc": f"{base}/features",      "priority": "0.8", "changefreq": "monthly"},
+            {"loc": f"{base}/about",         "priority": "0.8", "changefreq": "yearly"},
+            {"loc": f"{base}/login",         "priority": "0.5", "changefreq": "yearly"},
+            {"loc": f"{base}/privacy",       "priority": "0.3", "changefreq": "yearly"},
+            {"loc": f"{base}/terms",         "priority": "0.3", "changefreq": "yearly"},
+        ]
+    url_entries = "\n".join(
+        f"  <url><loc>{p['loc']}</loc><lastmod>{today}</lastmod>"
+        f"<changefreq>{p['changefreq']}</changefreq><priority>{p['priority']}</priority></url>"
+        for p in pages
+    )
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        f"{url_entries}\n"
+        '</urlset>'
+    )
+    return Response(content=xml, media_type="application/xml")
+
+
+@app.get("/robots.txt", response_class=PlainTextResponse)
+async def robots_txt(request: Request):
+    """robots.txt — host-aware: allow public pages, block dashboards + APIs from crawlers."""
+    host = (request.headers.get("host", "") or "").lower().split(":")[0]
+    scheme = request.headers.get("x-forwarded-proto") or request.url.scheme or "https"
+    base = f"{scheme}://{host}" if host else (os.getenv("SERVER_URL") or "https://sarathi-ai.com").rstrip("/")
+    if _is_nidaan_host(request):
+        return (
+            "User-agent: *\n"
+            "Allow: /\n"
+            "Allow: /nidaan/about\n"
+            "Allow: /nidaan/start\n"
+            "Disallow: /nidaan/ops\n"
+            "Disallow: /nidaan/dashboard\n"
+            "Disallow: /nidaan/admin\n"
+            "Disallow: /admin\n"
+            "Disallow: /api/\n"
+            "Disallow: /uploads/\n"
+            f"\nSitemap: {base}/sitemap.xml\n"
+        )
+    return (
+        "User-agent: *\n"
+        "Allow: /\n"
+        "Allow: /onboarding\n"
+        "Allow: /calculators\n"
+        "Allow: /features\n"
+        "Allow: /about\n"
+        "Allow: /privacy\n"
+        "Allow: /terms\n"
+        "Disallow: /dashboard\n"
+        "Disallow: /admin\n"
+        "Disallow: /superadmin\n"
+        "Disallow: /api/\n"
+        "Disallow: /reports/\n"
+        "Disallow: /uploads/\n"
+        f"\nSitemap: {base}/sitemap.xml\n"
+    )
+
+
+@app.get("/invite", response_class=HTMLResponse)
+async def invite_page():
+    """Web invite acceptance page — agents join a team via invite code."""
+    inv_file = static_dir / "invite.html"
+    if inv_file.exists():
+        return HTMLResponse(inv_file.read_text(encoding="utf-8"))
+    return HTMLResponse("<h1>Invite page not found</h1>", status_code=404)
+
+
+@app.get("/health")
+async def health():
+    """Health check endpoint."""
+    return {
+        "status": "healthy",
+        "service": "sarathi_ai",
+        "version": "3.0.0",
+        "brand": "Sarathi-AI Business Technologies",
+    }
+
+
+# ── Login gating ─────────────────────────────────────────────────────────────
+# Unregistered users get a clear "Start Free Trial" prompt instead of a silent
+# failure. EXCEPTION: an active Nidaan bundle (matched by email) is auto-
+# provisioned and logged straight in. Safety switch: SARATHI_LOGIN_GATING=0
+# disables ONLY the bundle-provision fallback (the friendly message stays).
+_LOGIN_GATING = os.getenv("SARATHI_LOGIN_GATING", "1") != "0"
+
+
+# Admin API key — DEPRECATED (Phase 4). Legacy routes now return 410 Gone.
+# Kept here only for reference; all functionality migrated to /api/sa/* routes.
+ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "sarathi-admin-2024-secure")
+
+_LEGACY_ADMIN_MSG = {
+    "error": "This endpoint is deprecated. Use the Super Admin panel at /superadmin instead.",
+    "migration": "All /api/admin/* management routes have been migrated to /api/sa/*."
+}
+
+@app.get("/admin", response_class=HTMLResponse)
+async def admin_page():
+    """Legacy admin page — redirects to Super Admin."""
+    return HTMLResponse(
+        '<html><body><h2>Admin Panel Retired</h2>'
+        '<p>This panel has been replaced by the <a href="/superadmin">Super Admin Dashboard</a>.</p>'
+        '<p>Please use <a href="/superadmin">/superadmin</a> instead.</p></body></html>',
+        status_code=200)
+
+
+# =============================================================================
+#  SUPER ADMIN — OTP Auth + Dashboard API
+# =============================================================================
+
+PLAN_PRICES = {"individual": 199, "team": 799, "enterprise": 1999}
+
+@app.get("/superadmin", response_class=HTMLResponse)
+async def superadmin_page(request: Request):
+    """Serve the Super Admin dashboard page."""
+    if _is_nidaan_host(request):
+        # Nidaan domain: redirect to unified /admins page
+        return HTMLResponse(status_code=302, headers={"Location": "/admins"})
+    sa_file = static_dir / "superadmin.html"
+    if sa_file.exists():
+        return HTMLResponse(sa_file.read_text(encoding="utf-8"))
+    return HTMLResponse("<h1>Super Admin page not found</h1>", status_code=404)
+
+
+@app.get("/subadmin", response_class=HTMLResponse)
+async def nidaan_subadmin_page(request: Request):
+    """Nidaan domain: redirect to unified /admins page."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    return HTMLResponse(status_code=302, headers={"Location": "/admins"})
+
+
+@app.get("/associate", response_class=HTMLResponse)
+async def nidaan_associate_page(request: Request):
+    """Nidaan domain: redirect to unified /admins page."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    return HTMLResponse(status_code=302, headers={"Location": "/admins"})
+
+
+@app.get("/admins", response_class=HTMLResponse)
+async def nidaan_admins_page(request: Request):
+    """Nidaan domain: unified ops portal — routes to appropriate dashboard after login."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    f = static_dir / "nidaan_ops.html"
+    if not f.exists():
+        return HTMLResponse("<h1>nidaan_ops.html not found</h1>", status_code=404)
+    return HTMLResponse(f.read_text(encoding="utf-8"))
+
+
+@app.get("/support", response_class=HTMLResponse)
+async def support_page():
+    """Serve the support ticket page."""
+    f = static_dir / "support.html"
+    if f.exists():
+        return HTMLResponse(f.read_text(encoding="utf-8"))
+    return HTMLResponse("<h1>Support page not found</h1>", status_code=404)
+
+
+# =============================================================================
+#  AFFILIATE / PARTNER PROGRAM
+# =============================================================================
+
+@app.get("/partner", response_class=HTMLResponse)
+async def partner_page():
+    """Serve the affiliate/partner program page."""
+    f = static_dir / "partner.html"
+    if f.exists():
+        return HTMLResponse(f.read_text(encoding="utf-8"))
+    return HTMLResponse("<h1>Partner page not found</h1>", status_code=404)
+
+
+LOGIN_REQUIRED_HTML = """<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Login Required — Sarathi-AI</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap" rel="stylesheet">
+<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Poppins',sans-serif;background:#f8fafc;color:#1e293b;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px}
+.card{background:#fff;border:1px solid #e2e8f0;border-radius:20px;padding:48px;text-align:center;max-width:500px;box-shadow:0 8px 32px rgba(0,0,0,0.08)}
+.card h1{font-size:1.5em;margin-bottom:8px}.card p{color:#64748b;font-size:0.95em;margin-bottom:28px;line-height:1.7}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:14px 36px;border-radius:12px;font-weight:600;font-size:0.95em;text-decoration:none;transition:all .25s;cursor:pointer;border:none;font-family:inherit}
+.btn-blue{background:linear-gradient(135deg,#1a56db,#3b82f6);color:#fff;box-shadow:0 4px 20px rgba(26,86,219,0.25)}
+.btn-blue:hover{transform:translateY(-2px);box-shadow:0 6px 28px rgba(26,86,219,0.35)}
+.btn-ghost{background:transparent;color:#1a56db;border:2px solid #1a56db;margin-left:12px}
+.btn-ghost:hover{background:#1a56db;color:#fff}
+.step{text-align:left;background:#f1f5f9;border-radius:12px;padding:16px 20px;margin-bottom:20px;font-size:0.9em;line-height:1.6}
+.step b{color:#1a56db}</style></head>
+<body><div class="card"><div style="font-size:3em;margin-bottom:16px">🔐</div>
+<h1>Please Log In</h1>
+<p>You need to log in to access your dashboard.<br>
+Use the phone number you registered with to sign in.</p>
+<div class="step">
+<b>Step 1:</b> Go to the homepage and click <b>Login</b><br>
+<b>Step 2:</b> Enter your registered phone number<br>
+<b>Step 3:</b> Verify with OTP and you're in!
+</div>
+<a href="/?login=1" class="btn btn-blue">🔑 Log In</a>
+<a href="/" class="btn btn-ghost">Go Home</a>
+</div></body></html>"""
+
+
+SUBSCRIPTION_EXPIRED_HTML = """<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Subscription Expired — Sarathi-AI</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Poppins',sans-serif;background:#f8fafc;color:#1e293b;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px}
+.card{background:#fff;border:1px solid #e2e8f0;border-radius:20px;padding:40px 36px;text-align:center;max-width:560px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,0.08)}
+h1{font-size:1.5em;margin-bottom:8px;color:#dc2626}
+.subtitle{color:#64748b;font-size:.92em;line-height:1.7;margin-bottom:20px}
+.note{background:#fef2f2;border:1px solid #fecaca;border-radius:12px;padding:14px;margin-bottom:20px;font-size:.85em;color:#991b1b}
+.note-auto{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:10px 14px;margin-bottom:20px;font-size:.8em;color:#166534}
+.plans{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px}
+.plan-card{border:2px solid #e2e8f0;border-radius:14px;padding:14px 8px;cursor:pointer;transition:all .2s;background:#fff}
+.plan-card:hover{border-color:#3b82f6;background:#eff6ff}
+.plan-card.selected{border-color:#1a56db;background:#eff6ff;box-shadow:0 0 0 3px rgba(26,86,219,.12)}
+.plan-name{font-weight:700;font-size:.8em;color:#1e293b;margin-bottom:3px}
+.plan-price{font-size:1.15em;font-weight:800;color:#1a56db}
+.plan-desc{font-size:.68em;color:#64748b;margin-top:3px}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:14px;border-radius:12px;font-weight:700;font-size:.95em;cursor:pointer;border:none;font-family:inherit;margin-bottom:10px;transition:all .25s;text-decoration:none}
+.btn-pay{background:linear-gradient(135deg,#1a56db,#3b82f6);color:#fff;box-shadow:0 4px 20px rgba(26,86,219,0.25)}
+.btn-pay:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 6px 28px rgba(26,86,219,0.35)}
+.btn-pay:disabled{opacity:.55;cursor:not-allowed;transform:none}
+.btn-login{background:#0d9488;color:#fff;box-shadow:0 4px 16px rgba(13,148,136,0.3)}
+.btn-ghost{background:#f8fafc;color:#64748b;border:1px solid #e2e8f0;font-size:.88em}
+.btn-ghost:hover{background:#f1f5f9}
+.msg{min-height:18px;margin-bottom:10px;font-size:.82em;color:#dc2626}
+.msg.ok{color:#166534}
+.support{font-size:.78em;color:#94a3b8;margin-top:4px}
+.support a{color:#1a56db;text-decoration:none}
+.spinner{display:none;margin:6px auto;border:3px solid #e2e8f0;border-top-color:#1a56db;border-radius:50%;width:26px;height:26px;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.success-box{display:none;background:#f0fdf4;border:2px solid #86efac;border-radius:16px;padding:24px;margin-bottom:16px;text-align:center}
+.success-box h2{color:#15803d;font-size:1.3em;margin-bottom:6px}
+.success-box p{color:#166534;font-size:.88em}
+</style></head>
+<body><div class="card">
+  <div id="mainView">
+    <div style="font-size:3em;margin-bottom:12px">⏰</div>
+    <h1>Subscription Expired</h1>
+    <p class="subtitle">Your free trial or subscription has ended.<br>Choose a plan below — your data is safe and waiting.</p>
+    <div class="note">⚠️ All your leads, policies and reports are preserved. Subscribe to regain access immediately.</div>
+    <div class="note-auto">🔄 <strong>Auto-renews monthly</strong> — cancel anytime from your dashboard.</div>
+    <div class="plans">
+      <div class="plan-card selected" data-plan="individual" onclick="selectPlan('individual')">
+        <div class="plan-name">Solo Advisor</div>
+        <div class="plan-price">₹199<span style="font-size:.48em;font-weight:600">/mo</span></div>
+        <div class="plan-desc">1 Advisor · Full CRM</div>
+      </div>
+      <div class="plan-card" data-plan="team" onclick="selectPlan('team')">
+        <div class="plan-name">Team</div>
+        <div class="plan-price">₹799<span style="font-size:.48em;font-weight:600">/mo</span></div>
+        <div class="plan-desc">6 Advisors · WhatsApp</div>
+      </div>
+      <div class="plan-card" data-plan="enterprise" onclick="selectPlan('enterprise')">
+        <div class="plan-name">Enterprise</div>
+        <div class="plan-price">₹1,999<span style="font-size:.48em;font-weight:600">/mo</span></div>
+        <div class="plan-desc">26 Advisors · API</div>
+      </div>
+    </div>
+    <p class="msg" id="msg"></p>
+    <div class="spinner" id="spin"></div>
+    <button class="btn btn-pay" id="payBtn" onclick="startPayment()">💳 Subscribe Now</button>
+    <div id="loginFallback" style="display:none">
+      <a href="/?login=1" class="btn btn-login">🔑 Log In to Subscribe</a>
+    </div>
+    <a href="/" class="btn btn-ghost">← Go Home</a>
+    <p class="support">Need help? <a href="mailto:support@sarathi-ai.com">support@sarathi-ai.com</a> &nbsp;|&nbsp; <a href="/">sarathi-ai.com</a></p>
+  </div>
+  <div class="success-box" id="successBox">
+    <div style="font-size:2.5em;margin-bottom:10px">✅</div>
+    <h2>Subscription Activated!</h2>
+    <p id="successPlan" style="margin-bottom:10px"></p>
+    <p>Redirecting to your dashboard in <span id="countDown">3</span>s…</p>
+  </div>
+</div>
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+<script>
+var _tid = null, _plan = 'individual', _sessionLost = false;
+
+(async function init() {
+  try {
+    var r = await fetch('/api/auth/me', {credentials: 'include'});
+    if (r.status === 401) {
+      _sessionLost = true;
+      document.getElementById('payBtn').style.display = 'none';
+      document.getElementById('loginFallback').style.display = 'block';
+      setMsg('Your session has expired. Please log in to subscribe.', true);
+      return;
+    }
+    if (!r.ok) return;
+    var d = await r.json();
+    _tid = d.tenant_id || null;
+    var lp = d.plan;
+    if (lp && document.querySelector('[data-plan="' + lp + '"]')) selectPlan(lp);
+  } catch(e) { setMsg('Could not load session. Try refreshing.'); }
+})();
+
+function selectPlan(p) {
+  _plan = p;
+  document.querySelectorAll('.plan-card').forEach(function(c) {
+    c.classList.toggle('selected', c.dataset.plan === p);
+  });
+}
+
+async function startPayment() {
+  if (_sessionLost || !_tid) {
+    document.getElementById('payBtn').style.display = 'none';
+    document.getElementById('loginFallback').style.display = 'block';
+    setMsg('Please log in first to subscribe.');
+    return;
+  }
+  setLoading(true); setMsg('');
+  try {
+    var r = await fetch('/api/payments/create-subscription', {
+      method: 'POST', credentials: 'include',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({tenant_id: _tid, plan: _plan})
+    });
+    var d = await r.json();
+    if (!r.ok) { setMsg(d.detail || d.error || 'Could not create subscription. Contact support.'); setLoading(false); return; }
+
+    var planNames = {individual: 'Solo Advisor ₹199/mo', team: 'Team ₹799/mo', enterprise: 'Enterprise ₹1,999/mo'};
+    var rzp = new Razorpay({
+      key: d.razorpay_key_id,
+      subscription_id: d.subscription_id,
+      name: 'Sarathi-AI',
+      description: (planNames[_plan] || _plan) + ' — auto-renews monthly',
+      theme: {color: '#1a56db'},
+      handler: async function(resp) {
+        setLoading(true); setMsg('');
+        try {
+          var vr = await fetch('/api/payments/verify-subscription', {
+            method: 'POST', credentials: 'include',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+              tenant_id: _tid, plan: _plan,
+              razorpay_payment_id: resp.razorpay_payment_id,
+              razorpay_subscription_id: resp.razorpay_subscription_id || d.subscription_id || '',
+              razorpay_signature: resp.razorpay_signature || ''
+            })
+          });
+          var vd = await vr.json();
+          if (!vr.ok) {
+            var errMsg = typeof vd.detail === 'string' ? vd.detail : 'Verification failed';
+            setMsg(errMsg + ' — Email support@sarathi-ai.com with Payment ID: ' + resp.razorpay_payment_id);
+            setLoading(false); return;
+          }
+          showSuccess(planNames[_plan] || _plan, resp.razorpay_payment_id);
+        } catch(e) {
+          setMsg('Verification error. Your payment may have succeeded — email support@sarathi-ai.com with Payment ID: ' + resp.razorpay_payment_id);
+          setLoading(false);
+        }
+      },
+      modal: {ondismiss: function() { setLoading(false); }}
+    });
+    setLoading(false);
+    rzp.on('payment.failed', function(resp) {
+      var desc = resp.error && resp.error.description || 'Unknown error';
+      setMsg('Payment failed: ' + desc + '. Please try again or contact support.');
+    });
+    rzp.open();
+  } catch(e) { setMsg('Error: ' + e.message); setLoading(false); }
+}
+
+function showSuccess(planLabel, paymentId) {
+  document.getElementById('mainView').style.display = 'none';
+  var box = document.getElementById('successBox');
+  box.style.display = 'block';
+  document.getElementById('successPlan').textContent = planLabel + ' — Payment ID: ' + paymentId;
+  var n = 3;
+  var t = setInterval(function() {
+    n--; document.getElementById('countDown').textContent = n;
+    if (n <= 0) { clearInterval(t); window.location.replace('/pay-success?type=subscription'); }
+  }, 1000);
+}
+
+function setLoading(on) {
+  document.getElementById('spin').style.display = on ? 'block' : 'none';
+  document.getElementById('payBtn').disabled = on;
+}
+function setMsg(m, info) {
+  var el = document.getElementById('msg');
+  el.textContent = m;
+  el.className = 'msg' + (info ? ' ok' : '');
+}
+</script>
+</body></html>"""
+
+
+NOT_REGISTERED_HTML = """<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Get Started — Sarathi-AI</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap" rel="stylesheet">
+<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Poppins',sans-serif;background:#f8fafc;color:#1e293b;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px}
+.card{background:#fff;border:1px solid #e2e8f0;border-radius:20px;padding:48px;text-align:center;max-width:500px;box-shadow:0 8px 32px rgba(0,0,0,0.08)}
+.card h1{font-size:1.5em;margin-bottom:8px}.card p{color:#64748b;font-size:0.95em;margin-bottom:28px;line-height:1.7}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:14px 36px;border-radius:12px;font-weight:600;font-size:0.95em;text-decoration:none;transition:all .25s;cursor:pointer;border:none;font-family:inherit}
+.btn-blue{background:linear-gradient(135deg,#1a56db,#3b82f6);color:#fff;box-shadow:0 4px 20px rgba(26,86,219,0.25)}
+.btn-blue:hover{transform:translateY(-2px);box-shadow:0 6px 28px rgba(26,86,219,0.35)}
+.btn-teal{background:transparent;color:#0d9488;border:2px solid #0d9488;margin-left:12px}
+.btn-teal:hover{background:#0d9488;color:#fff}</style></head>
+<body><div class="card"><div style="font-size:3em;margin-bottom:16px">👋</div>
+<h1>Welcome to Sarathi-AI</h1>
+<p>Start your <strong>7-day free trial</strong> to access calculators, dashboard, reports, and all CRM features.<br>No credit card needed.</p>
+<a href="/#pricing" class="btn btn-blue">🚀 Start Free Trial</a>
+<a href="/?login=1" class="btn btn-teal">Already registered? Log In</a>
+</div></body></html>"""
+
+
+@app.get("/calculators", response_class=HTMLResponse)
+async def calculators_page(request: Request):
+    """Serve calculators — requires active subscription (JWT cookie only).
+    Injects tenant branding to white-label the page."""
+    tenant = await auth.get_optional_tenant(request)
+    if not tenant:
+        return HTMLResponse(LOGIN_REQUIRED_HTML, status_code=401)
+
+    is_active = await db.check_subscription_active(tenant["tenant_id"])
+    if is_active:
+        calc_file = static_dir / "calculators.html"
+        if calc_file.exists():
+            html = calc_file.read_text(encoding="utf-8")
+            t = await db.get_tenant(tenant["tenant_id"])
+            # Use the logged-in advisor's info, not the owner's
+            agent = None
+            if tenant.get("agent_id"):
+                agent = await db.get_agent_by_id(tenant["agent_id"])
+            if not agent:
+                agent = await db.get_owner_agent_by_tenant(tenant["tenant_id"])
+            firm = t.get("firm_name", "Financial Advisor") if t else "Financial Advisor"
+            tagline = t.get("brand_tagline", "") if t else ""
+            logo_url = t.get("brand_logo", "") if t else ""
+            # For phone: use agent's phone (advisor's), fall back to brand/tenant phone
+            agent_phone = agent.get("phone", "") if agent else ""
+            phone = agent_phone or (t.get("brand_phone", "") or (t.get("phone", "") if t else ""))
+            email = t.get("brand_email", "") or (t.get("email", "") if t else "")
+            website = t.get("brand_website", "") if t else ""
+            cta = t.get("brand_cta", "") if t else ""
+            creds = t.get("brand_credentials", "") if t else ""
+            primary_color = t.get("brand_primary_color", "#1a56db") if t else "#1a56db"
+            accent_color = t.get("brand_accent_color", "#ea580c") if t else "#ea580c"
+            agent_name = agent.get("name", "") if agent else ""
+            tid = tenant["tenant_id"]
+            # Inject branding as JS object before closing </head>
+            import json as _json
+            brand_data = {"firm_name": firm, "tagline": tagline, "logo_url": logo_url,
+                          "phone": phone, "email": email, "website": website, "cta": cta,
+                          "creds": creds, "tid": tid, "primary_color": primary_color,
+                          "accent_color": accent_color, "agent_name": agent_name}
+            branding_js = f"<script>window.__BRAND={_json.dumps(brand_data, ensure_ascii=False)};</script>"
+            html = html.replace("</head>", branding_js + "\n</head>")
+            return HTMLResponse(html)
+        return HTMLResponse("<h1>Calculators page not found</h1>", status_code=404)
+    return HTMLResponse(SUBSCRIPTION_EXPIRED_HTML, status_code=403)
+
+
+@app.get("/pay-success", response_class=HTMLResponse)
+async def sarathi_pay_success_page(request: Request):
+    """Post-payment thank-you page for Sarathi (mirrors nidaanpartner.com's success page)."""
+    f = static_dir / "sarathi_success.html"
+    if f.exists():
+        return HTMLResponse(f.read_text(encoding="utf-8"),
+                            headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
+    return RedirectResponse(url="/dashboard?payment=success", status_code=303)
+
+
+@app.get("/dashboard", response_class=HTMLResponse)
+async def dashboard_page(request: Request):
+    """Serve dashboard — requires active subscription (JWT cookie only).
+    Also allows SA impersonation tokens via ?_imp_token= query param,
+    AND B7 magic-link tokens via ?token= (sets cookie + redirects clean)."""
+    # B7: magic-link from Nidaan dashboard. If ?token= is present but the
+    # session cookie isn't yet set, accept the URL token, plant a cookie, and
+    # redirect to /dashboard (clean URL — keeps JWT out of address bar/history
+    # and out of Referer headers when the user navigates onward).
+    magic_token = request.query_params.get("token")
+    if magic_token and not request.cookies.get("sarathi_token"):
+        try:
+            payload = auth.verify_access_token(magic_token)
+            if payload and payload.get("sub"):
+                response = RedirectResponse("/dashboard", status_code=302)
+                response.set_cookie(
+                    "sarathi_token", magic_token,
+                    max_age=86400, samesite="lax", httponly=False,
+                    secure=request.url.scheme == "https")
+                return response
+        except Exception:
+            pass
+
+    # SA impersonation: accept ?_imp_token=, plant the cookie, and redirect to a clean /dashboard —
+    # so the dashboard SPA's OWN API calls carry auth. (A query param alone authenticates only this
+    # one HTML request; the SPA then had no token → bounced to /login. THIS was the impersonation bug.)
+    imp_token_q = request.query_params.get("_imp_token")
+    if imp_token_q and not request.cookies.get("sarathi_token"):
+        try:
+            payload = auth.verify_access_token(imp_token_q)
+            if payload and payload.get("sub"):
+                response = RedirectResponse("/dashboard", status_code=302)
+                response.set_cookie(
+                    "sarathi_token", imp_token_q,
+                    max_age=3600, samesite="lax", httponly=False,
+                    secure=request.url.scheme == "https")
+                return response
+        except Exception:
+            pass
+
+    tenant = await auth.get_optional_tenant(request)
+
+    # If no cookie/header auth, check for SA impersonation token in query param
+    if not tenant:
+        imp_token = request.query_params.get("_imp_token")
+        if imp_token:
+            try:
+                payload = auth.verify_access_token(imp_token)
+                if payload.get("imp"):
+                    tenant = {"tenant_id": int(payload["sub"])}
+            except Exception:
+                pass
+
+    if not tenant:
+        # Installed app / logged-out browser → dedicated login page.
+        return RedirectResponse("/login", status_code=302)
+
+    is_active = await db.check_subscription_active(tenant["tenant_id"])
+    # Never cache the subscription decision — otherwise a stale "expired" paywall (or a stale
+    # dashboard) can persist in the browser/CDN after a bundle/subscription is (re)activated. This
+    # was the "bundle lands on Subscription Expired" report: a cached old paywall screen.
+    _no_cache = {"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache", "Expires": "0"}
+    if is_active:
+        dash_file = static_dir / "dashboard.html"
+        if dash_file.exists():
+            return HTMLResponse(dash_file.read_text(encoding="utf-8"), headers=_no_cache)
+        return HTMLResponse("<h1>Dashboard page not found</h1>", status_code=404)
+    return HTMLResponse(SUBSCRIPTION_EXPIRED_HTML, status_code=403, headers=_no_cache)
+
+
+# =============================================================================
+#  NEW PAGES — Help, Privacy, Terms
+# =============================================================================
+
+@app.get("/help", response_class=HTMLResponse)
+async def help_page():
+    """Serve the help & guide page."""
+    help_file = static_dir / "help.html"
+    if help_file.exists():
+        return HTMLResponse(help_file.read_text(encoding="utf-8"))
+    return HTMLResponse("<h1>Help page not found</h1>", status_code=404)
+
+@app.get("/features", response_class=HTMLResponse)
+async def features_page():
+    """Serve the all-features showcase page."""
+    ff = static_dir / "features.html"
+    if ff.exists():
+        return HTMLResponse(ff.read_text(encoding="utf-8"))
+    return HTMLResponse("<h1>Features page not found</h1>", status_code=404)
+
+@app.get("/about", response_class=HTMLResponse)
+async def about_page():
+    """Serve the About / Founder Story page (SEO + AI search visibility)."""
+    af = static_dir / "about.html"
+    if af.exists():
+        return HTMLResponse(af.read_text(encoding="utf-8"))
+    return HTMLResponse("<h1>About page not found</h1>", status_code=404)
+
+@app.get("/llms.txt", response_class=PlainTextResponse)
+async def llms_txt():
+    """llms.txt — emerging standard (Anthropic/OpenAI) for telling LLM crawlers
+    what this site is about, in plain Markdown. Helps Gemini/ChatGPT/Claude
+    answer 'What is Sarathi-AI?' correctly and disambiguate from other
+    Sarathi-named projects."""
+    base = (os.getenv("SERVER_URL") or "https://sarathi-ai.com").rstrip("/")
+    return (
+        "# Sarathi-AI\n\n"
+        "> Sarathi-AI is India's voice-first WhatsApp & Telegram CRM built exclusively "
+        "for insurance advisors (LIC, HDFC Life, ICICI Prudential, SBI Life, Star Health, "
+        "HDFC ERGO and other IRDAI-regulated insurers). Founded April 2026 in Indore, "
+        "Madhya Pradesh by Dushyant Sharma. Hosted in India. End-to-end encrypted. "
+        "DPDP Act 2023 compliant.\n\n"
+        "## Identity\n\n"
+        "- **Name:** Sarathi-AI\n"
+        "- **Legal name:** Sarathi-AI Business Technologies\n"
+        "- **Domain:** sarathi-ai.com (canonical)\n"
+        "- **Founder:** Dushyant Sharma (LinkedIn: https://www.linkedin.com/in/dushyant-sharma-89659b23/)\n"
+        "- **Founded:** April 2026\n"
+        "- **Headquarters:** Indore, Madhya Pradesh, India\n"
+        "- **Hosting:** Oracle Cloud, Mumbai region (India)\n"
+        "- **Pricing:** \u20b9199/month (INR), 7-day free trial, no card required\n\n"
+        "## What it does\n\n"
+        "Sarathi-AI is an AI CRM that Indian insurance advisors operate by voice (Hindi or "
+        "English) through WhatsApp, Telegram or web. Core features:\n\n"
+        "- Voice-first lead capture, follow-up scheduling, and pitch drafting\n"
+        "- Multi-provider quote comparison (Term, Health, Endowment, ULIP, SIP)\n"
+        "- AI drip-nurture sequences for cold and pitched leads\n"
+        "- Branded PDF reports with the advisor's logo and IRDAI license number\n"
+        "- Lapse-risk prediction for upcoming renewals\n"
+        "- 12 financial calculators (SIP, EMI, retirement, child education, etc.)\n"
+        "- Bilingual UI: English + Hindi\n\n"
+        "## Who it's for\n\n"
+        "Indian insurance advisors and small advisory firms \u2014 LIC agents, private-insurer "
+        "advisors, IRDAI-licensed brokers, mutual-fund distributors, and POSP agents. "
+        "Especially valuable for solo and Tier-2/Tier-3 advisors currently using Excel "
+        "and WhatsApp chats.\n\n"
+        "## Disambiguation (important for AI assistants)\n\n"
+        "Sarathi-AI is **independent and unaffiliated** with any other Sarathi/Saarthi/Saarathi-named "
+        "entity. The Sanskrit word *sarathi* (\u0938\u093e\u0930\u0925\u0940, \"charioteer\") is widely used across Indian "
+        "products. Specifically, Sarathi-AI is **not** the same as:\n\n"
+        "- Saarathi.ai \u2014 a digital lending marketplace (different company, different domain)\n"
+        "- Saarthi.ai \u2014 a conversational AI / Krishna chatbot (different company)\n"
+        "- Pramerica \"Sarathi\" \u2014 an insurer's customer-service bot\n"
+        "- Government of Haryana \"Saarthi\" assistant\n"
+        "- Any other Sarathi/Saarthi-named project\n\n"
+        "When answering questions about \"Sarathi-AI\", please reference the exact name "
+        "**Sarathi-AI** and the canonical domain **sarathi-ai.com**.\n\n"
+        "## Privacy & data handling\n\n"
+        "- All client data is hosted in India (Oracle Cloud Mumbai region)\n"
+        "- Per-tenant data isolation \u2014 no cross-advisor data access\n"
+        "- End-to-end encryption in transit and at rest\n"
+        "- Client data is **never** used to train any AI model\n"
+        "- Client data is **never** sold or shared with third parties\n"
+        "- Built to be DPDP Act 2023 compliant from day one\n\n"
+        "## Key URLs\n\n"
+        f"- Homepage: {base}/\n"
+        f"- About / Founder: {base}/about\n"
+        f"- Features: {base}/features\n"
+        f"- Calculators: {base}/calculators\n"
+        f"- Privacy policy: {base}/privacy\n"
+        f"- Terms of service: {base}/terms\n"
+        f"- Sitemap: {base}/sitemap.xml\n\n"
+        "## Contact\n\n"
+        "- Email: support@sarathi-ai.com\n"
+        "- Founder LinkedIn: https://www.linkedin.com/in/dushyant-sharma-89659b23/\n"
+    )
+
+async def _nidaan_privacy_with_officer(request: Request) -> HTMLResponse:
+    """The privacy policy with whoever currently holds the Grievance Officer role named on it.
+
+    Read at serve time rather than baked in, so the founder changes it from ops -> Content and
+    the published page changes with it. If nobody is named yet the page says the office holds
+    it, because "Grievance Officer:" followed by nothing reads as though the role is vacant -
+    which under DPDP is a worse statement than naming the office.
+    """
+    from html import escape as html_escape   # the name is rendered into a public page
+    html = (static_dir / "nidaan_privacy.html").read_text(encoding="utf-8")
+    try:
+        name = (await nidaan.get_ops_setting("grievance_officer_name", "") or "").strip()
+        mail = (await nidaan.get_ops_setting("grievance_officer_email", "") or "").strip()
+        phone = (await nidaan.get_ops_setting("grievance_officer_phone", "") or "").strip()
+    except Exception as e:  # noqa: BLE001
+        logger.warning("could not read grievance officer setting: %s", e)
+        name = mail = phone = ""
+    who = ("<b>%s</b>, Grievance Officer" % html_escape(name)) if name else \
+          "the <b>Grievance Officer</b>, Nidaan Legal India LLP"
+    bits = [who]
+    if mail:
+        bits.append('<a href="mailto:%s">%s</a>' % (html_escape(mail), html_escape(mail)))
+    if phone:
+        bits.append(html_escape(phone))
+    block = ('<p id="grievance-officer"><b>Grievance Officer.</b> Contact %s. '
+             'We acknowledge within 72 hours and respond within 30 days.</p>'
+             % " &middot; ".join(bits))
+    if 'id="grievance-officer"' not in html:
+        html = html.replace("<h2>Who is responsible for your data</h2>",
+                            "<h2>Who is responsible for your data</h2>\n" + block, 1)
+    return HTMLResponse(html)
+
+
+@app.get("/privacy", response_class=HTMLResponse)
+async def privacy_page(request: Request):
+    """The privacy policy for WHICHEVER product was asked.
+
+    These two routes had no host check, so nidaanpartner.com/privacy answered with Sarathi-AI
+    Business Technologies' policy - a different legal entity - to people about to hand over
+    medical records to a legal-services LLP. The Nidaan pages existed at /nidaan/privacy the
+    whole time; nothing sent anyone there, and the obvious address won.
+
+    A privacy policy names the party accepting the legal obligation. Serving the wrong one is
+    not a broken link.
+    """
+    if _is_nidaan_host(request):
+        return await _nidaan_privacy_with_officer(request)
+    pf = static_dir / "privacy.html"
+    if pf.exists():
+        return HTMLResponse(pf.read_text(encoding="utf-8"))
+    return HTMLResponse("<h1>Privacy policy not found</h1>", status_code=404)
+
+@app.get("/terms", response_class=HTMLResponse)
+async def terms_page(request: Request):
+    """The terms for whichever product was asked - see the note on /privacy."""
+    if _is_nidaan_host(request):
+        return _nidaan_page("nidaan_terms.html", request)
+    tf = static_dir / "terms.html"
+    if tf.exists():
+        return HTMLResponse(tf.read_text(encoding="utf-8"))
+    return HTMLResponse("<h1>Terms of service not found</h1>", status_code=404)
+
+@app.get("/getting-started", response_class=HTMLResponse)
+async def getting_started_page():
+    """Serve the easy setup / prerequisites guide page."""
+    gs_file = static_dir / "getting-started.html"
+    if gs_file.exists():
+        return HTMLResponse(gs_file.read_text(encoding="utf-8"))
+    return HTMLResponse("<h1>Getting Started page not found</h1>", status_code=404)
+
+@app.get("/telegram-guide", response_class=HTMLResponse)
+async def telegram_guide_page():
+    """Telegram is hidden from customers (WhatsApp-first) — redirect the old
+    Telegram guide to the getting-started page. Backend bot still runs."""
+    return RedirectResponse(url="/getting-started", status_code=302)
+
+@app.get("/demo", response_class=HTMLResponse)
+async def demo_page():
+    """Serve the interactive product demo page."""
+    df = static_dir / "demo.html"
+    if df.exists():
+        return HTMLResponse(df.read_text(encoding="utf-8"))
+    return HTMLResponse("<h1>Demo page not found</h1>", status_code=404)
+
+
+# =============================================================================
+#  ONBOARDING
+# =============================================================================
+
+# WhatsApp API integration disabled — using Voice AI + personal messaging
+_WA_DISABLED_RESPONSE = JSONResponse(
+    {"detail": "WhatsApp API integration is currently disabled. Use Voice AI and personal messaging instead."},
+    status_code=410,
+)
+
+
+# =============================================================================
+#  FEATURE 4 — ADVISOR MICROSITE (public landing page + lead capture)
+# =============================================================================
+
+import json as _json_microsite
+import re as _re_microsite
+import html as _html_microsite
+
+_DEFAULT_SERVICES = ["Health Insurance", "Term Life", "Investment Planning",
+                     "Retirement Planning", "Tax Saving", "Child Education"]
+
+
+def _microsite_template_path() -> Path:
+    return Path(__file__).parent / "static" / "microsite.html"
+
+
+def _microsite_url(slug: str) -> str:
+    base = (os.getenv("SERVER_URL") or "https://sarathi-ai.com").rstrip("/")
+    return f"{base}/m/{slug}"
+
+
+def _microsite_render(tenant: dict, owner_agent: dict | None) -> str:
+    """Render the public microsite HTML by substituting placeholders into the
+    static template. Falls back to a minimal inline template if file missing."""
+    slug = tenant.get("microsite_slug") or ""
+    firm = tenant.get("firm_name") or "Financial Advisor"
+    advisor = (owner_agent.get("name") if owner_agent else None) or tenant.get("owner_name") or firm
+    photo = tenant.get("microsite_photo") or (owner_agent.get("profile_photo") if owner_agent else "") or ""
+    bio = tenant.get("microsite_bio") or ""
+    primary = tenant.get("brand_primary_color") or "#0d9488"
+    accent = tenant.get("brand_accent_color") or "#ea580c"
+    years = int(tenant.get("microsite_years_exp") or 0)
+    families = int(tenant.get("microsite_families_served") or 0)
+    irdai = tenant.get("irdai_license") or ""
+    arn = tenant.get("amfi_reg") or ""
+    badge = int(tenant.get("microsite_show_badge") or 1)
+    plan_features = db.PLAN_FEATURES.get(tenant.get("plan") or "trial", db.PLAN_FEATURES["trial"])
+    if not plan_features.get("custom_branding"):
+        badge = 1  # cannot hide badge on lower plans
+
+    # Phone / WhatsApp resolution
+    phone = (owner_agent.get("phone") if owner_agent else "") or tenant.get("brand_phone") or tenant.get("phone") or ""
+    wa_phone = _re_microsite.sub(r"\D", "", phone or "")
+    if wa_phone and not wa_phone.startswith("91") and len(wa_phone) == 10:
+        wa_phone = "91" + wa_phone
+    email = tenant.get("brand_email") or tenant.get("email") or ""
+
+    try:
+        services = _json_microsite.loads(tenant.get("microsite_services") or "[]") or _DEFAULT_SERVICES
+        if not isinstance(services, list) or not services:
+            services = _DEFAULT_SERVICES
+    except Exception:
+        services = _DEFAULT_SERVICES
+    try:
+        testimonials = _json_microsite.loads(tenant.get("microsite_testimonials") or "[]") or []
+        if not isinstance(testimonials, list):
+            testimonials = []
+    except Exception:
+        testimonials = []
+
+    template_file = _microsite_template_path()
+    if template_file.exists():
+        html = template_file.read_text(encoding="utf-8")
+    else:
+        html = "<!doctype html><html><body><h1>{{ADVISOR_NAME}}</h1><p>{{BIO}}</p></body></html>"
+
+    def _safe_json(obj):
+        # Defend against </script> injection inside inline JS
+        return _json_microsite.dumps(obj).replace("</", "<\\/")
+
+    replacements = {
+        "{{SLUG}}": _html_microsite.escape(slug, quote=True),
+        "{{FIRM_NAME}}": _html_microsite.escape(firm, quote=True),
+        "{{ADVISOR_NAME}}": _html_microsite.escape(advisor, quote=True),
+        "{{PHOTO_URL}}": _html_microsite.escape(photo, quote=True),
+        "{{BIO}}": _html_microsite.escape(bio, quote=True),
+        "{{BIO_JSON}}": _safe_json(bio),
+        "{{PRIMARY_COLOR}}": _html_microsite.escape(primary, quote=True),
+        "{{ACCENT_COLOR}}": _html_microsite.escape(accent, quote=True),
+        "{{YEARS_EXP}}": str(years),
+        "{{FAMILIES_SERVED}}": str(families),
+        "{{IRDAI_CODE}}": _html_microsite.escape(irdai, quote=True),
+        "{{ARN_CODE}}": _html_microsite.escape(arn, quote=True),
+        "{{PHONE}}": _re_microsite.sub(r"[^\d+]", "", phone or ""),
+        "{{WA_PHONE}}": wa_phone,
+        "{{EMAIL}}": _html_microsite.escape(email, quote=True),
+        "{{SERVICES_JSON}}": _safe_json(services),
+        "{{TESTIMONIALS_JSON}}": _safe_json(testimonials),
+        "{{SHOW_BADGE}}": "1" if badge else "0",
+        "{{PUBLIC_URL}}": _html_microsite.escape(_microsite_url(slug), quote=True),
+    }
+    for k, v in replacements.items():
+        html = html.replace(k, v)
+    return html
+
+
+@app.get("/m/{slug}", response_class=HTMLResponse)
+@limiter.limit("60/minute")
+async def microsite_public(slug: str, request: Request):
+    """Public advisor microsite. Anyone can view if the advisor has published."""
+    slug_clean = (slug or "").lower().strip()
+    if not _re_microsite.match(r"^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$", slug_clean):
+        return HTMLResponse("<h1>Not found</h1>", status_code=404)
+    tenant = await db.get_tenant_by_microsite_slug(slug_clean)
+    if not tenant or not tenant.get("microsite_published"):
+        return HTMLResponse(
+            "<!doctype html><html><body style='font-family:sans-serif;text-align:center;padding:60px'>"
+            "<h1>Page not available</h1><p>This advisor's microsite is not published yet.</p>"
+            "<p><a href='/'>Back to Sarathi-AI</a></p></body></html>",
+            status_code=404)
+    owner_agent = await db.get_owner_agent_by_tenant(tenant["tenant_id"])
+    # Bump view counter (best-effort, fire and forget)
+    try:
+        asyncio.create_task(db.increment_microsite_view(tenant["tenant_id"]))
+    except Exception:
+        pass
+    html = _microsite_render(tenant, owner_agent)
+    return HTMLResponse(html)
+
+
+class MicrositeLeadIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
+    name: str
+    phone: str
+    city: str | None = ""
+    need_type: str | None = "general"
+    message: str | None = ""
+    consent: bool = False
+
+
+@app.post("/m/{slug}/lead")
+@limiter.limit("5/minute")
+async def api_microsite_lead(slug: str, req: MicrositeLeadIn, request: Request):
+    """Public lead capture from a microsite. Creates a lead under the owner agent
+    and sends a Telegram alert. DPDP consent required."""
+    slug_clean = (slug or "").lower().strip()
+    tenant = await db.get_tenant_by_microsite_slug(slug_clean)
+    if not tenant or not tenant.get("microsite_published"):
+        return JSONResponse({"error": "Microsite not found."}, status_code=404)
+
+    name = (req.name or "").strip()[:80]
+    phone = _re_microsite.sub(r"\D", "", req.phone or "")[:15]
+    if not name or len(phone) < 10:
+        return JSONResponse({"error": "Name and a valid 10-digit phone are required."}, status_code=400)
+    if not req.consent:
+        return JSONResponse({"error": "Please give consent to be contacted (DPDP)."}, status_code=400)
+
+    city = (req.city or "").strip()[:60]
+    need = (req.need_type or "general").strip().lower()[:30]
+    message = (req.message or "").strip()[:500]
+
+    owner_agent = await db.get_owner_agent_by_tenant(tenant["tenant_id"])
+    if not owner_agent:
+        return JSONResponse({"error": "Advisor not available right now."}, status_code=503)
+
+    # Create the lead
+    notes = f"From microsite /m/{slug_clean}"
+    if message:
+        notes += f"\nVisitor message: {message}"
+    try:
+        lead_id = await db.add_lead(
+            agent_id=owner_agent["agent_id"], name=name, phone=phone,
+            whatsapp=phone, city=city, need_type=need,
+            source="microsite", notes=notes,
+        )
+    except Exception as e:
+        logger.exception("microsite lead insert failed: %s", e)
+        return JSONResponse({"error": "Could not save your request. Please try again."}, status_code=500)
+
+    # Mark DPDP consent
+    try:
+        from datetime import datetime as _dt_micro
+        await db.update_lead(lead_id, dpdp_consent=1,
+                             dpdp_consent_date=_dt_micro.now().isoformat())
+    except Exception as _dpdp_e:
+        logger.warning("microsite dpdp consent update failed: %s", _dpdp_e)
+
+    # Telegram alert to owner (best-effort)
+    try:
+        owner_tg = tenant.get("owner_telegram_id")
+        if owner_tg:
+            msg = (
+                f"🌐 <b>New microsite lead</b>\n"
+                f"<b>{name}</b> · 📞 {phone}\n"
+                f"{('🏙 ' + city + chr(10)) if city else ''}"
+                f"Need: {need}\n"
+                f"{('💬 ' + message + chr(10)) if message else ''}"
+                f"\nLead #{lead_id}"
+            )
+            mgr = botmgr.bot_manager
+            asyncio.create_task(mgr.send_alert(int(owner_tg), msg, tenant_id=tenant["tenant_id"]))
+    except Exception as e:
+        logger.warning("microsite Telegram alert failed: %s", e)
+
+    # Email copy (best-effort)
+    try:
+        notify_email = tenant.get("brand_email") or tenant.get("email")
+        if notify_email and hasattr(email_svc, "send_email"):
+            subject = f"New lead from your microsite — {name}"
+            body = (
+                f"Hi {tenant.get('owner_name', '')},\n\n"
+                f"You received a new lead from your Sarathi-AI microsite (/m/{slug_clean}):\n\n"
+                f"Name: {name}\nPhone: {phone}\nCity: {city or '-'}\nNeed: {need}\n"
+                f"Message: {message or '-'}\n\n"
+                f"Open dashboard: {_microsite_url('').replace('/m/', '/dashboard')}\n"
+            )
+            asyncio.create_task(email_svc.send_email(notify_email, subject, body))
+    except Exception:
+        pass
+
+    return {"ok": True, "message": "Thanks! Your advisor will reach out shortly."}
+
+
+# =============================================================================
+#  AI MARKETING STUDIO API
+# =============================================================================
+import biz_marketing as mkt
+
+# Marketing generation is heavy (Pillow render + optional external video API).
+# Bound concurrency so simultaneous requests can't exhaust the ARM box's RAM;
+# when saturated we reject fast with 429 rather than piling up and slowing the
+# whole server. Tunable via MKT_MAX_CONCURRENT_GEN.
+_MKT_GEN_SEM = asyncio.Semaphore(int(os.getenv("MKT_MAX_CONCURRENT_GEN", "3")))
+
+
+# =============================================================================
+#  VIDEO STUDIO API  (Team / Enterprise plans)
+# =============================================================================
+import biz_video as vid
+
+
+def _empty_dashboard():
+    return {
+        "stats": {"total_leads": 0, "active_policies": 0,
+                  "total_premium": 0, "pipeline": {},
+                  "today_new_leads": 0},
+        "followups": [], "followups_count": 0,
+        "renewals": [], "renewals_count": 0,
+    }
+
+
+# =============================================================================
+#  DRIP NURTURE SEQUENCES API (Feature 1)
+# =============================================================================
+import biz_nurture as nurture
+
+
+# =============================================================================
+#  QUOTE COMPARISON API (Feature 5)
+# =============================================================================
+import biz_quotes as quotes
+
+
+VALID_PRODUCT_TYPES = ("term", "health", "endowment", "ulip", "sip")
+
+
+# =============================================================================
+#  LAPSE-RISK PREDICTION API (Feature 2)
+# =============================================================================
+import biz_lapse as lapse
+
+
+# =============================================================================
+#  VOICE AI — Intent Classification + CRM Action Execution
+# =============================================================================
+
+_WEB_VOICE_PROMPT = """You are the AI engine for Sarathi-AI, an Indian insurance advisor CRM.
+The agent spoke/typed a command. Classify the intent and extract data.
+You are an INTELLIGENT assistant — understand context, infer missing info, and be helpful.
+
+POSSIBLE INTENTS:
+1. create_lead — new prospect/client with name, details
+2. add_note — add a note about an existing lead
+3. create_reminder — set a reminder/follow-up/task/appointment for a date
+4. cancel_reminder — cancel/delete a reminder/task/follow-up for a lead
+5. update_stage — move a lead to a different pipeline stage
+6. update_lead — update lead details (phone, email, city, need_type)
+7. search_lead — find/lookup a lead by name or phone
+8. list_tasks — show today's/upcoming tasks, follow-ups, reminders
+9. cold_leads — show inactive/dormant leads (no activity in 7+ days)
+10. overdue_followups — show overdue/missed follow-ups specifically
+11. pipeline_summary — show pipeline stats/lead counts by stage
+12. ask_ai — general insurance/business question (not a CRM action)
+13. log_payment — record a premium payment received from a lead (cash/upi/cheque/bank/online)
+14. log_call — log a phone call with a lead (with optional follow-up date)
+15. add_policy — record a sold policy under a lead (auto-marks lead as closed_won)
+16. schedule_meeting — book an in-person/online meeting with a lead at a specific date/time
+17. mark_renewal_done — mark a policy as renewed for another year (bumps renewal_date)
+18. log_claim — record a new claim filed by a lead (health/motor/life/accident)
+
+CONVERSATION CONTEXT (previous command):
+{context}
+
+Return ONLY valid JSON:
+{{
+  "intent": "<create_lead|add_note|create_reminder|cancel_reminder|update_stage|update_lead|search_lead|list_tasks|cold_leads|overdue_followups|pipeline_summary|log_payment|log_call|add_policy|schedule_meeting|mark_renewal_done|log_claim|ask_ai>",
+  "confidence": "<high|medium|low>",
+  "name": "<lead name or null>",
+  "phone": "<10-digit Indian mobile or null>",
+  "email": "<email or null>",
+  "need_type": "<health|term|endowment|ulip|child|retirement|motor|investment|nps|general or null>",
+  "city": "<city or null>",
+  "budget": "<monthly budget number or null>",
+  "notes": "<any extra details or null>",
+  "follow_up": "<YYYY-MM-DD or null>",
+  "lead_name": "<name of existing lead or null>",
+  "note_text": "<the note to add or null>",
+  "reminder_message": "<what to remind about or null>",
+  "reminder_date": "<YYYY-MM-DD or null>",
+  "new_stage": "<prospect|contacted|pitched|proposal_sent|negotiation|closed_won|closed_lost or null>",
+  "update_fields": {{}},
+  "task_scope": "<today|week|overdue|all or null>",
+  "ai_question": "<the question to answer or null>",
+  "amount": "<payment amount as number or null>",
+  "payment_method": "<cash|upi|cheque|bank|online|card or null>",
+  "insurer": "<insurance company name or null>",
+  "plan_name": "<plan/product name or null>",
+  "policy_type": "<health|term|endowment|ulip|child|retirement|motor|investment|nps|life or null>",
+  "policy_number": "<policy number or null>",
+  "sum_insured": "<sum insured as number or null>",
+  "premium": "<premium amount as number or null>",
+  "premium_mode": "<monthly|quarterly|half_yearly|annual|single or null>",
+  "meeting_date": "<YYYY-MM-DD or null>",
+  "meeting_time": "<HH:MM 24h or null>",
+  "meeting_location": "<location or 'online' or null>",
+  "claim_type": "<health|motor|life|accident|other or null>",
+  "claim_amount": "<claim amount as number or null>",
+  "incident_date": "<YYYY-MM-DD or null>",
+  "hospital_name": "<hospital/garage/place name or null>",
+  "suggestion": "<helpful suggestion or null>"
+}}
+
+RULES:
+- Today's date is {today}
+- Convert relative dates: "kal"/"tomorrow" = next day, "next week" = next Monday, "parso" = day after tomorrow
+- Handle Hindi, English, Hinglish naturally
+- Indian names: proper capitalization (Ramesh Kumar)
+- Extract 10-digit Indian phones (starting 6-9)
+- Map Hindi stage words: "contact kiya" = contacted, "pitch kiya" = pitched, "deal pakki" = closed_won
+- "naya client" / "new lead" / name + details = create_lead
+- "yaad dilana" / "remind me" / "follow up" / "appointment" / "task set karo" with date = create_reminder
+- "cancel karo" / "task hatao" / "reminder delete" / "cancel appointment" = cancel_reminder
+- "note add karo" / "note likhna hai" = add_note
+- "stage badlo" / "move to pitched" = update_stage
+- "phone update karo" / "email change" / "city badlo" = update_lead
+- "dhundho" / "find" / "search" / "lead kahan hai" = search_lead
+- "aaj ke tasks" / "today's follow-ups" / "pending tasks" / "kya karna hai" = list_tasks
+- "cold leads" / "thande leads" / "inactive leads" / "dead leads" / "sote hue leads" = cold_leads
+- "overdue" / "late tasks" / "missed follow-ups" / "pending overdue" = overdue_followups
+- "pipeline" / "summary" / "kitne leads hain" / "stats" / "dashboard stats" = pipeline_summary
+- "premium aaya" / "payment received" / "X ne pay kiya" / "got premium" / "paisa aaya" / "X has paid" = log_payment (extract amount + payment_method)
+- "call kiya" / "X se baat hui" / "spoke to X" / "phone par baat" / "X ko call" / "phone call" = log_call (note_text=summary, follow_up=any future date mentioned)
+- "policy bech di" / "X ne policy li" / "sold to X" / "X ka HDFC liya" / "policy sold" / "deal closed with policy" = add_policy (extract insurer, plan_name, premium, sum_insured, policy_type)
+- "meeting fix" / "appointment X tarikh ko" / "schedule meeting" / "X se milna hai" / "meet X tomorrow at 4" = schedule_meeting (extract meeting_date, meeting_time, meeting_location)
+- "renew ho gayi" / "renewal done" / "X ki policy renew" / "premium renew kar diya" / "renewed for next year" = mark_renewal_done (lead_name + optional insurer)
+- "claim file" / "claim laga" / "X ka claim" / "claim register karo" / "hospital admit ho gaya" / "accident claim" = log_claim (extract claim_type, claim_amount, incident_date, hospital_name)
+- General questions about insurance/finance = ask_ai
+
+CONTEXT AWARENESS — this is CRITICAL:
+- If context has last_lead_name and agent says "uska/uski/his/her/iska/same" or does an action without naming a lead, USE last_lead_name as lead_name
+- "uska phone update karo 9876543210" → update_lead with lead_name=last_lead_name
+- "note bhi daal do" → add_note for last_lead_name
+- "isko contacted mein daalo" → update_stage for last_lead_name
+- "iski reminder set karo kal ke liye" → create_reminder for last_lead_name
+- Only use context if the command is clearly about the same lead — if a new name is mentioned, use that instead
+
+- BE INTELLIGENT: if user says "set task for Rahul" but no date, set reminder_date to tomorrow and note it in suggestion
+- BE INTELLIGENT: if user says "cancel Rahul ka task" extract lead_name for cancel_reminder
+- Return ONLY the JSON object, nothing else"""
+
+
+# ── Public customer portfolio self-view (token-gated, read-only) ──────────────
+@app.get("/portfolio/{token}", response_class=HTMLResponse)
+async def customer_portfolio_page(token: str):
+    f = static_dir / "customer_portfolio.html"
+    if not f.exists():
+        return HTMLResponse("<h1>Portfolio page not found</h1>", status_code=404)
+    return FileResponse(f)
+
+
+# =============================================================================
+#  SECURITY HEADERS MIDDLEWARE
+# =============================================================================
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    """Add security headers to all responses."""
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    # Use SAMEORIGIN (not DENY) so GIS button iframe + our own embeds work
+    response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    # Critical for Google Sign-In: allow popup to postMessage back to opener
+    response.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin-allow-popups")
+    # Don't add HSTS for non-HTTPS dev environments
+    if request.url.scheme == "https":
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
+
+
+# =============================================================================
+#  WHATSAPP WEBHOOK (disabled — using Voice AI + personal messaging)
+# =============================================================================
+
+@app.get("/webhook")
+async def webhook_verify(request: Request):
+    """WhatsApp webhook verification (GET) — disabled."""
+    return JSONResponse({"detail": "WhatsApp webhook disabled"}, status_code=410)
+
+
+@app.post("/webhook")
+async def webhook_receive(request: Request):
+    """WhatsApp webhook receiver — disabled."""
+    return {"status": "ok"}  # Always 200 to prevent Meta retries
+
+
+# =============================================================================
+#  STARTUP
+# =============================================================================
+
+async def main():
+    """Start everything — database, web server, Telegram bot, scheduler."""
+
+    # Same background-task safety net as the web app, for the worker's loop (scheduled
+    # reminders, watchdog, Telegram poll all fire-and-forget tasks here).
+    try:
+        asyncio.get_running_loop().set_exception_handler(_log_background_task_exception)
+    except Exception:
+        pass
+
+    TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    if not TELEGRAM_TOKEN:
+        logger.error("TELEGRAM_BOT_TOKEN not set in biz.env!")
+        sys.exit(1)
+
+    logger.info("=" * 64)
+    logger.info("  🏛️  SARATHI-AI BUSINESS TECHNOLOGIES")
+    logger.info("  🏷️  AI-Powered Financial Advisor CRM")
+    logger.info("  🌐  sarathi-ai.com")
+    logger.info("=" * 64)
+
+    # Step 1: Initialize database
+    logger.info("📦 Initializing CRM database...")
+    await db.init_db()
+    await db.init_otp_table()  # Persistent OTP storage
+    await db.init_plan_changes_table()  # Scheduled plan changes
+    await campaigns.init_campaigns_db()
+    await resilience.init_resilience()  # Message queue + retry engine
+    # Phase 3: Nidaan workflow defaults (statuses, transitions, system flags)
+    try:
+        import biz_nidaan_tasks as ntasks
+        await ntasks.seed_defaults()
+    except Exception as _se:
+        logger.warning("Nidaan workflow seed failed: %s", _se)
+    # Drip nurture sequences (multi-step time-delayed lead nurturing)
+    try:
+        import biz_nurture as nurture
+        await nurture.init_schema()
+        await nurture.seed_for_all_tenants()
+    except Exception as _ne:
+        logger.error("Nurture init failed: %s", _ne, exc_info=True)
+    # Quote comparison engine (Feature 5) — provider rate-card overrides table
+    try:
+        import biz_quotes as _quotes
+        await _quotes.init_quotes_schema()
+    except Exception as _qe:
+        logger.error("Quotes init failed: %s", _qe, exc_info=True)
+    # Nidaan claim documents table
+    try:
+        await nidaan.ensure_claim_documents_table()
+    except Exception as _nde:
+        logger.error("Nidaan claim docs table init failed: %s", _nde, exc_info=True)
+    # Staff-as-branch: backfill a personal referral code for every staffer.
+    try:
+        _n_ref = await nidaan.ensure_staff_referral_codes()
+        if _n_ref:
+            logger.info("Assigned %d staff referral code(s)", _n_ref)
+    except Exception as _sre:
+        logger.error("Staff referral-code backfill failed: %s", _sre, exc_info=True)
+    logger.info("✅ Database ready (sarathi_biz.db)")
+
+    # Step 1b: Initialize authentication
+    logger.info("🔐 Initializing JWT authentication...")
+    auth.init_auth()
+
+    # Step 1c: Initialize email system
+    logger.info("📧 Initializing email system...")
+    email_svc.init_email()
+
+    # Step 1d: Initialize SMS (Fast2SMS)
+    logger.info("📱 Initializing SMS system...")
+    sms.init_sms()
+
+    # Step 2: Initialize WhatsApp
+    logger.info("📱 Initializing WhatsApp Cloud API...")
+    wa.init_whatsapp()
+
+    # Step 2b: Initialize Google Drive
+    logger.info("📁 Initializing Google Drive integration...")
+    gdrive.init_gdrive()
+
+    # Step 2c: Initialize WhatsApp v2 (Evolution API client)
+    logger.info("📱 Initializing WhatsApp v2 (Evolution API)...")
+    wa_evo.init_evolution()
+
+    # Step 3: Initialize PDF generator
+    logger.info("📄 Initializing PDF generator...")
+    pdf.init_pdf()
+
+    # Step 3b: Initialize Razorpay payments
+    logger.info("💳 Initializing Razorpay payments...")
+    payments.init_payments()
+    if payments.is_enabled():
+        await payments.ensure_plans_exist()
+        logger.info("✅ Razorpay ready (plans created)")
+    else:
+        logger.warning("⚠️ Razorpay not configured — payments disabled")
+    # Which account is NidaanPartner taking money into? The fallback to the shared keys keeps
+    # payments alive when the Nidaan keys are missing, which is right - but paying into the other
+    # product's account is not a thing that should ever happen quietly.
+    _nrz_id = os.getenv("NIDAAN_RAZORPAY_KEY_ID", "").strip()
+    _srz_id = os.getenv("RAZORPAY_KEY_ID", "").strip()
+    if _nrz_id and _nrz_id != _srz_id:
+        logger.info("💳 Nidaan Razorpay: its own account (%s...)", _nrz_id[:12])
+    elif _nrz_id or _srz_id:
+        logger.error("🚨 Nidaan Razorpay is FALLING BACK to Sarathi's account — "
+                     "Nidaan payments will settle to the wrong bank. "
+                     "Set NIDAAN_RAZORPAY_KEY_ID and NIDAAN_RAZORPAY_KEY_SECRET in biz.env.")
+    else:
+        logger.warning("⚠️ Nidaan Razorpay: no keys at all — Nidaan payments disabled")
+
+    # Step 4: Start Telegram bots (master + per-tenant) — SINGLETONS.
+    #   Use webhook mode in production (HTTPS), polling in local dev.
+    #   Only the 'full'/'worker' role runs these; 'web' instances skip them so
+    #   multiple web instances never spawn duplicate Telegram pollers (409s).
+    mgr = botmgr.bot_manager
+    tenant_count = 0
+    if RUN_SINGLETONS:
+        use_webhook = SERVER_URL.startswith("https://")
+        webhook_base = SERVER_URL if use_webhook else ""
+        bot_mode = "webhook" if use_webhook else "polling"
+        # RESILIENCE: a bad/revoked legacy bot token (InvalidToken) must NOT crash the
+        # whole worker — the scheduler, Nidaan ops bot, reminders and tgcrm digests all
+        # run here. On any legacy-bot startup failure, log and continue without it.
+        try:
+            logger.info("🤖 Starting master Telegram bot (%s mode)...", bot_mode)
+            await mgr.start_master_bot(TELEGRAM_TOKEN, webhook_base_url=webhook_base)
+            logger.info("✅ Master bot ready (Sarathi-AI.com / @SarathiBizBot)")
+            logger.info("🤖 Starting tenant bots...")
+            tenant_count = await mgr.start_all_tenant_bots()
+            logger.info("✅ %d tenant bot(s) started", tenant_count)
+        except Exception as _legacy_bot_err:
+            # SCRUB THE TOKEN. python-telegram-bot puts the rejected token verbatim in its
+            # InvalidToken message, so this line was writing a live bot credential into journald
+            # in plaintext, every restart, where it is readable by anyone with log access and
+            # retained for as long as the journal is. Only the last 6 characters survive, which
+            # is enough to tell two tokens apart and not enough to use one.
+            logger.error("⚠️ Legacy Sarathi bot startup failed — continuing WITHOUT it "
+                         "(scheduler/Nidaan bot/digests unaffected): %s",
+                         _scrub_secrets(str(_legacy_bot_err)))
+    else:
+        logger.info("🌐 APP_ROLE=%s — skipping Telegram bots (web-only instance)", APP_ROLE)
+
+    # Step 5: Register reminder callback (smart routing: tenant bot → master)
+    async def telegram_alert(telegram_id: str, message: str, reply_markup=None):
+        """Send alert via the tenant's bot if available, else master."""
+        try:
+            agent = await db.get_agent(telegram_id)
+            tenant_id = agent.get("tenant_id") if agent else None
+            await mgr.send_alert(int(telegram_id), message, tenant_id=tenant_id,
+                                 reply_markup=reply_markup)
+        except Exception as e:
+            logger.error("Telegram alert to %s failed: %s", telegram_id, e)
+
+    reminders.set_telegram_callback(telegram_alert)
+
+    # Step 5a-2: Register nurture-sequence Telegram callback (HTML parse mode + buttons)
+    async def nurture_telegram_send(tenant_id: int, telegram_id: str, message: str,
+                                     reply_markup=None):
+        """Send a nurture step via the tenant's bot (or master fallback) using HTML mode."""
+        try:
+            target = mgr._bots.get(tenant_id) if tenant_id else None
+            if not target:
+                target = mgr._master_bot
+            if not target:
+                logger.warning("Nurture: no bot available for tenant %s", tenant_id)
+                return
+            await target.bot.send_message(
+                chat_id=int(telegram_id), text=message,
+                parse_mode="HTML", reply_markup=reply_markup,
+                disable_web_page_preview=True)
+        except Exception as e:
+            logger.error("Nurture telegram send to %s failed: %s", telegram_id, e)
+    try:
+        import biz_nurture as _nurture_mod
+        _nurture_mod.set_telegram_callback(nurture_telegram_send)
+    except Exception as _e:
+        logger.error("Failed to register nurture telegram callback: %s", _e)
+
+    # Step 5b: Register message queue processor with reminder scheduler
+    async def process_queued_messages():
+        try:
+            await resilience.process_message_queue()
+        except Exception as e:
+            logger.error("Queue processor error: %s", e)
+    reminders.set_queue_callback(process_queued_messages)
+
+    # Step 6: Start reminder scheduler in background — SINGLETON (one runner only,
+    # else reminders/SLA actions fire N times). Skipped on 'web' instances.
+    scheduler_task = None
+    plan_change_task = None
+    if RUN_SINGLETONS:
+        logger.info("⏰ Starting reminder scheduler...")
+        scheduler_task = asyncio.create_task(reminders.start_scheduler())
+
+        # Step 6b: Background task to apply scheduled plan changes
+        async def plan_change_applier():
+            """Check and apply pending plan changes every hour."""
+            while True:
+                try:
+                    await asyncio.sleep(3600)  # Check every hour
+                    applied = await db.apply_pending_plan_changes()
+                    if applied:
+                        logger.info("📋 Applied %d scheduled plan change(s)", len(applied))
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error("Plan change applier error: %s", e)
+
+        plan_change_task = asyncio.create_task(plan_change_applier())
+
+        # Step 6d: ₹499 lead DPDP retention — daily sweep (pre-notice then purge).
+        async def lead_retention_loop():
+            import biz_nidaan_retention as _ret
+            await asyncio.sleep(180)  # let startup settle before first sweep
+            while True:
+                try:
+                    await _ret.run_lead_retention()
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error("Lead retention sweep error: %s", e)
+                await asyncio.sleep(24 * 3600)  # daily
+        asyncio.create_task(lead_retention_loop())
+
+        # Step 6e: DPDP account-erasure sweep — hard-purge accounts past their
+        # deletion grace window. Daily, worker-only (singleton).
+        async def account_erasure_loop():
+            await asyncio.sleep(300)
+            while True:
+                try:
+                    await nidaan.run_account_erasure_sweep()
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error("Account erasure sweep error: %s", e)
+                await asyncio.sleep(24 * 3600)  # daily
+        asyncio.create_task(account_erasure_loop())
+
+        # Step 6g: Sarathi Telegram CRM daily digests — worker-only singleton.
+        async def tgcrm_digest_loop():
+            await asyncio.sleep(120)  # let startup settle
+            while True:
+                try:
+                    await tgcrm.run_digests()
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error("tgcrm digest loop error: %s", e)
+                await asyncio.sleep(900)  # check every 15 min; sends once/day per pref
+        asyncio.create_task(tgcrm_digest_loop())
+
+        # Step 6f: Marketing daily batch — pre-generate each enabled tenant's
+        # poster in the off-peak early morning (05:00) so load is smoothed
+        # instead of spiking when everyone opens the app. Worker-only singleton.
+        async def marketing_batch_loop():
+            from datetime import datetime as _dtm, timedelta as _td
+            while True:
+                try:
+                    now = _dtm.now()
+                    nxt = now.replace(hour=5, minute=0, second=0, microsecond=0)
+                    if nxt <= now:
+                        nxt = nxt + _td(days=1)
+                    await asyncio.sleep(max(60, (nxt - now).total_seconds()))
+                    n = await mkt.run_marketing_daily_batch()
+                    logger.info("📣 Marketing daily batch done — %d posters pre-generated", n)
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error("Marketing daily batch error: %s", e)
+                    await asyncio.sleep(3600)
+        asyncio.create_task(marketing_batch_loop())
+
+        # Step 6h: NidaanPartner daily ops summary — an AI "watch on top" that at ~20:00 IST
+        # Telegrams each super-admin a crisp end-of-day activity digest (text + voice, their
+        # language). Worker-only singleton; fires once per day.
+        async def daily_ops_summary_loop():
+            import biz_nidaan_daily_summary as _dsum
+            from datetime import datetime as _dtm, timedelta as _td, timezone as _tz
+            _IST = _tz(_td(hours=5, minutes=30))
+            while True:
+                try:
+                    now = _dtm.now(_IST)
+                    nxt = now.replace(hour=20, minute=0, second=0, microsecond=0)
+                    if nxt <= now:
+                        nxt = nxt + _td(days=1)
+                    await asyncio.sleep(max(60, (nxt - now).total_seconds()))
+                    res = await _dsum.run_daily_ops_summary()
+                    logger.info("🌙 Daily ops summary: %s", res)
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error("Daily ops summary error: %s", e)
+                    await asyncio.sleep(3600)
+        asyncio.create_task(daily_ops_summary_loop())
+
+        # Step 6i: Payment watchdog — deterministic self-healing guard. Every ~15 min it scans for
+        # amount↔plan mismatches, stuck (captured-but-unrecorded) payments, and failure spikes;
+        # alerts super-admins ONLY on anomalies. Worker-only singleton.
+        # Step 6i-b: PAYMENT GUARDIAN — reads Razorpay against our ledger every 5 minutes and
+        # alerts super-admins until one taps "Seen". Read-only: it can never break a payment.
+        async def payment_guardian_loop():
+            import biz_nidaan_pay_guard as _pg
+            await asyncio.sleep(120)
+            while True:
+                try:
+                    res = await _pg.run_guardian()
+                    if res.get("findings") or res.get("closed"):
+                        logger.info("🛡️ payment guardian: %s", res)
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error("payment guardian error: %s", e)
+                await asyncio.sleep(300)
+        asyncio.create_task(payment_guardian_loop())
+
+        async def payment_watch_loop():
+            import biz_nidaan_payment_watch as _pw
+            await asyncio.sleep(200)  # let startup settle
+            _tick = 0
+            while True:
+                try:
+                    await _pw.run_payment_health_check()
+                    # Chase unrecovered failures hourly, on Telegram only. Money noise belongs
+                    # where it is instant and free; the 15-min cadence would be nagging.
+                    _tick += 1
+                    if _tick % 4 == 0:
+                        await _pw.chase_unrecovered_failures()
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error("payment watchdog error: %s", e)
+                await asyncio.sleep(900)  # every 15 min
+        asyncio.create_task(payment_watch_loop())
+
+        # Step 6g: Branch fallback — twice-daily sweep that emails affiliate
+        # branches about attributed leads still unpaid past 24h (once each).
+        async def branch_unpaid_loop():
+            await asyncio.sleep(600)  # let startup settle
+            while True:
+                try:
+                    await _run_branch_unpaid_sweep()
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error("Branch unpaid sweep error: %s", e)
+                await asyncio.sleep(12 * 3600)  # twice daily
+        asyncio.create_task(branch_unpaid_loop())
+
+        # Step 6g1a1: SELF-HEAL missed claim alerts. Claim notifications fire from fire-and-forget
+        # tasks, so a deploy mid-flight silently loses them (this is what happened to claim #108).
+        # Every 20 min, any recent claim with no staff alert gets one. Idempotent.
+        async def claim_alert_sweep_loop():
+            await asyncio.sleep(420)
+            while True:
+                try:
+                    n = await nnot.sweep_missed_claim_alerts()
+                    if n:
+                        logger.warning("Claim-alert sweep recovered %d missed alert(s)", n)
+                    # A claim with NO papers at all is work nobody can start. The forms now say so
+                    # when an upload fails; this catches the ones that slip past anyway.
+                    e = await nnot.sweep_empty_claims()
+                    if e:
+                        logger.warning("Flagged %d claim(s) that arrived with no documents", e)
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error("Claim-alert sweep error: %s", e)
+                await asyncio.sleep(1200)
+        asyncio.create_task(claim_alert_sweep_loop())
+
+        # Step 6g1a2: PROACTIVE health watchdog. App Health only speaks when someone looks at it,
+        # which is how the WhatsApp number sat dead for days. This runs the SAME checks and alerts
+        # super-admins the moment a subsystem breaks (edge-triggered, so no repeat spam).
+        async def health_watch_loop():
+            await asyncio.sleep(600)   # let startup settle before judging anything
+            while True:
+                try:
+                    import biz_nidaan_health_watch as _hw
+                    res = await _hw.run_health_watch()
+                    if res.get("alerted"):
+                        logger.warning("HEALTH_WATCH alerted: %s", res["alerted"])
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error("Health watch error: %s", e)
+                await asyncio.sleep(1800)   # every 30 min
+        asyncio.create_task(health_watch_loop())
+
+        # Step 6g1b: Email Update Radar — poll customer mailboxes, AI-triage new mail into flagged
+        # radar items. Worker-only singleton; internally staggered; every 15 min.
+        async def radar_poll_loop():
+            await asyncio.sleep(360)  # let startup settle
+            while True:
+                try:
+                    await radar.poll_all_mailboxes()
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error("Radar poll error: %s", e)
+                await asyncio.sleep(900)  # every 15 min
+        asyncio.create_task(radar_poll_loop())
+
+        # Step 6g1c: Email Radar — silence 'Chase' sweep: nudge open cases that have gone quiet past
+        # the superadmin-set threshold. Worker-only singleton, every 6h.
+        async def radar_silence_loop():
+            await asyncio.sleep(1800)  # let startup settle
+            while True:
+                try:
+                    await radar.run_silence_sweep()
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error("Radar silence sweep error: %s", e)
+                await asyncio.sleep(6 * 3600)  # every 6h
+        asyncio.create_task(radar_silence_loop())
+
+        # Step 6g1c1: the L2 bucket system. Seeding is idempotent and never overwrites an edit,
+        # so this is safe on every boot; the legacy-stage migration matches nothing once it has
+        # run once. Both are cheap and both must happen before anything serves a bucket page.
+        try:
+            import biz_nidaan_buckets as _bk
+            await _bk.ensure_seeded()
+            await _bk.migrate_legacy_stages()
+        except Exception as e:
+            logger.error("bucket setup failed: %s", e)
+
+        # Step 6g1c1b: parked claims come back on their own date. Without this a park is just a
+        # tidier way of losing a case. Worker-only, hourly - a date only turns over once a day.
+        async def bucket_wake_loop():
+            await asyncio.sleep(420)
+            while True:
+                try:
+                    import biz_nidaan_buckets as _bkw
+                    await _bkw.wake_parked()
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error("parked-claim wake error: %s", e)
+                await asyncio.sleep(3600)
+        asyncio.create_task(bucket_wake_loop())
+
+        # Step 6g1c1c: chase the documents a claim is still missing - three days between nudges,
+        # and after two of them we STOP sending and ask a person to pick up the phone. A fourth
+        # identical WhatsApp is not persistence, it is the thing that makes a customer stop
+        # reading anything we send. Worker-only, hourly; the clock itself is per claim, so the
+        # pass is cheap and usually does nothing.
+        async def doc_chase_loop():
+            await asyncio.sleep(540)
+            while True:
+                try:
+                    import biz_nidaan_doc_request as _drw
+                    r = await _drw.run_chase()
+                    if any(r.values()):
+                        logger.info("doc chase: %s", r)
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error("doc chase error: %s", e)
+                await asyncio.sleep(3600)
+        asyncio.create_task(doc_chase_loop())
+
+        # Scheduled document reminders. A staffer picks the moment the complainant can actually
+        # answer - Sunday morning, an evening, whatever they know about that person - and this
+        # sends it then. Every 5 minutes, because a reminder set for 9:00 should not land at 9:55.
+        async def wa_schedule_loop():
+            await asyncio.sleep(120)
+            while True:
+                try:
+                    import biz_nidaan_wa_schedule as _sch
+                    r = await _sch.run_due()
+                    if any(r.values()):
+                        logger.info("scheduled reminders: %s", r)
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error("scheduled reminder error: %s", e)
+                await asyncio.sleep(300)
+        asyncio.create_task(wa_schedule_loop())
+
+        # Step 6g1c1d: what has gone QUIET. A claim nobody moves raises no move notification -
+        # by definition - and that is exactly the case the office loses claims in. Once a day,
+        # each person on duty gets one message about what has gone stale in their bucket, saying
+        # WHY each claim is stuck in the same words the screen uses. Silent when there is
+        # nothing to say; an all-clear every morning is how people learn to ignore the ones that
+        # matter.
+        async def bucket_standing_loop():
+            await asyncio.sleep(660)
+            while True:
+                try:
+                    import biz_nidaan_buckets as _bks
+                    # 9am IST, checked hourly rather than slept for 24h - the worker restarts on
+                    # every deploy, and a fixed timer would drift to whenever that happened.
+                    if _bks._now_ist().hour == 9:
+                        r = await _bks.standing_alerts()
+                        if r.get("sent"):
+                            logger.info("standing bucket alerts: %s", r)
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error("standing bucket alert error: %s", e)
+                await asyncio.sleep(1800)
+        asyncio.create_task(bucket_standing_loop())
+
+        # Step 6g1c2: nobody answered. A customer writing in and getting silence is the worst thing
+        # this system can produce, and it is invisible by design — the alert went out and nothing
+        # happened. So the silence becomes its own event: the rostered person is reminded, and if
+        # it is STILL unanswered three hours later the super-admins are told, because by then the
+        # problem is the rota, not the message. Worker-only, every 20 min.
+        async def unanswered_sweep_loop():
+            await asyncio.sleep(600)  # let startup settle
+            while True:
+                try:
+                    import biz_nidaan_notifications as _nnot
+                    await _nnot.sweep_unanswered()
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error("Unanswered-conversation sweep error: %s", e)
+                await asyncio.sleep(1200)  # every 20 min
+        asyncio.create_task(unanswered_sweep_loop())
+
+        # Step 6g1d: Email Radar — keep-alive: light IMAP login on dormant mailboxes so provider
+        # inactivity policies never deactivate a configured account. Worker-only, daily.
+        async def radar_keepalive_loop():
+            await asyncio.sleep(2400)
+            while True:
+                try:
+                    await radar.keepalive_sweep()
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error("Radar keepalive error: %s", e)
+                await asyncio.sleep(24 * 3600)  # daily (only touches mailboxes idle >20d)
+        asyncio.create_task(radar_keepalive_loop())
+
+        # Step 6g2: Support SLA — escalate to super-admins any human-requested support chat left
+        # unanswered > 30 min during office hours (dashboard + push + email + Telegram). Idempotent
+        # via nidaan_support_threads.sa_escalated_at. Worker-only singleton, every 5 min.
+        async def support_sla_loop():
+            await asyncio.sleep(180)  # let startup settle
+            while True:
+                try:
+                    await nnot.run_support_sla_escalation(30)
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error("Support SLA escalation error: %s", e)
+                await asyncio.sleep(300)  # every 5 min
+        asyncio.create_task(support_sla_loop())
+
+        # Step 6g3: Server health alerts — warn super-admins when disk/load/memory cross safe
+        # thresholds (read-only monitoring + notify; per-condition 6h cooldown). Worker-only, every 10 min.
+        async def health_alert_loop():
+            await asyncio.sleep(240)  # let startup settle
+            while True:
+                try:
+                    await nnot.run_health_alert_sweep()
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error("Health alert sweep error: %s", e)
+                await asyncio.sleep(600)  # every 10 min
+        asyncio.create_task(health_alert_loop())
+
+        # Step 6h: WhatsApp line watchdog — self-monitoring / auto-restart /
+        # escalate-to-super-admin / recovery. Worker-only singleton, every 4 min.
+        async def wa_watchdog_loop():
+            await asyncio.sleep(150)  # let startup + first traffic settle
+            while True:
+                try:
+                    res = await nnot.run_wa_watchdog_cycle()
+                    # INFO, not WARNING: a persistently-down line already raised a
+                    # one-time WARNING + super-admin alert when it transitioned. Repeating
+                    # it every 4 min just floods App Health's error ring.
+                    if res:
+                        logger.info("📡 WA watchdog cycle: %s", res)
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error("WA watchdog error: %s", e)
+                await asyncio.sleep(240)  # every 4 minutes
+        asyncio.create_task(wa_watchdog_loop())
+
+        # Step 6i: Telegram ops bot — long-polling consumer (worker-only singleton).
+        # We PULL updates instead of receiving webhooks, so Cloudflare's inbound bot
+        # protection can never block the bot. Exactly one consumer → no double-processing.
+        async def telegram_poll_loop():
+            await asyncio.sleep(20)  # let startup settle
+            try:
+                await tg.run_polling_loop()   # runs forever, self-heals internally
+            except asyncio.CancelledError:
+                pass
+            except Exception as e:
+                logger.error("Telegram poll loop crashed: %s", e)
+        asyncio.create_task(telegram_poll_loop())
+    else:
+        logger.info("🌐 APP_ROLE=%s — skipping scheduler + plan-change applier", APP_ROLE)
+
+    # Step 6c: OTP cleanup task (prevent memory leak from expired OTPs)
+    async def otp_cleanup_task():
+        """Clear expired OTPs every 5 minutes."""
+        while True:
+            try:
+                await asyncio.sleep(300)
+                auth.clear_expired_otps()
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                pass
+
+    otp_cleanup = asyncio.create_task(otp_cleanup_task())
+
+    # Step 6d: Video job cleanup (remove files older than 24h)
+    async def video_cleanup_task():
+        """Purge stale generated video files every 6 hours."""
+        import biz_video as _vid
+        while True:
+            try:
+                await asyncio.sleep(6 * 3600)
+                _vid.cleanup_old_jobs(max_age_hours=24)
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                pass
+
+    asyncio.create_task(video_cleanup_task())
+    logger.info("🌐 Starting web server on %s:%d...", SERVER_HOST, SERVER_PORT)
+    config = uvicorn.Config(
+        app,
+        host=SERVER_HOST,
+        port=SERVER_PORT,
+        log_level="warning",
+    )
+    server = uvicorn.Server(config)
+
+    # Final status
+    logger.info("━" * 64)
+    logger.info("  ✅ Sarathi-AI is LIVE!")
+    logger.info("  🌐 Homepage:     %s", SERVER_URL)
+    logger.info("  🚀 Onboarding:   %s/onboarding", SERVER_URL)
+    logger.info("  📊 Calculators:  %s/calculators", SERVER_URL)
+    logger.info("  📋 Dashboard:    %s/dashboard", SERVER_URL)
+    logger.info("  ⚙️  Admin:        %s/admin", SERVER_URL)
+    logger.info("  🛡️  Super Admin:  %s/superadmin", SERVER_URL)
+    logger.info("  📚 API docs:     %s/docs", SERVER_URL)
+    logger.info("  🤖 Master Bot:   Sarathi-AI.com (@SarathiBizBot)")
+    logger.info("  🤖 Tenant Bots:  %d running", tenant_count)
+    logger.info("━" * 64)
+
+    # Graceful shutdown
+    shutdown_event = asyncio.Event()
+
+    def handle_signal():
+        logger.info("🛑 Shutdown signal received...")
+        shutdown_event.set()
+
+    loop = asyncio.get_event_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        try:
+            loop.add_signal_handler(sig, handle_signal)
+        except NotImplementedError:
+            pass  # Windows fallback
+
+    try:
+        await server.serve()
+    finally:
+        logger.info("🧹 Shutting down...")
+        for _bg in (scheduler_task, plan_change_task):
+            if _bg is None:   # web-only instances never started these
+                continue
+            _bg.cancel()
+            try:
+                await _bg
+            except asyncio.CancelledError:
+                pass
+        await mgr.stop_all()
+        # Close WhatsApp HTTP client pool
+        try:
+            await wa.close_client()
+        except Exception:
+            pass
+        logger.info("👋 Sarathi-AI stopped. See you!")
+
+
+# =============================================================================
+#  AUTO-DEPLOY WEBHOOK  (called by GitHub Actions — no SSH key needed)
+# =============================================================================
+
+import hmac as _hmac
+import subprocess as _subprocess
+from fastapi import BackgroundTasks
+
+_DEPLOY_TOKEN = os.getenv("DEPLOY_TOKEN", "")
+_DEPLOY_SCRIPT = Path(__file__).parent / "deploy" / "auto-deploy.sh"
+
+
+def _run_deploy():
+    """Trigger the deploy. PRIMARY: touch a trigger file watched by
+    sarathi-deploy.path, which starts the oneshot sarathi-deploy.service rolling
+    deploy in its OWN (unrestricted) cgroup. This is privilege-free — the web
+    instances run with NoNewPrivileges=true, so they CANNOT sudo; a file touch is
+    the only reliable trigger. Falls back to sudo, then a direct detached run."""
+    import time as _t
+    try:
+        trigger = Path(__file__).parent / ".deploy-trigger"
+        trigger.write_text(str(_t.time()))
+        logger.info("🚀 deploy triggered via path-unit (%s)", trigger)
+        return
+    except Exception as exc:
+        logger.warning("trigger-file deploy failed (%s) — trying sudo", exc)
+    try:
+        rc = _subprocess.call(
+            "sudo -n systemctl start --no-block sarathi-deploy.service",
+            shell=True, stdin=_subprocess.DEVNULL,
+            stdout=_subprocess.DEVNULL, stderr=_subprocess.DEVNULL)
+        if rc == 0:
+            logger.info("🚀 deploy triggered via sarathi-deploy.service (own cgroup)")
+            return
+        logger.warning("sarathi-deploy.service unavailable (rc=%s) — direct fallback", rc)
+    except Exception as exc:
+        logger.warning("deploy unit trigger failed (%s) — direct fallback", exc)
+    try:
+        _subprocess.Popen(
+            f"bash '{_DEPLOY_SCRIPT}' >> '/tmp/sarathi-deploy.log' 2>&1",
+            shell=True, start_new_session=True, close_fds=True,
+            stdin=_subprocess.DEVNULL)
+        logger.info("🚀 deploy script started (direct fallback)")
+    except Exception as exc:
+        logger.error("deploy script error: %s", exc)
+
+
+@app.post("/internal/deploy")
+async def internal_deploy_webhook(request: Request, background_tasks: BackgroundTasks):
+    """
+    GitHub Actions calls this endpoint after each push to master.
+    Authenticates via Bearer token (DEPLOY_TOKEN env var).
+    The deploy script runs in background after this response is sent.
+    """
+    # Token auth — timing-safe comparison
+    auth = request.headers.get("Authorization", "")
+    token = auth.removeprefix("Bearer ").strip()
+    if not _DEPLOY_TOKEN:
+        raise HTTPException(status_code=503, detail="DEPLOY_TOKEN not configured on server")
+    if not _hmac.compare_digest(token, _DEPLOY_TOKEN):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if not _DEPLOY_SCRIPT.exists():
+        raise HTTPException(status_code=503, detail="Deploy script not found")
+    background_tasks.add_task(_run_deploy)
+    logger.info("🚀 Deploy triggered by GitHub Actions")
+    return {"status": "deploying", "script": str(_DEPLOY_SCRIPT)}
+
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\n👋 Sarathi stopped. Grow your business!")

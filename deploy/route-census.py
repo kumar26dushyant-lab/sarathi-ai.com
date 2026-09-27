@@ -30,6 +30,17 @@ CENSUS = os.path.join(ROOT, "deploy", "route-census.json")
 # Files that may declare routes. A second app file appears here the day stage 2 lands.
 SOURCES = ["sarathi_biz.py", "nidaan_app.py", "sarathi_app.py"]
 
+# KNOWN BLIND SPOT, recorded rather than left to be discovered.
+#
+# This reads decorators, so it sees only routes declared with @app.get/@app.post. Routes
+# registered in a LOOP are invisible to it - the shared-document pages (/bucket-flow,
+# /claims-view, /doc-collect and the rest of _DOC_KEYS) are registered that way, and the
+# extracted app proved it by having 9 routes this census does not know about.
+#
+# So: a dynamically registered route disappearing would NOT be caught here. Until that is
+# fixed, the live check after each stage is what covers them - ask the running app for its
+# route table, do not ask the source.
+
 _DEC = re.compile(r"@app\.(get|post|put|delete|patch)\(\s*[\"']([^\"']+)[\"']")
 
 
