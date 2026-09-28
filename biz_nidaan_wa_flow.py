@@ -283,6 +283,43 @@ async def _admin_ids() -> list:
     return ids
 
 
+# Meta's failure codes that staff actually meet, in words they can act on. Anything else keeps
+# Meta's own title, so a new code is never dropped - only not yet translated.
+_FAIL_WORDS = {
+    131047: "more than 24 hours since they last wrote - only an approved template can reach them",
+    131026: "this number cannot receive WhatsApp messages (not on WhatsApp, or a very old app)",
+    131049: "WhatsApp held it back - they have had many business messages recently",
+    131050: "they have turned off marketing messages from businesses",
+    131056: "too many messages to this person in a short time",
+    130429: "we sent too fast and WhatsApp slowed us down",
+    131042: "a payment problem on our WhatsApp account",
+    131031: "our WhatsApp account is locked",
+    132000: "the template's fill-in values did not match it",
+    132001: "that template does not exist in this language",
+    132015: "that template is paused by WhatsApp",
+    132016: "that template is disabled by WhatsApp",
+}
+
+
+def failure_reason(status: dict) -> str:
+    """'131047 - more than 24 hours since ...' from a failed receipt. '' if it carries none.
+
+    The receipt is webhook input: the code must be a number, the text is cut short, and nothing
+    in it is trusted beyond being stored and shown to staff.
+    """
+    errs = (status or {}).get("errors")
+    e = errs[0] if isinstance(errs, list) and errs and isinstance(errs[0], dict) else {}
+    try:
+        code = int(e.get("code"))
+    except (TypeError, ValueError):
+        code = 0
+    title = " ".join(str(e.get("title") or e.get("message") or "").split())[:100]
+    words = _FAIL_WORDS.get(code) or title
+    if not code and not words:
+        return ""
+    return ("%s - %s" % (code, words) if code else words)[:160]
+
+
 async def handle_inbound_payload(payload: dict) -> dict:
     """Parse a Meta webhook POST body. Handles message + status events. Idempotent, never raises."""
     handled = 0
@@ -328,13 +365,20 @@ async def handle_inbound_payload(payload: dict) -> dict:
                         _i = m.get("interactive") or {}
                         _br = (_i.get("button_reply") or _i.get("list_reply") or {})
                         await _on_inbound_text(msisdn, _br.get("title", "") or _br.get("id", ""))
-                # Delivery/read statuses for our outbound
+                # Delivery/read statuses for our outbound. A FAILED one keeps its reason.
                 for s in (val.get("statuses") or []):
                     try:
+                        st = str(s.get("status", ""))[:20]
+                        why = failure_reason(s) if st == "failed" else ""
                         async with aiosqlite.connect(DB_PATH) as conn:
-                            await conn.execute(
-                                "UPDATE nidaan_wa_messages SET status=? WHERE wa_message_id=?",
-                                (s.get("status", ""), s.get("id", "")))
+                            if why:
+                                await conn.execute(
+                                    "UPDATE nidaan_wa_messages SET status=?, error=? "
+                                    "WHERE wa_message_id=?", (st, why, str(s.get("id", ""))))
+                            else:
+                                await conn.execute(
+                                    "UPDATE nidaan_wa_messages SET status=? WHERE wa_message_id=?",
+                                    (st, str(s.get("id", ""))))
                             await conn.commit()
                     except Exception:
                         pass

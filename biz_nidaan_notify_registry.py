@@ -109,6 +109,8 @@ EVENTS = [
        "Everyone on the claim"),
     _e("doc.call_due", "claims", "Time to call about missing documents",
        "छूटे दस्तावेज़ के लिए कॉल करने का समय", "The person handling the claim"),
+    _e("doc.schedule_due", "claims", "Your scheduled document reminder went out (or did not)",
+       "आपका तय किया दस्तावेज़ रिमाइंडर गया (या नहीं गया)", "The person who set the reminder"),
 
     # ── level-2 ──────────────────────────────────────────────────────────────
     _e("case.assigned", "level2", "A case was assigned to you", "केस आपको सौंपा गया",

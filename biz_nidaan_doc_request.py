@@ -219,6 +219,35 @@ async def _lang_for(claim_id: int, claim: dict) -> str:
         return "hinglish"
 
 
+# The staff's ask, in the complainant's language. It used to be English whatever they read, with
+# only the document names switched - and a Hindi reader who cannot follow the ask does not send
+# the papers (founder, 29 Sep).
+_DRAFT = {
+    "en": {"hello": "Namaste", "sign": "— Team NidaanPartner",
+           "request": "To take your claim NP-%s forward we need the following document(s):",
+           "rerequest": ("We asked for a few documents on your claim NP-%s earlier. We still do "
+                         "not have the ones below — could you please send them?"),
+           "nudge": "A gentle reminder about your claim NP-%s. We are still waiting for:",
+           "link": "Send them here — it is the quickest way:",
+           "photo": "You can also reply to this message with a photo of each document."},
+    "hinglish": {"hello": "Namaste", "sign": "— Team NidaanPartner",
+                 "request": "Aapke claim NP-%s ko aage badhane ke liye humein yeh document(s) chahiye:",
+                 "rerequest": ("Humne aapke claim NP-%s ke liye pehle kuch documents maange the. "
+                               "Neeche wale abhi tak nahi mile — kripya bhej dijiye:"),
+                 "nudge": ("Aapke claim NP-%s ke liye ek chhota sa reminder. Humein abhi bhi "
+                           "inka intezaar hai:"),
+                 "link": "Yahan bhejiye — yeh sabse aasaan tarika hai:",
+                 "photo": "Aap is message ke reply mein har document ki saaf photo bhi bhej sakte hain."},
+    "hi": {"hello": "नमस्ते", "sign": "— NidaanPartner टीम",
+           "request": "आपके क्लेम NP-%s को आगे बढ़ाने के लिए हमें ये दस्तावेज़ चाहिए:",
+           "rerequest": ("हमने आपके क्लेम NP-%s के लिए पहले कुछ दस्तावेज़ माँगे थे। नीचे वाले अभी तक "
+                         "नहीं मिले — कृपया भेज दीजिए:"),
+           "nudge": "आपके क्लेम NP-%s के लिए एक छोटा-सा रिमाइंडर। हमें अभी भी इनका इंतज़ार है:",
+           "link": "यहाँ भेजिए — यह सबसे आसान तरीका है:",
+           "photo": "आप इस मैसेज के जवाब में हर दस्तावेज़ की साफ़ फोटो भी भेज सकते हैं।"},
+}
+
+
 async def draft_message(claim_id: int, doc_keys: list[str], *, kind: str = "request",
                         note: str = "") -> str:
     """The wording that goes out, with the documents named. Staff can edit every word of it -
@@ -237,17 +266,11 @@ async def draft_message(claim_id: int, doc_keys: list[str], *, kind: str = "requ
             # Hindi readers get the Hindi name of the document; everyone else the English one.
             lines.append("• %s" % ((d.get("hi") if lang == "hi" else None) or d.get("en") or k))
     link = await _upload_link(claim_id)
+    import biz_nidaan_wa_messages as _wam
+    t = _DRAFT.get(lang) or _DRAFT["hinglish"]
 
-    head = ("Namaste %s \U0001f64f" % name) if name else "Namaste \U0001f64f"
-    if kind == "rerequest":
-        opening = ("We asked for a few documents on your claim NP-%s earlier. We still do not "
-                   "have the ones below — could you please send them?" % claim_id)
-    elif kind == "nudge":
-        opening = ("A gentle reminder about your claim NP-%s. We are still waiting for:"
-                   % claim_id)
-    else:
-        opening = ("To take your claim NP-%s forward we need the following document(s):"
-                   % claim_id)
+    head = ("%s %s \U0001f64f" % (t["hello"], name)) if name else "%s \U0001f64f" % t["hello"]
+    opening = t[kind if kind in ("rerequest", "nudge") else "request"] % claim_id
 
     body = [head, "", opening, ""] + lines
     # The email ID is the one ask that must explain itself, in the language they read.
@@ -255,12 +278,14 @@ async def draft_message(claim_id: int, doc_keys: list[str], *, kind: str = "requ
         body += ["", MAIL_ID_NOTE.get(lang, MAIL_ID_NOTE["hinglish"])]
     if (note or "").strip():
         body += ["", (note or "").strip()]
+    # The same fast-track line the bot uses - one copy, so the two never disagree.
+    body += ["", _wam.FAST_TRACK.get(lang, _wam.FAST_TRACK["hinglish"])]
     if link:
-        body += ["", "Send them here — it is the quickest way:", link]
-    body += ["", "You can also reply to this message with a photo of each document."]
+        body += ["", t["link"], link]
+    body += ["", t["photo"]]
     if kind in ("nudge", "rerequest"):
         body += ["", IGNORE_LINE_EN, IGNORE_LINE_HI]
-    body += ["", "— Team NidaanPartner"]
+    body += ["", t["sign"]]
     return "\n".join(body)
 
 
@@ -348,7 +373,8 @@ async def preview(claim_id: int, *, doc_keys: list[str], message: str, extras=No
     unnamed = []
     for k in doc_keys:
         d = docs_by_key.get(k)
-        if d and (d.get("en") or "").lower() not in body:
+        if d and (d.get("en") or "").lower() not in body \
+                and not ((d.get("hi") or "") and d["hi"].lower() in body):
             unnamed.append(d.get("en") or k)
     if unnamed:
         warnings.append("The message does not mention %s. They will not know to send %s."

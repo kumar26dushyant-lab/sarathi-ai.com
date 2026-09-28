@@ -200,6 +200,82 @@ async def _finish(conn, sch_id: int, reason: str) -> None:
     await conn.commit()
 
 
+def _why_not(res: dict) -> str:
+    """The complainant's own line from a send result, in words: why they were not reached."""
+    if res.get("asked_recently"):
+        return "a colleague asked them very recently"
+    if not res.get("ok"):
+        return str(res.get("error") or "not sent")[:120]
+    for r in res.get("results") or []:
+        if r.get("kind") == "to" and r.get("whatsapp") and r.get("whatsapp") != "sent":
+            return str(r["whatsapp"])[:120]
+    return "not delivered"
+
+
+async def _send_template(claim_id: int, claim: dict, pending: list) -> tuple:
+    """The approved np_doc_reminder, for when the 24-hour window is closed. (ok, why_not)."""
+    try:
+        import biz_nidaan_doc_request as _dr
+        import biz_nidaan_wa_orchestrator as _orch
+        lang = await _dr._lang_for(claim_id, claim)
+        first = (pending or [{}])[0]
+        label = ((first.get("hi") if lang == "hi" else None) or first.get("en")
+                 or first.get("key") or "document")
+        r = await _orch.wa_journey(claim_id, "doc_reminder",
+                                   extra={"doc_label": label, "done": 0, "total": len(pending)})
+        return bool(r.get("ok")), ("" if r.get("ok") else str(r.get("error") or "not sent"))
+    except Exception as e:  # noqa: BLE001
+        logger.warning("scheduled reminder template failed for claim %s: %s", claim_id, e)
+        return False, "template send failed"
+
+
+async def _nudge_setter(s: dict, claim_id: int, claim: dict, *, sent_ok: bool, how: str,
+                        why: str, next_ist: str) -> None:
+    """Tell the person who set the reminder what happened - bell and Telegram, never email.
+
+    If it did not get through, that is the moment for a phone call, so the message says so and
+    gives the number. A schedule set by nobody in particular goes to whoever is on duty.
+    """
+    try:
+        import biz_nidaan_notifications as _nnot
+        ids = []
+        by = str(s.get("created_by") or "").strip()
+        if by.isdigit():
+            ids = [int(by)]
+        if not ids:
+            # Whoever is on duty for the claim's stage - the same rule as the "time to call" flag.
+            import biz_nidaan as _n
+            stage = (claim.get("pipeline_stage") or "").strip()
+            try:
+                ids = list(await _n.on_duty_rep_ids(stage)) if stage else []
+            except Exception:  # noqa: BLE001
+                ids = []
+        if not ids:
+            ids = [a["staff_id"] for a in await _nnot._super_admin_staff()]
+        if not ids:
+            return
+        who = (claim.get("complainant_name") or claim.get("insured_name") or "").strip()
+        if sent_ok:
+            subject = "\u23f0 NP-%s \u2014 your document reminder went out" % claim_id
+            body = ["Sent to %s as a %s." % (who or "the complainant", how)]
+            if next_ist:
+                body.append("Next reminder: %s." % next_ist)
+            body.append("If documents arrive, the reminders stop on their own.")
+        else:
+            import biz_nidaan_doc_request as _dr
+            phone = _dr.valid_phone(claim.get("complainant_phone") or claim.get("insured_phone"))
+            subject = "\U0001f4de NP-%s \u2014 the reminder did not reach them, please call" % claim_id
+            body = ["Your scheduled document reminder could not get through: %s." % (why or "not delivered"),
+                    "", "Please call: %s %s" % (who or "the complainant",
+                                               phone or "(no number on file)"),
+                    "", "Write down what they say on the claim afterwards."]
+        await _nnot.notify_staff_inapp(ids, subject, "\n".join(body),
+                                       event_key="doc.schedule_due", email=False,
+                                       claim_id=claim_id)
+    except Exception as e:  # noqa: BLE001 - a failed nudge must not stop the schedule loop
+        logger.warning("schedule nudge failed for claim %s: %s", claim_id, e)
+
+
 async def run_due() -> dict:
     """The worker pass. Sends what is due, then either books the next one or finishes."""
     out = {"sent": 0, "finished": 0, "skipped": 0}
@@ -241,7 +317,18 @@ async def run_due() -> dict:
                                  channels=["whatsapp"],
                                  actor="scheduled by %s" % (s.get("created_by_name") or "staff"),
                                  kind="nudge")
-            sent_ok = bool(res.get("ok"))
+            # REACHED, not "recorded". send() says ok when it logged the ask, even if nobody got
+            # it - reading that as "sent" closed schedules as done that had reached no one.
+            sent_ok = bool(res.get("ok") and res.get("reached_complainant"))
+            how, why = ("WhatsApp message", "") if sent_ok else ("", _why_not(res))
+            if not sent_ok and not res.get("asked_recently"):
+                # Past WhatsApp's 24-hour window a free message cannot be delivered at all. The
+                # approved reminder template can: it names the first document still missing.
+                sent_ok, why2 = await _send_template(claim_id, claim, pending)
+                if sent_ok:
+                    how, why = "approved WhatsApp reminder (24-hour rule)", ""
+                else:
+                    why = why2 or why
             sent_n = int(s.get("sent_count") or 0) + (1 if sent_ok else 0)
             nxt = _next_after(s["next_at"], s.get("repeat_rule") or "once",
                               s.get("repeat_every") or 7, s.get("repeat_weekday"))
@@ -251,15 +338,25 @@ async def run_due() -> dict:
                     await conn.execute(
                         "UPDATE nidaan_wa_schedule SET sent_count=?, last_sent_at=CURRENT_TIMESTAMP "
                         "WHERE sch_id=?", (sent_n, sch_id))
-                if not nxt or sent_n >= int(s.get("max_sends") or MAX_SENDS_DEFAULT):
-                    await _finish(conn, sch_id,
-                                  "asked %d time(s)" % sent_n if nxt else "one-off reminder sent")
+                finished = not nxt or sent_n >= int(s.get("max_sends") or MAX_SENDS_DEFAULT)
+                if finished:
+                    if nxt:
+                        reason = "asked %d time(s)" % sent_n
+                    elif sent_ok:
+                        reason = "one-off reminder sent"
+                    else:
+                        reason = "could not reach them: %s" % (why or "not delivered")
+                    await _finish(conn, sch_id, reason)
                     out["finished"] += 1
                 else:
                     await conn.execute(
                         "UPDATE nidaan_wa_schedule SET next_at=?, updated_at=CURRENT_TIMESTAMP "
                         "WHERE sch_id=?", (nxt, sch_id))
                 await conn.commit()
+            if not sent_ok:
+                out["not_reached"] = out.get("not_reached", 0) + 1
+            await _nudge_setter(s, claim_id, claim, sent_ok=sent_ok, how=how, why=why,
+                                next_ist=(utc_to_ist(nxt) if (nxt and not finished) else ""))
         except Exception as e:  # noqa: BLE001 — one bad schedule must not stop the rest
             logger.warning("scheduled reminder %s failed: %s", sch_id, e)
             out["skipped"] += 1

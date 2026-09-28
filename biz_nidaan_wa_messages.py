@@ -17,6 +17,28 @@ BRAND = "NidaanPartner"
 _SIGN = {"hinglish": f"\n\n— Team {BRAND}", "hi": f"\n\n— {BRAND} टीम", "en": f"\n\n— Team {BRAND}"}
 
 
+# "Fast-track" - the founder's word (29 Sep), because people know it from the news. It is always
+# about OUR internal process, never a promise about the insurer or the outcome. One copy of each
+# line, used by the bot AND by the message staff send (biz_nidaan_doc_request.draft_message), so
+# the two can never tell a complainant different things.
+FAST_TRACK = {
+    "hinglish": ("⚡ Documents sahi tarike se bhejiye — ek-ek karke, saaf photo ya PDF — to aapka "
+                 "case hamari internal process mein *fast-track* ho jaata hai."),
+    "hi": ("⚡ दस्तावेज़ सही तरीके से भेजिए — एक-एक करके, साफ़ फोटो या PDF — तो आपका केस हमारी "
+           "अंदरूनी प्रक्रिया में *फ़ास्ट-ट्रैक* हो जाता है।"),
+    "en": ("⚡ Send the documents the right way — one at a time, a clear photo or PDF — and your "
+           "case is *fast-tracked* in our internal process."),
+}
+# When something has to be sent again: encouragement, not blame.
+FAST_TRACK_RESEND = {
+    "hinglish": ("⚡ Sahi aur saaf document milte hi aapka case hamari internal process mein "
+                 "*fast-track* ho jaayega."),
+    "hi": "⚡ सही और साफ़ दस्तावेज़ मिलते ही आपका केस हमारी अंदरूनी प्रक्रिया में *फ़ास्ट-ट्रैक* हो जाएगा।",
+    "en": ("⚡ As soon as the right, clear document arrives, your case is *fast-tracked* in our "
+           "internal process."),
+}
+
+
 def _lang(l: Optional[str]) -> str:
     l = (l or "hinglish").strip().lower()
     return l if l in ("hinglish", "hi", "en") else "hinglish"
@@ -148,7 +170,7 @@ def doc_reminder(ctx: dict, lang: str = "hinglish") -> str:
         "en": (f"To move your claim forward we need *{doc}*{prog}.\nPlease send a clear photo or PDF here. "
                f"One document at a time — I'll guide you on what's next. 🙏"),
     }[l]
-    return hi_ + _SIGN[l]
+    return hi_ + "\n\n" + FAST_TRACK[l] + _SIGN[l]
 
 
 def doc_received_ok(ctx: dict, lang: str = "hinglish") -> str:
@@ -174,7 +196,7 @@ def doc_wrong(ctx: dict, lang: str = "hinglish") -> str:
         "hi": (f"यह दस्तावेज़{got_s} सही नहीं लग रहा। हमें *{want}* चाहिए। कृपया सही दस्तावेज़ की साफ़ फोटो भेजें। 🙏"),
         "en": (f"This document{got_s} doesn't look right. We need *{want}*. Please send a clear photo of the correct one. 🙏"),
     }[l]
-    return hi_ + _SIGN[l]
+    return hi_ + "\n\n" + FAST_TRACK_RESEND[l] + _SIGN[l]
 
 
 def doc_quality(ctx: dict, lang: str = "hinglish") -> str:
@@ -189,7 +211,7 @@ def doc_quality(ctx: dict, lang: str = "hinglish") -> str:
         "en": (f"*{doc}* didn't come through clearly{r}. Please retake it in good light with the full page "
                f"in frame, so we can read it properly. 🙏"),
     }[l]
-    return hi_ + _SIGN[l]
+    return hi_ + "\n\n" + FAST_TRACK_RESEND[l] + _SIGN[l]
 
 
 def docs_complete(ctx: dict, lang: str = "hinglish") -> str:
