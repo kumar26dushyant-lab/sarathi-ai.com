@@ -59,6 +59,15 @@ DOC_TYPES: dict[str, tuple] = {
                       "pre-authorisation request, approval or denial from the insurer or TPA"),
     "bank":          ("Bank details", "बैंक डिटेल",
                       "cancelled cheque, passbook page or bank account details"),
+    # Non-health claims are 7% of this firm's volume (14 of 201 claims, measured 28 Sep) but
+    # these three cover most of what life and motor cases actually send, and they cost almost
+    # nothing to recognise.
+    "death_cert":    ("Death certificate", "मृत्यु प्रमाण पत्र",
+                      "a death certificate, or a hospital's cause-of-death certificate"),
+    "fir":           ("FIR / incident report", "FIR / घटना रिपोर्ट",
+                      "a police FIR, accident report or fire brigade report"),
+    "surveyor":      ("Surveyor report", "सर्वेयर रिपोर्ट",
+                      "an insurance surveyor's assessment of damage or loss"),
     "other":         ("Other document", "अन्य दस्तावेज़",
                       "anything that is none of the above — a real answer, not a failure"),
 }

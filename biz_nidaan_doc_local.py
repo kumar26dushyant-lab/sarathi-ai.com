@@ -118,6 +118,25 @@ SIGNATURES: dict[str, list] = {
         (r"\bifsc\b", 11), (r"cancelled\s+cheque", 11), (r"passbook", 9),
         (r"account\s+(no|number)", 5), (r"branch\s+name", 4),
     ],
+    # Non-health claims are 7% of volume here, but these three are most of what life and
+    # motor cases send, and recognising them costs nothing.
+    "death_cert": [
+        (r"death\s+certificate", 12), (r"cause\s+of\s+death", 10),
+        (r"मृत्यु\s*प्रमाण", 10),
+        (r"registrar\s+of\s+births\s+(and|&)\s+deaths", 10),
+        (r"date\s+of\s+death", 6),
+    ],
+    "fir": [
+        (r"first\s+information\s+report", 12), (r"\bf\.?i\.?r\.?\b", 9),
+        (r"police\s+station", 6), (r"fire\s+brigade", 8),
+        (r"प्रथम\s*सूचना", 9),
+        (r"under\s+section\s+\d+", 5),
+    ],
+    "surveyor": [
+        (r"surveyor", 11), (r"survey\s+report", 11),
+        (r"loss\s+assessment", 8), (r"assessed\s+loss", 8),
+        (r"irda.*surveyor|surveyor.*licence", 7),
+    ],
 }
 
 _COMPILED = {t: [(re.compile(p, re.I | re.S), w) for p, w in rows]
