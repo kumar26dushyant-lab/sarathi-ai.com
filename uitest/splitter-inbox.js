@@ -80,5 +80,52 @@ const splitterJs = html.slice(html.indexOf('function loadDocSplit('),
 check('no discard/delete call anywhere in the splitter screen',
       !/discard_job_file|method:'DELETE'/.test(splitterJs));
 
+// ── the review screen ───────────────────────────────────────────────────────
+console.log('\nThe review screen\n');
+
+const review = html.slice(html.indexOf('function dsRenderReview('),
+                          html.indexOf('// ── what the splitter has been taught'));
+
+check('it walks the person through in numbered steps',
+      /<b>1\.<\/b>/.test(review) && /<b>2\.<\/b>/.test(review) && /<b>3\.<\/b>/.test(review),
+      'the founder asked for baby steps staff can read and follow');
+check('it says the pages were read on this server', /read on this server/.test(review));
+check('it shows the ready-made sets', /dsRenderSets|id="dsSets"/.test(review));
+
+// Two taps, not drag-and-drop: this is used on a phone in a corridor.
+check('correcting a page is TAP page then TAP name',
+      /dsPick\(/.test(review) && /Tap the page/.test(review));
+check('...with no drag-and-drop to fail on a touch screen',
+      !/ondragstart|draggable=|ondrop/.test(review));
+check('...and each type is offered by NAME, not an icon',
+      /esc\(t\.label\)/.test(review), 'words over ambiguous icons');
+
+check('teaching is a separate, opt-in tick',
+      /id="dsTeach"/.test(review) && /Remember this/.test(review),
+      '"this page once" and "pages like this always" are different decisions');
+check('a page nobody could read says so rather than guessing',
+      /could not be read/.test(review));
+check('the sets say what is NOT in the file', /not in this file/.test(review));
+
+// ── the rules screen ────────────────────────────────────────────────────────
+console.log('\nWhat the splitter has learned\n');
+
+const rules = html.slice(html.indexOf('function dsToggleRules('),
+                         html.indexOf('async function dsLoadThumbs('));
+
+check('there is a screen for it at all', rules.length > 200);
+check('a rule is shown as WORDS a person can read',
+      /r\.words\|\|\[\]/.test(rules) && /when at least 4 of these words appear/.test(rules),
+      'a similarity score would be unarguable, which is the problem');
+check('...with who taught it and how often it has fired',
+      /taught by/.test(rules) && /times_fired/.test(rules));
+check('...and an undo next to each one', /dsUndoRule\(/.test(rules));
+check('turning one off is confirmed first', /confirm\(/.test(rules));
+check('...and says it is kept on record, not deleted',
+      /kept on record, not deleted/.test(rules),
+      '"removed" and "turned off" are different promises');
+check('with nothing learned it explains how to teach it',
+      /Nothing learned yet/.test(rules) && /Remember this/.test(rules));
+
 console.log('\n' + (failed ? failed + ' FAILED\n' : 'ALL GOOD\n'));
 process.exit(failed ? 1 : 0);

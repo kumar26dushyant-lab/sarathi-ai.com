@@ -5890,6 +5890,10 @@ function loadDocSplit(){
       <div style="font-size:.78rem;color:var(--nd-text-muted);margin-top:.7rem">PDF · JPG · PNG · WebP &nbsp;·&nbsp; up to 12 files &nbsp;·&nbsp; 30 MB each &nbsp;·&nbsp; <i>(DOC/DOCX support coming)</i></div>
     </div>
     <div id="dsInbox" style="margin-top:1rem"></div>
+    <div style="margin-top:.9rem">
+      <button class="btn-sm btn-ghost" onclick="dsToggleRules()">📚 What this has learned</button>
+    </div>
+    <div id="dsRules" style="margin-top:.7rem"></div>
     <div id="dsResult" style="margin-top:1rem"></div>`;
   dsLoadInbox();
 }
@@ -6124,6 +6128,57 @@ function dsCopyPrompt(el){
   const txt=el.getAttribute('data-copy')||'';
   navigator.clipboard.writeText(txt).then(()=>{ const o=el.textContent; el.textContent=' ✓'; setTimeout(()=>el.textContent=o,1200); }).catch(()=>{});
 }
+// ── what the splitter has been taught ───────────────────────────────────────
+// Shown as sentences, not scores. The founder chose visible rules precisely so a colleague can
+// read one, decide it is wrong, and turn it off - which only works if the words are on screen.
+let _dsRulesOpen=false;
+
+function dsToggleRules(){
+  _dsRulesOpen=!_dsRulesOpen;
+  const w=document.getElementById('dsRules'); if(!w) return;
+  if(!_dsRulesOpen){ w.innerHTML=''; return; }
+  dsLoadRules();
+}
+
+async function dsLoadRules(){
+  const w=document.getElementById('dsRules'); if(!w) return;
+  w.innerHTML='<div class="empty" style="padding:.8rem"><p>Loading…</p></div>';
+  let rules=[];
+  try{
+    const r=await fetch('/nidaan/ops/api/docsplit/rules',{headers:{'Authorization':'Bearer '+_token}});
+    if(r.ok) rules=(await r.json()).rules||[];
+  }catch(e){ w.innerHTML='<div class="empty"><p>Could not load these right now.</p></div>'; return; }
+  if(!rules.length){
+    w.innerHTML=`<div class="nd-card" style="padding:.8rem 1rem;font-size:.85rem;color:var(--nd-text-muted)">
+      Nothing learned yet. When you correct a page and tick <b>“Remember this”</b>, the rule appears here — and you can turn it off again.
+    </div>`;
+    return;
+  }
+  w.innerHTML=`
+    <div class="nd-card" style="padding:.8rem 1rem">
+      <div style="font-weight:700;margin-bottom:.15rem">What this has learned (${rules.length})</div>
+      <div style="font-size:.78rem;color:var(--nd-text-muted);margin-bottom:.7rem">Each one was taught by somebody correcting a page. If one is wrong, turn it off — it stays on record so we can see what happened.</div>
+      ${rules.map(r=>`
+        <div style="padding:.5rem 0;border-top:1px solid var(--nd-border)">
+          <div style="font-size:.88rem">Filed as <b>${esc(r.label||r.doc_type)}</b> when at least 4 of these words appear:</div>
+          <div style="font-size:.8rem;color:var(--nd-text-muted);margin:.2rem 0 .3rem">${(r.words||[]).map(esc).join(' · ')}</div>
+          <div style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap">
+            <span style="font-size:.72rem;color:var(--nd-text-faint)">taught by ${esc(r.taught_by||'a colleague')}${r.created_at?' · '+esc(String(r.created_at).slice(0,10)):''} · used ${r.times_fired||0} time(s)</span>
+            <button class="btn-sm btn-ghost" style="color:var(--nd-danger-text)" onclick="dsUndoRule(${r.rule_id},'${esc(String(r.label||r.doc_type).replace(/'/g,''))}')">Turn this off</button>
+          </div>
+        </div>`).join('')}
+    </div>`;
+}
+
+async function dsUndoRule(id,label){
+  if(!confirm('Turn off the rule that files pages as "'+label+'"?\n\nIt stops being used straight away. It is kept on record, not deleted, so we can still see what it did.')) return;
+  try{
+    const r=await fetch(`/nidaan/ops/api/docsplit/rules/${id}/undo`,{method:'POST',headers:{'Authorization':'Bearer '+_token}});
+    if(!r.ok){ alert('Could not turn that off. Please try again.'); return; }
+  }catch(e){ alert('Could not turn that off. Please try again.'); return; }
+  dsLoadRules();
+}
+
 async function dsLoadThumbs(){
   for(let p=1;p<=_dsPages;p++){
     try{
@@ -6170,6 +6225,8 @@ async function dsCollate(btn){
 window.dsLoadInbox=dsLoadInbox; window.dsOpen=dsOpen; window.dsClose=dsClose;
 window.dsLoadPages=dsLoadPages; window.dsPick=dsPick; window.dsCancelPick=dsCancelPick;
 window.dsRetype=dsRetype; window.dsGetSet=dsGetSet;
+window.dsToggleRules=dsToggleRules; window.dsLoadRules=dsLoadRules;
+window.dsUndoRule=dsUndoRule;
 window.loadDocSplit=loadDocSplit; window.dsUpload=dsUpload; window.dsAddDoc=dsAddDoc; window.dsExport=dsExport; window.dsCollate=dsCollate;
 window.dsCopyPrompt=dsCopyPrompt;
 
