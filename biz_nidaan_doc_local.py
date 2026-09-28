@@ -58,10 +58,20 @@ SIGNATURES: dict[str, list] = {
         (r"insured\s+member", 2),
     ],
     "rejection": [
+        # Tuned against the letters this firm ACTUALLY receives, 28 Sep. The phrasing I had
+        # imagined - "we regret to inform", "repudiated" - appears in almost none of them.
+        # Star Health, the commonest insurer here, writes: "We regret we are unable to admit
+        # the claim for the below-mentioned reason/s". Eleven real letters classified as
+        # `other` because of that gap.
+        (r"unable\s+to\s+admit\s+the\s+claim", 12),
+        (r"we\s+regret\s+we\s+are\s+unable", 11),
+        (r"below[- ]mentioned\s+reason", 9),
+        (r"claim\s+intimation\s+number", 8),
         (r"repudiat", 12), (r"we\s+regret\s+to\s+inform", 9),
         (r"claim\s+(is|stands|has\s+been)\s+(rejected|repudiated|denied)", 11),
-        (r"claim\s+rejection", 10), (r"rejection\s+letter", 10),
-        (r"not\s+payable", 5), (r"exclusion\s+clause", 6), (r"deduction", 4),
+        (r"claim\s+rejection|rejection\s+of\s+claim", 10), (r"rejection\s+letter", 10),
+        (r"denial\s+(letter|of\s+claim)", 10),
+        (r"not\s+(payable|admissible)", 6), (r"exclusion\s+clause", 6), (r"deduction", 4),
         (r"closure\s+of\s+(the\s+)?claim", 6), (r"अस्वीकृत", 7),
     ],
     "kyc": [
@@ -83,9 +93,13 @@ SIGNATURES: dict[str, list] = {
         (r"room\s+rent", 5), (r"bill\s+(no|number)", 3), (r"grand\s+total", 3),
     ],
     "receipt": [
-        (r"receipt", 8), (r"received\s+with\s+thanks", 10),
-        (r"रसीद", 7), (r"amount\s+received", 7),
-        (r"payment\s+receipt", 10), (r"receipt\s+(no|number)", 6),
+        # The bare word "receipt" used to be worth 8 - heading weight for a word that turns up
+        # in the body of half the letters here, which is how a rejection letter scored as a
+        # receipt. A common word must not outvote a document's actual heading.
+        (r"payment\s+receipt", 10), (r"received\s+with\s+thanks", 10),
+        (r"receipt\s+(no|number)", 7), (r"amount\s+received", 7),
+        (r"रसीद", 7),
+        (r"receipt", 2),
     ],
     "pharmacy_bill": [
         (r"pharmacy", 10), (r"chemist", 10), (r"medical\s+store", 9),
