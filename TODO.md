@@ -4,7 +4,50 @@ _Auto-maintained by Claude **every conversation**, alongside `PROJECT_MASTER_CON
 _**Two-terminal workflow:** work 🟦 NidaanPartner items in one VS Code terminal, 🟩 Sarathi items in another. Each app's section is self-contained so both can progress simultaneously without collision._
 _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned · ✅ done_
 
-**Last updated:** 2026-09-28 (afternoon) — 🚨 **The claimant portal had been dead for two
+**Last updated:** 2026-09-28 (evening) — 🧰 **The doc splitter set-builder is BUILT**:
+inbox of three, review screen with the three ready-made sets, and a rules screen you can read and
+undo. ✅ Sudoers fixed — and it uncovered that **deploys had been skipping live sites at random**.
+🔴 Not deployed yet.
+
+### 🧰 28 Sep (evening) — THE SPLITTER NOW HANDS BACK SETS, AND REMEMBERS CORRECTIONS
+
+Everything below is built, tested and committed. **Not deployed** — say the word.
+
+**The inbox.** Three files open per person. A fourth is refused and *names* the one it would put
+away, offering to open or close it; closing confirms first and archives. Jobs now **belong to
+somebody** — a real hole, this: all four splitter routes asked only "are you staff?", so anyone on
+the team could open anyone else's uploaded claimant documents by job id. Refused with 404 rather
+than 403, so the endpoint cannot be used to learn whose uploads exist.
+
+**The review screen.** Every page with what it was read as, and the three sets those types compose
+into — **CIO documents**, **All documents merged**, **Claim set** — each downloadable. A set is
+composed **by type, not by page range**: "every bill in this file" is pages 4, 9 and 17, so this
+needed a new cut-by-page-numbers function. The sets recompute after every correction, which is the
+whole reason for showing sets rather than a pile of files — you can see what your correction did.
+
+**Two taps, not drag-and-drop.** Tap the page, tap the right name. Half the team is on a phone in a
+hospital corridor; dragging is a desktop idea. Each type is its **name**, never an icon.
+
+**Read once.** Classifying costs ~15s a scanned page, and the answer used to be thrown away —
+reopening a 40-page bundle cost ten minutes again. It is saved beside the working PDF as plain
+JSON. That is also what makes a correction stick: a re-read would silently put the machine's
+answer back.
+
+**The rules screen.** A correction can be taught, and then it reads as a sentence: *"filed as a
+Final bill when at least 4 of these words appear: total, payable, consumables… — taught by Asha,
+used 12 times"*. With an undo next to it, which **archives** — "removed" and "turned off" are
+different promises.
+
+**The six-hour delete is gone.** Every upload used to run a sweep removing any job folder older
+than six hours — no owner, no record, nobody asked, on a working copy of a real claimant's hospital
+file. Nothing automatic replaces it: `reclaimable()` *reports* what could be freed, and
+`discard_job_file()` refuses a live job even when asked directly.
+
+**Tests:** `test_doc_store` (30), `test_job_files` (16), `test_docsplit_routes` (23),
+`test_doc_review` (20, end-to-end on a real PDF), `uitest/splitter-inbox.js` (31). Each was proven
+to fail against the code as it was.
+
+**Previously:** 2026-09-28 (afternoon) — 🚨 **The claimant portal had been dead for two
 days** (a module-name collision I caused on 26 Sep) — found, fixed, **deployed** and verified from
 outside. 🍪 **Cookie consent shipped** on advisor and policyholder pages: Google Analytics no
 longer runs until somebody says yes. 🔒 The bot's "Ask AI" no longer sends task records out.

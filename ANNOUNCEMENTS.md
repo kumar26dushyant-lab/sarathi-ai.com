@@ -1,5 +1,82 @@
 # Staff Announcement Drafts
 
+## 2026-09-28 (3) — The document splitter now gives you ready-made sets, and remembers your corrections
+
+_For: everyone who uses the PDF splitter._
+_Not yet sent. Deploy first, then send._
+
+**Title (EN):**
+🧰 The splitter now builds the sets for you — and learns from your corrections
+
+**Details (EN):**
+• **Your files stay until you close them.** Up to three at a time. They used to be deleted
+automatically after six hours — so if you came back after lunch, your work was gone. That has
+stopped. Nothing is removed unless you close it, and closing keeps the file rather than
+destroying it.
+
+• **Only you can open your files.** Until now anyone on the team could open anyone's upload.
+Now they are yours.
+
+• **You get the sets, not a pile of PDFs.** After it reads the pages you will see three ready
+bundles — **CIO documents**, **All documents merged**, and the **Claim set** — each with a
+Download button. No more exporting pieces and joining them by hand.
+
+• **Wrong page? Two taps.** Tap the page, then tap the right name. That is all. It works the
+same on a phone as on a computer — no dragging. The sets update straight away, so you can see
+what your correction did.
+
+• **Tick “Remember this” and it learns.** The next file with a page like that one gets filed the
+same way, automatically. You can see everything it has learned under **“What this has learned”**,
+written in plain words — and if one is wrong, turn it off. Please do tick it when you are sure:
+this is how the tool gets better, and it only learns from you.
+
+• **Please still check the page numbers before you download.** The first guess is ours, made on
+our own server, and it is not always right — that is exactly why the Change button is there.
+
+• **A scanned file takes a minute.** Photographed pages are slower to read than typed ones. It
+only reads once: opening the same file again is instant, and your corrections are still there.
+
+• **If something looks wrong, tell us.** A page filed somewhere odd, a set missing something you
+expected, a file that will not open — say so. Every report makes it better.
+
+---
+
+**शीर्षक (HI):**
+🧰 स्प्लिटर अब आपके लिये सेट बनाता है — और आपकी सुधारों से सीखता है
+
+**विवरण (HI):**
+• **आपकी फ़ाइलें तब तक रहेंगी जब तक आप उन्हें बंद न करें।** एक साथ तीन तक।
+पहले छह घंटे बाद वे अपने आप मिट जाती थीं — यानी खाना खाकर लौटने पर काम गायब।
+अब ऐसा नहीं होगा। जब आप बंद करेंगे तभी हटेगी, और बंद करने पर भी फ़ाइल रखी जाती है, मिटाई नहीं जाती।
+
+• **आपकी फ़ाइल सिर्फ़ आप खोल सकते हैं।** अब तक टीम का कोई भी किसी की फ़ाइल खोल
+सकता था। अब वह आपकी है।
+
+• **आपको सेट मिलेंगे, PDF का ढेर नहीं।** पेज पढ़ने के बाद तीन तैयार बंडल
+दिखेंगे — **CIO दस्तावेज़**, **सारे दस्तावेज़ एक साथ**, और **क्लेम सेट** — हर एक पर
+डाउनलोड बटन। अब टुकड़े निकालकर हाथ से जोड़ने की ज़रूरत नहीं।
+
+• **पेज गलत लगा है? दो टैप।** पेज पर टैप कीजिये, फ़िर सही नाम पर टैप। बस।
+फ़ोन और कंप्यूटर दोनों पर एक जैसा — खींचने की ज़रूरत नहीं। सेट उसी वक्त बदल
+जाते हैं, तो आपको दिखता है कि आपके सुधार से क्या हुआ।
+
+• **“Remember this” पर टिक कीजिये, और यह सीख लेगा।** अगली फ़ाइल में वैसा पेज
+अपने आप सही जगह जाएगा। जो कुछ यह सीख चुका है वह **“What this has learned”** में साफ़
+शब्दों में लिखा मिलेगा — और गलत लगे तो बंद कर दीजिये। जब पक्का पता हो तब टिक
+ज़रूर कीजिये — यही तरीका है जिससे यह बेहतर बनता है, और यह सिर्फ़ आपसे सीखता है।
+
+• **डाउनलोड से पहले पेज ज़रूर जाँच लीजिये।** पहला अनुमान हमारा है, हमारे
+अपने सर्वर पर, और वह हमेशा सही नहीं होता — इसीलिये “Change” बटन है।
+
+• **स्कैन की फ़ाइल में एक मिनट लग सकता है।** फ़ोटो वाले पेज पढ़ने में वक्त
+लगता है। यह एक बार ही पढ़ता है — वही फ़ाइल दोबारा खोलने पर तुरंत खुलती है, और
+आपकी सुधार वैसी की वैसी रहती हैं।
+
+• **कुछ गलत लगे तो बताइये।** कोई पेज अजीब जगह लगा, किसी सेट में कुछ कम
+लगा, फ़ाइल नहीं खुली — बताइये। हर सूचना से यह बेहतर होता है।
+
+---
+
 ## 2026-09-28 (2) — A cookie choice now appears on the website, for advisors and policyholders
 
 _For: all staff, so nobody is surprised by what customers will ask about._

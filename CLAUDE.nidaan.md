@@ -166,6 +166,22 @@ rather than the request timing out. Awaiting it on the loop would freeze every o
 worker for minutes - the hazard the local engine introduced, which the network call it replaced
 never had (`_tools/test_ocr_budget.py`).
 
+### The document splitter
+
+Jobs belong to a staff member (`biz_nidaan_doc_store`), three open at a time, and the fourth ASKS
+before anything is put away. Every job route resolves through `_docsplit_job` and refuses with
+**404, never 403** - a 403 would confirm whose uploads exist. **Nothing deletes**: closing a job
+archives it, and the six-hour sweep that used to remove working files is gone.
+
+Pages are classified ONCE at upload and saved beside the working PDF (`pages.json`). Never
+re-classify a job that has an answer - it costs ~15s a scanned page AND would silently undo
+corrections. A set is composed **by type**, so its pages are scattered: use `extract_pages`, not
+`extract`.
+
+Corrections are taught as **readable word rules** somebody can undo, never a score. A rule always
+beats the engine's reading. Adding a document type means `DOC_TYPES` and the `SETS` orders in
+`biz_nidaan_doc_sets`.
+
 ### The bot
 
 **@NidaanPartnerOpsBot** (`biz_nidaan_telegram.py`, long-polling). Tasks, claims, notes, stage
