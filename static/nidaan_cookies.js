@@ -322,9 +322,13 @@
   var api = {
     /* Has this group been allowed? Anything not decided is NOT allowed. */
     allows: function (group) {
-      var c = load();
-      if (!c) return false;
+      // Essential first, and without consulting the stored answer: it is allowed by definition,
+      // it is what the banner tells people cannot be switched off, and it is true before anybody
+      // has answered anything. Checking the answer first made this say "no" to signing somebody
+      // in until they had dismissed a banner - the function contradicting the page.
       if (group === "essential") return true;
+      var c = load();
+      if (!c) return false;                       // undecided is NOT permission for anything else
       return group === "analytics" ? !!c.analytics : false;
     },
     decided: function () { return !!load(); },
