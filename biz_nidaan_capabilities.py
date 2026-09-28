@@ -612,10 +612,10 @@ CAPABILITIES: list[dict] = [
     {
         "id": "content_editor",
         "en": {"t": "Content & Complainant Terms",
-               "d": "Edit homepage facts, offices, and the complainant fee % + Terms (Nidaan The Legal Consultant LLP).",
+               "d": "Edit homepage facts, offices, and the complainant fee % + Terms (Nidaan The Legal Consultants LLP).",
                "u": "Change a business fact once — the website and chat assistant both update. Set the success-fee terms here."},
         "hi": {"t": "कंटेंट व क्लेमेंट शर्तें",
-               "d": "होमपेज तथ्य, कार्यालय, और क्लेमेंट फीस % + शर्तें (Nidaan The Legal Consultant LLP) संपादित करें।",
+               "d": "होमपेज तथ्य, कार्यालय, और क्लेमेंट फीस % + शर्तें (Nidaan The Legal Consultants LLP) संपादित करें।",
                "u": "एक बार तथ्य बदलें — वेबसाइट और चैट असिस्टेंट दोनों अपडेट। सक्सेस-फीस शर्तें यहीं तय करें।"},
         "telegram": False, "web": True, "min_role": "super_admin",
     },

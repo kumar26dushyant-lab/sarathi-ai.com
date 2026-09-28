@@ -20805,7 +20805,7 @@ async def _nidaan_privacy_with_officer(request: Request) -> HTMLResponse:
         logger.warning("could not read grievance officer setting: %s", e)
         name = mail = phone = ""
     who = ("<b>%s</b>, Grievance Officer" % html_escape(name)) if name else \
-          "the <b>Grievance Officer</b>, Nidaan Legal India LLP"
+          "the <b>Grievance Officer</b>, Nidaan The Legal Consultants LLP"
     bits = [who]
     if mail:
         bits.append('<a href="mailto:%s">%s</a>' % (html_escape(mail), html_escape(mail)))

@@ -47,7 +47,7 @@ check("the published page is rendered with whoever is named now", "get_ops_setti
 check("...read at SERVE time, so a change shows without a deploy",
       "nidaan_privacy.html" in helper and "read_text" in helper)
 check("an empty name falls back to naming the office, never prints blank",
-      "if name else" in helper and "Grievance Officer</b>, Nidaan Legal India LLP" in helper)
+      "if name else" in helper and "Grievance Officer</b>, Nidaan The Legal Consultants LLP" in helper)
 check("a failure to read the setting still serves the page",
       "except Exception" in helper)
 

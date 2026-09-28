@@ -71,12 +71,18 @@ check("the Sarathi policy does not name Nidaan either", "Nidaan" not in sp)
 
 # ── the entity, the office, and who to write to ─────────────────────────────
 print()
-LLP = "Nidaan Legal India LLP"
+# From the founder's registration document, 28 Sep: NIDAAN THE LEGAL CONSULTANTS LLP.
+# This previously read "Nidaan Legal India LLP" and asserted the real name must be
+# ABSENT - so the check was keeping the registered entity off the legal pages.
+LLP = "Nidaan The Legal Consultants LLP"
 MAIL = "enquiries@nidaanlegalindia.com"
 nt = io.open(os.path.join(ROOT, "static", "nidaan_terms.html"), encoding="utf-8").read()
 for name, page in (("privacy", np), ("terms", nt)):
     check("%-7s names the registered entity" % name, LLP in page)
-    check("%-7s   and NOT the old one" % name, "The Legal Consultants LLP" not in page)
+    check("%-7s   and not either of the wrong spellings" % name,
+          "Nidaan Legal India LLP" not in page
+          and "Nidaan The Legal Consultant LLP" not in page,
+          "one was the wrong firm; the other dropped the S, on the fee agreement")
     check("%-7s   publishes the registered office" % name, "452009" in page)
     check("%-7s   and a phone number" % name, "95844 68804" in page)
     check("%-7s   routes legal contact to the LLP, not the product inbox" % name, MAIL in page)
@@ -90,8 +96,9 @@ check("terms names Indore as the jurisdiction", "Indore" in nt)
 # A company name spelled two ways is not a name.
 import glob
 wrong = [os.path.basename(f) for f in glob.glob(os.path.join(ROOT, "static", "*.html"))
-         if "The Legal Consultants LLP" in io.open(f, encoding="utf-8").read()]
-check("no page anywhere still shows the old entity name", not wrong, wrong)
+         if ("Nidaan Legal India LLP" in io.open(f, encoding="utf-8").read()
+             or "Nidaan The Legal Consultant LLP" in io.open(f, encoding="utf-8").read())]
+check("no page anywhere shows a wrong spelling of the firm", not wrong, wrong)
 bad = [os.path.basename(f) for f in glob.glob(os.path.join(ROOT, "static", "*.html"))
        if re.search(r"Digital Consultant(?!cy)", io.open(f, encoding="utf-8").read())]
 check("the developer is 'Digital Consultancy' on every page", not bad, bad)

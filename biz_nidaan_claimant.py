@@ -419,7 +419,7 @@ async def build_consent_proof_pdf(claim_id: int) -> Optional[bytes]:
     gst = p.get("consent_gst_pct") or 0
     lines = []
     lines.append(("DIGITAL CONSENT RECORD", 15, True))
-    lines.append(("Nidaan The Legal Consultant LLP", 11, True))
+    lines.append(("Nidaan The Legal Consultants LLP", 11, True))
     lines.append(("", 10, False))
     lines.append(("Electronically generated record of the complainant's digital acceptance of the "
                   "engagement & success-fee terms, produced by NidaanPartner.com.", 9, False))
@@ -433,7 +433,7 @@ async def build_consent_proof_pdf(claim_id: int) -> Optional[bytes]:
     lines.append((f"Accepted (IST): {p.get('consent_accepted_at')}", 10, False))
     lines.append((f"Terms version: {p.get('consent_terms_version') or '-'}", 10, False))
     lines.append((f"Success fee: {p.get('consent_fee_pct')}% of amount recovered"
-                  + (f" + {gst}% GST" if gst else "") + " (payable to Nidaan The Legal Consultant LLP)", 10, False))
+                  + (f" + {gst}% GST" if gst else "") + " (payable to Nidaan The Legal Consultants LLP)", 10, False))
     lines.append((f"IP address: {p.get('consent_ip') or '-'}", 10, False))
     lines.append((f"Device: {p.get('consent_user_agent') or '-'}", 8, False))
     lines.append((f"Integrity hash (SHA-256): {p.get('consent_hash') or '-'}", 8, False))

@@ -9186,7 +9186,7 @@ async function loadClaimantTermsEditor(){
           <input id="ctVersion" class="form-input" value="${esc(cfg.terms_version||'v1-draft')}" ${canEdit?'':'disabled'} placeholder="v1"></div>
       </div>
       <div style="font-size:.72rem;color:var(--nd-text-muted);margin:.5rem 0">${gstNote}</div>
-      <label style="font-size:.72rem;color:var(--nd-text-muted);display:block">Terms &amp; conditions — English (contracting entity: <b>Nidaan The Legal Consultant LLP</b>)
+      <label style="font-size:.72rem;color:var(--nd-text-muted);display:block">Terms &amp; conditions — English (contracting entity: <b>Nidaan The Legal Consultants LLP</b>)
         <textarea id="ctTerms" class="form-input" rows="6" ${canEdit?'':'disabled'} placeholder="Paste the counsel-approved English terms here…">${esc(cfg.terms_html||'')}</textarea></label>
       <label style="font-size:.72rem;color:var(--nd-text-muted);display:block;margin-top:.6rem">नियम व शर्तें — हिंदी (complainants are Tier 2/3; Hindi is their default)
         <textarea id="ctTermsHi" class="form-input" rows="6" ${canEdit?'':'disabled'} placeholder="काउंसल-अनुमोदित हिंदी शर्तें यहाँ डालें…">${esc(cfg.terms_html_hi||'')}</textarea></label>

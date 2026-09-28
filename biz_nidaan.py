@@ -6387,7 +6387,7 @@ OPS_SETTING_DEFAULTS = {
     "wa_lead_capture_enabled": "1",     # auto-record inbound unknown WhatsApp numbers as CRM leads
     "wa_journey_enabled": "1",          # live complainant journey (claim/payment WhatsApp alerts) master switch
     # T&C shown in the complainant consent card, in BOTH languages (Hindi-default audience). The
-    # contracting entity is "Nidaan The Legal Consultant LLP" (the legal firm) — the success fee is
+    # contracting entity is "Nidaan The Legal Consultants LLP" (the legal firm) — the success fee is
     # the LLP's and is SEPARATE from NidaanPartner.com (the platform/mediator). Super-admin/counsel
     # owned: edit in ops Content; bump claimant_terms_version on any change so old acceptances stay
     # pinned to the version agreed. Plain text / simple HTML.
@@ -6399,19 +6399,19 @@ OPS_SETTING_DEFAULTS = {
         "actually recovered from the insurer/authority, plus applicable GST, is payable to Nidaan "
         "The Legal Consultant LLP only upon successful recovery. If nothing is recovered, no fee is "
         "payable.\n\n"
-        "This fee is payable to Nidaan The Legal Consultant LLP and is separate from any "
+        "This fee is payable to Nidaan The Legal Consultants LLP and is separate from any "
         "subscription or service of NidaanPartner.com.\n\n"
         "By accepting, you authorise the Firm to act on your behalf in this claim and confirm the "
         "details provided are correct. You may withdraw by written notice; fees already earned on "
         "amounts already recovered remain payable. This acceptance is recorded digitally with date "
         "and time."),
     "claimant_terms_html_hi": (
-        "यह अनुबंध आपके (पॉलिसीधारक / दावेदार) और Nidaan The Legal Consultant LLP (\"फर्म\") के बीच है। "
+        "यह अनुबंध आपके (पॉलिसीधारक / दावेदार) और Nidaan The Legal Consultants LLP (\"फर्म\") के बीच है। "
         "फर्म आपके बीमा दावे को आगे बढ़ाने और, जहाँ संभव हो, वसूल कराने में आपकी सहायता करेगी।\n\n"
         "फीस: फर्म पूरी तरह सफलता के आधार पर काम करती है। बीमा कंपनी/प्राधिकरण से वास्तव में वसूल की गई "
-        "राशि का 15% पेशेवर शुल्क, साथ में लागू GST, केवल सफल वसूली पर Nidaan The Legal Consultant LLP को "
+        "राशि का 15% पेशेवर शुल्क, साथ में लागू GST, केवल सफल वसूली पर Nidaan The Legal Consultants LLP को "
         "देय होगा। यदि कुछ भी वसूल नहीं होता, तो कोई फीस देय नहीं है।\n\n"
-        "यह फीस Nidaan The Legal Consultant LLP को देय है और NidaanPartner.com की किसी सदस्यता या सेवा से "
+        "यह फीस Nidaan The Legal Consultants LLP को देय है और NidaanPartner.com की किसी सदस्यता या सेवा से "
         "अलग है।\n\n"
         "स्वीकार करके, आप फर्म को इस दावे में अपनी ओर से कार्य करने के लिए अधिकृत करते हैं और पुष्टि करते हैं "
         "कि दी गई जानकारी सही है। आप लिखित सूचना देकर वापस ले सकते हैं; पहले वसूल हुई राशि पर अर्जित फीस देय "
