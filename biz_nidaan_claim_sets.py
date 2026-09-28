@@ -151,6 +151,13 @@ async def read_claim(claim_id: int, *, force: bool = False) -> dict:
 
     pages = []
     page_no = 0
+    # A TIME BUDGET FOR OCR ACROSS THE WHOLE CLAIM. Identifying per document without one took
+    # 7m30s on claim 151. Past the budget, documents are still identified from their names and
+    # from any page that carries its own text - only RENDERING a photographed page stops. What
+    # could not be read is flagged for a person, which is the honest result.
+    import time as _time
+    spent = 0.0
+    budget = float(os.getenv("NIDAAN_CLAIM_OCR_BUDGET_S", "90"))
     for d, (name, blob) in zip(readable, files):
         try:
             one, n_pages, _sk = split.normalize_to_pdf([(name, blob)])
@@ -162,7 +169,10 @@ async def read_claim(claim_id: int, *, force: bool = False) -> dict:
             d["unreadable"] = True
             continue
         try:
-            got = await brain.identify_document(one, rules)
+            _t0 = _time.monotonic()
+            got = await brain.identify_document(one, rules, filename=name,
+                                                ocr_allowed=(spent < budget))
+            spent += _time.monotonic() - _t0
         except Exception as e:  # noqa: BLE001
             logger.warning("claim %s: could not identify %s: %s", claim_id, name, e)
             got = {"doc_type": "other", "confidence": 0.0, "why": "could not be read",

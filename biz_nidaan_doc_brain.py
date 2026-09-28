@@ -73,7 +73,8 @@ async def classify_pages(pdf_bytes: bytes, rules: list | None = None) -> list:
 
 
 async def identify_document(pdf_bytes: bytes, rules: list | None = None,
-                            sample: int = 3) -> dict:
+                            sample: int = 3, filename: str = "",
+                            ocr_allowed: bool = True) -> dict:
     """What IS this document? Reads only the first few readable pages.
 
     Returns {doc_type, confidence, why, pages, sampled, mixed, words}.
@@ -89,6 +90,16 @@ async def identify_document(pdf_bytes: bytes, rules: list | None = None,
     import biz_nidaan_doc_local as local
     import biz_nidaan_doc_sets as sets
 
+    # THE NAME FIRST. On claim 204, 33 of 39 documents already said what they were in their
+    # filename, and the page reader - which never looked - called 28 of them "not sure". A name
+    # a person gave a document costs nothing to read and is correct when they renamed it.
+    named = local.type_from_filename(filename)
+    if named:
+        return {"doc_type": named["doc_type"], "confidence": 0.9, "why": named["why"],
+                "taught_by": "", "rule_id": None, "pages": 0, "sampled": 0,
+                "mixed": False, "kinds": [named["doc_type"]], "words": [],
+                "from_name": True}
+
     def _look() -> dict:
         import fitz
         doc = fitz.open(stream=pdf_bytes, filetype="pdf")
@@ -101,7 +112,7 @@ async def identify_document(pdf_bytes: bytes, rules: list | None = None,
             if total > sample * 2:
                 idx.append(total // 2)
             for i in idx:
-                text, src = local.page_text(doc, i)
+                text, src = local.page_text(doc, i, allow_ocr=ocr_allowed)
                 if src == "none":
                     continue
                 res = local.score_page(text)

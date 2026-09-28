@@ -207,6 +207,57 @@ def score_page(text: str) -> dict:
 
 
 # ── getting the text off the page, locally ──────────────────────────────────
+# ── what the FILENAME says ───────────────────────────────────────────────────
+# Ordered: the first match wins, so the specific comes before the general ("final bill" before
+# "bill", "claim form" before anything that might catch "form").
+_NAME_HINTS = [
+    (r"discharge|dischage|dis\s*charge|\bd\s*s\b\s*(summary)?$", "discharge"),
+    (r"claim\s*form", "claim_form"),
+    (r"pharmac|chemist|medicine|medical\s*store", "pharmacy_bill"),
+    (r"final\s*bill|hospital\s*bill|ipd\s*bill|\binvoice\b|bill\s*summary", "final_bill"),
+    (r"receipt|recipt|reciept|payment\s*proof", "receipt"),
+    (r"reject|repudiat|denial|deduction", "rejection"),
+    (r"pre\s*-?\s*auth|cashless|authori[sz]ation\s*letter", "cashless"),
+    (r"\bpolicy\b|policy\s*schedule|cover\s*letter|certificate\s*of\s*insurance", "policy"),
+    (r"\bkyc\b|aadhaa?r|adhar|\bpan\s*card\b|\bpan\b|voter|passport|driving\s*licen", "kyc"),
+    (r"prescription|\brx\b", "prescription"),
+    (r"death\s*cert", "death_cert"),
+    (r"\bfir\b|police|panchnama", "fir"),
+    (r"surveyor|survey\s*report", "surveyor"),
+    (r"cancel+ed\s*cheque|passbook|bank\s*statement|\bneft\b", "bank"),
+    (r"lab\s*report|pathology|x\s*-?\s*ray|\bmri\b|\bct\s*scan\b|\busg\b|ultrasound|\becg\b|"
+     r"\becho\b|investigation|blood\s*test|\breport\b", "investigation"),
+    (r"\bbill\b", "final_bill"),
+]
+_NAME_RX = [(re.compile(rx, re.I), t) for rx, t in _NAME_HINTS]
+
+# Names a camera, a scanner or WhatsApp generated. They say nothing about the document, and
+# guessing from them is how "Scanned_2026..." would become an ultrasound report.
+_MACHINE_NAME = re.compile(
+    r"^(img|image|scan|scanned|doc|document|whatsapp|pxl|dsc|photo|file|new|cam|screenshot|"
+    r"wa|vid|mobile|cs|adobe\s*scan)[\s_\-]*[\d(]", re.I)
+
+
+def type_from_filename(name: str) -> dict:
+    """What the file's own NAME says it is, or {} if it says nothing useful.
+
+    Returns {doc_type, why}. A name a person gave a document is the best signal we have: it
+    costs no OCR, and when a staff member renamed the file it is correct by definition.
+    """
+    raw = (name or "").strip()
+    if not raw:
+        return {}
+    stem = re.sub(r"\.(pdf|jpe?g|png|webp|gif|bmp|tiff?|heic|docx?|xlsx?|csv)$", "", raw,
+                  flags=re.I)
+    if _MACHINE_NAME.match(stem):
+        return {}
+    words = re.sub(r"[_\-\.+]+", " ", stem).lower()
+    for rx, t in _NAME_RX:
+        if rx.search(words):
+            return {"doc_type": t, "why": "the file is named “%s”" % raw[:60]}
+    return {}
+
+
 def page_text(doc, index: int, allow_ocr: bool = True) -> tuple:
     """(text, source) for one page. source is 'pdf', 'ocr' or 'none'.
 

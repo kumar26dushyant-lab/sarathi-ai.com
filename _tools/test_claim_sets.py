@@ -282,6 +282,21 @@ async def main():
     check("...because it is keyed by document, not by merged page number",
           still.get("by_person") == "Auditor", still)
 
+    print("\nThe filename is read before the pages\n")
+
+    import biz_nidaan_doc_local as _loc
+    check("a name a person gave it is used",
+          _loc.type_from_filename("CLAIM FORM PART A.pdf").get("doc_type") == "claim_form")
+    check("...and says why, in words",
+          "named" in _loc.type_from_filename("DISCHARGE SUMMARY.pdf").get("why", ""))
+    for machine in ("Scanned_20260924_151559.pdf", "IMG-20260428-WA0246.jpg",
+                    "WhatsApp Image 2026-09-01 at 10.12.pdf", "PXL_20260901.jpg"):
+        check("a camera/scanner name says nothing: %s" % machine,
+              _loc.type_from_filename(machine) == {},
+              "Scanned_2026 must not become an ultrasound report")
+    check("a name that names nothing is not guessed from",
+          _loc.type_from_filename("random notes.pdf") == {})
+
     print("\nThe routes reuse the existing claim rule\n")
 
     src = io.open("sarathi_biz.py", encoding="utf-8").read()
