@@ -170,7 +170,10 @@ def doc_reminder(ctx: dict, lang: str = "hinglish") -> str:
         "en": (f"To move your claim forward we need *{doc}*{prog}.\nPlease send a clear photo or PDF here. "
                f"One document at a time — I'll guide you on what's next. 🙏"),
     }[l]
-    return hi_ + "\n\n" + FAST_TRACK[l] + _SIGN[l]
+    # "Busy right now? Tell me when to remind you" - only when that is switched on; the caller
+    # passes the line in, so this stays a pure function.
+    offer = ("\n\n" + ctx["offer_line"]) if ctx.get("offer_line") else ""
+    return hi_ + "\n\n" + FAST_TRACK[l] + offer + _SIGN[l]
 
 
 def doc_received_ok(ctx: dict, lang: str = "hinglish") -> str:

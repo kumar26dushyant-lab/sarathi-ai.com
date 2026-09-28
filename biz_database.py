@@ -1786,6 +1786,18 @@ async def init_db():
                 created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )""")
+        # WHEN THE COMPLAINANT ASKED TO BE REMINDED (biz_nidaan_wa_remind): what the bot last
+        # asked this number - a question, or a time waiting for their yes. One row per number,
+        # updated in place; finished states stay, nothing is deleted.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nidaan_wa_remind_state (
+                msisdn       TEXT PRIMARY KEY,
+                claim_id     INTEGER NOT NULL,
+                state        TEXT NOT NULL DEFAULT '',   -- asked | proposed | booked | dropped | gave_up | failed
+                proposed_utc TEXT NOT NULL DEFAULT '',
+                tries        INTEGER NOT NULL DEFAULT 0,
+                updated_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )""")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_waschedule_due "
                            "ON nidaan_wa_schedule(status, next_at)")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_waschedule_claim "

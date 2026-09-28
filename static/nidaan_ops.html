@@ -13206,6 +13206,7 @@ async function loadWhatsapp(){
         <label>Default language<br><select id="waLang">${langSel}</select></label>
         <label title="Automatically record an inbound WhatsApp number as a CRM lead when it isn't a known customer">Auto-capture leads<br><select id="waLeadCap"><option value="1"${s.wa_lead_capture_enabled!=='0'?' selected':''}>ON</option><option value="0"${s.wa_lead_capture_enabled==='0'?' selected':''}>OFF</option></select></label>
         <label title="Live WhatsApp alerts to the complainant on claim-registered / payment success / payment failed. Turn OFF to pause all automatic customer messages.">Live journey alerts<br><select id="waJourney"><option value="1"${s.wa_journey_enabled!=='0'?' selected':''}>ON</option><option value="0"${s.wa_journey_enabled==='0'?' selected':''}>OFF</option></select></label>
+        <label title="When the bot asks for a document it adds: Busy? Tell me when to remind you. The complainant writes a day and time (kal shaam 7 baje / Sunday 10am), the bot confirms it with them, and a one-time reminder is booked on the claim. Staff get a message when it goes out.">Complainant picks reminder time<br><select id="waRemindAsk"><option value="1"${s.wa_remind_ask_enabled==='1'?' selected':''}>ON</option><option value="0"${s.wa_remind_ask_enabled!=='1'?' selected':''}>OFF</option></select></label>
         <button class="btn btn-primary" onclick="saveWaSettings()">Save defaults</button>
       </div>
       <div id="waSettingsMsg" style="font-size:.8rem;margin-top:.5rem"></div>
@@ -13354,6 +13355,7 @@ async function saveWaSettings(){
     wa_default_language: g('waLang').value,
     wa_lead_capture_enabled: g('waLeadCap').value,
     wa_journey_enabled: g('waJourney').value,
+    wa_remind_ask_enabled: g('waRemindAsk').value,
   };
   const m=g('waSettingsMsg'); m.style.color='var(--nd-text-faint)'; m.textContent='Saving…';
   const r=await API('/wa/settings',{method:'POST', body:JSON.stringify(body)});

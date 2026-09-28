@@ -282,7 +282,14 @@ async def ask_next(claim_id: int, msisdn: str, *, greeted: bool = True, force: b
     if not force and await _asked_recently(claim_id, doc["key"]):
         return {"ok": True, "skipped": "asked_recently", "asked": doc["key"]}
     await _set_awaiting(claim_id, doc["key"])
-    sent = await _wa.send_text(msisdn, _msg.compose("doc_reminder", lang, _send_ctx(claim, done, total, doc=doc, lang=lang)))
+    _ctx = _send_ctx(claim, done, total, doc=doc, lang=lang)
+    try:
+        import biz_nidaan_wa_remind as _remind
+        if await _remind.enabled():
+            _ctx["offer_line"] = _remind.text("offer", lang)
+    except Exception:  # noqa: BLE001 - the ask goes out without the offer rather than not at all
+        pass
+    sent = await _wa.send_text(msisdn, _msg.compose("doc_reminder", lang, _ctx))
     # Only a message that actually went counts as asked. This used to mark the claim asked and
     # write "Asked for: X" whatever happened - so a refused message read on the timeline as a
     # delivered one, and the retry then skipped itself as "asked recently".
@@ -849,6 +856,26 @@ async def handle_inbound_text(msisdn: str, text: str) -> dict:
     # wordings - the model was writing a fresh greeting each time because, as far as it could
     # tell, it had never met him. A person who has just been told who we are does not need
     # telling again; they need answering.
+    # WHEN SHOULD WE REMIND THEM? The complainant picks the moment (founder, 29 Sep). Only where
+    # documents may be asked for, and only when switched on. None means "this message is not
+    # about that" and the conversation carries on exactly as before; so does any error here.
+    if claim and _st.get("may_send_docs"):
+        try:
+            import biz_nidaan_wa_remind as _remind
+            _r = await _remind.handle(msisdn, claim_id, text, lang) \
+                if await _remind.enabled() else None
+        except Exception as e:  # noqa: BLE001
+            logger.warning("remind-time handling failed, answering normally: %s", e)
+            _r = None
+        if _r:
+            await _activity(claim_id, "wa_inbound", f"Customer: {(text or '')[:120]}",
+                            direction="in")
+            await _tell_staff_inbound(claim_id, msisdn, text)
+            await _wa.send_text(msisdn, _r)
+            await _touch_outbound(msisdn)
+            await _activity(claim_id, "wa_remind", f"Reminder time: {_r[:120]}")
+            return {"ok": True, "action": "remind_time"}
+
     d = await _brain.decide(text, lang, history=await _recent_history(msisdn),
                             context=sc.get("text", ""),
                             handoff_only=bool(sc.get("handoff_only")),

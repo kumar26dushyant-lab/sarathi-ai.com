@@ -6386,6 +6386,7 @@ OPS_SETTING_DEFAULTS = {
     "wa_default_language": "hinglish",  # hinglish | hi | en
     "wa_lead_capture_enabled": "1",     # auto-record inbound unknown WhatsApp numbers as CRM leads
     "wa_journey_enabled": "1",          # live complainant journey (claim/payment WhatsApp alerts) master switch
+    "wa_remind_ask_enabled": "0",       # the complainant picks when to be reminded (biz_nidaan_wa_remind); off until switched on
     # T&C shown in the complainant consent card, in BOTH languages (Hindi-default audience). The
     # contracting entity is "Nidaan The Legal Consultants LLP" (the legal firm) — the success fee is
     # the LLP's and is SEPARATE from NidaanPartner.com (the platform/mediator). Super-admin/counsel

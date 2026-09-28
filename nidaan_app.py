@@ -43,7 +43,7 @@ from fastapi import FastAPI, Request, Query, Depends, HTTPException, Response, U
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
-from typing import Optional, List
+from typing import Optional, List, Literal
 from email.utils import formatdate
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.middleware import SlowAPIMiddleware
@@ -7193,8 +7193,11 @@ async def nidaan_ops_wa_overview(request: Request):
     import biz_nidaan_whatsapp as _nwa
     configured = _nwa.is_configured()
     health = await _nwa.number_health() if configured else {"configured": False}
+    # Every key the panel shows. It used to send seven of ten: a switch turned OFF still read ON
+    # on screen, and "Save defaults" for any other change then wrote ON back without a word.
     _wa_keys = ["wa_doc_collection_enabled", "wa_reminder_hour_ist", "wa_cadence_hours",
-                "wa_quiet_start_ist", "wa_quiet_end_ist", "wa_escalate_days", "wa_default_language"]
+                "wa_quiet_start_ist", "wa_quiet_end_ist", "wa_escalate_days", "wa_default_language",
+                "wa_lead_capture_enabled", "wa_journey_enabled", "wa_remind_ask_enabled"]
     settings = {k: await nidaan.get_ops_setting(k) for k in _wa_keys}
     async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
         _c.row_factory = __import__("aiosqlite").Row
@@ -7229,6 +7232,7 @@ class OpsWaSettingsReq(BaseModel):
     wa_default_language: Optional[str] = None
     wa_lead_capture_enabled: Optional[str] = None
     wa_journey_enabled: Optional[str] = None
+    wa_remind_ask_enabled: Optional[Literal["0", "1"]] = None
 
 
 @app.post("/nidaan/ops/api/wa/settings")
