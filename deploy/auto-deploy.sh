@@ -71,7 +71,14 @@ sudo -n systemctl restart sarathi-worker || echo "  (worker restart non-zero —
 # whole class of fault comes straight back.
 roll() {
     local unit_prefix="$1" base_port="$2" label="$3"
-    if ! systemctl list-unit-files | grep -q "^${unit_prefix}@"; then
+    # NO PIPE. `systemctl list-unit-files | grep -q` looked obvious and was a race: grep -q exits
+    # on the first match, systemctl takes SIGPIPE, and `set -o pipefail` surfaces 141 - which
+    # this test reads as "not installed". Whether it happens depends on how far down the
+    # alphabetical listing the match is and who wins the race, so the deploy silently skipped a
+    # DIFFERENT live site depending on timing. On 28 Sep it skipped sarathi-new-web while rolling
+    # nidaan-web from the identical line. `systemctl cat` answers the same question with no pipe
+    # and no race.
+    if ! systemctl cat "${unit_prefix}@.service" >/dev/null 2>&1; then
         echo "  - ${label}: no ${unit_prefix}@ unit installed, skipping"
         return 0
     fi

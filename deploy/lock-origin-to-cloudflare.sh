@@ -97,15 +97,20 @@ undo() {
       || iptables -I INPUT 4 -p tcp --dport "$port" -m state --state NEW -j ACCEPT
   done
   echo "Removing the Cloudflare-specific rules…"
-  while iptables -S INPUT | grep -q -- "--comment $MARK"; do
-    rule=$(iptables -S INPUT | grep -m1 -- "--comment $MARK" | sed 's/^-A /-D /')
+  # Collected first, then deleted. `iptables -S | grep -q` as a loop CONDITION is a race under
+  # `set -o pipefail`: grep -q exits on the first match, iptables takes SIGPIPE, pipefail
+  # surfaces 141, and the loop stops with rules still in place - while the script reports that it
+  # removed them. The same line silently skipped deploying a live site in auto-deploy.sh on
+  # 28 Sep. mapfile reads the whole listing, so nothing exits early and nothing is left behind.
+  mapfile -t _v4rules < <(iptables -S INPUT | grep -- "--comment $MARK" || true)
+  for _r in ${_v4rules+"${_v4rules[@]}"}; do
     # shellcheck disable=SC2086
-    iptables $rule
+    iptables ${_r/#-A /-D }
   done
-  while ip6tables -S INPUT 2>/dev/null | grep -q -- "--comment $MARK"; do
-    rule=$(ip6tables -S INPUT | grep -m1 -- "--comment $MARK" | sed 's/^-A /-D /')
+  mapfile -t _v6rules < <(ip6tables -S INPUT 2>/dev/null | grep -- "--comment $MARK" || true)
+  for _r in ${_v6rules+"${_v6rules[@]}"}; do
     # shellcheck disable=SC2086
-    ip6tables $rule
+    ip6tables ${_r/#-A /-D }
   done
   netfilter-persistent save >/dev/null 2>&1 && echo "  Persisted."
   echo; status
