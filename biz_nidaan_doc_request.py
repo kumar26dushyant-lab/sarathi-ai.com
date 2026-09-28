@@ -800,6 +800,21 @@ async def followup(claim_id: int, missing: int) -> dict:
     except Exception:  # noqa: BLE001
         sched = None
     last = await recent_ask(claim_id)
+    # The WhatsApp bot asks too (doc_reminder / the approved template / Start). recent_ask reads
+    # only asks STAFF sent, so on its own it would say "nobody has asked" after the bot had.
+    try:
+        async with aiosqlite.connect(DB_PATH) as c:
+            r = await (await c.execute(
+                "SELECT actor, created_at FROM nidaan_claim_activity WHERE claim_id=? AND kind IN "
+                "('doc_reminder','wa_doc_reminder','doc_collection_start') "
+                "AND summary NOT LIKE '%NOT delivered%' AND summary NOT LIKE '%not sent%' "
+                "ORDER BY created_at DESC LIMIT 1", (int(claim_id),))).fetchone()
+        if r and (not last.get("asked") or str(r[1]) > str(last.get("at") or "")):
+            days = _days_since(r[1])
+            last = {"asked": True, "by": "the WhatsApp bot", "at": str(r[1]),
+                    "days": days if days is not None else 0}
+    except Exception as e:  # noqa: BLE001
+        logger.info("bot asks unreadable for claim %s: %s", claim_id, e)
     events = []
     try:
         async with aiosqlite.connect(DB_PATH) as c:
@@ -834,7 +849,9 @@ async def followup(claim_id: int, missing: int) -> dict:
         step, text = "act", ("Last asked %s by %s, and no reminder is set. Book a reminder time, "
                              "or call." % (ago, last.get("by") or "someone"))
     else:
-        step, text = "act", "Nobody has asked yet. Press \u201cAsk the complainant\u201d."
+        step, text = "act", ("No ask is recorded yet. Press \u201cAsk the complainant\u201d \u2014 "
+                             "or if you already asked by phone, write it on the claim so the "
+                             "next person knows.")
     return {
         "step": step, "next": text, "missing": missing,
         "auto_global": auto_global, "auto_running": auto_running,

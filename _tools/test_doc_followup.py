@@ -102,8 +102,22 @@ async def main():
     print("\nThe one next step\n")
 
     fu = await dr.followup(1, missing=3)
-    check("nobody asked yet: say so, and what to press",
-          fu["step"] == "act" and "Nobody has asked" in fu["next"], fu["next"])
+    check("nothing asked yet: say so, what to press, and to record a phone ask",
+          fu["step"] == "act" and "No ask is recorded" in fu["next"]
+          and "write it on the claim" in fu["next"], fu["next"])
+
+    # The WhatsApp bot asked - that IS an ask, even though no staff member sent one.
+    await run("INSERT INTO nidaan_claim_activity (claim_id, kind, actor, summary, created_at) "
+              "VALUES (9, 'doc_reminder', 'bot', 'Asked for: Discharge summary (1/5)', "
+              "datetime('now','-2 days'))")
+    fu9 = await dr.followup(9, missing=4)
+    check("an ask the WhatsApp bot sent counts as asked",
+          "WhatsApp bot" in fu9["next"] and "2 days ago" in fu9["next"], fu9["next"])
+    await run("INSERT INTO nidaan_claim_activity (claim_id, kind, actor, summary) VALUES "
+              "(8, 'doc_reminder', 'bot', 'WhatsApp NOT delivered - Discharge summary: refused')")
+    fu8 = await dr.followup(8, missing=4)
+    check("...but one that was NOT delivered does not", "No ask is recorded" in fu8["next"],
+          fu8["next"])
     check("...and that automatic reminders are OFF for everyone",
           fu["auto_global"] is False and fu["auto_running"] is False, fu)
 
