@@ -6065,7 +6065,9 @@ function dsRenderPages(){
                         : (p.locked ? 'you set this' : (p.why||''));
     return `
     <div class="nd-card" id="dsPg_${p.page}" style="padding:.5rem .7rem;margin-bottom:.45rem;display:flex;gap:.7rem;align-items:center;flex-wrap:wrap">
-      <img id="dsThumb_${p.page}" alt="page ${p.page}" style="width:54px;height:72px;object-fit:contain;background:var(--nd-bg-surface-2);border:1px solid var(--nd-border);border-radius:4px;flex:0 0 auto">
+      <img id="dsThumb_${p.page}" alt="page ${p.page}" title="Click to see this page properly" onclick="dsBigPage(${p.page})" style="width:110px;height:148px;object-fit:contain;background:var(--nd-bg-surface-2);border:1px solid var(--nd-border);border-radius:4px;flex:0 0 auto;cursor:zoom-in"
+           onerror="this.style.display='none';const n=document.getElementById('dsNoThumb_'+${p.page});if(n)n.style.display='block'">
+      <div id="dsNoThumb_${p.page}" style="display:none;width:110px;height:148px;border:1px dashed var(--nd-border-strong);border-radius:4px;font-size:.68rem;color:var(--nd-text-muted);padding:.4rem;text-align:center;flex:0 0 auto">Cannot show this page here.<br>Open the original to check it.</div>
       <div style="flex:1;min-width:150px">
         <div style="font-size:.7rem;color:var(--nd-text-muted)">Page ${p.page}</div>
         <div style="font-weight:600;font-size:.9rem">${esc(p.label||'Something else')}${p.locked?' ✓':''}</div>
@@ -6209,11 +6211,48 @@ async function dsUndoRule(id,label){
   dsLoadRules();
 }
 
+// See a page properly before deciding what it is. A 54px image was not a decision aid, it was
+// a decoration - the founder said so with a screenshot, and he was right.
+function dsBigPage(page){
+  const old = document.getElementById('dsBig');
+  if (old) old.remove();
+  const w = document.createElement('div');
+  w.id = 'dsBig';
+  w.style.cssText = 'position:fixed;inset:0;z-index:3000;background:rgba(0,0,0,.82);'
+    + 'display:flex;align-items:center;justify-content:center;padding:1rem;cursor:zoom-out';
+  w.onclick = function(){ w.remove(); };
+  w.innerHTML = '<div style="max-width:96vw;max-height:94vh;text-align:center">'
+    + '<img id="dsBigImg" alt="page ' + page + '" '
+    +   'style="max-width:96vw;max-height:88vh;object-fit:contain;background:#fff;border-radius:6px">'
+    + '<div id="dsBigMsg" style="color:#fff;font-size:.82rem;margin-top:.5rem">Loading page '
+    +   page + '…</div></div>';
+  document.body.appendChild(w);
+  // Fetched WITH the token, never a bare <img src>: this endpoint needs the Authorization
+  // header, and a plain src attribute sends none - which is exactly how the SOP page came to
+  // refuse every signed-in staff member.
+  fetch('/nidaan/ops/api/docsplit/' + encodeURIComponent(_dsJob) + '/thumb/' + page + '?w=1200',
+        { headers: { 'Authorization': 'Bearer ' + _token } })
+    .then(function(r){ if (!r.ok) throw new Error('no'); return r.blob(); })
+    .then(function(b){
+      const img = document.getElementById('dsBigImg');
+      const msg = document.getElementById('dsBigMsg');
+      if (img) img.src = URL.createObjectURL(b);
+      if (msg) msg.textContent = 'Page ' + page + ' · tap anywhere to close';
+    })
+    .catch(function(){
+      const msg = document.getElementById('dsBigMsg');
+      if (msg) msg.textContent = 'This page cannot be shown here — open the original file '
+        + 'to check it. Tap anywhere to close.';
+    });
+}
+
 async function dsLoadThumbs(){
   for(let p=1;p<=_dsPages;p++){
     try{
       const r=await fetch(`/nidaan/ops/api/docsplit/${_dsJob}/thumb/${p}`,{headers:{'Authorization':'Bearer '+_token}});
       if(r.ok){ const el=document.getElementById('dsThumb_'+p); if(el) el.src=URL.createObjectURL(await r.blob()); }
+      else { const n=document.getElementById('dsNoThumb_'+p); if(n){ n.style.display='block';
+             const el=document.getElementById('dsThumb_'+p); if(el) el.style.display='none'; } }
     }catch(e){}
   }
 }
@@ -6255,6 +6294,7 @@ async function dsCollate(btn){
 window.dsLoadInbox=dsLoadInbox; window.dsOpen=dsOpen; window.dsClose=dsClose;
 window.dsLoadPages=dsLoadPages; window.dsPick=dsPick; window.dsCancelPick=dsCancelPick;
 window.dsRetype=dsRetype; window.dsGetSet=dsGetSet;
+window.dsBigPage=dsBigPage;
 window.dcSetsLoad=dcSetsLoad; window.dcSetGet=dcSetGet; window.dcAutoSet=dcAutoSet;
 window.dcPagePick=dcPagePick; window.dcPageCancel=dcPageCancel; window.dcPageSet=dcPageSet;
 window.dsToggleRules=dsToggleRules; window.dsLoadRules=dsLoadRules;

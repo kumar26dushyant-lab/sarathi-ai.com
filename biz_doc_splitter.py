@@ -386,7 +386,10 @@ def render_thumb(pdf_bytes: bytes, page_no: int, width: int = 190) -> Optional[b
             doc.close()
             return None
         p = doc[page_no - 1]
-        zoom = max(0.2, min(width / max(1.0, p.rect.width), 2.0))
+        # Up to 4x for the enlarged view. At 2x a scanned page opened full-screen was a blur,
+        # which is the same as not showing it - the point is that somebody can READ it before
+        # saying what it is.
+        zoom = max(0.2, min(width / max(1.0, p.rect.width), 4.0))
         pix = p.get_pixmap(matrix=fitz.Matrix(zoom, zoom))
         png = pix.tobytes("png")
         doc.close()

@@ -12655,8 +12655,12 @@ async def ops_docsplit_rule_undo(rule_id: int, request: Request):
 
 
 @app.get("/nidaan/ops/api/docsplit/{job}/thumb/{page}")
-async def ops_docsplit_thumb(job: str, page: int, request: Request):
-    """A page thumbnail (PNG) for the review grid."""
+async def ops_docsplit_thumb(job: str, page: int, request: Request, w: int = 190):
+    """A page image (PNG). `w` is the render width, so the enlarged view is a real render.
+
+    Bounded, because the width becomes a zoom factor on a page somebody else uploaded: a huge
+    number would turn one click into a very large allocation on a two-CPU box.
+    """
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     staff = _require_staff(request)
@@ -12664,7 +12668,7 @@ async def ops_docsplit_thumb(job: str, page: int, request: Request):
     pdf = docsplit.load_job(job)
     if not pdf:
         raise HTTPException(status_code=404, detail="Job expired — please re-upload")
-    png = docsplit.render_thumb(pdf, page)
+    png = docsplit.render_thumb(pdf, page, width=max(80, min(int(w or 190), 1400)))
     if not png:
         raise HTTPException(status_code=404, detail="No such page")
     return Response(content=png, media_type="image/png",
