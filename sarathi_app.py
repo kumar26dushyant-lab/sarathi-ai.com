@@ -1051,6 +1051,19 @@ async def _docsplit_job(job: str, staff: dict) -> dict:
     return row
 
 
+class _ClaimAutoReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool
+
+
+class _ClaimPageTypeReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    doc_id: int = Field(..., ge=1)
+    page_in_doc: int = Field(..., ge=1, le=2000)
+    doc_type: str = Field(..., max_length=40)
+    teach: bool = False
+
+
 async def _docsplit_pages(job: str) -> list:
     """What each page is, reading the saved answer and only classifying if there is none.
 

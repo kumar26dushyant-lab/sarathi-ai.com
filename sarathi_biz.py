@@ -12287,6 +12287,89 @@ async def ops_docsplit_close(job: str, request: Request):
     return {"ok": True, "jobs": await _store.list_jobs(staff.get("staff_id"))}
 
 
+class _ClaimAutoReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/doc-auto")
+@limiter.limit("30/minute")
+async def ops_claim_doc_auto(claim_id: int, body: _ClaimAutoReq, request: Request):
+    """Turn automatic arranging on or off for THIS claim. Off unless somebody turns it on."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request)
+    import biz_nidaan_claim_authz as _authz
+    if not (await _authz.assert_claim_access(staff, claim_id)).get("allowed"):
+        raise HTTPException(status_code=404, detail="Claim not found")
+    import biz_nidaan_claim_sets as _cs
+    who = _actor_label(staff)
+    if not await _cs.set_automation(claim_id, body.enabled, who):
+        raise HTTPException(status_code=400, detail="Could not change that")
+    await _ops_audit(request, "claim.doc_auto", "claim", str(claim_id),
+                     "arranging %s" % ("on" if body.enabled else "off"))
+    await _cs.remark(claim_id,
+                     "\U0001f9f9 Automatic document arranging turned %s"
+                     % ("ON" if body.enabled else "OFF"), who)
+    return {"ok": True, "enabled": body.enabled}
+
+
+class _ClaimPageTypeReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    doc_id: int = Field(..., ge=1)
+    page_in_doc: int = Field(..., ge=1, le=2000)
+    doc_type: str = Field(..., max_length=40)
+    teach: bool = False
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/doc-page")
+@limiter.limit("120/minute")
+async def ops_claim_doc_page(claim_id: int, body: _ClaimPageTypeReq, request: Request):
+    """A person says what a page is. Wins over the reading, and survives every later re-read.
+
+    Available whether arranging is on or off - that is the audit case the founder named: the
+    reading was confident, it was still wrong, and somebody corrects it afterwards.
+
+    `teach` turns it into a rule for the whole team and is admin-only, exactly as in the
+    standalone splitter: correcting a page is your own work, teaching changes everyone's.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request)
+    import biz_nidaan_claim_authz as _authz
+    if not (await _authz.assert_claim_access(staff, claim_id)).get("allowed"):
+        raise HTTPException(status_code=404, detail="Claim not found")
+    import biz_nidaan_claim_sets as _cs
+    import biz_nidaan_doc_sets as _sets
+    if body.doc_type not in _sets.DOC_TYPES:
+        raise HTTPException(status_code=400, detail="Unknown document type")
+    if body.teach and nidaan.role_rank(staff.get("role", "")) < nidaan.role_rank("sub_super_admin"):
+        raise HTTPException(status_code=403,
+                            detail="Only an admin can make a correction into a rule for everyone.")
+    who = _actor_label(staff)
+    if not await _cs.set_page_type(claim_id, body.doc_id, body.page_in_doc, body.doc_type, who):
+        raise HTTPException(status_code=400, detail="Could not store that")
+
+    rule_id = 0
+    if body.teach:
+        read = await _cs.read_claim(claim_id)
+        words = next((p.get("words") or [] for p in read["pages"]
+                      if p.get("doc_id") == body.doc_id
+                      and p.get("page_in_doc") == body.page_in_doc), [])
+        import biz_nidaan_doc_store as _store
+        rule_id = await _store.teach(body.doc_type, words, who, staff.get("staff_id"))
+
+    await _ops_audit(request, "claim.doc_page", "claim", str(claim_id),
+                     "page %d of doc %d -> %s" % (body.page_in_doc, body.doc_id, body.doc_type))
+    await _cs.remark(claim_id,
+                     "\U0001f4d1 Page %d of a document filed as %s%s"
+                     % (body.page_in_doc, _sets.type_label(body.doc_type),
+                        " (and remembered for next time)" if rule_id else ""), who)
+    claim = await nidaan.get_claim_with_account(claim_id) or {}
+    return {"ok": True, "taught": bool(rule_id),
+            **(await _cs.sets_for_claim(claim_id, claim.get("claim_type") or ""))}
+
+
 @app.get("/nidaan/ops/api/claims/{claim_id}/doc-sets")
 async def ops_claim_doc_sets(claim_id: int, request: Request, refresh: int = 0):
     """The three sets built from the documents already on this claim, and what is still missing.

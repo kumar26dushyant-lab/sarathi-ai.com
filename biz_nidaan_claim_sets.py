@@ -240,6 +240,10 @@ async def sets_for_claim(claim_id: int, claim_type: str = "", *, force: bool = F
         "still_needed": still_needed,
         "truncated": read.get("truncated", False),
         "from_cache": read.get("from_cache", False),
+        # The names a person can choose from. Without these the "what is this page?" buttons
+        # render empty - the screen reads this list rather than keeping its own copy, so adding
+        # a document type never means editing the page too.
+        "types": [{"key": k, "label": sets.type_label(k)} for k in sets.DOC_TYPES],
         "automation": await automation_on(claim_id),
         "arrangement": arrangement_state(pages),
     }

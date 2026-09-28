@@ -130,6 +130,11 @@ async def main():
           and res["by_source"].get("uploaded by staff") == 1, res["by_source"])
     check("nobody had to upload anything", res["from_cache"] is False)
 
+    check("the screen is given the names a person can choose from",
+          len(res.get("types") or []) > 5
+          and all(t.get("key") and t.get("label") for t in res["types"]),
+          "without these the 'what is this page?' buttons render empty")
+
     print("\nThe three sets\n")
 
     keys = {s["key"] for s in res["sets"]}

@@ -1,5 +1,90 @@
 # Staff Announcement Drafts
 
+## 2026-09-29 — Document collection: one number, and the sets build themselves on the claim
+
+_For: everyone who collects or files claim documents._
+_Read the full SOP: **nidaanpartner.com/sop-documents** (sign in to ops first)._
+_Not yet sent._
+
+**Title (EN):**
+📂 From tomorrow: one WhatsApp number for documents, and the sets are ready on the claim
+
+**Details (EN):**
+• **Please ask for documents on our official number only: +91 91836 86384.** Not your own
+number. When it comes to the official number it attaches itself to the right claim, the
+complainant gets a confirmation, and the associate is told — in seconds, with a time on it.
+A document on a personal phone has no time, no record, and nobody else can reach it when you
+are on leave.
+
+• **The authorization call does not change.** Keep doing exactly what you do now.
+
+• **You no longer build the sets by hand.** Open the claim → **📂 Documents**. Next to the
+checklist there is a new box, **Ready to send**, built from the documents already on that claim.
+Three bundles — **CIO documents**, **All documents merged**, **Claim set** — each with a
+Download button. No uploading, no joining files together.
+
+• **It will tell you when it is unsure.** If a page could not be read clearly it says
+**“Please arrange these”** and gives you the page numbers. Tap the page, tap the right name.
+That is the whole job.
+
+• **Your correction sticks.** It is not undone when the pages are read again, and it stays on
+the right page even when a new document arrives later.
+
+• **Please still check a set before you send it.** The first guess is ours, made on our own
+server, and it is not always right. That is exactly why the Change button is there.
+
+• **“Arrange this claim automatically” is off** until you turn it on, claim by claim. Turn it
+on where the documents are clean. Even then, if one page is doubtful it stops and asks you — and
+you can always change a page by hand afterwards, including in an audit.
+
+• **Nothing goes outside.** Every page is read on our own server. No claim document is sent to
+any outside company — that changed this week and it is not coming back.
+
+• **Tell us when something looks wrong.** A page filed somewhere odd, a set missing something
+you expected — say so. That is how it gets better, and it only learns from you.
+
+---
+
+**शीर्षक (HI):**
+📂 कल से: दस्तावेज़ों के लिये एक ही WhatsApp नंबर, और सेट क्लेम पर ही तैयार
+
+**विवरण (HI):**
+• **दस्तावेज़ सिर्फ़ हमारे ऑफ़िशियल नंबर पर मँगवाइये: +91 91836 86384।** अपने नंबर पर
+नहीं। ऑफ़िशियल नंबर पर आते ही वह सही क्लेम से अपने आप जुड़ जाता है, दावेदार को
+पुष्टि मिलती है, और एसोसिएट को सूचना चली जाती है — सेकंडों में, समय के साथ।
+निजी फ़ोन पर आया दस्तावेज़ न समय दिखाता है, न रिकॉर्ड, और आपकी छुट्टी में किसी और तक
+पहुँचता ही नहीं।
+
+• **अथॉराइज़ेशन कॉल में कुछ नहीं बदला।** जैसे करते हैं वैसे ही करते रहिये।
+
+• **अब सेट हाथ से नहीं बनाने।** क्लेम खोलिये → **📂 Documents**। चेकलिस्ट के पास
+नया बॉक्स **Ready to send** है, जो उसी क्लेम के दस्तावेज़ों से बनता है। तीन बंडल —
+**CIO documents**, **All documents merged**, **Claim set** — हर एक पर डाउनलोड बटन।
+न अपलोड करना, न फ़ाइलें जोड़नी।
+
+• **शक हो तो वह खुद बताएगा।** कोई पेज साफ़ न पढ़ा जा सका हो तो
+**“Please arrange these”** लिखकर पेज नंबर देता है। पेज पर टैप, फ़िर सही नाम पर टैप।
+बस इतना ही काम है।
+
+• **आपकी सुधार टिकी रहती है।** दोबारा पढ़ने पर मिटती नहीं, और बाद में नया दस्तावेज़
+आने पर भी सही पेज पर ही रहती है।
+
+• **भेजने से पहले सेट ज़रूर जाँच लीजिये।** पहला अनुमान हमारा है, हमारे अपने
+सर्वर पर, और वह हमेशा सही नहीं होता — इसीलिये Change बटन है।
+
+• **“Arrange this claim automatically” बंद है**, जब तक आप चालू न करें — हर क्लेम के लिये
+अलग। जहाँ दस्तावेज़ साफ़ हों वहाँ चालू कीजिये। तब भी एक पेज पर शक हो तो वह रुककर
+पूछता है — और बाद में आप हाथ से पेज बदल सकते हैं, ऑडिट में भी।
+
+• **बाहर कुछ नहीं जाता।** हर पेज हमारे अपने सर्वर पर पढ़ा जाता है। कोई भी क्लेम
+दस्तावेज़ किसी बाहरी कंपनी को नहीं भेजा जाता — यह इसी हफ़्ते बदला है और वापस नहीं
+आएगा।
+
+• **कुछ गलत लगे तो बताइये।** कोई पेज अजीब जगह लगा, किसी सेट में कुछ कम लगा —
+बताइये। इसी से यह बेहतर होता है, और यह सिर्फ़ आपसे सीखता है।
+
+---
+
 ## 2026-09-28 (3) — The document splitter now gives you ready-made sets, and remembers your corrections
 
 _For: everyone who uses the PDF splitter._

@@ -3609,6 +3609,16 @@
   "func": "ops_deliver_review",
   "guard": "nidaan-host,staff:team_member,rate-limited"
  },
+ "POST /nidaan/ops/api/claims/{claim_id}/doc-auto": {
+  "file": "sarathi_biz.py",
+  "func": "ops_claim_doc_auto",
+  "guard": "nidaan-host,staff:any,rate-limited"
+ },
+ "POST /nidaan/ops/api/claims/{claim_id}/doc-page": {
+  "file": "sarathi_biz.py",
+  "func": "ops_claim_doc_page",
+  "guard": "nidaan-host,staff:any,rate-limited"
+ },
  "POST /nidaan/ops/api/claims/{claim_id}/doc-reminder/email": {
   "file": "sarathi_biz.py",
   "func": "nidaan_ops_doc_reminder_email",
