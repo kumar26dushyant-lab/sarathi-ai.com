@@ -16679,6 +16679,33 @@ async function docsOpen(claimId, after){
   await docsRender();
 }
 
+// FOLLOW-UP SO FAR - what has been done to get the documents, and the one next step. So the
+// next person does not ask twice, or wait for reminders that are switched off (founder, 29 Sep).
+function _dcFollowup(fu){
+  if (!fu) return '';
+  const tone = fu.step === 'call' ? 'var(--nd-warning-text)'
+             : fu.step === 'act' ? 'var(--nd-text-primary)' : 'var(--nd-text-muted)';
+  const auto = fu.missing <= 0 ? ''
+    : !fu.auto_global ? 'Automatic reminders are switched off for everyone — nobody is being reminded unless you ask or book a time.'
+    : fu.auto_paused ? 'Automatic reminders are turned off on this claim.'
+    : fu.auto_running ? 'Automatic reminders are on for this claim.'
+    : 'Automatic reminders start once an ask reaches the complainant.';
+  const ev = (fu.events || []).map(function(e){
+    return '<div class="bdsub" style="margin-top:.2rem">' + esc(e.at) + ' · <b>' + esc(e.who)
+      + '</b> — ' + esc(e.what) + '</div>';
+  }).join('');
+  return '<div style="border:1px solid var(--nd-border);border-radius:10px;padding:.55rem .65rem;'
+    + 'margin-bottom:.6rem;background:var(--nd-bg-surface-2)">'
+    + '<div style="font-size:.8rem;font-weight:700;color:var(--nd-text-primary)">Follow-up so far</div>'
+    + '<div style="font-size:.82rem;margin-top:.25rem;color:' + tone + '"><b>Next:</b> '
+    +   esc(fu.next) + '</div>'
+    + (auto ? '<div class="bdsub" style="margin-top:.25rem">' + esc(auto) + '</div>' : '')
+    + (ev ? '<details style="margin-top:.35rem"><summary style="cursor:pointer;font-size:.78rem">'
+        + 'What was done (' + (fu.events || []).length + ')</summary>' + ev + '</details>'
+        : '<div class="bdsub" style="margin-top:.25rem">Nothing has been done yet.</div>')
+    + '</div>';
+}
+
 async function docsRender(msg, ok){
   const body = document.getElementById('modalBody');
   if (!body) return;
@@ -16775,6 +16802,7 @@ async function docsRender(msg, ok){
     +     '</div>'
     +   '</div>'
     +   '<div class="dcbox"><div class="dch">The checklist · ' + got.length + ' of ' + list.length + '</div>'
+    +     _dcFollowup(win && win.followup)
     +     checkRows
     +     '<button class="l2mv g" style="margin-top:.5rem" onclick="dwAsk(' + _dcClaim + ')">'
     +       '📨 Ask the complainant for what is missing</button>'
@@ -16851,15 +16879,21 @@ function dcSetsRender(){
       + '<br><span class="bdsub">Open the list below, tap the page and say what it is.</span>'
       + '</span></div>';
 
+  // Each set downloads two ways: ONE PDF, or one PDF PER DOCUMENT (claim form, DS, final bill...)
+  // in a zip - the founder's "bundle of each document".
   const sets = (d.sets || []).map(function(st){
     const n = (st.pages || []).length;
+    const parts = (st.parts || []).map(function(p){
+      return esc(p.label) + ' ' + p.pages; }).join(' · ');
     return '<div class="dcrow"><div style="flex:1;min-width:140px">'
       + '<b>' + esc(st.label) + '</b>'
-      + '<div class="bdsub">' + n + ' page(s)'
+      + '<div class="bdsub">' + n + ' page(s)' + (parts ? ': ' + parts : '')
       + (st.missing && st.missing.length
           ? ' · not on this claim: ' + st.missing.map(esc).join(', ') : '')
       + '</div></div>'
-      + (n ? '<button class="l2mv p" onclick="dcSetGet(\'' + esc(st.key) + '\')">Download</button>'
+      + (n ? '<button class="l2mv p" onclick="dcSetGet(\'' + esc(st.key) + '\')">One PDF</button>'
+           + '<button class="l2mv g" onclick="dcSetGet(\'' + esc(st.key) + '\',1)">'
+           + 'Each document (zip)</button>'
            : '<span class="bdsub">nothing yet</span>')
       + '</div>';
   }).join('');
@@ -16918,11 +16952,11 @@ function dcSetsRender(){
     + '<div id="dcSetsMsg" class="bdsub" style="margin-top:.35rem"></div>';
 }
 
-async function dcSetGet(key){
+async function dcSetGet(key, parts){
   const m = document.getElementById('dcSetsMsg');
-  if (m) m.textContent = 'Building that set…';
+  if (m) m.textContent = parts ? 'Building one PDF per document…' : 'Building that set…';
   try{
-    const r = await API('/claims/' + _dcClaim + '/doc-sets/' + key);
+    const r = await API('/claims/' + _dcClaim + '/doc-sets/' + key + (parts ? '/parts' : ''));
     if (!r.ok){
       const e = await r.json().catch(function(){ return {}; });
       if (m) m.textContent = (typeof e.detail === 'string' && e.detail) || 'Could not build that set.';
@@ -16931,7 +16965,7 @@ async function dcSetGet(key){
     const blob = await r.blob();
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = 'NP-' + _dcClaim + '-' + key + '.pdf';
+    a.download = 'NP-' + _dcClaim + '-' + key + (parts ? '-documents.zip' : '.pdf');
     document.body.appendChild(a); a.click(); a.remove();
     if (m) m.textContent = '';
   }catch(e){ if (m) m.textContent = 'Could not download that set.'; }

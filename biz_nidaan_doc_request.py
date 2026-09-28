@@ -573,6 +573,13 @@ async def pause_chase(claim_id: int, *, paused: bool, actor: str = "") -> dict:
             "ON CONFLICT(claim_id) DO UPDATE SET paused=?, updated_at=datetime('now')",
             (int(claim_id), 1 if paused else 0, 1 if paused else 0))
         await c.commit()
+    # On the claim's timeline, where the next person looks - it used to reach the audit log only.
+    try:
+        await _n.record_claim_activity(
+            claim_id, "doc_chase", channel="system", actor=actor or "staff",
+            summary="Automatic document reminders turned %s" % ("OFF" if paused else "ON"))
+    except Exception:
+        pass
     return {"ok": True}
 
 
@@ -765,6 +772,76 @@ async def window(claim_id: int) -> dict:
         "recipients": await recipients(claim_id),
         "chase": await chase_state(claim_id),
         "history": reqs,
+        "followup": await followup(
+            claim_id, len([d for d in docs if d["required"] and not d["received"]])),
+    }
+
+
+# ── follow-up so far ─────────────────────────────────────────────────────────
+# What counts as document follow-up on the claim timeline.
+FOLLOWUP_KINDS = ("doc_request", "doc_reminder", "wa_doc_reminder", "wa_scheduled", "wa_remind",
+                  "doc_call", "doc_chase", "doc_collection_start", "doc_batch", "docs_complete")
+
+
+async def followup(claim_id: int, missing: int) -> dict:
+    """What has been done to collect this claim's documents, and the ONE next step.
+
+    Founder, 29 Sep: record what someone did, so whoever follows up next knows whether to send a
+    nudge, turn on automatic reminders, or book a time. The next step is worked out from the same
+    state the workers use - so it cannot say "reminders are running" when they are switched off.
+    """
+    import biz_nidaan_wa_schedule as _sch
+    chase = await chase_state(claim_id)
+    auto_global = await auto_collection_on()
+    sched = None
+    try:
+        sched = next((s for s in await _sch.listing(claim_id) if s.get("status") == "active"),
+                     None)
+    except Exception:  # noqa: BLE001
+        sched = None
+    last = await recent_ask(claim_id)
+    events = []
+    try:
+        async with aiosqlite.connect(DB_PATH) as c:
+            c.row_factory = aiosqlite.Row
+            ph = ",".join("?" * len(FOLLOWUP_KINDS))
+            rows = await (await c.execute(
+                "SELECT kind, actor, summary, created_at FROM nidaan_claim_activity "
+                "WHERE claim_id=? AND kind IN (%s) ORDER BY created_at DESC, rowid DESC LIMIT 8"
+                % ph, (int(claim_id),) + FOLLOWUP_KINDS)).fetchall()
+        events = [{"kind": r["kind"], "who": (r["actor"] or "system")[:60],
+                   "what": (r["summary"] or "")[:180], "at": _sch.utc_to_ist(r["created_at"])}
+                  for r in rows]
+    except Exception as e:  # noqa: BLE001
+        logger.info("follow-up history unreadable for claim %s: %s", claim_id, e)
+
+    auto_running = bool(chase.get("armed") and auto_global and chase.get("next_nudge_at"))
+    if missing <= 0:
+        step, text = "done", "Nothing required is missing - nothing to chase."
+    elif chase.get("call_due"):
+        step, text = "call", ("Please CALL the complainant - the reminders have not worked. "
+                              "Write down what they said afterwards.")
+    elif sched:
+        step, text = "wait", ("A reminder is booked for %s (set by %s). Nothing to do until then."
+                              % (sched.get("next_ist") or "later",
+                                 sched.get("created_by_name") or "staff"))
+    elif auto_running:
+        step, text = "wait", ("Automatic reminder next on %s. Nothing to do until then."
+                              % _sch.utc_to_ist(chase.get("next_nudge_at")))
+    elif last.get("asked"):
+        ago = ("today" if not last.get("days") else "yesterday" if last["days"] == 1
+               else "%d days ago" % last["days"])
+        step, text = "act", ("Last asked %s by %s, and no reminder is set. Book a reminder time, "
+                             "or call." % (ago, last.get("by") or "someone"))
+    else:
+        step, text = "act", "Nobody has asked yet. Press \u201cAsk the complainant\u201d."
+    return {
+        "step": step, "next": text, "missing": missing,
+        "auto_global": auto_global, "auto_running": auto_running,
+        "auto_paused": bool(chase.get("paused")),
+        "scheduled": ({"next": sched.get("next_ist") or "", "by": sched.get("created_by_name")
+                       or ""} if sched else None),
+        "last_ask": last, "events": events,
     }
 
 

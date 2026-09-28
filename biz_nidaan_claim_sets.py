@@ -31,6 +31,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import io
 import os
 
 import aiosqlite
@@ -69,7 +70,7 @@ async def claim_documents(claim_id: int) -> list:
 
 # Bump when the way a document is identified changes (new file names, new page signals), so
 # every claim re-reads once instead of keeping the old answer until somebody presses the button.
-READER_VERSION = 2
+READER_VERSION = 3
 
 
 def _fingerprint(docs: list, rules: list = ()) -> str:
@@ -244,6 +245,8 @@ async def sets_for_claim(claim_id: int, claim_type: str = "", *, force: bool = F
             "key": st["key"], "label": st["label"], "why": st.get("why") or "",
             "pages": [p.get("page") for p in st.get("pages") or []],
             "missing": [sets.type_label(m) for m in st.get("missing") or []],
+            "parts": [{"type": t, "label": sets.type_label(t), "pages": len(g)}
+                      for t, g in _by_type(st.get("pages") or [])],
         })
 
     # What the claim itself is still waiting for, in the words staff use on the checklist.
@@ -502,32 +505,108 @@ async def build_set_pdf(claim_id: int, set_key: str) -> bytes:
     order = composed.get("pages") or []
     if not order:
         return b""
+    return (await _render(claim_id, [order]))[0]
 
+
+def _by_type(order: list) -> list:
+    """[(doc_type, [pages...]), ...] in the set's own order. A set is composed BY TYPE, so all of
+    one type's pages already sit together - this only draws the lines between them."""
+    out = []
+    for p in order:
+        t = p.get("doc_type") or "other"
+        if out and out[-1][0] == t:
+            out[-1][1].append(p)
+        else:
+            out.append((t, [p]))
+    return out
+
+
+async def build_set_parts(claim_id: int, set_key: str) -> list:
+    """The set as one PDF PER DOCUMENT: [(file name, pdf bytes), ...].
+
+    Claim form (3 pages) one PDF, discharge summary (10 pages) one PDF, final bill one PDF - in
+    the set's order, numbered so they sort that way in any folder. Built from exactly the pages
+    the screen shows, like the single PDF.
+    """
+    import biz_nidaan_doc_sets as sets
+    import biz_doc_splitter as split
+
+    _read, pages = await final_pages(claim_id)
+    sendable = [p for p in pages if not p.get("excluded")]
+    order = sets.compose(sendable, set_key).get("pages") or []
+    groups = _by_type(order)
+    if not groups:
+        return []
+    blobs = await _render(claim_id, [g for _t, g in groups])
+    out = []
+    for i, ((t, _g), blob) in enumerate(zip(groups, blobs), 1):
+        if blob:
+            name = "%02d %s.pdf" % (i, split._safe_name(sets.type_label(t)).replace("_", " ")
+                                     or t)
+            out.append((name, blob))
+    return out
+
+
+async def build_set_zip(claim_id: int, set_key: str) -> bytes:
+    """build_set_parts, as one zip to download."""
+    import zipfile
+    parts = await build_set_parts(claim_id, set_key)
+    if not parts:
+        return b""
+    buf = io.BytesIO()
+    # Stored, not compressed: PDFs are compressed already, and this keeps it quick.
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_STORED) as z:
+        for name, blob in parts:
+            z.writestr(name, blob)
+    return buf.getvalue()
+
+
+async def _render(claim_id: int, groups: list) -> list:
+    """One PDF per list of pages, each page copied from (document, page inside it).
+
+    In a worker thread: turning a claim's photos into PDF pages takes seconds, and doing it on
+    the event loop would freeze every other request on this worker meanwhile.
+    """
+    import asyncio
     docs = {d.get("doc_id"): d for d in await claim_documents(claim_id)}
+    return await asyncio.to_thread(_render_sync, claim_id, docs, groups)
+
+
+def _render_sync(claim_id: int, docs: dict, groups: list) -> list:
+    import fitz
+    import biz_doc_splitter as split
+
     docs_dir = os.getenv("NIDAAN_DOCS_DIR", "uploads/nidaan-docs")
     opened: dict = {}
-    out = fitz.open()
+    results = []
     try:
-        for pg in order:
-            did = pg.get("doc_id")
-            n = int(pg.get("page_in_doc") or 0)
-            if did not in opened:
-                d = docs.get(did) or {}
-                try:
-                    with open(os.path.join(docs_dir, d.get("stored_name") or ""), "rb") as f:
-                        blob = f.read()
-                    one, _n, _sk = split.normalize_to_pdf([(d.get("original_name") or "doc",
-                                                           blob)])
-                    opened[did] = fitz.open(stream=one, filetype="pdf") if one else None
-                except Exception as e:  # noqa: BLE001
-                    logger.info("claim %s: could not open doc %s for a set: %s",
-                                claim_id, did, e)
-                    opened[did] = None
-            src = opened.get(did)
-            if src is None or n < 1 or n > src.page_count:
-                continue
-            out.insert_pdf(src, from_page=n - 1, to_page=n - 1)
-        return out.tobytes() if out.page_count else b""
+        for order in groups:
+            out = fitz.open()
+            try:
+                for pg in order:
+                    did = pg.get("doc_id")
+                    n = int(pg.get("page_in_doc") or 0)
+                    if did not in opened:
+                        d = docs.get(did) or {}
+                        try:
+                            with open(os.path.join(docs_dir, d.get("stored_name") or ""),
+                                      "rb") as f:
+                                blob = f.read()
+                            one, _n, _sk = split.normalize_to_pdf(
+                                [(d.get("original_name") or "doc", blob)])
+                            opened[did] = fitz.open(stream=one, filetype="pdf") if one else None
+                        except Exception as e:  # noqa: BLE001
+                            logger.info("claim %s: could not open doc %s for a set: %s",
+                                        claim_id, did, e)
+                            opened[did] = None
+                    src = opened.get(did)
+                    if src is None or n < 1 or n > src.page_count:
+                        continue
+                    out.insert_pdf(src, from_page=n - 1, to_page=n - 1)
+                results.append(out.tobytes() if out.page_count else b"")
+            finally:
+                out.close()
+        return results
     finally:
         for v in opened.values():
             try:
@@ -535,4 +614,3 @@ async def build_set_pdf(claim_id: int, set_key: str) -> bytes:
                     v.close()
             except Exception:  # noqa: BLE001
                 pass
-        out.close()

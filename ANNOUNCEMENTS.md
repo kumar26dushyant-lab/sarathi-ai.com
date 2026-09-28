@@ -1,5 +1,36 @@
 # Staff Announcement Drafts
 
+## 2026-09-29 (short) — Documents: what changes from today  ← SEND THIS ONE
+
+_For: everyone who collects or files claim documents. Replaces the long draft below._
+_Not yet sent._
+
+**EN**
+
+📂 **Documents — what changes from today**
+
+1. Ask for documents **only on +91 91836 86384** — never your own number. Tell the complainant: *“One document at a time, the whole page — then your case is fast-tracked in our internal process.”*
+2. **Before you chase, read “Follow-up so far”** (claim → 📂 Documents). It shows who asked, when, and **what to do next**. Don't ask twice.
+3. Follow up **one way** — ask now, book a reminder time, or call. It is recorded for the next person. If you get **“please call”**, call that day and write what they said on the claim.
+4. **Ready to send** builds the three sets by itself. Check the documents it names, tap to correct, and press **Don't send** for a page that must not go.
+5. Download as **One PDF**, or **Each document (zip)** — claim form, discharge summary (DS), final bill, each its own PDF.
+
+Steps: **nidaanpartner.com/sop-documents** (sign in to ops first).
+
+**HI**
+
+📂 **दस्तावेज़ — आज से क्या बदला**
+
+1. दस्तावेज़ **सिर्फ़ +91 91836 86384 पर** मँगवाइये — अपने नंबर पर कभी नहीं। दावेदार से कहिये: *“एक बार में एक दस्तावेज़, पूरा पेज — तब आपका केस हमारी अंदरूनी प्रक्रिया में फ़ास्ट-ट्रैक हो जाता है।”*
+2. **याद दिलाने से पहले “Follow-up so far” पढ़िये** (क्लेम → 📂 Documents)। उसमें लिखा है किसने माँगा, कब, और **अब क्या करना है**। दोबारा मत माँगिये।
+3. फ़ॉलो-अप **एक ही तरीके से** — अभी माँगिये, रिमाइंडर का समय तय कीजिये, या कॉल कीजिये। अगले व्यक्ति के लिये सब दर्ज रहता है। **“please call”** आए तो उसी दिन कॉल कीजिये और जो कहा वह क्लेम पर लिखिये।
+4. **Ready to send** तीनों सेट खुद बनाता है। जिन दस्तावेज़ों के नाम वह बताए उन्हें जाँचिये, टैप करके ठीक कीजिये, और जो पेज नहीं जाना चाहिये उस पर **Don't send** दबाइये।
+5. डाउनलोड: **One PDF**, या **Each document (zip)** — क्लेम फ़ॉर्म, डिस्चार्ज समरी (DS), फ़ाइनल बिल, हर एक की अलग PDF।
+
+पूरे कदम: **nidaanpartner.com/sop-documents** (पहले ops में साइन इन कीजिये)।
+
+---
+
 ## 2026-09-29 — Document collection: one number, and the sets build themselves on the claim
 
 _For: everyone who collects or files claim documents._

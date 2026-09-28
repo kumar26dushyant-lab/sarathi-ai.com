@@ -12,9 +12,10 @@ it. Newest first within each group._
 ### Waiting on the founder
 | # | What | Why it is waiting |
 |---|---|---|
-| 1 | **Turn on "Complainant picks reminder time"** after the run-through, if he wants it | Built, tested, deployed OFF (WhatsApp → Doc-collection defaults). It answers inside the live conversation, so it waits for his word |
+| 1 | **Turn on "Complainant picks reminder time"** after the 29 Sep run-through | He said yes (29 Sep). Deployed OFF; flip it when he says the run-through is done (WhatsApp → Doc-collection defaults) |
 | 2 | **Rotate the doc share key** | It was printed into a task log on 28 Sep. Rotating breaks existing shared SOP links, so it is his call |
-| 3 | **Send the 29 Sep announcement** | Drafted and updated in `ANNOUNCEMENTS.md` (names documents, Don't send, fast-track, reminder nudge) |
+| 3 | **Send the 29 Sep announcement** | The SHORT one at the top of `ANNOUNCEMENTS.md` (five points, EN + HI) |
+| 3a | **Automatic document reminders are OFF for everyone** (`wa_doc_collection_enabled` never set) | Staff now SEE this in "Follow-up so far". Turning it on is his decision |
 | 4 | **Test the radar** with authority-sounding wording once forwarding lands | He said he will; the code is ready for direct and forwarded mail |
 | 3 | **Sarathi-AI in its own VS Code session** | Needs the source split first - see below. Today both products are generated from one `sarathi_biz.py`, so two sessions would collide |
 
@@ -26,7 +27,7 @@ it. Newest first within each group._
 | 3 | **DPDP 10-day advance reminder** to super-admin Telegram | Raised 27 Sep, not built |
 | 4 | **Splitter: rules do not yet re-run on an open job** | Teaching a rule improves the NEXT file. Re-reading the open one is a small addition |
 | 5 | **`biz_nidaan_wa_flow` has few tests** | `failure_reason` is tested now (29 Sep); the inbound routing still is not |
-| 7 | **Claim sets: hospital case papers** (consent, assessment, IPD file, "DC") go to a person | On purpose - DC is a discharge card or a death certificate, an IPD file holds several documents. A "Hospital records" type would let them be filed confidently; ask him first |
+| 7 | **Claim sets: hospital case papers** (consent, assessment, IPD file) go to a person | On purpose - an IPD file holds several documents. "DC" is settled: discharge card = Discharge summary (DS), founder 29 Sep. A "Hospital records" type would let the rest be filed; ask him first |
 | 8 | **Claim sets: 11 files named `Document_1.pdf` on claim 39** | Nothing to read in the name; the pages decide. Worth checking why a source names every file the same |
 | 9 | **WhatsApp: 72 free messages + 22 templates failed in two weeks, reason never kept** | Now kept. Look again in a week: 131047 means the 24-hour rule, 131026 means a number not on WhatsApp - opposite fixes |
 | 6 | **@SarathiBizBot token still dead** | Separate from the Nidaan bot, which is fine |
@@ -58,7 +59,12 @@ needed before starting.
 
 ---
 
-**Last updated:** 2026-09-29 (night) — 🚫 **"Don't send this page"** and the download now
+**Last updated:** 2026-09-29 (early morning) — 🗂️ **Each document (zip)**: one PDF per
+document in every set; **DC = Discharge summary (DS)**; 🧭 **"Follow-up so far"** on every claim
+(who asked, when, what next - and says when automatic reminders are off); SOP opens with the
+team's action items; short announcement drafted.
+
+**Before that, 2026-09-29 (night)** — 🚫 **"Don't send this page"** and the download now
 matches the screen; file names read first (claims 204/39/151: 35/39, 14/28, 12/25 recognised);
 ⚡ **fast-track** wording + the staff ask in the reader's language; ⏰ scheduled reminders say if
 they LANDED, fall back to the approved template past 24 hours, and nudge whoever set them;

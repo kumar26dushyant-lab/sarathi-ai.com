@@ -12398,6 +12398,34 @@ async def ops_claim_doc_sets(claim_id: int, request: Request, refresh: int = 0):
                                     force=bool(refresh))
 
 
+@app.get("/nidaan/ops/api/claims/{claim_id}/doc-sets/{set_key}/parts")
+async def ops_claim_doc_set_parts(claim_id: int, set_key: str, request: Request):
+    """One set as a zip of ONE PDF PER DOCUMENT - claim form, discharge summary, final bill...
+
+    Founder, 29 Sep: "claim form (3 pages) one PDF, DS (10 pages) one pdf, final bill (3 pages)
+    one pdf". Same pages as the screen and the single PDF (biz_nidaan_claim_sets.final_pages).
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request)
+    import biz_nidaan_claim_authz as _authz
+    if not (await _authz.assert_claim_access(staff, claim_id)).get("allowed"):
+        raise HTTPException(status_code=404, detail="Claim not found")
+    import biz_nidaan_claim_sets as _cs
+    import biz_nidaan_doc_sets as _sets
+    import biz_doc_splitter as _split
+    if set_key not in _sets.SETS:
+        raise HTTPException(status_code=404, detail="Unknown set")
+    out = await _cs.build_set_zip(claim_id, set_key)
+    if not out:
+        raise HTTPException(status_code=400, detail="Nothing in this set yet")
+    await _ops_audit(request, "claim.doc_set_parts", "claim", str(claim_id), set_key)
+    return Response(content=out, media_type="application/zip",
+                    headers={"Content-Disposition":
+                             'attachment; filename="claim-%d-%s-documents.zip"'
+                             % (claim_id, _split._safe_name(set_key))})
+
+
 @app.get("/nidaan/ops/api/claims/{claim_id}/doc-sets/{set_key}")
 async def ops_claim_doc_set_pdf(claim_id: int, set_key: str, request: Request):
     """One set for this claim, as a PDF - built from EXACTLY the pages the screen shows.

@@ -41,7 +41,8 @@ DOC_TYPES: dict[str, tuple] = {
                       "Aadhaar, PAN, passport, voter ID, driving licence — any identity document"),
     "claim_form":    ("Claim form", "क्लेम फ़ॉर्म",
                       "the insurer's claim form, Part A or Part B, signed by the insured"),
-    "discharge":     ("Discharge summary", "डिस्चार्ज समरी",
+    # "(DS)" - what staff call it. A discharge CARD is the same document and is filed here.
+    "discharge":     ("Discharge summary (DS)", "डिस्चार्ज समरी (DS)",
                       "the hospital's discharge summary or discharge card, with diagnosis and course"),
     "final_bill":    ("Final bill", "फ़ाइनल बिल",
                       "the hospital's final or consolidated bill, the summary of charges"),

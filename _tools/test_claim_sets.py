@@ -337,6 +337,31 @@ async def main():
           % got)
     check("an unknown set builds nothing", (await cs.build_set_pdf(77, "no-such-set")) == b"")
 
+    print("\nOne PDF per document (founder: claim form one PDF, DS one PDF, bill one PDF)\n")
+
+    import zipfile
+    parts = await cs.build_set_parts(77, "all_merged")
+    shown_parts = shown.get("parts") or []
+    check("one PDF for each document in the set, as the screen lists them",
+          len(parts) == len(shown_parts) and len(parts) >= 2,
+          ([n for n, _b in parts], shown_parts))
+    check("...each with exactly the pages the screen says",
+          [len(pdf_heads(b)) for _n, b in parts] == [x["pages"] for x in shown_parts],
+          ([len(pdf_heads(b)) for _n, b in parts], shown_parts))
+    check("...together, the same pages as the single PDF, in the same order",
+          [h for _n, b in parts for h in pdf_heads(b)] == got)
+    check("...named by document and numbered in the set's order",
+          all(n[:2].isdigit() and n.endswith(".pdf") for n, _b in parts)
+          and [n[:2] for n, _b in parts] == sorted(n[:2] for n, _b in parts),
+          [n for n, _b in parts])
+    check("the discharge summary is called what staff call it: (DS)",
+          any("Discharge summary DS" in n for n, _b in parts), [n for n, _b in parts])
+    z = zipfile.ZipFile(io.BytesIO(await cs.build_set_zip(77, "all_merged")))
+    check("the zip holds exactly those PDFs", z.namelist() == [n for n, _b in parts],
+          z.namelist())
+    check("an unknown set gives an empty zip, not an error",
+          (await cs.build_set_zip(77, "no-such-set")) == b"")
+
     print("\n'Don't send this page'\n")
 
     dis = next(q for q in screen["pages"] if q.get("doc_name") == "discharge.pdf")
@@ -391,20 +416,22 @@ async def main():
                          ("CANCEL CHEQUE.pdf", "bank"), ("RENEWAL NOTIE.pdf", "policy"),
                          ("NonRegistrationLetter (1).pdf", "rejection"),
                          ("OPD CASH MEMO_0001.pdf", "other_bill"),
-                         ("authorization-acceptance-claim-204.pdf", "other")):
+                         ("authorization-acceptance-claim-204.pdf", "other"),
+                         # DC is a discharge CARD - filed as the discharge summary (founder)
+                         ("DC_0001.pdf", "discharge"), ("Discharge Card.pdf", "discharge")):
         check("a real claim's name: %s" % real,
               _loc.type_from_filename(real).get("doc_type") == want_t,
               _loc.type_from_filename(real))
-    # ...and the ones that must stay with a person: DC is a discharge card OR a death
-    # certificate, and an IPD file usually holds several documents.
-    for unclear in ("DC_0001.pdf", "IPD PAPERS_0001.pdf", "CONSENT_0001.pdf", "Document_1.pdf"):
+    # ...and the ones that must stay with a person: an IPD file usually holds several documents.
+    for unclear in ("IPD PAPERS_0001.pdf", "CONSENT_0001.pdf", "Document_1.pdf"):
         check("an unclear name goes to a person: %s" % unclear,
               _loc.type_from_filename(unclear) == {}, _loc.type_from_filename(unclear))
 
     print("\nThe routes reuse the existing claim rule\n")
 
     src = io.open("sarathi_biz.py", encoding="utf-8").read()
-    for name in ("ops_claim_doc_sets", "ops_claim_doc_set_pdf", "ops_claim_doc_exclude"):
+    for name in ("ops_claim_doc_sets", "ops_claim_doc_set_pdf", "ops_claim_doc_exclude",
+                 "ops_claim_doc_set_parts"):
         m = re.search(r"async def %s\(.*?(?=\n@app\.|\nasync def )" % name, src, re.S)
         body = m.group(0) if m else ""
         check("%-22s asks biz_nidaan_claim_authz" % name,

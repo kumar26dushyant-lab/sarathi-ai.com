@@ -1529,6 +1529,11 @@
   "func": "ops_claim_doc_sets",
   "guard": "nidaan-host,staff:any"
  },
+ "GET /nidaan/ops/api/claims/{claim_id}/doc-sets/{set_key}/parts": {
+  "file": "sarathi_biz.py",
+  "func": "ops_claim_doc_set_parts",
+  "guard": "nidaan-host,staff:any"
+ },
  "GET /nidaan/ops/api/claims/{claim_id}/doc-sets/{set_key}": {
   "file": "sarathi_biz.py",
   "func": "ops_claim_doc_set_pdf",

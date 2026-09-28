@@ -100,6 +100,23 @@ check('...and the box says how many are held back', /page\(s\) held back/.test(b
 check('the page list stays open after a change', /dcPagesWrap[\s\S]{0,40}\.open/.test(box));
 check('dcPageHold is reachable from the onclick', /window\.dcPageHold=dcPageHold/.test(html));
 
+console.log('\nOne PDF per document\n');
+
+check('each set offers one PDF AND one PDF per document',
+      /One PDF/.test(box) && /Each document \(zip\)/.test(box) && /,1\)">'/.test(box));
+check('...the per-document download asks the /parts route', /\/parts'/.test(box));
+check('...and the set says what it holds, document by document', /st\.parts/.test(box));
+
+console.log('\nFollow-up so far\n');
+
+const fu = html.slice(html.indexOf('function _dcFollowup('), html.indexOf('async function docsRender('));
+check('the checklist box shows the follow-up record', /_dcFollowup\(win && win\.followup\)/.test(html));
+check('...with the one next step first', /<b>Next:<\/b>/.test(fu));
+check('...saying plainly when automatic reminders are off for everyone',
+      /switched off for everyone/.test(fu) && /fu\.auto_global/.test(fu));
+check('...and who did what, escaped', /esc\(e\.who\)/.test(fu) && /esc\(e\.what\)/.test(fu));
+check('...colours from the theme, not literals', !/#[0-9a-fA-F]{3,6}\b/.test(fu));
+
 console.log('\nNothing here deletes\n');
 
 check('no delete call anywhere in the sets box',

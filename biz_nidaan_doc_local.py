@@ -214,7 +214,9 @@ _NAME_HINTS = [
     # Our own authorization letter (authorization-acceptance-claim-N.pdf). We made it, so we know
     # what it is; it is not a cashless authorization and not something to check.
     (r"authori[sz]ation\s*acceptance", "other"),
-    (r"discharge|dischage|dis\s*charge|\bd\s*s\b\s*(summary)?$|death\s*summary", "discharge"),
+    # DC is a discharge CARD, filed as the discharge summary (founder, 29 Sep).
+    (r"discharge|dischage|dis\s*charge|\bd\s*s\b\s*(summary)?$|death\s*summary|\bdc\b",
+     "discharge"),
     (r"claim\s*form", "claim_form"),
     (r"pharmac|chemist|medicine|medical\s*store|\bmed\s*bills?\b", "pharmacy_bill"),
     (r"final\s*bill|hospital\s*bill|ipd\s*bill|\binvoice\b|bill\s*summary", "final_bill"),

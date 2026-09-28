@@ -223,6 +223,11 @@ when identification changes, or claims keep yesterday's answer. Measured 29 Sep 
 204/39/151: 35/39, 14/28 and 12/25 documents recognised; what is left is camera photos,
 `Document_1.pdf` and hospital case papers, which go to a person on purpose.
 
+Each set downloads as ONE PDF or as **one PDF per document type** in a zip (`build_set_parts`:
+01 Claim form, 02 Discharge summary DS, ...) - the founder's "bundle of each document". Both use
+`_render`, which runs in a worker thread. **DC is a discharge card and is filed as the Discharge
+summary (DS)** - founder, 29 Sep; the type label carries "(DS)".
+
 ### The complainant's WhatsApp - reminders and the 24-hour rule
 
 Inside 24 hours of the complainant's last message we may send free text; outside it, only an
@@ -232,6 +237,12 @@ approved template. `np_doc_reminder` is approved and delivers. A **scheduled rem
 the window is closed. The person who set it is told what happened (`doc.schedule_due`, bell +
 Telegram), with "please call" and the number when it did not land. Meta's failed receipts keep
 their reason (`wa_flow.failure_reason`: 131047 = the 24-hour rule, 131026 = not on WhatsApp).
+
+**"Follow-up so far"** (`doc_request.followup`, served in the doc window) is what the next
+person reads before chasing: every ask, booked reminder, call and automatic-reminder switch on the
+claim, newest first, and ONE "Next:" line computed from the same state the workers use.
+Automatic reminders are OFF globally unless `wa_doc_collection_enabled` is set - it says so,
+because staff waiting on a reminder that will never go is the failure it exists to prevent.
 
 **The complainant can pick the time** (`biz_nidaan_wa_remind`, setting `wa_remind_ask_enabled`,
 **off** until a super-admin turns it on). Local rules read the reply; nothing is booked without

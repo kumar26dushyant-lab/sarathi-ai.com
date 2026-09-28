@@ -8116,3 +8116,11 @@ send anything; after that only an approved template, charged per conversation. T
 later one goes as `np_doc_reminder` (approved, delivering: 10 read / 20 sent in two weeks, 9
 failed with no reason recorded - now recorded). Staff nudges are internal (bell + Telegram) and
 have no such rule.
+
+**29 Sep, early morning (founder's answers):** a set must also come as a bundle of one PDF per
+document (claim form, DS, final bill) - built, "Each document (zip)"; DC = discharge card =
+Discharge summary (DS) - built; complainant-picks-time goes on after the run-through; and the
+real ask: RECORD what each person did so the next one knows whether to nudge, turn on automatic
+reminders or book a time - built as "Follow-up so far" on every claim, which also exposed that
+automatic reminders are off for everyone. SOP now opens with the team's action items; a short
+five-point announcement replaces the long one.
