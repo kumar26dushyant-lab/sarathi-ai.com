@@ -17548,6 +17548,60 @@
     "_nidaan_page",
     "app"
    ]
+  },
+  {
+   "func": "ops_docsplit_jobs",
+   "paths": [
+    "/nidaan/ops/api/docsplit/jobs"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_STAFF_ACTIVE_TTL",
+    "_doc_ext_for",
+    "_doc_magic_ok",
+    "_get_staff_from_request",
+    "_is_nidaan_host",
+    "_require_staff",
+    "_sniff_file",
+    "_staff_active_cache",
+    "_staff_still_active",
+    "app",
+    "limiter"
+   ],
+   "uses": [
+    "_doc_magic_ok",
+    "_is_nidaan_host",
+    "_require_staff",
+    "app",
+    "limiter"
+   ]
+  },
+  {
+   "func": "ops_docsplit_close",
+   "paths": [
+    "/nidaan/ops/api/docsplit/{job}/close"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_STAFF_ACTIVE_TTL",
+    "_doc_ext_for",
+    "_doc_magic_ok",
+    "_get_staff_from_request",
+    "_is_nidaan_host",
+    "_require_staff",
+    "_sniff_file",
+    "_staff_active_cache",
+    "_staff_still_active",
+    "app",
+    "limiter"
+   ],
+   "uses": [
+    "_doc_magic_ok",
+    "_is_nidaan_host",
+    "_require_staff",
+    "app",
+    "limiter"
+   ]
   }
  ],
  "shared_core": [

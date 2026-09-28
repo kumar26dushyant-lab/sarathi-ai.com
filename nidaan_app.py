@@ -12143,6 +12143,54 @@ async def ops_account_merge(body: _MergeAccountsReq, request: Request):
 
 
 # ══════════ DOCUMENT SPLITTER — standalone ops tool (all staff) ══════════
+async def _docsplit_job(job: str, staff: dict) -> dict:
+    """The job, if this staff member may open it. Otherwise 404 - never 403.
+
+    404 for "not yours" as well as "no such job", deliberately: a 403 would confirm that the id
+    is real and belongs to somebody, which turns the endpoint into a way to find out whose
+    uploads are on the server. Same rule as claim ids and task ids.
+
+    Takes the staff row rather than the request, so that every caller has to write
+    _require_staff() on its own line. Hiding the authentication one call deep made the route
+    census read these routes as having no staff gate at all - and a guard a reader cannot see at
+    the route is a guard the next person deletes.
+    """
+    import biz_nidaan_doc_store as _store
+    row = await _store.job_for(job, staff.get("staff_id"), staff.get("role") or "")
+    if not row:
+        raise HTTPException(status_code=404, detail="Job expired — please re-upload")
+    return row
+
+
+@app.get("/nidaan/ops/api/docsplit/jobs")
+async def ops_docsplit_jobs(request: Request):
+    """This person's open jobs. The inbox - never anybody else's work."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request)
+    import biz_nidaan_doc_store as _store
+    jobs = await _store.list_jobs(staff.get("staff_id"))
+    return {"jobs": jobs, "limit": _store.MAX_JOBS}
+
+
+@app.post("/nidaan/ops/api/docsplit/{job}/close")
+@limiter.limit("30/minute")
+async def ops_docsplit_close(job: str, request: Request):
+    """Put a job away. ARCHIVED, not deleted - 'I closed the wrong one' has to be recoverable.
+
+    Only ever called because somebody pressed a button that said so; the UI confirms first.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request)
+    import biz_nidaan_doc_store as _store
+    ok = await _store.archive_job(job, staff.get("staff_id"), staff.get("role") or "")
+    if not ok:
+        raise HTTPException(status_code=404, detail="Job expired — please re-upload")
+    await _ops_audit(request, "docsplit.close", "docsplit", job, "job closed")
+    return {"ok": True, "jobs": await _store.list_jobs(staff.get("staff_id"))}
+
+
 @app.post("/nidaan/ops/api/docsplit/upload")
 @limiter.limit("20/minute")
 async def ops_docsplit_upload(request: Request, files: list[UploadFile] = File(...)):
@@ -12150,7 +12198,7 @@ async def ops_docsplit_upload(request: Request, files: list[UploadFile] = File(.
     + page ranges → return them for human review. Any staff."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    _require_staff(request)
+    staff = _require_staff(request)
     raw = []
     skipped_bad: list = []
     for f in (files or [])[:12]:
@@ -12172,7 +12220,19 @@ async def ops_docsplit_upload(request: Request, files: list[UploadFile] = File(.
     if n > docsplit.MAX_PAGES:
         raise HTTPException(status_code=400,
                             detail=f"Too many pages ({n}). Please split into batches of ≤{docsplit.MAX_PAGES}.")
+    # THREE AT A TIME. A fourth does not quietly push the first out: it reports that the inbox
+    # is full and names the one it would put away, and the screen asks. (Founder, 28 Sep.)
+    import biz_nidaan_doc_store as _store
+    room = await _store.room_for_a_job(staff.get("staff_id"))
+    if not room.get("ok"):
+        raise HTTPException(status_code=409, detail={
+            "reason": "inbox_full", "limit": room.get("limit"),
+            "oldest": room.get("oldest") or {},
+            "message": "You already have %d files open. Close one to start another."
+                       % room.get("limit", 3)})
     job = docsplit.save_job(pdf)
+    await _store.create_job(job, staff.get("staff_id"),
+                            (raw[0][0] if raw else "Upload"), n)
     documents = await docsplit.segment(pdf, n)
     # Report files rejected as not-a-real-document alongside the pipeline's own skips, so the
     # staffer sees WHY something didn't make it in rather than silently losing a page.
@@ -12185,7 +12245,8 @@ async def ops_docsplit_thumb(job: str, page: int, request: Request):
     """A page thumbnail (PNG) for the review grid."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    _require_staff(request)
+    staff = _require_staff(request)
+    await _docsplit_job(job, staff)            # and yours, or 404
     pdf = docsplit.load_job(job)
     if not pdf:
         raise HTTPException(status_code=404, detail="Job expired — please re-upload")
@@ -12213,7 +12274,8 @@ async def ops_docsplit_export(job: str, body: _DocSplitExportReq, request: Reque
     """Reviewer confirmed the split → export one PDF per document, as a zip."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    _require_staff(request)
+    staff = _require_staff(request)
+    await _docsplit_job(job, staff)            # and yours, or 404
     pdf = docsplit.load_job(job)
     if not pdf:
         raise HTTPException(status_code=404, detail="Job expired — please re-upload")
@@ -12232,7 +12294,8 @@ async def ops_docsplit_collate(job: str, request: Request):
     Zero-AI, deterministic — the mixed files were already normalised + merged on upload. Any staff."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    _require_staff(request)
+    staff = _require_staff(request)
+    await _docsplit_job(job, staff)            # and yours, or 404
     pdf = docsplit.load_job(job)
     if not pdf:
         raise HTTPException(status_code=404, detail="Job expired — please re-upload")

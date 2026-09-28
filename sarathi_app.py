@@ -954,6 +954,26 @@ def _get_staff_from_request(request: Request) -> Optional[dict]:
     return payload
 
 
+# ══════════ DOCUMENT SPLITTER — standalone ops tool (all staff) ══════════
+async def _docsplit_job(job: str, staff: dict) -> dict:
+    """The job, if this staff member may open it. Otherwise 404 - never 403.
+
+    404 for "not yours" as well as "no such job", deliberately: a 403 would confirm that the id
+    is real and belongs to somebody, which turns the endpoint into a way to find out whose
+    uploads are on the server. Same rule as claim ids and task ids.
+
+    Takes the staff row rather than the request, so that every caller has to write
+    _require_staff() on its own line. Hiding the authentication one call deep made the route
+    census read these routes as having no staff gate at all - and a guard a reader cannot see at
+    the route is a guard the next person deletes.
+    """
+    import biz_nidaan_doc_store as _store
+    row = await _store.job_for(job, staff.get("staff_id"), staff.get("role") or "")
+    if not row:
+        raise HTTPException(status_code=404, detail="Job expired — please re-upload")
+    return row
+
+
 # ── Revenue + Refunds: gated to the platform owner only ──────────────────────
 # Other super_admins do NOT see revenue or refund admin. Owner is matched by
 # email (case-insensitive). Configurable later via system flag if needed.
