@@ -218,24 +218,44 @@ async def main():
 
     print("\nConfident, or a person looks\n")
 
-    sure = [{"page": 1, "confidence": 0.9, "source": "pdf"},
-            {"page": 2, "confidence": 0.8, "source": "pdf"}]
+    sure = [{"page": 1, "doc_id": 1, "doc_name": "policy.pdf", "confidence": 0.9,
+             "source": "doc", "why": "policy schedule"},
+            {"page": 2, "doc_id": 2, "doc_name": "bill.pdf", "confidence": 0.8,
+             "source": "doc", "why": "total payable"}]
     st = cs.arrangement_state(sure)
     check("all confident means ready", st["ready"] is True and st["unsure"] == [], st)
 
-    mixed = sure + [{"page": 3, "confidence": 0.4, "source": "pdf"}]
-    st = cs.arrangement_state(mixed)
-    check("ONE doubtful page holds the whole claim", st["ready"] is False, st)
-    check("...and it is named, so somebody knows where to look", st["unsure"] == [3], st)
+    weak = sure + [{"page": 3, "doc_id": 3, "doc_name": "scan.jpg", "confidence": 0.4,
+                    "source": "doc", "why": "a few weak signs"}]
+    st = cs.arrangement_state(weak)
+    check("ONE doubtful document holds the whole claim", st["ready"] is False, st)
+    check("...and it is named, not numbered",
+          [u["name"] for u in st["unsure"]] == ["scan.jpg"], st["unsure"])
+    check("...with a reason a person can act on",
+          "not sure" in st["unsure"][0]["why"], st["unsure"])
 
-    unread = sure + [{"page": 3, "confidence": 0.99, "source": "none"}]
+    unread = sure + [{"page": 3, "doc_id": 3, "doc_name": "photo.jpg", "confidence": 0.99,
+                      "source": "none", "why": ""}]
     st = cs.arrangement_state(unread)
-    check("a page nobody could read is never 'sure'", st["unsure"] == [3], st)
+    check("a document nobody could read is never 'sure'",
+          st["unsure"] and "nothing could be read" in st["unsure"][0]["why"], st)
 
-    settled = mixed[:]
+    bundle = sure + [{"page": 3, "doc_id": 3, "doc_name": "all.pdf", "confidence": 0.9,
+                      "source": "doc", "why": "x", "mixed": True}]
+    st = cs.arrangement_state(bundle)
+    check("a file holding several documents says so",
+          st["unsure"] and "more than one document" in st["unsure"][0]["why"], st)
+
+    settled = weak[:]
     settled[2] = dict(settled[2], by_person="Asha")
-    check("a page a person settled stops holding it up",
+    check("a document a person settled stops holding it up",
           cs.arrangement_state(settled)["ready"] is True)
+
+    many = sure + [{"page": 4, "doc_id": 2, "doc_name": "bill.pdf", "confidence": 0.8,
+                    "source": "doc", "why": "total payable"}]
+    check("a document is counted once, however many pages it has",
+          len(cs.arrangement_state(many)["unsure"]) == 0,
+          "otherwise a 40-page bill would be listed 40 times")
 
     print("\nThe audit case: automation was sure, and still wrong\n")
 

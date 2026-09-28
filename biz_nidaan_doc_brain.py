@@ -72,6 +72,84 @@ async def classify_pages(pdf_bytes: bytes, rules: list | None = None) -> list:
     return await asyncio.to_thread(local.classify_pdf, pdf_bytes, rules or [])
 
 
+async def identify_document(pdf_bytes: bytes, rules: list | None = None,
+                            sample: int = 3) -> dict:
+    """What IS this document? Reads only the first few readable pages.
+
+    Returns {doc_type, confidence, why, pages, sampled, mixed, words}.
+
+    Reading every page of every document was the mistake this replaces: it cost ten times the
+    OCR and produced worse answers, because the pages that identify a document are its first
+    ones. Page 6 of a bill has no heading on it.
+
+    `mixed` means the sampled pages disagreed with real confidence on both sides - a single file
+    holding several documents. That is a fact worth telling somebody, not a label to guess at.
+    """
+    import asyncio
+    import biz_nidaan_doc_local as local
+    import biz_nidaan_doc_sets as sets
+
+    def _look() -> dict:
+        import fitz
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        try:
+            total = doc.page_count
+            seen, words = [], []
+            # The first pages, and - for a long file - one from the middle, so a bundle that
+            # changes half way through is noticed rather than assumed.
+            idx = list(range(min(total, sample)))
+            if total > sample * 2:
+                idx.append(total // 2)
+            for i in idx:
+                text, src = local.page_text(doc, i)
+                if src == "none":
+                    continue
+                res = local.score_page(text)
+                res["page"] = i + 1
+                seen.append(res)
+                if not words:
+                    words = sets.fingerprint(text)
+            return {"seen": seen, "total": total, "words": words}
+        finally:
+            doc.close()
+
+    try:
+        got = await asyncio.to_thread(_look)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("could not identify a document: %s", e)
+        return {"doc_type": "other", "confidence": 0.0, "why": "could not be read",
+                "pages": 0, "sampled": 0, "mixed": False, "words": []}
+
+    seen, total = got["seen"], got["total"]
+    if not seen:
+        return {"doc_type": "other", "confidence": 0.0,
+                "why": "nothing could be read on it", "pages": total,
+                "sampled": 0, "mixed": False, "words": got["words"]}
+
+    # A rule a person taught beats the reading, here as everywhere else.
+    scored = sets.apply_rules([{**r, "words": got["words"]} for r in seen], rules or [])
+    best = max(scored, key=lambda r: float(r.get("confidence") or 0))
+
+    # Disagreement only counts when BOTH sides are confident - two weak guesses are not a bundle.
+    strong = [r for r in scored if float(r.get("confidence") or 0) >= 0.6
+              and (r.get("doc_type") or "other") != "other"]
+    kinds = {r.get("doc_type") for r in strong}
+    mixed = len(kinds) > 1
+
+    return {
+        "doc_type": best.get("doc_type") or "other",
+        "confidence": float(best.get("confidence") or 0),
+        "why": best.get("why") or "",
+        "taught_by": best.get("taught_by") or "",
+        "rule_id": best.get("rule_id"),
+        "pages": total,
+        "sampled": len(seen),
+        "mixed": mixed,
+        "kinds": sorted(k for k in kinds if k),
+        "words": got["words"],
+    }
+
+
 async def match_document(pdf_bytes: bytes, candidates: list,
                          rules: list | None = None) -> dict:
     """Which of the documents this claim still needs is this? A drop-in for the old AI call.

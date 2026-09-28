@@ -16796,12 +16796,18 @@ function dcSetsRender(){
   const arr = d.arrangement || {ready:true, unsure:[]};
   // One doubtful page holds the whole claim, and it is NAMED. A set that is 90% right is the
   // dangerous kind - nobody checks it, and the wrong paper reaches an authority.
+  // BY DOCUMENT, with names. Listing page numbers produced "please arrange pages 1,2,3 ... 106"
+  // on a real claim - a wall nobody can act on. Staff talk about "the bill", not page 47.
   const head = arr.ready
-    ? '<div class="dcdone on"><span>✅</span><span><b>Arranged</b> — every page was read '
-      + 'clearly. Check a set before you send it.</span></div>'
-    : '<div class="dcdone"><span>✋</span><span><b>Please arrange these</b> — page'
-      + (arr.unsure.length > 1 ? 's ' : ' ') + arr.unsure.join(', ')
-      + ' could not be read clearly. Tap a page below and say what it is.</span></div>';
+    ? '<div class="dcdone on"><span>✅</span><span><b>Arranged</b> — every document was '
+      + 'recognised. Check a set before you send it.</span></div>'
+    : '<div class="dcdone"><span>✋</span><span><b>Please check these '
+      + arr.unsure.length + ' document(s)</b><br>'
+      + arr.unsure.map(function(u){
+          return '• ' + esc(u.name) + ' — ' + esc(u.why);
+        }).join('<br>')
+      + '<br><span class="bdsub">Open the list below, tap the page and say what it is.</span>'
+      + '</span></div>';
 
   const sets = (d.sets || []).map(function(st){
     const n = (st.pages || []).length;
@@ -16824,7 +16830,7 @@ function dcSetsRender(){
   const pages = (d.pages || []).map(function(p){
     const who = p.by_person ? (' · set by ' + esc(p.by_person))
               : (p.taught_by ? (' · rule by ' + esc(p.taught_by)) : '');
-    const unsure = (arr.unsure || []).indexOf(p.page) >= 0;
+    const unsure = (arr.unsure_pages || []).indexOf(p.page) >= 0;
     return '<div class="dcrow" style="' + (unsure ? 'background:var(--nd-bg-surface-2)' : '') + '">'
       + '<div style="flex:1;min-width:150px">'
       +   '<b>' + esc(p.label || 'Something else') + '</b>' + (p.by_person ? ' ✓' : '')

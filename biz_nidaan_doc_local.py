@@ -173,9 +173,15 @@ def score_page(text: str) -> dict:
     for t, rows in _COMPILED.items():
         hit, terms = 0, []
         for rx, w in rows:
-            if rx.search(text):
+            m = rx.search(text)
+            if m:
                 hit += w
-                terms.append(rx.pattern)
+                # The WORDS FOUND ON THE PAGE, not the pattern that found them. This used to
+                # append rx.pattern, so staff were shown things like
+                # "discharge\s+summary, course\s+in\s+(the\s+)?hospital" and could not tell
+                # whether the answer was right - which is the only question the line exists to
+                # help with.
+                terms.append(" ".join((m.group(0) or "").split())[:60].lower())
         if hit:
             scores[t] = hit
             why[t] = terms[:3]

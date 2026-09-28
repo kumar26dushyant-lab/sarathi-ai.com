@@ -44,12 +44,17 @@ const box = html.slice(html.indexOf('// ── The three sets, built from what i
                        html.indexOf('// Remove a document that should not be on the claim.'));
 
 check('it reads the claim\'s own sets endpoint', /\/doc-sets/.test(box));
-check('one doubtful page is NAMED, not just counted',
-      /arr\.unsure\.join\(/.test(box),
-      'otherwise somebody has to hunt for the page that is holding the claim');
+// By DOCUMENT NAME, not page number. On a real claim the page-number version read
+// "please arrange pages 1,2,3 ... 106" - a wall nobody can act on.
+check('a doubtful document is named, not numbered',
+      /esc\(u\.name\)/.test(box),
+      'staff talk about "the bill", never about page 47');
+check('...with a reason beside each one', /esc\(u\.why\)/.test(box));
 check('...and the whole claim is held until it is settled',
-      /arr\.ready[\s\S]{0,400}Please arrange these/.test(box),
-      'a set that is 90% right is the dangerous kind - nobody checks it');
+      /arr\.ready[\s\S]{0,400}Please check these/.test(box),
+      'a set that is nearly right is the dangerous kind - nobody checks it');
+check('...and a 40-page bill is listed once, not forty times',
+      /arr\.unsure\.length/.test(box) && !/arr\.unsure\.join\(/.test(box));
 check('each set can be downloaded', /dcSetGet\(/.test(box));
 check('...and says what is NOT on the claim', /not on this claim/.test(box));
 check('it shows what the CHECKLIST still wants', /still_needed/.test(box),

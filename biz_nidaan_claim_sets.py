@@ -122,54 +122,76 @@ async def read_claim(claim_id: int, *, force: bool = False) -> dict:
         if cached:
             return {"pages": cached, "docs": docs, "truncated": False, "from_cache": True}
 
-    # The documents are already on disk; merge them the same way an upload is merged, so one
-    # page number means the same thing here as it does in the standalone tool.
+    # The files, and the document rows behind them in the same order.
     docs_dir = os.getenv("NIDAAN_DOCS_DIR", "uploads/nidaan-docs")
-    files = []
-    readable = []          # the document rows behind `files`, in the same order, for attribution
+    files, readable = [], []
     for d in docs:
-        p = os.path.join(docs_dir, d.get("stored_name") or "")
+        path = os.path.join(docs_dir, d.get("stored_name") or "")
         try:
-            with open(p, "rb") as f:
+            with open(path, "rb") as f:
                 files.append((d.get("original_name") or "document", f.read()))
             readable.append(d)
         except Exception as e:  # noqa: BLE001
-            # A missing file is reported, never silently dropped: "the bill is not in the set"
-            # and "the bill is not on the server" are different problems.
+            # Reported, never silently dropped: "the bill is not in the set" and "the bill is
+            # not on the server" are different problems, and only one is the staffer's to fix.
             logger.info("claim %s: could not read %s (%s)", claim_id, d.get("stored_name"), e)
             d["unreadable"] = True
 
     if not files:
         return {"pages": [], "docs": docs, "truncated": False, "from_cache": False}
 
-    try:
-        merged, pages_n, _skipped, spans = split.normalize_with_spans(files)
-    except Exception as e:  # noqa: BLE001
-        logger.warning("claim %s: could not merge its documents: %s", claim_id, e)
-        return {"pages": [], "docs": docs, "truncated": False, "from_cache": False}
-    if not merged:
-        return {"pages": [], "docs": docs, "truncated": False, "from_cache": False}
-
+    # EACH DOCUMENT IS IDENTIFIED ON ITS OWN, from its first readable pages, and every page of
+    # it takes that answer. Reading all 134 pages of a claim cost two minutes, hit the OCR
+    # budget, and produced WORSE answers - page 6 of a bill has no heading, so it read as
+    # "Other" and dragged the whole claim into "please arrange". Measured on claims 204, 39 and
+    # 151 before this changed.
     import biz_nidaan_doc_brain as brain
     import biz_nidaan_doc_store as store
-    try:
-        pages = await brain.classify_pages(merged, await store.load_rules())
-    except Exception as e:  # noqa: BLE001
-        logger.warning("claim %s: could not read the pages: %s", claim_id, e)
-        pages = []
+    rules = await store.load_rules()
 
-    # Which document each page came from. `spans` is in merge order and `readable` was built in
-    # the same order, so the two line up one to one.
-    by_page = {}
-    for span, d in zip(spans, readable):
-        for n in range(int(span["start"]), int(span["end"]) + 1):
-            by_page[n] = (d, n - int(span["start"]) + 1)
-    for pg in pages:
-        d, in_doc = by_page.get(int(pg.get("page") or 0), (None, None))
-        if d is not None:
-            pg["doc_id"] = d.get("doc_id")
-            pg["doc_name"] = d.get("original_name") or ""
-            pg["page_in_doc"] = in_doc
+    pages = []
+    page_no = 0
+    for d, (name, blob) in zip(readable, files):
+        try:
+            one, n_pages, _sk = split.normalize_to_pdf([(name, blob)])
+        except Exception as e:  # noqa: BLE001
+            logger.info("claim %s: could not open %s: %s", claim_id, name, e)
+            d["unreadable"] = True
+            continue
+        if not one or not n_pages:
+            d["unreadable"] = True
+            continue
+        try:
+            got = await brain.identify_document(one, rules)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("claim %s: could not identify %s: %s", claim_id, name, e)
+            got = {"doc_type": "other", "confidence": 0.0, "why": "could not be read",
+                   "mixed": False, "words": []}
+        d["doc_type"] = got["doc_type"]
+        d["confidence"] = got["confidence"]
+        d["why"] = got.get("why") or ""
+        d["mixed"] = bool(got.get("mixed"))
+        d["kinds"] = got.get("kinds") or []
+        d["taught_by"] = got.get("taught_by") or ""
+        for i in range(n_pages):
+            page_no += 1
+            pages.append({
+                "page": page_no,
+                "doc_type": got["doc_type"],
+                "confidence": got["confidence"],
+                "why": got.get("why") or "",
+                "source": "doc",
+                "words": got.get("words") or [],
+                "taught_by": got.get("taught_by") or "",
+                "doc_id": d.get("doc_id"),
+                "doc_name": d.get("original_name") or name,
+                "page_in_doc": i + 1,
+                "mixed": bool(got.get("mixed")),
+            })
+
+    pages_n = page_no
+    if not pages:
+        return {"pages": [], "docs": docs, "truncated": False, "from_cache": False}
 
     truncated = bool(pages_n and pages_n > MAX_PAGES)
     save_cached(claim_id, fp, pages)
@@ -330,20 +352,40 @@ async def page_types(claim_id: int) -> dict:
 
 
 def arrangement_state(pages: list) -> dict:
-    """Is this claim arranged, or does it need a person? Returns {ready, unsure:[page numbers]}.
+    """What still needs a person? Returns {ready, unsure:[...], unsure_pages:[...]}.
 
-    ONE doubtful page holds the whole claim. A set that is 90% right is the dangerous kind -
-    nobody checks it, and the wrong paper goes to an authority.
+    BY DOCUMENT, with names. The first version listed page numbers, and on a real claim that
+    read "please arrange pages 1,2,3 ... 106" - a wall of numbers nobody can act on. Staff talk
+    about "the bill" and "the discharge summary", never about page 47.
+
+    A document is unsure when nothing could be read on it, when the reading was weak, or when it
+    holds several documents at once - and each of those says so in words.
     """
-    unsure = []
+    by_doc = {}
     for p in pages or []:
+        key = p.get("doc_id")
+        if key in by_doc:
+            continue                       # every page of a document carries the same answer
+        by_doc[key] = p
+
+    unsure = []
+    for p in by_doc.values():
         if p.get("by_person"):
             continue                       # a person settled this one
-        if p.get("source") == "none":
-            unsure.append(p.get("page"))   # nothing could be read on it
+        name = p.get("doc_name") or "a document"
+        if p.get("mixed"):
+            unsure.append({"doc_id": p.get("doc_id"), "name": name,
+                           "why": "this file holds more than one document"})
+        elif p.get("source") == "none" or not p.get("why"):
+            unsure.append({"doc_id": p.get("doc_id"), "name": name,
+                           "why": "nothing could be read on it"})
         elif float(p.get("confidence") or 0) < SURE:
-            unsure.append(p.get("page"))
-    return {"ready": not unsure, "unsure": unsure}
+            unsure.append({"doc_id": p.get("doc_id"), "name": name,
+                           "why": "not sure what it is"})
+
+    return {"ready": not unsure, "unsure": unsure,
+            "unsure_pages": [q.get("page") for q in (pages or [])
+                             if q.get("doc_id") in {u["doc_id"] for u in unsure}]}
 
 
 async def remark(claim_id: int, summary: str, actor: str = "Document arranging") -> None:
