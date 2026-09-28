@@ -12405,7 +12405,12 @@ async def ops_claim_doc_sets(claim_id: int, request: Request, refresh: int = 0):
 
 @app.get("/nidaan/ops/api/claims/{claim_id}/doc-sets/{set_key}")
 async def ops_claim_doc_set_pdf(claim_id: int, set_key: str, request: Request):
-    """One set for this claim, as a PDF, composed by type across everything on the claim."""
+    """One set for this claim, as a PDF - built from EXACTLY the pages the screen shows.
+
+    It used not to be: the screen applied staff corrections and this did not, so a page fixed on
+    screen downloaded in its old place. Both now come through biz_nidaan_claim_sets.final_pages.
+    Pages somebody held back ("don't send this page") are left out.
+    """
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     staff = _require_staff(request)
@@ -12414,38 +12419,55 @@ async def ops_claim_doc_set_pdf(claim_id: int, set_key: str, request: Request):
         raise HTTPException(status_code=404, detail="Claim not found")
     import biz_nidaan_claim_sets as _cs
     import biz_nidaan_doc_sets as _sets
+    import biz_doc_splitter as _split
     if set_key not in _sets.SETS:
         raise HTTPException(status_code=404, detail="Unknown set")
-
-    read = await _cs.read_claim(claim_id)
-    if not read["pages"]:
-        raise HTTPException(status_code=400, detail="Nothing readable on this claim yet")
-    composed = _sets.compose(read["pages"], set_key)
-    nums = [p.get("page") for p in composed.get("pages") or []]
-    if not nums:
-        raise HTTPException(status_code=400, detail="Nothing in this set yet")
-
-    # Rebuilt from the same merge the reading used, so a page number means the same thing.
-    import biz_doc_splitter as _split
-    import os as _os
-    docs_dir = _os.getenv("NIDAAN_DOCS_DIR", "uploads/nidaan-docs")
-    files = []
-    for d in read["docs"]:
-        try:
-            with open(_os.path.join(docs_dir, d.get("stored_name") or ""), "rb") as f:
-                files.append((d.get("original_name") or "document", f.read()))
-        except Exception:  # noqa: BLE001
-            continue
-    merged, _n, _sk = _split.normalize_to_pdf(files)
-    out = _split.extract_pages(merged, nums) if merged else b""
+    out = await _cs.build_set_pdf(claim_id, set_key)
     if not out:
-        raise HTTPException(status_code=400, detail="Could not build that set")
-    await _ops_audit(request, "claim.doc_set", "claim", str(claim_id),
-                     "%s (%d pages)" % (set_key, len(nums)))
+        raise HTTPException(status_code=400, detail="Nothing in this set yet")
+    await _ops_audit(request, "claim.doc_set", "claim", str(claim_id), set_key)
     return Response(content=out, media_type="application/pdf",
                     headers={"Content-Disposition":
                              'attachment; filename="claim-%d-%s.pdf"'
                              % (claim_id, _split._safe_name(set_key))})
+
+
+class _ClaimExcludeReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    doc_id: int = Field(..., ge=1)
+    page_in_doc: int = Field(..., ge=1, le=2000)
+    excluded: bool
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/doc-exclude")
+@limiter.limit("120/minute")
+async def ops_claim_doc_exclude(claim_id: int, body: _ClaimExcludeReq, request: Request):
+    """Hold a page back from every set, or put it back.
+
+    An INCLUSION decision, not a type one: a policy copy that must not go to the Ombudsman is
+    still a policy copy. Written to the claim's remarks, so nobody wonders later why a page is
+    missing from a bundle that was sent.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request)
+    import biz_nidaan_claim_authz as _authz
+    if not (await _authz.assert_claim_access(staff, claim_id)).get("allowed"):
+        raise HTTPException(status_code=404, detail="Claim not found")
+    import biz_nidaan_claim_sets as _cs
+    who = _actor_label(staff)
+    if not await _cs.set_excluded(claim_id, body.doc_id, body.page_in_doc, body.excluded, who):
+        raise HTTPException(status_code=400, detail="Could not change that")
+    await _ops_audit(request, "claim.doc_exclude", "claim", str(claim_id),
+                     "page %d of doc %d %s" % (body.page_in_doc, body.doc_id,
+                                               "held back" if body.excluded else "put back"))
+    await _cs.remark(claim_id,
+                     ("\U0001f6ab Page %d of a document held back from the sets"
+                      if body.excluded else
+                      "\u21a9\ufe0f Page %d of a document put back into the sets")
+                     % body.page_in_doc, who)
+    claim = await nidaan.get_claim_with_account(claim_id) or {}
+    return {"ok": True, **(await _cs.sets_for_claim(claim_id, claim.get("claim_type") or ""))}
 
 
 @app.post("/nidaan/ops/api/docsplit/upload")

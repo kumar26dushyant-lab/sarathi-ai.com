@@ -77,8 +77,11 @@
   "_CaseAssignReq",
   "_CaseBlockerReq",
   "_ChangeReq",
+  "_ClaimAutoReq",
+  "_ClaimExcludeReq",
   "_ClaimInvolveReq",
   "_ClaimMuteReq",
+  "_ClaimPageTypeReq",
   "_ClaimShieldStatusReq",
   "_ClaimVerifyCheckReq",
   "_ClaimVerifyStartReq",
@@ -104,7 +107,7 @@
   "_DocSendReq",
   "_DocSplitDoc",
   "_DocSplitExportReq",
-  "_DocSplitTaskReq",
+  "_DocSplitRetypeReq",
   "_DocTickReq",
   "_DocTypeReq",
   "_DocsCompleteReq",
@@ -199,6 +202,8 @@
   "_doc_ext_for",
   "_doc_magic_ok",
   "_doc_share_key",
+  "_docsplit_job",
+  "_docsplit_pages",
   "_enrich_note_attachments",
   "_esc_html",
   "_file_consent_pdf",
@@ -629,6 +634,27 @@
    "func": "nidaan_privacy_page",
    "paths": [
     "/nidaan/privacy"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_PAGE_ETAG",
+    "_etag_matches",
+    "_is_nidaan_host",
+    "_nidaan_page",
+    "_page_etag",
+    "app",
+    "static_dir"
+   ],
+   "uses": [
+    "_is_nidaan_host",
+    "_nidaan_page",
+    "app"
+   ]
+  },
+  {
+   "func": "nidaan_cookies_page",
+   "paths": [
+    "/nidaan/cookies"
    ],
    "product": "nidaan",
    "reaches": [
@@ -5122,6 +5148,62 @@
    ]
   },
   {
+   "func": "ops_doc_content",
+   "paths": [
+    "/nidaan/ops/api/doc/{slug}"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_DOC_KEYS",
+    "_STAFF_ACTIVE_TTL",
+    "_actor_label",
+    "_get_staff_from_request",
+    "_is_nidaan_host",
+    "_ops_audit",
+    "_require_staff",
+    "_staff_active_cache",
+    "_staff_still_active",
+    "app",
+    "logger",
+    "static_dir"
+   ],
+   "uses": [
+    "_DOC_KEYS",
+    "_actor_label",
+    "_is_nidaan_host",
+    "_ops_audit",
+    "_require_staff",
+    "app",
+    "logger",
+    "static_dir"
+   ]
+  },
+  {
+   "func": "ops_doc_readers",
+   "paths": [
+    "/nidaan/ops/api/doc/readers"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_DOC_KEYS",
+    "_STAFF_ACTIVE_TTL",
+    "_get_staff_from_request",
+    "_is_nidaan_host",
+    "_require_staff",
+    "_staff_active_cache",
+    "_staff_still_active",
+    "app",
+    "logger"
+   ],
+   "uses": [
+    "_DOC_KEYS",
+    "_is_nidaan_host",
+    "_require_staff",
+    "app",
+    "logger"
+   ]
+  },
+  {
    "func": "nidaan_doc_feedback_get",
    "paths": [
     "/nidaan/api/doc/feedback"
@@ -8815,6 +8897,185 @@
    ]
   },
   {
+   "func": "ops_docsplit_jobs",
+   "paths": [
+    "/nidaan/ops/api/docsplit/jobs"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_STAFF_ACTIVE_TTL",
+    "_get_staff_from_request",
+    "_is_nidaan_host",
+    "_require_staff",
+    "_staff_active_cache",
+    "_staff_still_active",
+    "app"
+   ],
+   "uses": [
+    "_is_nidaan_host",
+    "_require_staff",
+    "app"
+   ]
+  },
+  {
+   "func": "ops_docsplit_close",
+   "paths": [
+    "/nidaan/ops/api/docsplit/{job}/close"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_STAFF_ACTIVE_TTL",
+    "_actor_label",
+    "_get_staff_from_request",
+    "_is_nidaan_host",
+    "_ops_audit",
+    "_require_staff",
+    "_staff_active_cache",
+    "_staff_still_active",
+    "app",
+    "limiter"
+   ],
+   "uses": [
+    "_is_nidaan_host",
+    "_ops_audit",
+    "_require_staff",
+    "app",
+    "limiter"
+   ]
+  },
+  {
+   "func": "ops_claim_doc_auto",
+   "paths": [
+    "/nidaan/ops/api/claims/{claim_id}/doc-auto"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_ClaimAutoReq",
+    "_STAFF_ACTIVE_TTL",
+    "_actor_label",
+    "_get_staff_from_request",
+    "_is_nidaan_host",
+    "_ops_audit",
+    "_require_staff",
+    "_staff_active_cache",
+    "_staff_still_active",
+    "app",
+    "limiter"
+   ],
+   "uses": [
+    "_ClaimAutoReq",
+    "_actor_label",
+    "_is_nidaan_host",
+    "_ops_audit",
+    "_require_staff",
+    "app",
+    "limiter"
+   ]
+  },
+  {
+   "func": "ops_claim_doc_page",
+   "paths": [
+    "/nidaan/ops/api/claims/{claim_id}/doc-page"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_ClaimPageTypeReq",
+    "_STAFF_ACTIVE_TTL",
+    "_actor_label",
+    "_get_staff_from_request",
+    "_is_nidaan_host",
+    "_ops_audit",
+    "_require_staff",
+    "_staff_active_cache",
+    "_staff_still_active",
+    "app",
+    "limiter"
+   ],
+   "uses": [
+    "_ClaimPageTypeReq",
+    "_actor_label",
+    "_is_nidaan_host",
+    "_ops_audit",
+    "_require_staff",
+    "app",
+    "limiter"
+   ]
+  },
+  {
+   "func": "ops_claim_doc_sets",
+   "paths": [
+    "/nidaan/ops/api/claims/{claim_id}/doc-sets"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_STAFF_ACTIVE_TTL",
+    "_get_staff_from_request",
+    "_is_nidaan_host",
+    "_require_staff",
+    "_staff_active_cache",
+    "_staff_still_active",
+    "app"
+   ],
+   "uses": [
+    "_is_nidaan_host",
+    "_require_staff",
+    "app"
+   ]
+  },
+  {
+   "func": "ops_claim_doc_set_pdf",
+   "paths": [
+    "/nidaan/ops/api/claims/{claim_id}/doc-sets/{set_key}"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_STAFF_ACTIVE_TTL",
+    "_actor_label",
+    "_get_staff_from_request",
+    "_is_nidaan_host",
+    "_ops_audit",
+    "_require_staff",
+    "_staff_active_cache",
+    "_staff_still_active",
+    "app"
+   ],
+   "uses": [
+    "_is_nidaan_host",
+    "_ops_audit",
+    "_require_staff",
+    "app"
+   ]
+  },
+  {
+   "func": "ops_claim_doc_exclude",
+   "paths": [
+    "/nidaan/ops/api/claims/{claim_id}/doc-exclude"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_ClaimExcludeReq",
+    "_STAFF_ACTIVE_TTL",
+    "_actor_label",
+    "_get_staff_from_request",
+    "_is_nidaan_host",
+    "_ops_audit",
+    "_require_staff",
+    "_staff_active_cache",
+    "_staff_still_active",
+    "app",
+    "limiter"
+   ],
+   "uses": [
+    "_ClaimExcludeReq",
+    "_actor_label",
+    "_is_nidaan_host",
+    "_ops_audit",
+    "_require_staff",
+    "app",
+    "limiter"
+   ]
+  },
+  {
    "func": "ops_docsplit_upload",
    "paths": [
     "/nidaan/ops/api/docsplit/upload"
@@ -8831,11 +9092,147 @@
     "_staff_active_cache",
     "_staff_still_active",
     "app",
-    "limiter"
+    "limiter",
+    "logger"
    ],
    "uses": [
     "_doc_magic_ok",
     "_is_nidaan_host",
+    "_require_staff",
+    "app",
+    "limiter",
+    "logger"
+   ]
+  },
+  {
+   "func": "ops_docsplit_pages",
+   "paths": [
+    "/nidaan/ops/api/docsplit/{job}/pages"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_STAFF_ACTIVE_TTL",
+    "_docsplit_job",
+    "_docsplit_pages",
+    "_get_staff_from_request",
+    "_is_nidaan_host",
+    "_require_staff",
+    "_staff_active_cache",
+    "_staff_still_active",
+    "app"
+   ],
+   "uses": [
+    "_docsplit_job",
+    "_docsplit_pages",
+    "_is_nidaan_host",
+    "_require_staff",
+    "app"
+   ]
+  },
+  {
+   "func": "ops_docsplit_retype",
+   "paths": [
+    "/nidaan/ops/api/docsplit/{job}/retype"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_DocSplitRetypeReq",
+    "_STAFF_ACTIVE_TTL",
+    "_actor_label",
+    "_docsplit_job",
+    "_docsplit_pages",
+    "_get_staff_from_request",
+    "_is_nidaan_host",
+    "_ops_audit",
+    "_require_staff",
+    "_staff_active_cache",
+    "_staff_still_active",
+    "app",
+    "limiter"
+   ],
+   "uses": [
+    "_DocSplitRetypeReq",
+    "_actor_label",
+    "_docsplit_job",
+    "_docsplit_pages",
+    "_is_nidaan_host",
+    "_ops_audit",
+    "_require_staff",
+    "app",
+    "limiter"
+   ]
+  },
+  {
+   "func": "ops_docsplit_set",
+   "paths": [
+    "/nidaan/ops/api/docsplit/{job}/set/{set_key}"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_STAFF_ACTIVE_TTL",
+    "_actor_label",
+    "_docsplit_job",
+    "_docsplit_pages",
+    "_get_staff_from_request",
+    "_is_nidaan_host",
+    "_ops_audit",
+    "_require_staff",
+    "_staff_active_cache",
+    "_staff_still_active",
+    "app"
+   ],
+   "uses": [
+    "_docsplit_job",
+    "_docsplit_pages",
+    "_is_nidaan_host",
+    "_ops_audit",
+    "_require_staff",
+    "app"
+   ]
+  },
+  {
+   "func": "ops_docsplit_rules",
+   "paths": [
+    "/nidaan/ops/api/docsplit/rules"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_STAFF_ACTIVE_TTL",
+    "_get_staff_from_request",
+    "_is_nidaan_host",
+    "_require_staff",
+    "_staff_active_cache",
+    "_staff_still_active",
+    "app"
+   ],
+   "uses": [
+    "_is_nidaan_host",
+    "_require_staff",
+    "app"
+   ]
+  },
+  {
+   "func": "ops_docsplit_rule_undo",
+   "paths": [
+    "/nidaan/ops/api/docsplit/rules/{rule_id}/undo"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_STAFF_ACTIVE_TTL",
+    "_actor_label",
+    "_get_staff_from_request",
+    "_is_nidaan_host",
+    "_ops_audit",
+    "_require_staff",
+    "_staff_active_cache",
+    "_staff_still_active",
+    "app",
+    "limiter"
+   ],
+   "uses": [
+    "_actor_label",
+    "_is_nidaan_host",
+    "_ops_audit",
     "_require_staff",
     "app",
     "limiter"
@@ -8849,6 +9246,7 @@
    "product": "nidaan",
    "reaches": [
     "_STAFF_ACTIVE_TTL",
+    "_docsplit_job",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
@@ -8857,6 +9255,7 @@
     "app"
    ],
    "uses": [
+    "_docsplit_job",
     "_is_nidaan_host",
     "_require_staff",
     "app"
@@ -8873,6 +9272,7 @@
     "_DocSplitExportReq",
     "_STAFF_ACTIVE_TTL",
     "_actor_label",
+    "_docsplit_job",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
@@ -8883,6 +9283,7 @@
    ],
    "uses": [
     "_DocSplitExportReq",
+    "_docsplit_job",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
@@ -8898,6 +9299,7 @@
    "reaches": [
     "_STAFF_ACTIVE_TTL",
     "_actor_label",
+    "_docsplit_job",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
@@ -8907,6 +9309,7 @@
     "app"
    ],
    "uses": [
+    "_docsplit_job",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
@@ -17527,372 +17930,6 @@
     "app",
     "logger"
    ]
-  },
-  {
-   "func": "nidaan_cookies_page",
-   "paths": [
-    "/nidaan/cookies"
-   ],
-   "product": "nidaan",
-   "reaches": [
-    "_PAGE_ETAG",
-    "_etag_matches",
-    "_is_nidaan_host",
-    "_nidaan_page",
-    "_page_etag",
-    "app",
-    "static_dir"
-   ],
-   "uses": [
-    "_is_nidaan_host",
-    "_nidaan_page",
-    "app"
-   ]
-  },
-  {
-   "func": "ops_docsplit_jobs",
-   "paths": [
-    "/nidaan/ops/api/docsplit/jobs"
-   ],
-   "product": "nidaan",
-   "reaches": [
-    "_STAFF_ACTIVE_TTL",
-    "_doc_ext_for",
-    "_doc_magic_ok",
-    "_get_staff_from_request",
-    "_is_nidaan_host",
-    "_require_staff",
-    "_sniff_file",
-    "_staff_active_cache",
-    "_staff_still_active",
-    "app",
-    "limiter"
-   ],
-   "uses": [
-    "_doc_magic_ok",
-    "_is_nidaan_host",
-    "_require_staff",
-    "app",
-    "limiter"
-   ]
-  },
-  {
-   "func": "ops_docsplit_close",
-   "paths": [
-    "/nidaan/ops/api/docsplit/{job}/close"
-   ],
-   "product": "nidaan",
-   "reaches": [
-    "_STAFF_ACTIVE_TTL",
-    "_doc_ext_for",
-    "_doc_magic_ok",
-    "_get_staff_from_request",
-    "_is_nidaan_host",
-    "_require_staff",
-    "_sniff_file",
-    "_staff_active_cache",
-    "_staff_still_active",
-    "app",
-    "limiter"
-   ],
-   "uses": [
-    "_doc_magic_ok",
-    "_is_nidaan_host",
-    "_require_staff",
-    "app",
-    "limiter"
-   ]
-  },
-  {
-   "func": "ops_docsplit_rules",
-   "paths": [
-    "/nidaan/ops/api/docsplit/rules"
-   ],
-   "product": "nidaan",
-   "reaches": [
-    "_STAFF_ACTIVE_TTL",
-    "_doc_ext_for",
-    "_doc_magic_ok",
-    "_get_staff_from_request",
-    "_is_nidaan_host",
-    "_require_staff",
-    "_sniff_file",
-    "_staff_active_cache",
-    "_staff_still_active",
-    "app",
-    "limiter"
-   ],
-   "uses": [
-    "_doc_magic_ok",
-    "_is_nidaan_host",
-    "_require_staff",
-    "app",
-    "limiter"
-   ]
-  },
-  {
-   "func": "ops_docsplit_pages",
-   "paths": [
-    "/nidaan/ops/api/docsplit/{job}/pages"
-   ],
-   "product": "nidaan",
-   "reaches": [
-    "_STAFF_ACTIVE_TTL",
-    "_doc_ext_for",
-    "_doc_magic_ok",
-    "_get_staff_from_request",
-    "_is_nidaan_host",
-    "_require_staff",
-    "_sniff_file",
-    "_staff_active_cache",
-    "_staff_still_active",
-    "app",
-    "limiter"
-   ],
-   "uses": [
-    "_doc_magic_ok",
-    "_is_nidaan_host",
-    "_require_staff",
-    "app",
-    "limiter"
-   ]
-  },
-  {
-   "func": "ops_docsplit_set",
-   "paths": [
-    "/nidaan/ops/api/docsplit/{job}/set/{set_key}"
-   ],
-   "product": "nidaan",
-   "reaches": [
-    "_STAFF_ACTIVE_TTL",
-    "_doc_ext_for",
-    "_doc_magic_ok",
-    "_get_staff_from_request",
-    "_is_nidaan_host",
-    "_require_staff",
-    "_sniff_file",
-    "_staff_active_cache",
-    "_staff_still_active",
-    "app",
-    "limiter"
-   ],
-   "uses": [
-    "_doc_magic_ok",
-    "_is_nidaan_host",
-    "_require_staff",
-    "app",
-    "limiter"
-   ]
-  },
-  {
-   "func": "ops_docsplit_rule_undo",
-   "paths": [
-    "/nidaan/ops/api/docsplit/rules/{rule_id}/undo"
-   ],
-   "product": "nidaan",
-   "reaches": [
-    "_STAFF_ACTIVE_TTL",
-    "_doc_ext_for",
-    "_doc_magic_ok",
-    "_get_staff_from_request",
-    "_is_nidaan_host",
-    "_require_staff",
-    "_sniff_file",
-    "_staff_active_cache",
-    "_staff_still_active",
-    "app",
-    "limiter"
-   ],
-   "uses": [
-    "_doc_magic_ok",
-    "_is_nidaan_host",
-    "_require_staff",
-    "app",
-    "limiter"
-   ]
-  },
-  {
-   "func": "ops_docsplit_retype",
-   "paths": [
-    "/nidaan/ops/api/docsplit/{job}/retype"
-   ],
-   "product": "nidaan",
-   "reaches": [
-    "_STAFF_ACTIVE_TTL",
-    "_doc_ext_for",
-    "_doc_magic_ok",
-    "_get_staff_from_request",
-    "_is_nidaan_host",
-    "_require_staff",
-    "_sniff_file",
-    "_staff_active_cache",
-    "_staff_still_active",
-    "app",
-    "limiter"
-   ],
-   "uses": [
-    "_doc_magic_ok",
-    "_is_nidaan_host",
-    "_require_staff",
-    "app",
-    "limiter"
-   ]
-  },
-  {
-   "func": "ops_doc_readers",
-   "paths": [
-    "/nidaan/ops/api/doc/readers"
-   ],
-   "product": "nidaan",
-   "reaches": [
-    "_STAFF_ACTIVE_TTL",
-    "_get_staff_from_request",
-    "_is_nidaan_host",
-    "_require_staff",
-    "_staff_active_cache",
-    "_staff_still_active",
-    "app"
-   ],
-   "uses": [
-    "_is_nidaan_host",
-    "_require_staff",
-    "app"
-   ]
-  },
-  {
-   "func": "ops_doc_content",
-   "paths": [
-    "/nidaan/ops/api/doc/{slug}"
-   ],
-   "product": "nidaan",
-   "reaches": [
-    "_STAFF_ACTIVE_TTL",
-    "_doc_ext_for",
-    "_doc_magic_ok",
-    "_get_staff_from_request",
-    "_is_nidaan_host",
-    "_require_staff",
-    "_sniff_file",
-    "_staff_active_cache",
-    "_staff_still_active",
-    "app",
-    "limiter"
-   ],
-   "uses": [
-    "_doc_magic_ok",
-    "_is_nidaan_host",
-    "_require_staff",
-    "app",
-    "limiter"
-   ]
-  },
-  {
-   "func": "ops_claim_doc_sets",
-   "paths": [
-    "/nidaan/ops/api/claims/{claim_id}/doc-sets"
-   ],
-   "product": "nidaan",
-   "reaches": [
-    "_STAFF_ACTIVE_TTL",
-    "_doc_ext_for",
-    "_doc_magic_ok",
-    "_get_staff_from_request",
-    "_is_nidaan_host",
-    "_require_staff",
-    "_sniff_file",
-    "_staff_active_cache",
-    "_staff_still_active",
-    "app",
-    "limiter"
-   ],
-   "uses": [
-    "_doc_magic_ok",
-    "_is_nidaan_host",
-    "_require_staff",
-    "app",
-    "limiter"
-   ]
-  },
-  {
-   "func": "ops_claim_doc_set_pdf",
-   "paths": [
-    "/nidaan/ops/api/claims/{claim_id}/doc-sets/{set_key}"
-   ],
-   "product": "nidaan",
-   "reaches": [
-    "_STAFF_ACTIVE_TTL",
-    "_doc_ext_for",
-    "_doc_magic_ok",
-    "_get_staff_from_request",
-    "_is_nidaan_host",
-    "_require_staff",
-    "_sniff_file",
-    "_staff_active_cache",
-    "_staff_still_active",
-    "app",
-    "limiter"
-   ],
-   "uses": [
-    "_doc_magic_ok",
-    "_is_nidaan_host",
-    "_require_staff",
-    "app",
-    "limiter"
-   ]
-  },
-  {
-   "func": "ops_claim_doc_auto",
-   "paths": [
-    "/nidaan/ops/api/claims/{claim_id}/doc-auto"
-   ],
-   "product": "nidaan",
-   "reaches": [
-    "_STAFF_ACTIVE_TTL",
-    "_doc_ext_for",
-    "_doc_magic_ok",
-    "_get_staff_from_request",
-    "_is_nidaan_host",
-    "_require_staff",
-    "_sniff_file",
-    "_staff_active_cache",
-    "_staff_still_active",
-    "app",
-    "limiter"
-   ],
-   "uses": [
-    "_doc_magic_ok",
-    "_is_nidaan_host",
-    "_require_staff",
-    "app",
-    "limiter"
-   ]
-  },
-  {
-   "func": "ops_claim_doc_page",
-   "paths": [
-    "/nidaan/ops/api/claims/{claim_id}/doc-page"
-   ],
-   "product": "nidaan",
-   "reaches": [
-    "_STAFF_ACTIVE_TTL",
-    "_doc_ext_for",
-    "_doc_magic_ok",
-    "_get_staff_from_request",
-    "_is_nidaan_host",
-    "_require_staff",
-    "_sniff_file",
-    "_staff_active_cache",
-    "_staff_still_active",
-    "app",
-    "limiter"
-   ],
-   "uses": [
-    "_doc_magic_ok",
-    "_is_nidaan_host",
-    "_require_staff",
-    "app",
-    "limiter"
-   ]
   }
  ],
  "shared_core": [
@@ -17919,6 +17956,7 @@
   "NidaanReviewPayByIdReq",
   "RUN_SINGLETONS",
   "SERVER_HOST",
+  "_DOC_LOADER_HTML",
   "_NidaanMsgReq",
   "_QuickTaskNoteReq",
   "_RingHandler",
@@ -18287,6 +18325,7 @@
   "nidaan_claim_verify_start",
   "nidaan_claim_verify_where",
   "nidaan_claimshield_status",
+  "nidaan_cookies_page",
   "nidaan_dashboard_page",
   "nidaan_delete_claim_doc",
   "nidaan_delete_review_doc",
@@ -18438,6 +18477,11 @@
   "ops_case_report",
   "ops_case_secret",
   "ops_claim_consent_proof",
+  "ops_claim_doc_auto",
+  "ops_claim_doc_exclude",
+  "ops_claim_doc_page",
+  "ops_claim_doc_set_pdf",
+  "ops_claim_doc_sets",
   "ops_claim_involve",
   "ops_claim_last_ask",
   "ops_claim_mention_candidates",
@@ -18480,7 +18524,9 @@
   "ops_delete_inactive_staff",
   "ops_delete_staff",
   "ops_deliver_review",
+  "ops_doc_content",
   "ops_doc_desk",
+  "ops_doc_readers",
   "ops_doc_window",
   "ops_doc_window_add",
   "ops_doc_window_called",
@@ -18493,10 +18539,15 @@
   "ops_doc_window_tick",
   "ops_doc_window_type",
   "ops_docs_complete",
-  "ops_docsplit_ai_task",
+  "ops_docsplit_close",
   "ops_docsplit_collate",
   "ops_docsplit_export",
-  "ops_docsplit_tasks",
+  "ops_docsplit_jobs",
+  "ops_docsplit_pages",
+  "ops_docsplit_retype",
+  "ops_docsplit_rule_undo",
+  "ops_docsplit_rules",
+  "ops_docsplit_set",
   "ops_docsplit_thumb",
   "ops_docsplit_upload",
   "ops_errors",

@@ -6296,7 +6296,7 @@ window.dsLoadPages=dsLoadPages; window.dsPick=dsPick; window.dsCancelPick=dsCanc
 window.dsRetype=dsRetype; window.dsGetSet=dsGetSet;
 window.dsBigPage=dsBigPage;
 window.dcSetsLoad=dcSetsLoad; window.dcSetGet=dcSetGet; window.dcAutoSet=dcAutoSet;
-window.dcPagePick=dcPagePick; window.dcPageCancel=dcPageCancel; window.dcPageSet=dcPageSet;
+window.dcPageHold=dcPageHold; window.dcPagePick=dcPagePick; window.dcPageCancel=dcPageCancel; window.dcPageSet=dcPageSet;
 window.dsToggleRules=dsToggleRules; window.dsLoadRules=dsLoadRules;
 window.dsUndoRule=dsUndoRule;
 window.loadDocSplit=loadDocSplit; window.dsUpload=dsUpload; window.dsAddDoc=dsAddDoc; window.dsExport=dsExport; window.dsCollate=dsCollate;
@@ -16871,23 +16871,37 @@ function dcSetsRender(){
     const who = p.by_person ? (' · set by ' + esc(p.by_person))
               : (p.taught_by ? (' · rule by ' + esc(p.taught_by)) : '');
     const unsure = (arr.unsure_pages || []).indexOf(p.page) >= 0;
-    return '<div class="dcrow" style="' + (unsure ? 'background:var(--nd-bg-surface-2)' : '') + '">'
+    // A held-back page stays in the list, struck through, with who held it back - hiding it
+    // would make it look as though it never arrived.
+    const held = !!p.excluded;
+    return '<div class="dcrow" style="' + (unsure ? 'background:var(--nd-bg-surface-2);' : '')
+      +   (held ? 'opacity:.65;' : '') + '">'
       + '<div style="flex:1;min-width:150px">'
-      +   '<b>' + esc(p.label || 'Something else') + '</b>' + (p.by_person ? ' ✓' : '')
+      +   '<b' + (held ? ' style="text-decoration:line-through"' : '') + '>'
+      +     esc(p.label || 'Something else') + '</b>' + (p.by_person ? ' ✓' : '')
       +   '<div class="bdsub">' + esc(p.doc_name || 'document')
-      +     (p.page_in_doc ? (' · page ' + p.page_in_doc) : '') + who + '</div>'
+      +     (p.page_in_doc ? (' · page ' + p.page_in_doc) : '') + who
+      +     (held ? ' · <b>not sent</b> — held back by ' + esc(p.excluded_by || 'a colleague') : '')
+      +   '</div>'
       + '</div>'
       + '<button class="l2mv g" onclick="dcPagePick(' + (p.doc_id || 0) + ','
-      +   (p.page_in_doc || 0) + ')">Change</button></div>';
+      +   (p.page_in_doc || 0) + ')">Change</button>'
+      + '<button class="l2mv g" onclick="dcPageHold(' + (p.doc_id || 0) + ','
+      +   (p.page_in_doc || 0) + ',' + (held ? 'false' : 'true') + ')">'
+      +   (held ? 'Send again' : 'Don\'t send') + '</button></div>';
   }).join('');
 
-  const isAdmin = (_role === 'super_admin' || _role === 'sub_super_admin');
+  const wasOpen = !!(document.getElementById('dcPagesWrap') || {}).open;
+  const heldCount = (d.pages || []).filter(function(p){ return p.excluded; }).length;
 
   box.innerHTML = '<div class="dch">Ready to send · ' + d.documents + ' document(s)</div>'
     + head
     + sets
     + missing
-    + '<details style="margin-top:.6rem"><summary style="cursor:pointer;font-size:.82rem">'
+    + (heldCount ? '<div class="bdsub" style="margin-top:.4rem">🚫 ' + heldCount
+        + ' page(s) held back — they are not in any set. See the list below.</div>' : '')
+    + '<details id="dcPagesWrap" style="margin-top:.6rem"' + (wasOpen ? ' open' : '')
+    +   '><summary style="cursor:pointer;font-size:.82rem">'
     +   'What each page was read as (' + (d.pages || []).length + ')</summary>'
     +   '<div id="dcPages">' + pages + '</div></details>'
     + '<label class="dcdone" style="margin-top:.6rem">'
@@ -16898,7 +16912,6 @@ function dcSetsRender(){
     +   'unclear, and then it asks you. You can always change a page by hand.</span></span></label>'
     + '<div style="margin-top:.5rem"><button class="l2mv g" onclick="dcSetsLoad(1)">'
     +   '↻ Read the pages again</button>'
-    +   (isAdmin ? '' : '')
     + '</div>'
     + '<div id="dcSetsMsg" class="bdsub" style="margin-top:.35rem"></div>';
 }
@@ -16963,6 +16976,23 @@ function dcPagePick(docId, pageInDoc){
   wrap.appendChild(box);
 }
 
+// Hold a page back from every set, or put it back. Confirmed on the way out, because a page
+// silently missing from a legal bundle is the harder mistake to notice.
+async function dcPageHold(docId, pageInDoc, hold){
+  if (hold && !confirm('Keep this page out of every set?\n\nIt stays on the claim and in this '
+      + 'list, and you can put it back any time.')) return;
+  const m = document.getElementById('dcSetsMsg');
+  try{
+    const r = await API('/claims/' + _dcClaim + '/doc-exclude', {method:'POST',
+      body: JSON.stringify({doc_id: docId, page_in_doc: pageInDoc, excluded: !!hold})});
+    if (!r.ok){ if (m) m.textContent = 'Could not change that.'; return; }
+    _dcSets = await r.json();
+    dcSetsRender();
+    const m2 = document.getElementById('dcSetsMsg');
+    if (m2) m2.textContent = hold ? 'That page will not be sent.' : 'That page is back in the sets.';
+  }catch(e){ if (m) m.textContent = 'Could not change that.'; }
+}
+
 function dcPageCancel(){
   const b = document.getElementById('dcPickBox');
   if (b) b.remove();
@@ -16982,7 +17012,9 @@ async function dcPageSet(docId, pageInDoc, type){
     }
     _dcSets = await r.json();
     dcSetsRender();
-    if (m) m.textContent = teach ? 'Saved, and remembered for next time.' : 'Saved.';
+    // The render replaced the message line; write to the new one.
+    const m2 = document.getElementById('dcSetsMsg');
+    if (m2) m2.textContent = teach ? 'Saved, and remembered for next time.' : 'Saved.';
   }catch(e){ if (m) m.textContent = 'Could not change that page.'; }
 }
 

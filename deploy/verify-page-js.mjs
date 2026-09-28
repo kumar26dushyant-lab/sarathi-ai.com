@@ -106,7 +106,13 @@ for (const file of files) {
     // printing "nothing reported". It then missed a real ReferenceError that killed every
     // feature below it. So the placeholder alone decides nothing: the block is skipped only if
     // it ALSO fails to compile, which is what an unrendered template actually does.
-    if (/\{\{[A-Z0-9_]+\}\}/.test(m[2]) && !compiles(m[2])) {
+    //
+    // And failing to compile is not enough either (29 Sep). The ops script MENTIONS {{1}}, so a
+    // real syntax error in it - an unescaped apostrophe in "Don't send" - made it look like a
+    // template and the whole page was skipped with "0 problem(s)". A template compiles once its
+    // placeholders are filled in; a broken script still does not, and that one is reported.
+    const PH = /\{\{[A-Z0-9_]+\}\}/g;
+    if (PH.test(m[2]) && !compiles(m[2]) && compiles(m[2].replace(PH, "null"))) {
       console.log(`  (skipping a templated script block in ${file} - {{...}} placeholders)`);
       continue;
     }

@@ -3585,6 +3585,22 @@ async def init_db():
             "CREATE INDEX IF NOT EXISTS idx_nidaan_claim_page_types_claim "
             "ON nidaan_claim_page_types(claim_id)")
 
+        # "Don't send this page" - kept OUT of every set without changing what the page is. An
+        # inclusion decision, not a type one: a policy copy that must not go to the Ombudsman is
+        # still a policy copy. `excluded` is flipped rather than the row deleted, so the fact
+        # that somebody once held a page back is never lost.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nidaan_claim_page_excluded (
+                claim_id    INTEGER NOT NULL,
+                doc_id      INTEGER NOT NULL,
+                page_in_doc INTEGER NOT NULL,
+                excluded    INTEGER NOT NULL DEFAULT 1,
+                set_by      TEXT NOT NULL DEFAULT '',
+                set_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (claim_id, doc_id, page_in_doc)
+            )
+        """)
+
         # Backfill: store the actual Razorpay payment_id so refunds have something
         # to call against (column razorpay_subscription_id holds the order_id, not payment_id).
         try:

@@ -84,6 +84,22 @@ check('teaching is offered only to an admin',
 check('...and a team member is told what to do instead',
       /Ask an admin to make it a rule/.test(box));
 
+console.log('\n"Don\'t send this page"\n');
+
+check('each page has a Don\'t send button', /Don\\'t send/.test(box) && /dcPageHold\(/.test(box));
+check('...which reads Send again once held back', /Send again/.test(box));
+check('...and asks first before holding a page back',
+      /async function dcPageHold[\s\S]{0,200}confirm\(/.test(box),
+      'a page silently missing from a legal bundle is the hard mistake to notice');
+check('...keyed by document and page INSIDE it',
+      /doc-exclude[\s\S]{0,160}page_in_doc/.test(box));
+check('a held-back page stays in the list, struck through, with who held it back',
+      /line-through/.test(box) && /excluded_by/.test(box),
+      'hiding it would look as though it never arrived');
+check('...and the box says how many are held back', /page\(s\) held back/.test(box));
+check('the page list stays open after a change', /dcPagesWrap[\s\S]{0,40}\.open/.test(box));
+check('dcPageHold is reachable from the onclick', /window\.dcPageHold=dcPageHold/.test(html));
+
 console.log('\nNothing here deletes\n');
 
 check('no delete call anywhere in the sets box',

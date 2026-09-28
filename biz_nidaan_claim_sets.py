@@ -218,22 +218,13 @@ async def sets_for_claim(claim_id: int, claim_type: str = "", *, force: bool = F
     """
     import biz_nidaan_doc_sets as sets
 
-    read = await read_claim(claim_id, force=force)
-    pages = read["pages"]
-
-    # WHAT A PERSON SET WINS, always, and after the fact. Applied here rather than baked into the
-    # cache so a correction takes effect immediately and survives every later reading.
-    typed = await page_types(claim_id)
-    for pg in pages:
-        key = (pg.get("doc_id"), pg.get("page_in_doc"))
-        if key in typed:
-            pg["was"] = pg.get("doc_type")
-            pg["doc_type"] = typed[key]["doc_type"]
-            pg["confidence"] = 1.0
-            pg["by_person"] = typed[key]["set_by"] or "a colleague"
+    read, pages = await final_pages(claim_id, force=force)
+    # Excluded pages are shown on the screen (so somebody can put them back) but never composed
+    # into a set.
+    sendable = [p for p in pages if not p.get("excluded")]
 
     out_sets = []
-    for st in sets.compose_all(pages):
+    for st in sets.compose_all(sendable):
         out_sets.append({
             "key": st["key"], "label": st["label"], "why": st.get("why") or "",
             "pages": [p.get("page") for p in st.get("pages") or []],
@@ -266,7 +257,9 @@ async def sets_for_claim(claim_id: int, claim_type: str = "", *, force: bool = F
                    "locked": bool(p.get("locked")), "taught_by": p.get("taught_by") or "",
                    "doc_id": p.get("doc_id"), "doc_name": p.get("doc_name") or "",
                    "page_in_doc": p.get("page_in_doc"),
-                   "by_person": p.get("by_person") or "", "was": p.get("was") or ""}
+                   "by_person": p.get("by_person") or "", "was": p.get("was") or "",
+                   "excluded": bool(p.get("excluded")),
+                   "excluded_by": p.get("excluded_by") or ""}
                   for p in pages],
         "sets": out_sets,
         "still_needed": still_needed,
@@ -277,7 +270,9 @@ async def sets_for_claim(claim_id: int, claim_type: str = "", *, force: bool = F
         # a document type never means editing the page too.
         "types": [{"key": k, "label": sets.type_label(k)} for k in sets.DOC_TYPES],
         "automation": await automation_on(claim_id),
-        "arrangement": arrangement_state(pages),
+        # A page somebody deliberately held back is a decision already made - it must not keep
+        # the claim in "please check".
+        "arrangement": arrangement_state(sendable),
     }
 
 # ── the switch, the corrections, and the arranging ───────────────────────────
@@ -410,3 +405,119 @@ async def remark(claim_id: int, summary: str, actor: str = "Document arranging")
         await bk._log(int(claim_id), summary, actor)
     except Exception as e:  # noqa: BLE001
         logger.info("claim %s: could not write a remark: %s", claim_id, e)
+
+
+# ── one answer to "what is in this set", for the screen AND the download ─────
+async def final_pages(claim_id: int, *, force: bool = False) -> tuple:
+    """The reading, with everything a person decided laid over it. Returns (read, pages).
+
+    The single place corrections and exclusions are applied. The screen and the PDF download
+    both come through here - they used not to, and a corrected page showed correctly on screen
+    and then downloaded in its old place.
+    """
+    read = await read_claim(claim_id, force=force)
+    # Copies, so laying decisions over them never writes into the cached reading.
+    pages = [dict(p) for p in read["pages"]]
+
+    typed = await page_types(claim_id)
+    held = await excluded_pages(claim_id)
+    for pg in pages:
+        key = (pg.get("doc_id"), pg.get("page_in_doc"))
+        if key in typed:
+            pg["was"] = pg.get("doc_type")
+            pg["doc_type"] = typed[key]["doc_type"]
+            pg["confidence"] = 1.0
+            pg["by_person"] = typed[key]["set_by"] or "a colleague"
+        if key in held:
+            pg["excluded"] = True
+            pg["excluded_by"] = held[key] or "a colleague"
+    return read, pages
+
+
+async def excluded_pages(claim_id: int) -> dict:
+    """{(doc_id, page_in_doc): set_by} for every page currently held back from the sets."""
+    try:
+        async with aiosqlite.connect(_db()) as c:
+            rows = await (await c.execute(
+                "SELECT doc_id, page_in_doc, set_by FROM nidaan_claim_page_excluded "
+                "WHERE claim_id=? AND excluded=1", (int(claim_id),))).fetchall()
+        return {(int(r[0]), int(r[1])): r[2] for r in rows}
+    except Exception as e:  # noqa: BLE001
+        # Unreadable means nothing is held back - which errs towards SENDING a page. That is the
+        # safer failure here: a missing page is noticed when the set is checked, while a page
+        # silently dropped from a legal bundle may never be.
+        logger.info("claim %s: could not read held-back pages: %s", claim_id, e)
+        return {}
+
+
+async def set_excluded(claim_id: int, doc_id: int, page_in_doc: int,
+                       excluded: bool, by: str) -> bool:
+    """Hold a page back from every set, or put it back. Never deletes the row."""
+    try:
+        async with aiosqlite.connect(_db()) as c:
+            await c.execute(
+                "INSERT INTO nidaan_claim_page_excluded "
+                "(claim_id, doc_id, page_in_doc, excluded, set_by, set_at) "
+                "VALUES (?,?,?,?,?,CURRENT_TIMESTAMP) "
+                "ON CONFLICT(claim_id, doc_id, page_in_doc) DO UPDATE SET "
+                "excluded=excluded.excluded, set_by=excluded.set_by, set_at=CURRENT_TIMESTAMP",
+                (int(claim_id), int(doc_id), int(page_in_doc), 1 if excluded else 0,
+                 (by or "")[:80]))
+            await c.commit()
+        return True
+    except Exception as e:  # noqa: BLE001
+        logger.warning("claim %s: could not change a held-back page: %s", claim_id, e)
+        return False
+
+
+async def build_set_pdf(claim_id: int, set_key: str) -> bytes:
+    """One set as a PDF, built page by page from (document, page inside it).
+
+    NOT by merged page number. The old download re-merged every file and trusted that its page
+    47 was the reading's page 47 - true only until one file failed to open, after which every
+    later page would have come from the wrong document.
+    """
+    import fitz
+    import biz_doc_splitter as split
+    import biz_nidaan_doc_sets as sets
+
+    _read, pages = await final_pages(claim_id)
+    sendable = [p for p in pages if not p.get("excluded")]
+    composed = sets.compose(sendable, set_key)
+    order = composed.get("pages") or []
+    if not order:
+        return b""
+
+    docs = {d.get("doc_id"): d for d in await claim_documents(claim_id)}
+    docs_dir = os.getenv("NIDAAN_DOCS_DIR", "uploads/nidaan-docs")
+    opened: dict = {}
+    out = fitz.open()
+    try:
+        for pg in order:
+            did = pg.get("doc_id")
+            n = int(pg.get("page_in_doc") or 0)
+            if did not in opened:
+                d = docs.get(did) or {}
+                try:
+                    with open(os.path.join(docs_dir, d.get("stored_name") or ""), "rb") as f:
+                        blob = f.read()
+                    one, _n, _sk = split.normalize_to_pdf([(d.get("original_name") or "doc",
+                                                           blob)])
+                    opened[did] = fitz.open(stream=one, filetype="pdf") if one else None
+                except Exception as e:  # noqa: BLE001
+                    logger.info("claim %s: could not open doc %s for a set: %s",
+                                claim_id, did, e)
+                    opened[did] = None
+            src = opened.get(did)
+            if src is None or n < 1 or n > src.page_count:
+                continue
+            out.insert_pdf(src, from_page=n - 1, to_page=n - 1)
+        return out.tobytes() if out.page_count else b""
+    finally:
+        for v in opened.values():
+            try:
+                if v is not None:
+                    v.close()
+            except Exception:  # noqa: BLE001
+                pass
+        out.close()

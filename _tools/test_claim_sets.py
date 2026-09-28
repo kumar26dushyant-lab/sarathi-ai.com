@@ -74,6 +74,11 @@ CREATE TABLE nidaan_claim_page_types (
     doc_type TEXT NOT NULL, set_by TEXT NOT NULL DEFAULT '',
     set_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (claim_id, doc_id, page_in_doc));
+CREATE TABLE nidaan_claim_page_excluded (
+    claim_id INTEGER NOT NULL, doc_id INTEGER NOT NULL, page_in_doc INTEGER NOT NULL,
+    excluded INTEGER NOT NULL DEFAULT 1, set_by TEXT NOT NULL DEFAULT '',
+    set_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (claim_id, doc_id, page_in_doc));
 CREATE TABLE nidaan_doc_rules (
     rule_id INTEGER PRIMARY KEY AUTOINCREMENT, doc_type TEXT NOT NULL,
     words TEXT NOT NULL DEFAULT '[]', taught_by TEXT NOT NULL DEFAULT '',
@@ -282,6 +287,72 @@ async def main():
     check("...because it is keyed by document, not by merged page number",
           still.get("by_person") == "Auditor", still)
 
+    print("\nThe download is the set the screen shows\n")
+
+    import fitz
+
+    def pdf_heads(blob):
+        """The first line of every page in a built PDF - which document each page came from."""
+        d = fitz.open(stream=blob, filetype="pdf")
+        try:
+            return [(d[i].get_text() or "").strip().split("\n")[0] for i in range(d.page_count)]
+        finally:
+            d.close()
+
+    first_line = {n: t.split("   ")[0] for n, t in PAGE_TEXT.items()}
+    # A correction that MOVES a page: the oddity was read as "other" (last in the merged set);
+    # a person calls it a policy page, which goes first. A download that ignored corrections
+    # would still put it last - and this check would catch it.
+    pre = await cs.sets_for_claim(77, "health")
+    odd_row = next(q for q in pre["pages"] if q.get("doc_name") == "oddity.pdf")
+    await cs.set_page_type(77, odd_row["doc_id"], odd_row["page_in_doc"], "policy", "Auditor")
+    screen = await cs.sets_for_claim(77, "health")
+    by_page = {q["page"]: q for q in screen["pages"]}
+    shown = next(x for x in screen["sets"] if x["key"] == "all_merged")
+    want = [first_line[by_page[n]["doc_name"]] for n in shown["pages"]]
+    blob = await cs.build_set_pdf(77, "all_merged")
+    got = pdf_heads(blob) if blob else []
+    check("the PDF holds the same pages, in the same order, as the screen", got == want,
+          "screen=%s pdf=%s" % (want, got))
+    check("...including the page a person moved",
+          bool(got) and got[0] == first_line["oddity.pdf"],
+          "the old download composed from the machine's reading and ignored corrections: %s"
+          % got)
+    check("an unknown set builds nothing", (await cs.build_set_pdf(77, "no-such-set")) == b"")
+
+    print("\n'Don't send this page'\n")
+
+    dis = next(q for q in screen["pages"] if q.get("doc_name") == "discharge.pdf")
+    before_type = dis["doc_type"]
+    check("a page can be held back",
+          await cs.set_excluded(77, dis["doc_id"], dis["page_in_doc"], True, "Priya"))
+    held = await cs.sets_for_claim(77, "health")
+    row = next(q for q in held["pages"]
+               if (q["doc_id"], q["page_in_doc"]) == (dis["doc_id"], dis["page_in_doc"]))
+    check("...it is still LISTED, so somebody can put it back", row.get("excluded") is True, row)
+    check("...with who held it back", row.get("excluded_by") == "Priya", row)
+    check("...and it keeps what it is - held back is not retyped",
+          row["doc_type"] == before_type, row)
+    in_sets = [n for x in held["sets"] for n in x["pages"]]
+    check("...and it is in NO set", row["page"] not in in_sets, held["sets"])
+    blob2 = await cs.build_set_pdf(77, "all_merged")
+    check("...and the download leaves it out too",
+          len(pdf_heads(blob2)) == len(got) - 1, (len(got), len(pdf_heads(blob2))))
+    check("it can be put back", await cs.set_excluded(77, dis["doc_id"], dis["page_in_doc"],
+                                                      False, "Priya"))
+    back = await cs.sets_for_claim(77, "health")
+    row = next(q for q in back["pages"]
+               if (q["doc_id"], q["page_in_doc"]) == (dis["doc_id"], dis["page_in_doc"]))
+    check("...and it is in the sets again",
+          row.get("excluded") is False and row["page"] in [n for x in back["sets"]
+                                                           for n in x["pages"]], row)
+    async with aiosqlite.connect(db.DB_PATH) as c:
+        n = (await (await c.execute(
+            "SELECT COUNT(*) FROM nidaan_claim_page_excluded WHERE claim_id=77")).fetchone())[0]
+    check("putting it back UPDATES the record, never deletes it", n == 1, n)
+    check("...for that claim only - another claim is untouched",
+          (await cs.excluded_pages(999)) == {})
+
     print("\nThe filename is read before the pages\n")
 
     import biz_nidaan_doc_local as _loc
@@ -296,11 +367,27 @@ async def main():
               "Scanned_2026 must not become an ultrasound report")
     check("a name that names nothing is not guessed from",
           _loc.type_from_filename("random notes.pdf") == {})
+    # Names from real claims 204, 39 and 151 (29 Sep) that clearly say what they are.
+    for real, want_t in (("MED BILLS_0001.pdf", "pharmacy_bill"), ("PRESC_0001.pdf", "prescription"),
+                         ("ALL PRISCRIPTIONS.pdf", "prescription"),
+                         ("DEATH SUMMARY_0001.pdf", "discharge"),
+                         ("CANCEL CHEQUE.pdf", "bank"), ("RENEWAL NOTIE.pdf", "policy"),
+                         ("NonRegistrationLetter (1).pdf", "rejection"),
+                         ("OPD CASH MEMO_0001.pdf", "other_bill"),
+                         ("authorization-acceptance-claim-204.pdf", "other")):
+        check("a real claim's name: %s" % real,
+              _loc.type_from_filename(real).get("doc_type") == want_t,
+              _loc.type_from_filename(real))
+    # ...and the ones that must stay with a person: DC is a discharge card OR a death
+    # certificate, and an IPD file usually holds several documents.
+    for unclear in ("DC_0001.pdf", "IPD PAPERS_0001.pdf", "CONSENT_0001.pdf", "Document_1.pdf"):
+        check("an unclear name goes to a person: %s" % unclear,
+              _loc.type_from_filename(unclear) == {}, _loc.type_from_filename(unclear))
 
     print("\nThe routes reuse the existing claim rule\n")
 
     src = io.open("sarathi_biz.py", encoding="utf-8").read()
-    for name in ("ops_claim_doc_sets", "ops_claim_doc_set_pdf"):
+    for name in ("ops_claim_doc_sets", "ops_claim_doc_set_pdf", "ops_claim_doc_exclude"):
         m = re.search(r"async def %s\(.*?(?=\n@app\.|\nasync def )" % name, src, re.S)
         body = m.group(0) if m else ""
         check("%-22s asks biz_nidaan_claim_authz" % name,
@@ -308,6 +395,16 @@ async def main():
               "a second copy of the access rule is how one of them drifts")
         check("%-22s refuses with 404, not 403" % name,
               "status_code=404" in body and "status_code=403" not in body, body[-200:])
+
+    m = re.search(r"async def ops_claim_doc_exclude\(.*?(?=\n@app\.|\nasync def )", src, re.S)
+    body = m.group(0) if m else ""
+    check("holding a page back is written to the claim's remarks",
+          "_cs.remark(" in body and "_ops_audit(" in body, body[-300:])
+    m = re.search(r"async def ops_claim_doc_set_pdf\(.*?(?=\n@app\.|\nasync def |\nclass )",
+                  src, re.S)
+    body = m.group(0) if m else ""
+    check("the download route uses the shared builder, not its own reading",
+          "build_set_pdf" in body and "read_claim" not in body, body[-300:])
 
     print("\n%s\n" % ("ALL GOOD" if not FAILED else "%d FAILED" % FAILED))
     return 1 if FAILED else 0

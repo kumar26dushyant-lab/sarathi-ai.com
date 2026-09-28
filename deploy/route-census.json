@@ -3614,6 +3614,11 @@
   "func": "ops_claim_doc_auto",
   "guard": "nidaan-host,staff:any,rate-limited"
  },
+ "POST /nidaan/ops/api/claims/{claim_id}/doc-exclude": {
+  "file": "sarathi_biz.py",
+  "func": "ops_claim_doc_exclude",
+  "guard": "nidaan-host,staff:any,rate-limited"
+ },
  "POST /nidaan/ops/api/claims/{claim_id}/doc-page": {
   "file": "sarathi_biz.py",
   "func": "ops_claim_doc_page",

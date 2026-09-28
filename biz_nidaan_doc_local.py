@@ -211,22 +211,27 @@ def score_page(text: str) -> dict:
 # Ordered: the first match wins, so the specific comes before the general ("final bill" before
 # "bill", "claim form" before anything that might catch "form").
 _NAME_HINTS = [
-    (r"discharge|dischage|dis\s*charge|\bd\s*s\b\s*(summary)?$", "discharge"),
+    # Our own authorization letter (authorization-acceptance-claim-N.pdf). We made it, so we know
+    # what it is; it is not a cashless authorization and not something to check.
+    (r"authori[sz]ation\s*acceptance", "other"),
+    (r"discharge|dischage|dis\s*charge|\bd\s*s\b\s*(summary)?$|death\s*summary", "discharge"),
     (r"claim\s*form", "claim_form"),
-    (r"pharmac|chemist|medicine|medical\s*store", "pharmacy_bill"),
+    (r"pharmac|chemist|medicine|medical\s*store|\bmed\s*bills?\b", "pharmacy_bill"),
     (r"final\s*bill|hospital\s*bill|ipd\s*bill|\binvoice\b|bill\s*summary", "final_bill"),
     (r"receipt|recipt|reciept|payment\s*proof", "receipt"),
-    (r"reject|repudiat|denial|deduction", "rejection"),
+    (r"reject|repudiat|denial|deduction|non\s*-?\s*registration", "rejection"),
     (r"pre\s*-?\s*auth|cashless|authori[sz]ation\s*letter", "cashless"),
-    (r"\bpolicy\b|policy\s*schedule|cover\s*letter|certificate\s*of\s*insurance", "policy"),
+    (r"\bpolicy\b|policy\s*schedule|cover\s*letter|certificate\s*of\s*insurance|"
+     r"renewal\s*noti", "policy"),
     (r"\bkyc\b|aadhaa?r|adhar|\bpan\s*card\b|\bpan\b|voter|passport|driving\s*licen", "kyc"),
-    (r"prescription|\brx\b", "prescription"),
+    (r"prescription|priscription|\bpresc\b|\brx\b", "prescription"),
     (r"death\s*cert", "death_cert"),
     (r"\bfir\b|police|panchnama", "fir"),
     (r"surveyor|survey\s*report", "surveyor"),
-    (r"cancel+ed\s*cheque|passbook|bank\s*statement|\bneft\b", "bank"),
+    (r"cancel+(ed)?\s*che(que|ck)|passbook|bank\s*statement|\bneft\b", "bank"),
     (r"lab\s*report|pathology|x\s*-?\s*ray|\bmri\b|\bct\s*scan\b|\busg\b|ultrasound|\becg\b|"
      r"\becho\b|investigation|blood\s*test|\breport\b", "investigation"),
+    (r"cash\s*memo", "other_bill"),
     (r"\bbill\b", "final_bill"),
 ]
 _NAME_RX = [(re.compile(rx, re.I), t) for rx, t in _NAME_HINTS]

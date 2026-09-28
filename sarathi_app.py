@@ -1031,66 +1031,6 @@ async def _ops_audit(request: Request, action: str, target_type: str = "",
         pass
 
 
-# ══════════ DOCUMENT SPLITTER — standalone ops tool (all staff) ══════════
-async def _docsplit_job(job: str, staff: dict) -> dict:
-    """The job, if this staff member may open it. Otherwise 404 - never 403.
-
-    404 for "not yours" as well as "no such job", deliberately: a 403 would confirm that the id
-    is real and belongs to somebody, which turns the endpoint into a way to find out whose
-    uploads are on the server. Same rule as claim ids and task ids.
-
-    Takes the staff row rather than the request, so that every caller has to write
-    _require_staff() on its own line. Hiding the authentication one call deep made the route
-    census read these routes as having no staff gate at all - and a guard a reader cannot see at
-    the route is a guard the next person deletes.
-    """
-    import biz_nidaan_doc_store as _store
-    row = await _store.job_for(job, staff.get("staff_id"), staff.get("role") or "")
-    if not row:
-        raise HTTPException(status_code=404, detail="Job expired — please re-upload")
-    return row
-
-
-class _ClaimAutoReq(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    enabled: bool
-
-
-class _ClaimPageTypeReq(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    doc_id: int = Field(..., ge=1)
-    page_in_doc: int = Field(..., ge=1, le=2000)
-    doc_type: str = Field(..., max_length=40)
-    teach: bool = False
-
-
-async def _docsplit_pages(job: str) -> list:
-    """What each page is, reading the saved answer and only classifying if there is none.
-
-    Classifying costs about fifteen seconds a page where OCR is needed, so re-reading on every
-    screen open would make a 40-page scanned bundle unusable. It is saved once at upload; this
-    is the fallback for a job from before that existed.
-    """
-    pages = docsplit.load_pages(job)
-    if pages:
-        return pages
-    pdf = docsplit.load_job(job)
-    if not pdf:
-        return []
-    import biz_nidaan_doc_brain as _brain
-    import biz_nidaan_doc_store as _store
-    pages = await _brain.classify_pages(pdf, await _store.load_rules())
-    docsplit.save_pages(job, pages)
-    return pages
-
-
-class _DocSplitRetypeReq(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    page: int = Field(..., ge=1, le=500)
-    doc_type: str = Field(..., max_length=40)
-    teach: bool = False
-
-
 # ── Revenue + Refunds: gated to the platform owner only ──────────────────────
 # Other super_admins do NOT see revenue or refund admin. Owner is matched by
 # email (case-insensitive). Configurable later via system flag if needed.
