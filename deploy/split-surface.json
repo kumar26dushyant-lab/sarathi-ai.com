@@ -17737,6 +17737,27 @@
     "app",
     "limiter"
    ]
+  },
+  {
+   "func": "ops_doc_readers",
+   "paths": [
+    "/nidaan/ops/api/doc/readers"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_STAFF_ACTIVE_TTL",
+    "_get_staff_from_request",
+    "_is_nidaan_host",
+    "_require_staff",
+    "_staff_active_cache",
+    "_staff_still_active",
+    "app"
+   ],
+   "uses": [
+    "_is_nidaan_host",
+    "_require_staff",
+    "app"
+   ]
   }
  ],
  "shared_core": [

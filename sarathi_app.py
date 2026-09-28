@@ -885,6 +885,15 @@ async def _serve_shared_doc(request: Request, slug: str, k: str) -> HTMLResponse
     f = static_dir / _DOC_KEYS[slug]
     if not f.exists():
         raise HTTPException(status_code=404)
+    # Who has read it. Only for a signed-in staff member: somebody on the share key has no name
+    # we could honestly attach, and a reading list with guesses in it is worse than none.
+    try:
+        _who = _get_staff_from_request(request)
+        if _who:
+            await _ops_audit(request, "doc.read", "doc", slug,
+                             "%s opened it" % _actor_label(_who))
+    except Exception as _e:  # noqa: BLE001
+        logger.debug("could not record a document read: %s", _e)
     return HTMLResponse(f.read_text(encoding="utf-8"),
                         headers={"Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow"})
 
@@ -957,6 +966,35 @@ def _get_staff_from_request(request: Request) -> Optional[dict]:
     if not _staff_still_active(sid):
         return None
     return payload
+
+
+def _actor_label(staff: dict) -> str:
+    """The REAL person behind an action, for accountability. If this is a staff-
+    impersonation session, surface the real super-admin — never let the impersonated
+    identity mask who actually acted: returns 'RealName (as ImpersonatedName)'."""
+    if not staff:
+        return ""
+    name = (staff.get("name") or staff.get("email")
+            or ("staff#" + str(staff.get("staff_id") or staff.get("sub") or ""))).strip()
+    imp = staff.get("imp_by") or {}
+    if isinstance(imp, dict) and imp.get("name"):
+        return f"{imp['name']} (as {name})"
+    return name
+
+
+async def _ops_audit(request: Request, action: str, target_type: str = "",
+                     target_id="", detail: str = ""):
+    """Best-effort: record a superadmin ops action to the activity trail."""
+    try:
+        staff = _get_staff_from_request(request) or {}
+        ip = request.client.host if request.client else ""
+        await nidaan.log_activity(
+            action=action, actor_type="staff", actor_id=staff.get("staff_id"),
+            actor_name=_actor_label(staff),
+            actor_role=staff.get("role", ""), target_type=target_type,
+            target_id=target_id, detail=detail, ip=ip)
+    except Exception:
+        pass
 
 
 # ══════════ DOCUMENT SPLITTER — standalone ops tool (all staff) ══════════

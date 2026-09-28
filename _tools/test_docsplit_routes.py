@@ -118,6 +118,18 @@ for app in APPS:
     check("...and does not archive anything itself", "archive_job" not in up,
           "the oldest goes only when somebody presses a button")
 
+    # A rule changes what EVERY staff member sees on every future file, so teaching one is an
+    # admin decision. The route census cannot see this: the route's own guard is still staff:any
+    # (correcting a page is anybody's work) and the restriction is a condition inside. Without
+    # this check it would be unguarded in practice the moment somebody tidied the line away.
+    rt = route_body(src, "post", "/nidaan/ops/api/docsplit/{job}/retype")
+    check("teaching a rule is admin-only",
+          "body.teach and" in rt and "sub_super_admin" in rt,
+          "any staff member could otherwise make a rule for the whole team")
+    check("...while correcting a page stays open to anyone",
+          "_require_staff(request)" in rt,
+          "the correction is their own work on their own job")
+
     close = route_body(src, "post", "/nidaan/ops/api/docsplit/{job}/close")
     check("closing a job archives it", "archive_job(" in close, close[:160] or "NOT FOUND")
     check("...and is written down in the ops audit", "_ops_audit" in close)

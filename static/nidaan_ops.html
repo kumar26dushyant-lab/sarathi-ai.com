@@ -6089,9 +6089,13 @@ function dsPick(page){
     <div style="display:flex;flex-wrap:wrap;gap:.35rem">
       ${_dsTypes.map(t=>`<button class="btn-sm btn-ghost" style="font-size:.78rem" onclick="dsRetype(${page},'${esc(t.key)}')">${esc(t.label)}</button>`).join('')}
     </div>
+    ${(_role==='super_admin'||_role==='sub_super_admin') ? `
     <label style="display:flex;gap:.4rem;align-items:center;margin-top:.55rem;font-size:.78rem;color:var(--nd-text-muted)">
       <input type="checkbox" id="dsTeach"> Remember this, so pages like it are filed the same way next time
-    </label>
+    </label>` : `
+    <div style="margin-top:.55rem;font-size:.75rem;color:var(--nd-text-faint)">
+      Your correction applies to this file. Seeing the same document often? Ask an admin to make it a rule for everyone.
+    </div>`}
     <button class="btn-sm btn-ghost" style="margin-top:.4rem" onclick="dsCancelPick()">Cancel</button>`;
   row.appendChild(box);
 }
@@ -6190,7 +6194,7 @@ async function dsLoadRules(){
           <div style="font-size:.8rem;color:var(--nd-text-muted);margin:.2rem 0 .3rem">${(r.words||[]).map(esc).join(' · ')}</div>
           <div style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap">
             <span style="font-size:.72rem;color:var(--nd-text-faint)">taught by ${esc(r.taught_by||'a colleague')}${r.created_at?' · '+esc(String(r.created_at).slice(0,10)):''} · used ${r.times_fired||0} time(s)</span>
-            <button class="btn-sm btn-ghost" style="color:var(--nd-danger-text)" onclick="dsUndoRule(${r.rule_id},'${esc(String(r.label||r.doc_type).replace(/'/g,''))}')">Turn this off</button>
+            ${(_role==='super_admin'||_role==='sub_super_admin') ? `<button class="btn-sm btn-ghost" style="color:var(--nd-danger-text)" onclick="dsUndoRule(${r.rule_id},'${esc(String(r.label||r.doc_type).replace(/'/g,''))}')">Turn this off</button>` : ''}
           </div>
         </div>`).join('')}
     </div>`;

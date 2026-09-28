@@ -8576,6 +8576,15 @@ async def _serve_shared_doc(request: Request, slug: str, k: str) -> HTMLResponse
     f = static_dir / _DOC_KEYS[slug]
     if not f.exists():
         raise HTTPException(status_code=404)
+    # Who has read it. Only for a signed-in staff member: somebody on the share key has no name
+    # we could honestly attach, and a reading list with guesses in it is worse than none.
+    try:
+        _who = _get_staff_from_request(request)
+        if _who:
+            await _ops_audit(request, "doc.read", "doc", slug,
+                             "%s opened it" % _actor_label(_who))
+    except Exception as _e:  # noqa: BLE001
+        logger.debug("could not record a document read: %s", _e)
     return HTMLResponse(f.read_text(encoding="utf-8"),
                         headers={"Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow"})
 
@@ -8597,6 +8606,39 @@ def _register_doc_routes() -> None:
 
 
 _register_doc_routes()
+
+
+@app.get("/nidaan/ops/api/doc/readers", include_in_schema=False)
+async def ops_doc_readers(request: Request, doc: str = "", limit: int = 200):
+    """Who has opened a shared document, and when they last did. Admin+.
+
+    Answers one question - has the team read this - so it returns one row per person with their
+    most recent open, not a hit log. Somebody who opened it on the share key is not here: they
+    were not signed in, so there is no name to record (see _serve_shared_doc).
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "sub_super_admin")
+    slug = (doc or "").strip()[:60]
+    if slug and slug not in _DOC_KEYS:
+        raise HTTPException(status_code=404, detail="Unknown document")
+    import aiosqlite as _sq
+    q = ("SELECT actor_name, target_id AS doc, MAX(created_at) AS last_opened, COUNT(*) AS opens "
+         "FROM nidaan_audit_log WHERE action='doc.read' ")
+    args: list = []
+    if slug:
+        q += "AND target_id=? "
+        args.append(slug)
+    q += "GROUP BY actor_name, target_id ORDER BY last_opened DESC LIMIT ?"
+    args.append(max(1, min(int(limit or 200), 500)))
+    try:
+        async with _sq.connect(db.DB_PATH) as c:
+            c.row_factory = _sq.Row
+            rows = await (await c.execute(q, tuple(args))).fetchall()
+        return {"readers": [dict(r) for r in rows], "documents": sorted(_DOC_KEYS)}
+    except Exception as e:  # noqa: BLE001
+        logger.warning("could not read the document readers list: %s", e)
+        return {"readers": [], "documents": sorted(_DOC_KEYS)}
 
 
 @app.get("/nidaan/api/doc/feedback", include_in_schema=False)
@@ -12313,6 +12355,12 @@ async def ops_docsplit_retype(job: str, body: _DocSplitRetypeReq, request: Reque
     import biz_nidaan_doc_store as _store
     if body.doc_type not in _sets.DOC_TYPES:
         raise HTTPException(status_code=400, detail="Unknown document type")
+    # Correcting a page is anybody's own work. TEACHING is not: a rule changes what every staff
+    # member sees on every future file, so it is an admin decision - set once, applies to all
+    # (founder, 28 Sep). A team member who meets the same document repeatedly asks an admin.
+    if body.teach and nidaan.role_rank(staff.get("role", "")) < nidaan.role_rank("sub_super_admin"):
+        raise HTTPException(status_code=403,
+                            detail="Only an admin can make a correction into a rule for everyone.")
     pages = await _docsplit_pages(job)
     hit = None
     for p in pages:
@@ -12387,7 +12435,8 @@ async def ops_docsplit_rule_undo(rule_id: int, request: Request):
     """Turn a taught rule off. ARCHIVED, so 'why was this filed there' stays answerable."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    staff = _require_staff(request)
+    # Turning a rule off also changes it for everyone, so the same bar as teaching one.
+    staff = _require_staff(request, "sub_super_admin")
     import biz_nidaan_doc_store as _store
     if not await _store.undo_rule(rule_id, _actor_label(staff)):
         raise HTTPException(status_code=404, detail="That rule is already off")
