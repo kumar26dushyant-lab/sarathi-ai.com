@@ -66,6 +66,14 @@ CREATE TABLE nidaan_claim_documents (
     claim_id INTEGER, stored_name TEXT, original_name TEXT, file_size INTEGER,
     mime_type TEXT, uploaded_at TEXT DEFAULT CURRENT_TIMESTAMP, source TEXT DEFAULT '',
     submitted_at TEXT);
+CREATE TABLE nidaan_claim_doc_auto (
+    claim_id INTEGER PRIMARY KEY, enabled INTEGER NOT NULL DEFAULT 0,
+    updated_by TEXT NOT NULL DEFAULT '', updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE nidaan_claim_page_types (
+    claim_id INTEGER NOT NULL, doc_id INTEGER NOT NULL, page_in_doc INTEGER NOT NULL,
+    doc_type TEXT NOT NULL, set_by TEXT NOT NULL DEFAULT '',
+    set_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (claim_id, doc_id, page_in_doc));
 CREATE TABLE nidaan_doc_rules (
     rule_id INTEGER PRIMARY KEY AUTOINCREMENT, doc_type TEXT NOT NULL,
     words TEXT NOT NULL DEFAULT '[]', taught_by TEXT NOT NULL DEFAULT '',
@@ -181,6 +189,73 @@ async def main():
     empty = await cs.sets_for_claim(999, "health")
     check("no documents is not an error", empty["documents"] == 0 and empty["pages"] == [])
     check("...and the sets are empty rather than missing", len(empty["sets"]) == 3)
+
+    print("\nEvery page knows which document it came from\n")
+
+    att = await cs.sets_for_claim(77, "health", force=True)
+    named = [p for p in att["pages"] if p.get("doc_name")]
+    check("each page names its document", len(named) == len(att["pages"]),
+          [(p["page"], p.get("doc_name")) for p in att["pages"]])
+    check("...and its page number inside that document",
+          all(p.get("page_in_doc") for p in named),
+          "'page 2 of FINAL BILL.pdf' is actionable; 'page 7' is not")
+
+    print("\nThe switch is per claim, and off unless somebody turns it on\n")
+
+    check("off by default", (await cs.automation_on(77)) is False)
+    check("it can be turned on", await cs.set_automation(77, True, "Dushyant"))
+    check("...and reads back on", (await cs.automation_on(77)) is True)
+    check("...for THAT claim only", (await cs.automation_on(999)) is False,
+          "the founder asked for per claim")
+    check("...and can be turned off again",
+          (await cs.set_automation(77, False, "Dushyant"))
+          and (await cs.automation_on(77)) is False)
+
+    print("\nConfident, or a person looks\n")
+
+    sure = [{"page": 1, "confidence": 0.9, "source": "pdf"},
+            {"page": 2, "confidence": 0.8, "source": "pdf"}]
+    st = cs.arrangement_state(sure)
+    check("all confident means ready", st["ready"] is True and st["unsure"] == [], st)
+
+    mixed = sure + [{"page": 3, "confidence": 0.4, "source": "pdf"}]
+    st = cs.arrangement_state(mixed)
+    check("ONE doubtful page holds the whole claim", st["ready"] is False, st)
+    check("...and it is named, so somebody knows where to look", st["unsure"] == [3], st)
+
+    unread = sure + [{"page": 3, "confidence": 0.99, "source": "none"}]
+    st = cs.arrangement_state(unread)
+    check("a page nobody could read is never 'sure'", st["unsure"] == [3], st)
+
+    settled = mixed[:]
+    settled[2] = dict(settled[2], by_person="Asha")
+    check("a page a person settled stops holding it up",
+          cs.arrangement_state(settled)["ready"] is True)
+
+    print("\nThe audit case: automation was sure, and still wrong\n")
+
+    pol = next(p for p in att["pages"] if p.get("doc_name") == "policy.pdf")
+    was = pol["doc_type"]
+    check("a person can retype it afterwards",
+          (await cs.set_page_type(77, pol["doc_id"], pol["page_in_doc"], "kyc", "Auditor")))
+
+    after_fix = await cs.sets_for_claim(77, "health", force=True)
+    fixed = next(p for p in after_fix["pages"] if p.get("doc_name") == "policy.pdf")
+    check("...and a full re-read does NOT undo them", fixed["doc_type"] == "kyc", fixed)
+    check("...and the screen can say who settled it", fixed.get("by_person") == "Auditor", fixed)
+    check("...and what it used to think", fixed.get("was") == was, fixed)
+    check("an unknown type is refused",
+          (await cs.set_page_type(77, pol["doc_id"], 1, "not-a-type", "X")) is False)
+
+    print("\nA correction survives another document arriving\n")
+
+    async with aiosqlite.connect(db.DB_PATH) as c:
+        await add(c, 77, "discharge.pdf", "whatsapp")
+    later = await cs.sets_for_claim(77, "health", force=True)
+    still = next(p for p in later["pages"] if p.get("doc_name") == "policy.pdf")
+    check("the correction is still on the right page", still["doc_type"] == "kyc", still)
+    check("...because it is keyed by document, not by merged page number",
+          still.get("by_person") == "Auditor", still)
 
     print("\nThe routes reuse the existing claim rule\n")
 

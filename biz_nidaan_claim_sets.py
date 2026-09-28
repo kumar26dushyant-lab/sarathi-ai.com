@@ -126,11 +126,13 @@ async def read_claim(claim_id: int, *, force: bool = False) -> dict:
     # page number means the same thing here as it does in the standalone tool.
     docs_dir = os.getenv("NIDAAN_DOCS_DIR", "uploads/nidaan-docs")
     files = []
+    readable = []          # the document rows behind `files`, in the same order, for attribution
     for d in docs:
         p = os.path.join(docs_dir, d.get("stored_name") or "")
         try:
             with open(p, "rb") as f:
                 files.append((d.get("original_name") or "document", f.read()))
+            readable.append(d)
         except Exception as e:  # noqa: BLE001
             # A missing file is reported, never silently dropped: "the bill is not in the set"
             # and "the bill is not on the server" are different problems.
@@ -141,7 +143,7 @@ async def read_claim(claim_id: int, *, force: bool = False) -> dict:
         return {"pages": [], "docs": docs, "truncated": False, "from_cache": False}
 
     try:
-        merged, pages_n, _skipped = split.normalize_to_pdf(files)
+        merged, pages_n, _skipped, spans = split.normalize_with_spans(files)
     except Exception as e:  # noqa: BLE001
         logger.warning("claim %s: could not merge its documents: %s", claim_id, e)
         return {"pages": [], "docs": docs, "truncated": False, "from_cache": False}
@@ -155,6 +157,19 @@ async def read_claim(claim_id: int, *, force: bool = False) -> dict:
     except Exception as e:  # noqa: BLE001
         logger.warning("claim %s: could not read the pages: %s", claim_id, e)
         pages = []
+
+    # Which document each page came from. `spans` is in merge order and `readable` was built in
+    # the same order, so the two line up one to one.
+    by_page = {}
+    for span, d in zip(spans, readable):
+        for n in range(int(span["start"]), int(span["end"]) + 1):
+            by_page[n] = (d, n - int(span["start"]) + 1)
+    for pg in pages:
+        d, in_doc = by_page.get(int(pg.get("page") or 0), (None, None))
+        if d is not None:
+            pg["doc_id"] = d.get("doc_id")
+            pg["doc_name"] = d.get("original_name") or ""
+            pg["page_in_doc"] = in_doc
 
     truncated = bool(pages_n and pages_n > MAX_PAGES)
     save_cached(claim_id, fp, pages)
@@ -173,6 +188,17 @@ async def sets_for_claim(claim_id: int, claim_type: str = "", *, force: bool = F
 
     read = await read_claim(claim_id, force=force)
     pages = read["pages"]
+
+    # WHAT A PERSON SET WINS, always, and after the fact. Applied here rather than baked into the
+    # cache so a correction takes effect immediately and survives every later reading.
+    typed = await page_types(claim_id)
+    for pg in pages:
+        key = (pg.get("doc_id"), pg.get("page_in_doc"))
+        if key in typed:
+            pg["was"] = pg.get("doc_type")
+            pg["doc_type"] = typed[key]["doc_type"]
+            pg["confidence"] = 1.0
+            pg["by_person"] = typed[key]["set_by"] or "a colleague"
 
     out_sets = []
     for st in sets.compose_all(pages):
@@ -205,10 +231,126 @@ async def sets_for_claim(claim_id: int, claim_type: str = "", *, force: bool = F
                    "label": sets.type_label(p.get("doc_type") or "other"),
                    "confidence": round(float(p.get("confidence") or 0), 2),
                    "why": p.get("why") or "", "source": p.get("source") or "",
-                   "locked": bool(p.get("locked")), "taught_by": p.get("taught_by") or ""}
+                   "locked": bool(p.get("locked")), "taught_by": p.get("taught_by") or "",
+                   "doc_id": p.get("doc_id"), "doc_name": p.get("doc_name") or "",
+                   "page_in_doc": p.get("page_in_doc"),
+                   "by_person": p.get("by_person") or "", "was": p.get("was") or ""}
                   for p in pages],
         "sets": out_sets,
         "still_needed": still_needed,
         "truncated": read.get("truncated", False),
         "from_cache": read.get("from_cache", False),
+        "automation": await automation_on(claim_id),
+        "arrangement": arrangement_state(pages),
     }
+
+# ── the switch, the corrections, and the arranging ───────────────────────────
+# Confidence at or above this is "we are sure". Below it, a person looks. Deliberately high: the
+# cost of a wrong automatic arrangement is a set sent to an authority with the wrong papers in
+# it; the cost of asking is a minute of somebody's time.
+SURE = 0.75
+
+
+async def automation_on(claim_id: int) -> bool:
+    """Is automatic arranging on for THIS claim? Off unless somebody said otherwise."""
+    try:
+        async with aiosqlite.connect(_db()) as c:
+            row = await (await c.execute(
+                "SELECT enabled FROM nidaan_claim_doc_auto WHERE claim_id=?",
+                (int(claim_id),))).fetchone()
+        return bool(row and row[0])
+    except Exception as e:  # noqa: BLE001
+        # Unreadable means OFF. Arranging somebody's medical documents automatically because a
+        # table would not answer is the wrong way to fail.
+        logger.info("claim %s: could not read the arrange switch (%s) - treating as off",
+                    claim_id, e)
+        return False
+
+
+async def set_automation(claim_id: int, enabled: bool, by: str) -> bool:
+    """Turn automatic arranging on or off for this claim, and say who did."""
+    try:
+        async with aiosqlite.connect(_db()) as c:
+            await c.execute(
+                "INSERT INTO nidaan_claim_doc_auto (claim_id, enabled, updated_by, updated_at) "
+                "VALUES (?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(claim_id) DO UPDATE SET "
+                "enabled=excluded.enabled, updated_by=excluded.updated_by, "
+                "updated_at=CURRENT_TIMESTAMP",
+                (int(claim_id), 1 if enabled else 0, (by or "")[:80]))
+            await c.commit()
+        return True
+    except Exception as e:  # noqa: BLE001
+        logger.warning("claim %s: could not set the arrange switch: %s", claim_id, e)
+        return False
+
+
+async def set_page_type(claim_id: int, doc_id: int, page_in_doc: int,
+                        doc_type: str, by: str) -> bool:
+    """What a PERSON says this page is. Survives every later reading.
+
+    Available whether automation is on or off - that is the founder's audit case: automation was
+    confident, it was still wrong, and somebody corrects it afterwards.
+    """
+    import biz_nidaan_doc_sets as sets
+    if doc_type not in sets.DOC_TYPES:
+        return False
+    try:
+        async with aiosqlite.connect(_db()) as c:
+            await c.execute(
+                "INSERT INTO nidaan_claim_page_types "
+                "(claim_id, doc_id, page_in_doc, doc_type, set_by, set_at) "
+                "VALUES (?,?,?,?,?,CURRENT_TIMESTAMP) "
+                "ON CONFLICT(claim_id, doc_id, page_in_doc) DO UPDATE SET "
+                "doc_type=excluded.doc_type, set_by=excluded.set_by, set_at=CURRENT_TIMESTAMP",
+                (int(claim_id), int(doc_id), int(page_in_doc), doc_type, (by or "")[:80]))
+            await c.commit()
+        return True
+    except Exception as e:  # noqa: BLE001
+        logger.warning("claim %s: could not store a page type: %s", claim_id, e)
+        return False
+
+
+async def page_types(claim_id: int) -> dict:
+    """{(doc_id, page_in_doc): {"doc_type", "set_by"}} - everything a person has typed here."""
+    try:
+        async with aiosqlite.connect(_db()) as c:
+            c.row_factory = aiosqlite.Row
+            rows = await (await c.execute(
+                "SELECT doc_id, page_in_doc, doc_type, set_by FROM nidaan_claim_page_types "
+                "WHERE claim_id=?", (int(claim_id),))).fetchall()
+        return {(int(r["doc_id"]), int(r["page_in_doc"])):
+                {"doc_type": r["doc_type"], "set_by": r["set_by"]} for r in rows}
+    except Exception as e:  # noqa: BLE001
+        logger.info("claim %s: could not read stored page types: %s", claim_id, e)
+        return {}
+
+
+def arrangement_state(pages: list) -> dict:
+    """Is this claim arranged, or does it need a person? Returns {ready, unsure:[page numbers]}.
+
+    ONE doubtful page holds the whole claim. A set that is 90% right is the dangerous kind -
+    nobody checks it, and the wrong paper goes to an authority.
+    """
+    unsure = []
+    for p in pages or []:
+        if p.get("by_person"):
+            continue                       # a person settled this one
+        if p.get("source") == "none":
+            unsure.append(p.get("page"))   # nothing could be read on it
+        elif float(p.get("confidence") or 0) < SURE:
+            unsure.append(p.get("page"))
+    return {"ready": not unsure, "unsure": unsure}
+
+
+async def remark(claim_id: int, summary: str, actor: str = "Document arranging") -> None:
+    """Write to the claim's own remarks timeline - the same one staff already read.
+
+    The founder asked that this fit the existing claim conversation "without conflict or
+    discrepancies". That means ONE timeline: an automatic arrangement appears next to "Renamed a
+    document" and "moved to Escalation", not in a private log nobody opens.
+    """
+    try:
+        import biz_nidaan_buckets as bk
+        await bk._log(int(claim_id), summary, actor)
+    except Exception as e:  # noqa: BLE001
+        logger.info("claim %s: could not write a remark: %s", claim_id, e)

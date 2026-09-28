@@ -3549,6 +3549,42 @@ async def init_db():
             "CREATE INDEX IF NOT EXISTS idx_nidaan_doc_rules_live "
             "ON nidaan_doc_rules(archived_at, doc_type)")
 
+        # ── Arranging a claim's documents: the switch, and what a person decided ───────
+        #
+        # PER CLAIM, and OFF unless somebody turns it on (founder, 29 Sep). A claim is where the
+        # decision belongs: one case may be a tidy PDF pack from an insurer and the next a pile
+        # of photographs, and the person holding the case knows which.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nidaan_claim_doc_auto (
+                claim_id    INTEGER PRIMARY KEY REFERENCES nidaan_claims(claim_id),
+                enabled     INTEGER NOT NULL DEFAULT 0,
+                updated_by  TEXT NOT NULL DEFAULT '',
+                updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        # A page a PERSON has typed, kept so re-reading never undoes them - including the audit
+        # case the founder named: automation was confident, it was still wrong, somebody fixes it
+        # by hand afterwards.
+        #
+        # Keyed by (doc_id, page INSIDE that document), never by the merged page number. The
+        # merged number moves the moment another document is added to the claim, and a
+        # correction that silently slides onto a different page is worse than no correction.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nidaan_claim_page_types (
+                claim_id    INTEGER NOT NULL,
+                doc_id      INTEGER NOT NULL,
+                page_in_doc INTEGER NOT NULL,
+                doc_type    TEXT NOT NULL,
+                set_by      TEXT NOT NULL DEFAULT '',
+                set_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (claim_id, doc_id, page_in_doc)
+            )
+        """)
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_nidaan_claim_page_types_claim "
+            "ON nidaan_claim_page_types(claim_id)")
+
         # Backfill: store the actual Razorpay payment_id so refunds have something
         # to call against (column razorpay_subscription_id holds the order_id, not payment_id).
         try:

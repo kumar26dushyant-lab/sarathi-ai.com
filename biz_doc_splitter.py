@@ -47,12 +47,30 @@ def _safe_name(s: str) -> str:
 # ── Normalize any uploads → one working PDF ──────────────────────────────────
 def normalize_to_pdf(files: list) -> tuple[bytes, int, list]:
     """files = [(filename, bytes), …]. Merge PDFs + images into ONE PDF (in upload order).
-    Returns (pdf_bytes, page_count, skipped_filenames)."""
+    Returns (pdf_bytes, page_count, skipped_filenames).
+
+    Delegates to normalize_with_spans so there is ONE merge in this file. Two implementations is
+    how the page numbers on one screen quietly stop matching the other.
+    """
+    pdf, n, skipped, _spans = normalize_with_spans(files)
+    return pdf, n, skipped
+
+
+def normalize_with_spans(files: list) -> tuple[bytes, int, list, list]:
+    """As normalize_to_pdf, and also which pages each file became.
+
+    The fourth value is [{"name", "start", "end"}] - 1-indexed, inclusive, in merge order. A file
+    that contributed no pages is absent from it and present in `skipped`, which is the honest
+    place for "we could not read this at all".
+    """
     out = fitz.open()
     skipped = []
+    spans = []
     for fname, data in files:
         if not data:
+            skipped.append(fname)
             continue
+        before = out.page_count
         ext = fname.lower().rsplit(".", 1)[-1] if "." in fname else ""
         try:
             if ext == "pdf" or data[:5] == b"%PDF-":
@@ -77,10 +95,14 @@ def normalize_to_pdf(files: list) -> tuple[bytes, int, list]:
         except Exception as e:
             logger.info("docsplit normalize %s failed: %s", fname, e)
             skipped.append(fname)
+        # Recorded only when the file really contributed pages, so a span never points at
+        # somebody else's document.
+        if out.page_count > before:
+            spans.append({"name": fname, "start": before + 1, "end": out.page_count})
     pdf = out.tobytes()
     n = out.page_count
     out.close()
-    return pdf, n, skipped
+    return pdf, n, skipped, spans
 
 
 # ── Job storage (short-lived working PDF on disk) ────────────────────────────
