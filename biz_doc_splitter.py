@@ -161,18 +161,16 @@ async def segment(pdf_bytes: bytes, page_count: int) -> list:
 async def _learned_rules() -> list:
     """The rules staff have taught, so a correction made once holds the next time.
 
-    THE ONE SEAM. Storing the rules is the next piece of work (the review screen has to exist
-    before there is anything to store from), so today this is empty and the engine's own reading
-    stands. When the table lands, `load_rules` appears in biz_nidaan_doc_sets and this starts
-    returning them - no other file has to change, and nothing here breaks in the meantime.
+    Every correction a staff member makes on the review screen is stored as a rule - a handful of
+    readable words off that page, and the name of who taught it - and a rule always beats the
+    engine's own reading, because a person looked at that page and the engine guessed.
 
     Fails to an EMPTY list, never an error: a splitter that still works without rules is worth
     more than one that refuses because a table is missing.
     """
     try:
-        import biz_nidaan_doc_sets as sets
-        load = getattr(sets, "load_rules", None)
-        return (await load()) if load else []
+        import biz_nidaan_doc_store as store
+        return await store.load_rules()
     except Exception as e:  # noqa: BLE001
         logger.debug("no learned rules available: %s", e)
         return []

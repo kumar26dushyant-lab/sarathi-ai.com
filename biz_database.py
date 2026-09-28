@@ -3504,6 +3504,51 @@ async def init_db():
             "CREATE INDEX IF NOT EXISTS idx_nidaan_refunds_status "
             "ON nidaan_refunds(status)")
 
+        # ── The document splitter: one person's jobs, and what they have taught it ──────
+        #
+        # A JOB is one upload somebody is working through. It belongs to the staff member who
+        # uploaded it - the old splitter had no owner at all, so anybody holding a job id could
+        # open anybody's file. Three per person (biz_nidaan_doc_store.MAX_JOBS), and the oldest
+        # is only ever removed after they are ASKED (founder, 28 Sep) - so this table has an
+        # archived_at and no delete.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nidaan_doc_jobs (
+                job_id       TEXT PRIMARY KEY,
+                staff_id     INTEGER NOT NULL REFERENCES nidaan_staff(staff_id),
+                title        TEXT NOT NULL DEFAULT '',
+                page_count   INTEGER NOT NULL DEFAULT 0,
+                created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                opened_at    TIMESTAMP,
+                archived_at  TIMESTAMP
+            )
+        """)
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_nidaan_doc_jobs_staff "
+            "ON nidaan_doc_jobs(staff_id, archived_at)")
+
+        # A RULE is a correction somebody made, kept so the same page is filed the same way next
+        # time. `words` is a handful of readable words from the page, NOT a hash: the whole point
+        # is a screen where a person can read a rule and say "no, that is wrong" and undo it.
+        # Turning one off archives it - the sentence "a colleague taught this on 12 October" has
+        # to survive, or nobody can tell why a page was filed the way it was.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nidaan_doc_rules (
+                rule_id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                doc_type       TEXT NOT NULL,
+                words          TEXT NOT NULL DEFAULT '[]',
+                taught_by      TEXT NOT NULL DEFAULT '',
+                taught_by_id   INTEGER REFERENCES nidaan_staff(staff_id),
+                created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                times_fired    INTEGER NOT NULL DEFAULT 0,
+                last_fired_at  TIMESTAMP,
+                archived_at    TIMESTAMP,
+                archived_by    TEXT NOT NULL DEFAULT ''
+            )
+        """)
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_nidaan_doc_rules_live "
+            "ON nidaan_doc_rules(archived_at, doc_type)")
+
         # Backfill: store the actual Razorpay payment_id so refunds have something
         # to call against (column razorpay_subscription_id holds the order_id, not payment_id).
         try:
