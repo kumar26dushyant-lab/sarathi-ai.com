@@ -55,12 +55,41 @@ echo "Restarting worker (singletons)…"
 sudo -n systemctl restart sarathi-worker || echo "  (worker restart non-zero — check journal)"
 
 # 2) Rolling restart of the web tier. One at a time, health-gated → no 502.
-for inst in 1 2; do
-    port=$((8000 + inst))
-    echo "Rolling web@$inst (port $port)…"
-    sudo -n systemctl restart "sarathi-web@$inst"
-    wait_health "$port" || exit 1
-done
+#
+# EVERY UNIT THAT SERVES A LIVE SITE. Since the split on 27 Sep each domain has its own app, and
+# this loop still rolled only sarathi-web@1/2 (8001/8002) - the old combined app, which no longer
+# answers for either domain. So a deploy pulled the new code, restarted nothing anybody was using,
+# and printed "complete". The claimant portal stayed broken for two days partly because of it, and
+# the fix on 28 Sep had to be rolled by hand.
+#
+#   nidaan-web@N       8031/8032   nidaanpartner.com   (nidaan_app.py)
+#   sarathi-new-web@N  8021/8022   sarathi-ai.com      (sarathi_app.py)
+#   sarathi-web@N      8001/8002   the old combined app, kept as a rollback
+#
+# A unit that is not installed is SKIPPED WITH A LINE SAYING SO, never silently: during a
+# migration the set changes, and "I did not roll that one" has to be visible in the log or this
+# whole class of fault comes straight back.
+roll() {
+    local unit_prefix="$1" base_port="$2" label="$3"
+    if ! systemctl list-unit-files | grep -q "^${unit_prefix}@"; then
+        echo "  - ${label}: no ${unit_prefix}@ unit installed, skipping"
+        return 0
+    fi
+    for inst in 1 2; do
+        local unit="${unit_prefix}@${inst}" port=$((base_port + inst))
+        if ! systemctl is-enabled --quiet "$unit" 2>/dev/null            && ! systemctl is-active --quiet "$unit" 2>/dev/null; then
+            echo "  - $unit is neither enabled nor running, skipping"
+            continue
+        fi
+        echo "Rolling $unit (port $port)…"
+        sudo -n systemctl restart "$unit"
+        wait_health "$port" || exit 1
+    done
+}
+
+roll nidaan-web      8030 "nidaanpartner.com"
+roll sarathi-new-web 8020 "sarathi-ai.com"
+roll sarathi-web     8000 "old combined app (rollback)"
 
 echo "=== $(date '+%F %T') Rolling deploy complete ==="
 

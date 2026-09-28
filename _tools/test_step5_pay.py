@@ -79,7 +79,22 @@ async def cleanup(acc):
         print(f"cleaned account {acc} + {len(cids)} claim(s)")
 
 
+USAGE = """  py -3.14 _tools/test_step5_pay.py setup <complete|incomplete>
+  py -3.14 _tools/test_step5_pay.py paysig <order_id> <payment_id>
+  py -3.14 _tools/test_step5_pay.py verify_paid <claim_id>
+  py -3.14 _tools/test_step5_pay.py cleanup <account_id>      # REMOVES the test account
+
+  cleanup deletes rows. Read what it will remove before running it."""
+
 if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        # Swept up by `py -3.14 _tools/test_*.py`, this used to die on sys.argv[1] and read as a
+        # failing test. It is a toolkit, and one of its subcommands deletes an account - so with
+        # no arguments it explains itself and does nothing.
+        import os as _os, sys as _sys
+        _sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+        import _needs_server as _ns
+        _ns.manual_tool(USAGE)
     p = sys.argv[1]
     if p == "setup":
         asyncio.run(setup(sys.argv[2] == "complete"))

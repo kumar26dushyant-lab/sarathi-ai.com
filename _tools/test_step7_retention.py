@@ -23,6 +23,12 @@ except Exception:
 os.environ["NIDAAN_LEAD_RETENTION_DAYS"] = "30"
 os.environ["NIDAAN_LEAD_NOTICE_DAYS"] = "7"   # notice at day 23
 
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+import _needs_server as _ns
+# Runs against the database this machine is configured for, which is only the real
+# one on the server. Elsewhere it says what it did not check, and skips.
+_ns.live_db_or_skip("lead retention and its notice period")
 import biz_database as db
 import biz_nidaan as nidaan
 import biz_nidaan_doc_checklist as ck

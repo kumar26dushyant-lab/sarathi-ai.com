@@ -17,7 +17,11 @@ import tempfile
 if os.environ.get("NIDAAN_NO_OUTBOUND") != "1":
     sys.exit("refusing to run with outbound enabled")
 
-LIVE = "/opt/sarathi/sarathi_biz.db"
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+import _needs_server as _ns
+# Needs a copy of the live database; says so and skips when there is not one.
+LIVE = _ns.live_db_or_skip("contact retry behaviour against real rows")
 db = os.path.join(tempfile.mkdtemp(prefix="rt_"), "copy.db")
 shutil.copy(LIVE, db)
 for e in ("-wal", "-shm"):

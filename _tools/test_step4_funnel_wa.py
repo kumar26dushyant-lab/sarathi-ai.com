@@ -19,6 +19,12 @@ try:
 except Exception:
     pass
 
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+import _needs_server as _ns
+# Runs against the database this machine is configured for, which is only the real
+# one on the server. Elsewhere it says what it did not check, and skips.
+_ns.live_db_or_skip("the three funnel notification handlers")
 import biz_database as db
 import biz_nidaan as nidaan
 import biz_nidaan_doc_checklist as ck
