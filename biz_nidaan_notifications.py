@@ -421,17 +421,13 @@ async def notify_staff_inapp(staff_ids: list, subject: str, body: str,
             f"AND status='active' AND deleted_at IS NULL", list(staff_ids))).fetchall()]
     sent = 0
     for r in rows:
-        try:
-            await _record_notification(
-                event_key=event_key, priority=PRIORITY_P2,
-                recipient_type=RECIPIENT_STAFF, recipient_id=r["staff_id"],
-                channel=CHANNEL_DASHBOARD, subject=subject, body=body,
-                status="sent", sent_at=ts, require_ack=require_ack, claim_id=claim_id,
-                announce_id=announce_id, cp_id=cp_id, telegram=_tg_ok)
-            sent += 1
-        except Exception as e:
-            logger.warning("notify_staff_inapp failed for %s: %s", r.get("staff_id"), e)
-        # The bell above always fires. The EMAIL leg is decided per recipient, so a super-admin
+        # THIS person's channels are decided FIRST, then their notice is recorded. It was the
+        # other way round from 25 to 29 Sep: the bell read `_tg_ok` before it was set, so the
+        # first person on every list got nothing at all (UnboundLocalError, caught and logged) and
+        # everyone after got the previous person's Telegram decision. Every one-person notice was
+        # lost, and staff #1 missed 85. deploy/verify-use-before-assign.py now fails the build on
+        # this shape.
+        # The bell (below) always fires. The EMAIL leg is decided per recipient, so a super-admin
         # keeps the full picture while a teammate gets internal chatter on Telegram instead of
         # in their inbox. Money, documents and leave are never downgraded.
         # The PREFERENCES first, then the policy. resolve() falls through to should_email()
@@ -468,6 +464,16 @@ async def notify_staff_inapp(staff_ids: list, subject: str, body: str,
                                  r.get("staff_id"), event_key, _dt.get("why"))
             except Exception:
                 _tg_ok = telegram
+        try:
+            await _record_notification(
+                event_key=event_key, priority=PRIORITY_P2,
+                recipient_type=RECIPIENT_STAFF, recipient_id=r["staff_id"],
+                channel=CHANNEL_DASHBOARD, subject=subject, body=body,
+                status="sent", sent_at=ts, require_ack=require_ack, claim_id=claim_id,
+                announce_id=announce_id, cp_id=cp_id, telegram=_tg_ok)
+            sent += 1
+        except Exception as e:
+            logger.warning("notify_staff_inapp failed for %s: %s", r.get("staff_id"), e)
         if _email_ok and r.get("email"):
             try:
                 await _send_email(to_email=r["email"], subject=f"[Nidaan] {subject}",
@@ -2113,8 +2119,34 @@ async def on_payment_failed(kind: str, amount_rupees=0, detail: str = "",
         logger.warning("on_payment_failed referrer alert failed (ref=%s): %s", rc, _re)
 
 
+async def _concerned_staff(claim_id=None, ref_code: str = "") -> list:
+    """The staff a payment concerns beyond the admins: whoever handles the claim, and the staff
+    member whose referral brought the customer (founder, 29 Sep: "concerning staff and
+    superadmins should get payment notifications"). Active staff only."""
+    out = []
+    try:
+        async with aiosqlite.connect(db.DB_PATH) as conn:
+            if claim_id:
+                r = await (await conn.execute(
+                    "SELECT s.staff_id FROM nidaan_claims c JOIN nidaan_staff s "
+                    "ON s.staff_id = c.assigned_to_staff_id WHERE c.claim_id=? "
+                    "AND s.status='active' AND s.deleted_at IS NULL", (claim_id,))).fetchone()
+                if r:
+                    out.append(r[0])
+            rc = (ref_code or "").strip()
+            if rc:
+                r = await (await conn.execute(
+                    "SELECT staff_id FROM nidaan_staff WHERE UPPER(referral_code)=UPPER(?) "
+                    "AND status='active' AND deleted_at IS NULL", (rc,))).fetchone()
+                if r and r[0] not in out:
+                    out.append(r[0])
+    except Exception as e:  # noqa: BLE001 - the admins are still told
+        logger.info("could not find the staff a payment concerns: %s", e)
+    return out
+
+
 async def on_payment_success(kind: str, amount_rupees=0, detail: str = "", contact: str = "",
-                             account_id=None, claim_id=None):
+                             account_id=None, claim_id=None, ref_code: str = ""):
     """A payment SUCCEEDED / was captured (subscription, ₹499/₹2000 review, L2, or a payment
     link). Alert EVERY super-admin on ALL channels — dashboard bell + email + Telegram + push —
     so PAID events are as visible as failures/pending. Mirrors on_payment_failed (no ack needed)."""
@@ -2125,6 +2157,9 @@ async def on_payment_success(kind: str, amount_rupees=0, detail: str = "", conta
             "AND status='active' AND deleted_at IS NULL")).fetchall()]
     if not ids:
         return
+    for sid in await _concerned_staff(claim_id, ref_code):
+        if sid not in ids:
+            ids.append(sid)
     subj = f"🟢 Payment RECEIVED — {kind}" + (f" ₹{amount_rupees}" if amount_rupees else "")
     body = ("A payment was received ✓\n\n"
             f"Type: {kind}\n"
@@ -2141,7 +2176,8 @@ async def on_payment_success(kind: str, amount_rupees=0, detail: str = "", conta
 
 async def on_ledger_payment(*, source: str, total_paise: int, account_id=None, claim_id=None,
                             branch_code: str = "", plan: str = "", verified: bool = True,
-                            actor_name: str = "", dedup_key: str = "") -> None:
+                            actor_name: str = "", dedup_key: str = "",
+                            ref_code: str = "") -> None:
     """One payment, just recorded in the ledger - tell the office what it was and who paid."""
     # A branch Level-2 fee already has its own message - "Level-2 queued ... Level-2 fee: Rs.X" -
     # to the same people. A second "Payment RECEIVED" beside it is the near-duplicate the founder
@@ -2187,7 +2223,7 @@ async def on_ledger_payment(*, source: str, total_paise: int, account_id=None, c
             lines.append("Recorded by hand" + (" by " + actor_name if actor_name else "")
                          + " - not confirmed by Razorpay")
         await on_payment_success(kind, amount, detail="\n".join(lines), contact=phone,
-                                 account_id=account_id, claim_id=claim_id)
+                                 account_id=account_id, claim_id=claim_id, ref_code=ref_code)
         # Stamp the row itself, so "was THIS payment announced?" is a fact about this payment and
         # not "was there some payment alert around that time".
         if dedup_key:
@@ -2250,7 +2286,12 @@ async def on_branch_l2_paid(claim_id: int, branch_code: str):
     if not ids:
         return
     fee = int(c.get("l2_fee_paid") or 0)
-    subj = f"⚖️ Level-2 queued — #{_cn(claim_id)} {c.get('insured_name','')}"
+    # This IS the payment notice for a branch Level-2 fee (on_ledger_payment stays quiet for
+    # it), so it says PAYMENT first. Titled "Level-2 queued", nobody scanning Telegram read it as
+    # the payment alert they were waiting for.
+    subj = (f"🟢 Payment RECEIVED — Level-2 fee Rs.{fee} · #{_cn(claim_id)} "
+            f"{c.get('insured_name','')} queued for legal" if fee else
+            f"⚖️ Level-2 queued — #{_cn(claim_id)} {c.get('insured_name','')} (no fee)")
     body = (f"Branch {branch_code} moved a claim to Level-2 — queued for the legal team.\n\n"
             f"Case: #{_cn(claim_id)} {c.get('insured_name','')} ({c.get('claim_type','')})\n"
             f"Level-2 fee: {('Rs.'+str(fee)) if fee else 'no charge (free policy)'}\n\n"
