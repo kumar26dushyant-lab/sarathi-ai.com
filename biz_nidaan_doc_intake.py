@@ -246,7 +246,16 @@ async def accept(claim_id: int, account_id, files: list, *, claim_type: str = ""
     # off as something else, the checklist claiming a document that never arrived, and nobody
     # finding out until the claim stalls. Two-in-three is worse than nothing, because nothing is
     # honest and brings a person to look.
-    doc_id = await _store(account_id, claim_id, "document.pdf", merged, source)
+    # KEEP THE NAME THE SENDER GAVE IT. I had this storing everything as "document.pdf", which
+    # works against the thing the whole pipeline is for: a claimant's own file is often already
+    # called "Insurance_Policy_Schedule.pdf" or "Discharge Summary.pdf", and that name is the
+    # single most reliable clue anybody - staff or the splitter - gets about what it is. Throwing
+    # it away to store a generic name loses information we cannot recover.
+    # Several files merged into one batch keep the first name, with a note of how many.
+    first = (files[0][0] if files else "") or "document.pdf"
+    stem = first.rsplit(".", 1)[0][:90] or "document"
+    name = ("%s.pdf" % stem) if len(files) <= 1 else ("%s (+%d more).pdf" % (stem, len(files) - 1))
+    doc_id = await _store(account_id, claim_id, name, merged, source)
     if doc_id:
         out["stored"] += 1
 

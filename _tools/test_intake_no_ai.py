@@ -159,6 +159,11 @@ try:
                                     claim_type="health", source="whatsapp"))
 
     check("the document is stored", res["stored"] == 1, res)
+    # The sender's own filename is often the best clue anybody gets about what a document is -
+    # "Insurance_Policy_Schedule.pdf" tells staff and the splitter more than any guess we could
+    # make. Storing everything as "document.pdf" threw that away; this makes sure it comes back.
+    check("...under the name the sender gave it",
+          any("scan" in (n or "") for n, _ in spy.stored), spy.stored)
     check("no classifier is consulted at all on this path", spy.asked == [],
           "match_document was called %d time(s)" % len(spy.asked))
     check("NOTHING is ticked, though a certain matcher says DISCHARGE SUMMARY",

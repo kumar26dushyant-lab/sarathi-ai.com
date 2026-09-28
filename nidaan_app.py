@@ -8523,6 +8523,11 @@ async def nidaan_ops_raise_for_subscriber(body: _RaiseForSubReq, request: Reques
 
 _DOC_KEYS = {
     "end-to-end": "nidaan_end_to_end.html",
+    # The document-collection SOP: how a claimant's papers reach a claim, step by step, in
+    # English and Hindi. Shared with the whole team on an ordinary browser link so it can be
+    # forwarded and read on a phone - which is why it lives here behind the share key rather
+    # than on the open web: it describes how we work, and it names our WhatsApp number.
+    "sop-documents": "nidaan_sop_documents.html",
     # The Level-2 operating manual — how a paid claim travels through the buckets. Shared with
     # staff on an ordinary browser link so it can be forwarded and read on a phone; one page,
     # Hinglish and English, because the people doing the work do not read release notes.

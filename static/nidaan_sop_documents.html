@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SOP — Collecting claim documents</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#ffffff; --fg:#152238; --mut:#5a6b85; --line:#e3e9f2; --soft:#f6f9fc;
+  --accent:#0f766e; --accent-fg:#ffffff; --warn-bg:#fff8e6; --warn-line:#e8c96a;
+  --good-bg:#eefaf6; --good-line:#8fd4c2; --stop-bg:#fdf0ef; --stop-line:#e8a9a3;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0e1626; --fg:#e6edf7; --mut:#9fb0c9; --line:#1f2c42; --soft:#141f33;
+    --accent:#2dd4bf; --accent-fg:#06302b; --warn-bg:#2b2410; --warn-line:#6b5a1f;
+    --good-bg:#0f2a24; --good-line:#1f6b59; --stop-bg:#2c1615; --stop-line:#7a3430;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0e1626; --fg:#e6edf7; --mut:#9fb0c9; --line:#1f2c42; --soft:#141f33;
+  --accent:#2dd4bf; --accent-fg:#06302b; --warn-bg:#2b2410; --warn-line:#6b5a1f;
+  --good-bg:#0f2a24; --good-line:#1f6b59; --stop-bg:#2c1615; --stop-line:#7a3430;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:'Inter',system-ui,-apple-system,sans-serif;line-height:1.7}
+a{color:var(--accent)}
+.top{position:sticky;top:0;z-index:10;background:var(--accent);color:var(--accent-fg);padding:.85rem 1rem;display:flex;justify-content:space-between;align-items:center;gap:.6rem;flex-wrap:wrap}
+.top b{font-family:'Poppins',sans-serif;font-size:1rem}
+.langbtn{background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.4);color:inherit;font:inherit;font-size:.8rem;font-weight:600;padding:.25rem .7rem;border-radius:999px;cursor:pointer}
+.wrap{max-width:780px;margin:0 auto;padding:1.5rem 1rem 4rem}
+h1{font-family:'Poppins',sans-serif;font-size:1.5rem;line-height:1.3;margin-bottom:.3rem;text-wrap:balance}
+.sub{color:var(--mut);font-size:.87rem;margin-bottom:1.5rem}
+h2{font-family:'Poppins',sans-serif;font-size:1.05rem;margin:2rem 0 .6rem;padding-top:.9rem;border-top:1px solid var(--line)}
+p,li{font-size:.94rem}
+ul,ol{margin:.5rem 0 .5rem 1.3rem}
+li{margin-bottom:.45rem}
+.step{background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:1rem 1.1rem;margin:.9rem 0}
+.step .n{display:inline-block;background:var(--accent);color:var(--accent-fg);font-weight:700;font-size:.8rem;border-radius:999px;padding:.1rem .65rem;margin-bottom:.45rem}
+.step h3{font-size:1rem;font-family:'Poppins',sans-serif;margin-bottom:.35rem}
+.box{border-radius:10px;padding:.85rem 1rem;margin:1rem 0;font-size:.9rem}
+.good{background:var(--good-bg);border:1px solid var(--good-line)}
+.warn{background:var(--warn-bg);border:1px solid var(--warn-line)}
+.stop{background:var(--stop-bg);border:1px solid var(--stop-line)}
+.blank{background:var(--warn-bg);border:1px dashed var(--warn-line);padding:.15rem .5rem;border-radius:6px;font-weight:700}
+table{border-collapse:collapse;width:100%;min-width:30rem;font-size:.88rem}
+.tw{overflow-x:auto;border:1px solid var(--line);border-radius:10px;margin:1rem 0}
+th,td{text-align:left;padding:.55rem .75rem;border-bottom:1px solid var(--line);vertical-align:top}
+th{background:var(--soft);font-weight:700;white-space:nowrap}
+tr:last-child td{border-bottom:0}
+.hi{display:none}
+body.lang-hi .en{display:none}
+body.lang-hi .hi{display:block}
+body.lang-hi li.hi,body.lang-hi span.hi{display:revert}
+.foot{margin-top:2.5rem;padding-top:1rem;border-top:1px solid var(--line);color:var(--mut);font-size:.82rem}
+@media(max-width:600px){h1{font-size:1.3rem}.wrap{padding:1.2rem .9rem 3rem}}
+</style>
+</head>
+<body>
+<div class="top">
+  <b>NidaanPartner · SOP</b>
+  <button class="langbtn" id="langBtn" type="button">हिंदी</button>
+</div>
+<div class="wrap">
+
+<!-- ══════════════════ ENGLISH ══════════════════ -->
+<div class="en">
+
+<h1>Collecting a claimant's documents</h1>
+<div class="sub">How it works today, and what to do at each step. Last updated 28 September 2026.</div>
+
+<div class="box warn">
+<b>One thing to fill in before sharing this.</b> Wherever you see
+<span class="blank">OFFICIAL NUMBER</span> below, put our real NidaanPartner WhatsApp number.
+It has deliberately been left blank — a wrong number here would send a patient's hospital papers
+to a stranger.
+</div>
+
+<h2>The short version</h2>
+<ol>
+  <li><b>Call for authorization</b> — as you do now. This works; nothing changes.</li>
+  <li><b>Ask for documents on our official WhatsApp number</b> — not your own number.</li>
+  <li>The document <b>attaches itself</b> to the claim, and the claimant gets a confirmation.</li>
+  <li>You <b>check it landed</b> on the right claim, and file anything that needs naming.</li>
+  <li>Use the <b>Document Splitter</b> to build the sets you send onward.</li>
+</ol>
+
+<h2>Why not your personal number</h2>
+<p>It is quicker in the moment and it costs us later. When a document arrives on a personal
+phone:</p>
+<ul>
+  <li>Nothing records <b>when</b> it arrived, so we cannot show an authority we acted promptly.</li>
+  <li>If you are on leave, nobody else can reach it.</li>
+  <li>A patient's hospital papers sit in a personal gallery and personal backups.</li>
+  <li>You then attach it by hand — which is the step we are trying to remove.</li>
+</ul>
+<p>Every document that arrives on the official number is on the claim, timestamped, visible to
+whoever picks the case up next.</p>
+
+<h2>Step by step</h2>
+
+<div class="step">
+  <span class="n">Step 1</span>
+  <h3>The authorization call — unchanged</h3>
+  <p>Call the complainant and take authorization exactly as you do today. The signed
+  authorization PDF is generated by the system and attaches itself to the claim. You do not need
+  to do anything with it.</p>
+</div>
+
+<div class="step">
+  <span class="n">Step 2</span>
+  <h3>Ask for the documents — on the official number</h3>
+  <p>On the same call, say something like:</p>
+  <div class="box good" style="margin:.6rem 0">
+    “Please send the documents on WhatsApp to <span class="blank">OFFICIAL NUMBER</span>. Save it
+    as NidaanPartner. Send one document at a time, and send the whole page — not a part of it.”
+  </div>
+  <p>Ask them to send <b>PDFs where they have them</b> (hospitals and insurers usually email
+  PDFs) and clear photographs otherwise.</p>
+</div>
+
+<div class="step">
+  <span class="n">Step 3</span>
+  <h3>What happens on its own</h3>
+  <ul>
+    <li>The file is <b>attached to their claim</b> automatically — we match it by their phone number.</li>
+    <li>They get a reply: <i>“Got it — [file name] attached to your case #123.”</i></li>
+    <li>The associate on that claim is <b>notified</b>.</li>
+    <li>The file keeps <b>the name it arrived with</b>.</li>
+  </ul>
+  <p>If the claimant has <b>more than one open claim</b>, the system asks them which one it is
+  for. They reply with the number.</p>
+</div>
+
+<div class="step">
+  <span class="n">Step 4</span>
+  <h3>What you do</h3>
+  <ul>
+    <li>Open the claim and check the document is on the right case.</li>
+    <li>Tick it off the checklist for what it actually is.</li>
+    <li>If a page is unreadable, ask them for that one again — good light, whole page.</li>
+  </ul>
+  <div class="box warn" style="margin-top:.6rem">
+    <b>Nothing is ticked off automatically.</b> The document is saved and waits for you. This is
+    deliberate: a wrong automatic tick means the checklist claims a paper we do not have, and
+    nobody finds out until the claim stalls.
+  </div>
+</div>
+
+<div class="step">
+  <span class="n">Step 5</span>
+  <h3>Build the sets — Document Splitter</h3>
+  <p>When a claimant sends one big file, or you have a pile to organise, open
+  <b>Ops → Document Splitter</b>:</p>
+  <ol>
+    <li>Upload the file or files. Pages are read <b>on our own server</b> — nothing is sent outside.</li>
+    <li>Check what each page was read as. Wrong? <b>Tap the page, tap the right name.</b></li>
+    <li>Tick <b>“Remember this”</b> when you are sure — that is the only way it improves.</li>
+    <li>Download the set you need: <b>CIO documents</b>, <b>All documents merged</b>, or the
+      <b>Claim set</b>.</li>
+  </ol>
+  <p>You can keep <b>three files open at a time</b>. They stay until you close them.</p>
+</div>
+
+<h2>The four ways a document reaches a claim</h2>
+<div class="tw">
+<table>
+<thead><tr><th>How</th><th>What it means</th><th>Use it?</th></tr></thead>
+<tbody>
+<tr><td><b>Official WhatsApp</b></td><td>Claimant sends to our number; attaches itself.</td><td><b>Yes — prefer this</b></td></tr>
+<tr><td><b>Their claim page</b></td><td>Claimant uploads on the link we send them.</td><td>Yes, good for a long list</td></tr>
+<tr><td><b>System-generated</b></td><td>The authorization PDF. Automatic.</td><td>Nothing to do</td></tr>
+<tr><td><b>You attach by hand</b></td><td>From Ops, for anything that reached you another way.</td><td>Only when the others cannot be used</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2>What is NOT automatic yet — so you know</h2>
+<ul>
+  <li><b>Documents are not renamed by type on arrival.</b> A file arrives as the claimant named
+    it. Naming by type happens in the Splitter, where you confirm it.</li>
+  <li><b>Nothing is ticked off the checklist for you.</b> A person decides, always.</li>
+  <li>The Splitter's first guess is <b>a guess</b>. Check the pages before you download.</li>
+</ul>
+<p>This is on purpose. We are starting manual and letting the machine take over only as it earns
+it — every time you correct a page and tick “Remember this”, it gets better at that document.</p>
+
+<h2>When something goes wrong</h2>
+<ul>
+  <li><b>Claimant says they sent it but it is not on the claim</b> — check they used the official
+    number and that it is the number on their claim. If they sent from a different phone, it will
+    not match.</li>
+  <li><b>It attached to the wrong claim</b> — tell us; do not re-send.</li>
+  <li><b>A page will not open, or is filed somewhere odd</b> — tell us. Every report makes it
+    better.</li>
+</ul>
+
+</div>
+
+<!-- ══════════════════ हिंदी ══════════════════ -->
+<div class="hi">
+
+<h1>दावेदार के दस्तावेज़ इकट्ठा करना</h1>
+<div class="sub">आज यह कैसे काम करता है, और हर कदम पर आपको क्या करना है। अंतिम अपडेट: 28 सितंबर 2026।</div>
+
+<div class="box warn">
+<b>साझा करने से पहले एक चीज़ भरनी है।</b> नीचे जहाँ भी
+<span class="blank">OFFICIAL NUMBER</span> लिखा है, वहाँ हमारा असली NidaanPartner WhatsApp नंबर
+लिखिए। इसे जानबूझकर खाली छोड़ा गया है — यहाँ गलत नंबर का मतलब है किसी मरीज़ के अस्पताल के
+काग़ज़ किसी अनजान व्यक्ति के पास चले जाना।
+</div>
+
+<h2>छोटी बात</h2>
+<ol>
+  <li><b>अथॉराइज़ेशन के लिए कॉल कीजिये</b> — जैसे अभी करते हैं। यह चल रहा है, इसमें कुछ नहीं बदला।</li>
+  <li><b>दस्तावेज़ हमारे ऑफ़िशियल WhatsApp नंबर पर मँगवाइये</b> — अपने नंबर पर नहीं।</li>
+  <li>दस्तावेज़ <b>अपने आप क्लेम से जुड़ जाता है</b>, और दावेदार को पुष्टि मिल जाती है।</li>
+  <li>आप <b>जाँचिये कि सही क्लेम पर आया</b>, और जो नाम देना है वह दीजिये।</li>
+  <li>आगे भेजने के लिए सेट बनाने हों तो <b>डॉक्यूमेंट स्प्लिटर</b> इस्तेमाल कीजिये।</li>
+</ol>
+
+<h2>अपने निजी नंबर पर क्यों नहीं</h2>
+<p>उस वक़्त आसान लगता है, बाद में महँगा पड़ता है। जब दस्तावेज़ निजी फ़ोन पर आता है:</p>
+<ul>
+  <li>यह दर्ज ही नहीं होता कि वह <b>कब</b> आया — हम किसी अथॉरिटी को दिखा नहीं सकते कि हमने समय पर काम किया।</li>
+  <li>आप छुट्टी पर हों तो किसी और के पास वह पहुँच ही नहीं सकता।</li>
+  <li>मरीज़ के अस्पताल के काग़ज़ निजी गैलरी और निजी बैकअप में पड़े रहते हैं।</li>
+  <li>फिर आपको हाथ से जोड़ना पड़ता है — और यही कदम हम हटाना चाहते हैं।</li>
+</ul>
+
+<h2>कदम-दर-कदम</h2>
+
+<div class="step">
+  <span class="n">कदम 1</span>
+  <h3>अथॉराइज़ेशन कॉल — कुछ नहीं बदला</h3>
+  <p>दावेदार को कॉल कीजिये और अथॉराइज़ेशन वैसे ही लीजिये जैसे आज लेते हैं। साइन किया हुआ
+  अथॉराइज़ेशन PDF सिस्टम खुद बनाता है और खुद क्लेम से जोड़ देता है। आपको उसके साथ कुछ नहीं करना।</p>
+</div>
+
+<div class="step">
+  <span class="n">कदम 2</span>
+  <h3>दस्तावेज़ माँगिये — ऑफ़िशियल नंबर पर</h3>
+  <p>उसी कॉल में ऐसे कहिये:</p>
+  <div class="box good" style="margin:.6rem 0">
+    “दस्तावेज़ WhatsApp पर <span class="blank">OFFICIAL NUMBER</span> पर भेजिये। इसे
+    NidaanPartner नाम से सेव कर लीजिये। एक बार में एक दस्तावेज़ भेजिये, और पूरा पेज भेजिये —
+    आधा नहीं।”
+  </div>
+  <p>जहाँ PDF हो वहाँ <b>PDF ही</b> मँगवाइये (अस्पताल और बीमा कंपनी आम तौर पर PDF भेजते हैं),
+  बाक़ी जगह साफ़ फ़ोटो।</p>
+</div>
+
+<div class="step">
+  <span class="n">कदम 3</span>
+  <h3>अपने आप क्या होता है</h3>
+  <ul>
+    <li>फ़ाइल <b>उनके क्लेम से अपने आप जुड़ जाती है</b> — हम उनके फ़ोन नंबर से मिलान करते हैं।</li>
+    <li>उन्हें जवाब मिलता है: <i>“मिल गया — [फ़ाइल का नाम] आपके केस #123 से जुड़ गया।”</i></li>
+    <li>उस क्लेम के एसोसिएट को <b>सूचना</b> चली जाती है।</li>
+    <li>फ़ाइल का <b>वही नाम रहता है जिस नाम से आई</b>।</li>
+  </ul>
+  <p>अगर दावेदार के <b>एक से ज़्यादा खुले क्लेम</b> हैं, तो सिस्टम खुद पूछता है कि किस क्लेम के
+  लिए है। वे नंबर लिखकर जवाब देते हैं।</p>
+</div>
+
+<div class="step">
+  <span class="n">कदम 4</span>
+  <h3>आपको क्या करना है</h3>
+  <ul>
+    <li>क्लेम खोलकर देखिये कि दस्तावेज़ सही केस पर आया है।</li>
+    <li>वह असल में जो है, उस हिसाब से चेकलिस्ट में टिक लगाइये।</li>
+    <li>कोई पेज पढ़ा न जा रहा हो तो वही दोबारा मँगवाइये — अच्छी रोशनी, पूरा पेज।</li>
+  </ul>
+  <div class="box warn" style="margin-top:.6rem">
+    <b>कोई टिक अपने आप नहीं लगता।</b> दस्तावेज़ सेव होकर आपका इंतज़ार करता है। यह जानबूझकर है:
+    गलत अपने-आप लगा टिक यानी चेकलिस्ट कहे कि काग़ज़ आ गया जो आया ही नहीं, और पता तब चले जब
+    क्लेम अटक जाए।
+  </div>
+</div>
+
+<div class="step">
+  <span class="n">कदम 5</span>
+  <h3>सेट बनाइये — डॉक्यूमेंट स्प्लिटर</h3>
+  <p>जब दावेदार एक बड़ी फ़ाइल भेजे, या आपके पास ढेर हो, तो <b>Ops → Document Splitter</b> खोलिये:</p>
+  <ol>
+    <li>फ़ाइल अपलोड कीजिये। पेज <b>हमारे अपने सर्वर पर</b> पढ़े जाते हैं — बाहर कुछ नहीं जाता।</li>
+    <li>देखिये हर पेज क्या पढ़ा गया। गलत है? <b>पेज पर टैप, फिर सही नाम पर टैप।</b></li>
+    <li>जब पक्का पता हो तब <b>“Remember this”</b> टिक कीजिये — यही एक तरीका है जिससे यह सुधरता है।</li>
+    <li>जो सेट चाहिये वह डाउनलोड कीजिये: <b>CIO documents</b>, <b>All documents merged</b>, या
+      <b>Claim set</b>।</li>
+  </ol>
+  <p>आप <b>एक साथ तीन फ़ाइलें</b> खोल सकते हैं। बंद करने तक वे रहेंगी।</p>
+</div>
+
+<h2>अभी क्या अपने आप नहीं होता — ताकि आपको पता रहे</h2>
+<ul>
+  <li><b>आते ही दस्तावेज़ का नाम प्रकार के हिसाब से नहीं बदलता।</b> फ़ाइल उसी नाम से आती है जो
+    दावेदार ने रखा। प्रकार के हिसाब से नाम स्प्लिटर में होता है, जहाँ आप पुष्टि करते हैं।</li>
+  <li><b>चेकलिस्ट में आपके लिए कोई टिक नहीं लगता।</b> फ़ैसला हमेशा इंसान का।</li>
+  <li>स्प्लिटर का पहला अनुमान <b>अनुमान ही है</b>। डाउनलोड से पहले पेज जाँच लीजिये।</li>
+</ul>
+<p>यह जानबूझकर है। हम मैनुअल से शुरू कर रहे हैं, और मशीन को उतना ही काम दे रहे हैं जितना वह
+कमाती है — हर बार जब आप पेज सुधारकर “Remember this” टिक करते हैं, वह उस दस्तावेज़ पर बेहतर
+होती जाती है।</p>
+
+<h2>कुछ गलत हो जाए तो</h2>
+<ul>
+  <li><b>दावेदार कहे भेज दिया पर क्लेम पर नहीं है</b> — देखिये कि उन्होंने ऑफ़िशियल नंबर पर भेजा
+    और वही नंबर उनके क्लेम पर है। किसी दूसरे फ़ोन से भेजा तो मिलान नहीं होगा।</li>
+  <li><b>गलत क्लेम पर जुड़ गया</b> — हमें बताइये; दोबारा मत भिजवाइये।</li>
+  <li><b>कोई पेज खुल नहीं रहा, या अजीब जगह लगा है</b> — बताइये। हर सूचना से यह बेहतर होता है।</li>
+</ul>
+
+</div>
+
+<div class="foot">
+  <span class="en">Internal document — NidaanPartner operations. Please do not post this link publicly.</span>
+  <span class="hi">आंतरिक दस्तावेज़ — NidaanPartner ऑपरेशंस। यह लिंक सार्वजनिक रूप से न डालें।</span>
+</div>
+</div>
+
+<script>
+(function(){
+  function get(){ try{ return localStorage.getItem('nidaan_lang') || 'en'; }catch(e){ return 'en'; } }
+  function apply(l){
+    var hi = (l||'').toLowerCase().indexOf('hi') === 0;
+    document.body.classList.toggle('lang-hi', hi);
+    document.documentElement.lang = hi ? 'hi' : 'en';
+    var b = document.getElementById('langBtn');
+    if (b) b.textContent = hi ? 'English' : 'हिंदी';
+  }
+  apply(get());
+  var b = document.getElementById('langBtn');
+  if (b) b.addEventListener('click', function(){
+    var next = (get().toLowerCase().indexOf('hi') === 0) ? 'en' : 'hi';
+    try{ localStorage.setItem('nidaan_lang', next); }catch(e){}
+    apply(next);
+  });
+})();
+</script>
+</body>
+</html>

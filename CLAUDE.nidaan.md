@@ -166,6 +166,35 @@ rather than the request timing out. Awaiting it on the loop would freeze every o
 worker for minutes - the hazard the local engine introduced, which the network call it replaced
 never had (`_tools/test_ocr_budget.py`).
 
+### How documents reach a claim
+
+Four ways, and the counts as of 28 Sep: staff attaching by hand (934), authorization PDFs we
+generate (59), the **official WhatsApp number** (20, since 22 Sep), the claimant's own claim page
+(25). The WhatsApp path is `biz_nidaan_inbound.py` - matched to the claim by phone number,
+attached, claimant told, associate notified.
+
+**A document keeps the name it arrived with.** A claimant's file is often already called
+`Insurance_Policy_Schedule.pdf`, which is the best clue anybody gets about what it is. Do not
+store a generic name - that was a regression on 28 Sep and it cost real information. Naming by
+TYPE happens in the splitter, where a person confirms it.
+
+The staff SOP for all of this is `static/nidaan_sop_documents.html`, served at `/sop-documents`
+behind the share key. Keep it true when this changes.
+
+### The email radar
+
+Reads **on this server**: `biz_nidaan_radar_read.py`, a domain list and a phrase list, imports
+nothing but `re`. No model - the emails are from statutory bodies about identified claimants.
+
+**The forwarded sender is the real sender.** On a hand-forwarded letter the `From:` header is the
+colleague who pressed forward; the authority is inside the body. Both are read, forwarded first.
+Judging by the header alone missed exactly the mail the feature exists for.
+
+Authorities are **in the code** (Ombudsman, IRDAI, `gov.in`, statutory phrases - facts about the
+regulator). The ops config box is for what changes, and is **additive only**: a rule or listed
+sender can set red, never green. Unrecognised is amber; only our own mail and service notices are
+cleared.
+
 ### The document splitter
 
 Jobs belong to a staff member (`biz_nidaan_doc_store`), three open at a time, and the fourth ASKS
