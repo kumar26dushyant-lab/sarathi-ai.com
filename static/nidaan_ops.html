@@ -5480,22 +5480,34 @@ function _fwdCode(i){
   return m ? m[1] : '';
 }
 function _radarInBucket(i,b){
-  if(b==='forwarding') return _isFwdConfirm(i);
-  if(b==='confirm') return _isConfirm(i);
-  if(b==='act') return i.status==='new' && (i.flag==='red'||i.flag==='amber');
-  if(b==='waiting') return i.status==='responded';
-  if(b==='resolved') return i.status==='resolved'||i.status==='closed';
+  // "authority" is the point of the whole feature, so it is the first bucket and the default.
+  // An item counts when the reader recognised the sender or the wording as an authority, or
+  // when a rule the team wrote forced it - both arrive as red.
+  // status must be NEW. A letter we have already answered has left our hands, and leaving
+  // it here means the first tab never empties - which is how a tab stops being read.
+  if(b==='authority') return i.flag==='red' && i.status==='new';
+  // Everything nobody recognised. Deliberately NOT mixed into the first tab: that is what made
+  // the screen unreadable - 44 notices about our own email sitting above the letters that matter.
+  if(b==='look') return i.flag==='amber' && i.status==='new';
+  // Answered and finished together: 'Done' alone would be a lie about one we have replied
+  // to and are still waiting on.
+  if(b==='done') return i.status==='responded'||i.status==='resolved'||i.status==='closed';
   if(b==='cleared') return i.flag==='green';
-  if(b==='deadline') return !!i.deadline;
+  if(b==='forwarding') return _isFwdConfirm(i)||_isConfirm(i);
   return true;
 }
 function _renderRadarItems(){
   const s=_radarStats, mx=_radarMetrics;
-  const b=_radarFlag||'act';
+  const b=_radarFlag||'authority';
   const items=_radarItems.filter(i=>_radarInBucket(i,b));
   const fTab=(v,lbl)=>`<div class="tab-pill ${b===v?'active':''}" onclick="radarSetFlag('${v}')">${lbl}</div>`;
-  const metricStrip=`<div style="display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:.9rem">${_mTile('Act now',(mx.act||0),'need attention')}${_mTile('Auto-cleared',(mx.auto_triage_pct||0)+'%','AI handled')}${_mTile('Mailboxes',(mx.mailboxes_ok||0)+'/'+(mx.mailboxes_active||0),'connected')}${_mTile('Today',(mx.today||0),'')}</div>`;
-  const filters=`<div class="tab-row" style="margin-bottom:.8rem">${fTab('act','🔴 Act now ('+(mx.act||0)+')')}${fTab('waiting','🕓 Waiting on them ('+(mx.waiting||0)+')')}${fTab('resolved','✅ Resolved ('+(mx.resolved||0)+')')}${fTab('deadline','⏰ Deadlines ('+(mx.with_deadline||0)+')')}${fTab('cleared','⚪ Cleared ('+(mx.green||0)+')')}${fTab('confirm','✅ Confirmations ('+(_radarItems.filter(_isConfirm).length)+')')}${fTab('forwarding','📮 Forwarding codes ('+(_radarItems.filter(_isFwdConfirm).length)+')')}</div>`;
+  const nAuth=_radarItems.filter(i=>_radarInBucket(i,'authority')).length;
+  const nLook=_radarItems.filter(i=>_radarInBucket(i,'look')).length;
+  const nDone=_radarItems.filter(i=>_radarInBucket(i,'done')).length;
+  const nClr =_radarItems.filter(i=>_radarInBucket(i,'cleared')).length;
+  const nFwd =_radarItems.filter(i=>_radarInBucket(i,'forwarding')).length;
+  const metricStrip=`<div style="display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:.9rem">${_mTile('From authorities',nAuth,'read these first')}${_mTile('Cleared for you',nClr,'our own mail & services')}${_mTile('Mailboxes',(mx.mailboxes_ok||0)+'/'+(mx.mailboxes_active||0),'connected')}${_mTile('Today',(mx.today||0),'')}</div>`;
+  const filters=`<div class="tab-row" style="margin-bottom:.8rem">${fTab('authority','🔴 From authorities ('+nAuth+')')}${fTab('look','👀 Needs a look ('+nLook+')')}${fTab('done','✅ Answered &amp; closed ('+nDone+')')}${fTab('cleared','⚪ Cleared automatically ('+nClr+')')}${fTab('forwarding','📮 Forwarding codes ('+nFwd+')')}</div>`;
   if(!items.length){
     const noMb = !_radarMailboxes.length;
     const empty = noMb

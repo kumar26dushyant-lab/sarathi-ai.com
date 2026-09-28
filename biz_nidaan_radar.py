@@ -403,16 +403,9 @@ def _is_priority_sender(from_addr: str, senders: list[str]) -> bool:
     return False
 
 
-def _decide_flag(triage: dict, priority_sender: bool) -> str:
-    """🔴 red = act now · 🟡 amber = review · ⚪ green = auto-clear. Fail-safe: anything not clearly
-    noise defaults to amber (a human looks) — never auto-clear on doubt."""
-    cat = (triage.get("category") or "other").lower()
-    pri = (triage.get("priority") or "normal").lower()
-    if priority_sender or cat in ("authority", "legal", "court") or pri == "high":
-        return "red"
-    if cat in ("receipt", "marketing", "spam"):
-        return "green"
-    return "amber"
+# The flag is no longer decided from a model's category and priority - see
+# biz_nidaan_radar_read.read_email, which decides it from the sender and the words, and
+# can say which. _decide_flag lived here and went with the triage that fed it.
 
 
 # ── Incremental IMAP fetch (blocking; call via asyncio.to_thread) ────────────
@@ -512,8 +505,8 @@ def _imap_fetch_new(host: str, port: int, email: str, password: str,
 
 # ── Poll: fetch → AI triage → store as radar items ───────────────────────────
 async def poll_mailbox(mb: dict, senders: list[str], rules: Optional[list] = None) -> int:
-    """Poll ONE mailbox: fetch new mail, AI-triage each, store flagged items, advance last_uid."""
-    import biz_ai as _ai
+    """Poll ONE mailbox: fetch new mail, read each ON THIS SERVER, store items, advance last_uid."""
+    import biz_nidaan_radar_read as _read
     mid = mb["mailbox_id"]
     try:
         pw = decrypt_secret(mb.get("enc_password") or "")
@@ -530,12 +523,17 @@ async def poll_mailbox(mb: dict, senders: list[str], rules: Optional[list] = Non
     pending_tasks = []   # (item_id, flag, subject, summary, deeplink) for red/amber → Tasks module
     async with aiosqlite.connect(DB_PATH) as conn:
         for m in msgs:
-            ps = _is_priority_sender(m["from_addr"], senders)
-            triage = await _ai.radar_triage_email(m["from_addr"], m["subject"], m["snippet"])
-            flag = _decide_flag(triage, ps)
+            # Read HERE, from the sender and the words - see biz_nidaan_radar_read. This used to
+            # post the sender, subject and 600 characters of body to Gemini, about identified
+            # claimants, from statutory bodies. It also marked 44 of the first 58 emails "amber,
+            # a human looks", which is the same as saying nothing.
+            verdict = _read.read_email(m["from_addr"], m["from_name"], m["subject"],
+                                       m["snippet"], senders)
+            ps = verdict["category"] == "authority" and _is_priority_sender(
+                verdict["origin"] or m["from_addr"], senders)
+            flag = verdict["flag"]
             # A founder rule is an instruction, not a suggestion: if it matches, the mail is
-            # surfaced even where the AI would have cleared it. That is the whole point of having
-            # a rule — the human already knows this one matters.
+            # surfaced whatever else was decided. The human already knows this one matters.
             hit = _rule_hit(rules or [], m["from_addr"], m["from_name"], m["subject"], m["snippet"])
             if hit:
                 flag = "red"
@@ -546,15 +544,22 @@ async def poll_mailbox(mb: dict, senders: list[str], rules: Optional[list] = Non
                           received_at, flag, category, priority_sender, deadline, needs_action,
                           ai_reason, ai_summary, matched_rule)
                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    # ai_reason / ai_summary keep their column names: renaming a column is a
+                    # migration that rewrites data, which is the founder's to approve. They now
+                    # hold the readable reason this was flagged, and the sender it really came
+                    # from - which on a forwarded letter is not the From: header.
                     (mid, m["uid"], m["message_id"], m["from_addr"], m["from_name"], m["subject"],
-                     m["snippet"], m["received_at"], flag, triage["category"], 1 if ps else 0,
-                     triage["deadline"], 1 if triage["needs_response"] else 0,
-                     triage["reason"], triage["summary"], hit))
+                     m["snippet"], m["received_at"], flag, verdict["category"], 1 if ps else 0,
+                     "", 1 if verdict["needs_action"] else 0,
+                     verdict["why"],
+                     ("from %s" % verdict["origin"]) if verdict["origin"] else "", hit))
                 if cur.rowcount:
                     created += 1
-                    if flag in ("red", "amber"):
+                    # Only the ones that need somebody become a task. Amber used to as well,
+                    # which is how 44 notices about our own email became 44 jobs.
+                    if flag == "red":
                         pending_tasks.append((cur.lastrowid, flag, m["subject"] or "",
-                                              triage["summary"] or "", gmail_deeplink(m["message_id"])))
+                                              verdict["why"] or "", gmail_deeplink(m["message_id"])))
             except Exception:
                 pass
         await conn.execute(
