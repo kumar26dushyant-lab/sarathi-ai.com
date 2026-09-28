@@ -59,7 +59,12 @@ needed before starting.
 
 ---
 
-**Last updated:** 2026-09-29 (early morning) — 🗂️ **Each document (zip)**: one PDF per
+**Last updated:** 2026-09-29 04:05 IST — 🔔 **notifications fixed**: from 25 Sep the first
+person on every list (staff #1, the founder) and every one-person notice were silently dropped;
+payment notices now also reach the claim's handler and the referring staff; a branch Level-2
+fee's notice says "Payment RECEIVED" first. Test notice to the founder recorded and sent.
+
+**Earlier, 2026-09-29 (early morning)** — 🗂️ **Each document (zip)**: one PDF per
 document in every set; **DC = Discharge summary (DS)**; 🧭 **"Follow-up so far"** on every claim
 (who asked, when, what next - and says when automatic reminders are off); SOP opens with the
 team's action items; short announcement drafted.

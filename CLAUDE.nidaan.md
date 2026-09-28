@@ -282,6 +282,11 @@ bot becomes a way to enumerate claim numbers).
 - **The page linter skipped a broken ops page as a "template".** A block that MENTIONS `{{1}}` and
   failed to compile was skipped with "0 problems". Fixed 29 Sep: skipped only if it compiles once
   placeholders are filled. Prove a check can fail before trusting it.
+- **The first person on every notification list was never told (25-29 Sep).** A variable was
+  read a few lines before it was set; Python compiled it, and the error was caught and logged
+  per person. Every one-person notice was lost; the founder (staff #1) missed 85, payment alerts
+  included. `deploy/verify-use-before-assign.py` is in `check:py` now. A caught exception in a
+  send loop is silent success in disguise - count those log lines, do not trust "sent".
 - **Hindi text in these files mixes two encodings of ज़/फ़/ड़** (one character vs letter + dot).
   They look identical and do not match byte for byte - an exact-match patch anchor fails.
 
