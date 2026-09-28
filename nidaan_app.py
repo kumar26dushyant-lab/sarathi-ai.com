@@ -8569,6 +8569,65 @@ async def _doc_access_ok(request: Request, key: str) -> bool:
         return False
 
 
+# The page a browser gets when it arrives without a share key. It tries the ops token that is
+# already in localStorage on this origin - the same token the ops screens use - and shows the
+# document if the server accepts it. If there is no token, or the server says no, it shows the
+# message a stranger should see. The token is never put in the URL, where it would reach logs.
+_DOC_LOADER_HTML = """<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow"><title>Opening\u2026</title></head>
+<body style="font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;margin:0">
+<div id="m" style="max-width:30rem;margin:18vh auto;padding:0 1.5rem;line-height:1.6">
+  <p style="color:#555">Opening\u2026</p></div>
+<script>
+(function(){
+  var slug = "__SLUG__";
+  var box = document.getElementById("m");
+  function refuse(){
+    box.innerHTML = "<h2 style='margin:0 0 .5rem'>This page needs its share link</h2>" +
+      "<p style='color:#555'>Ask whoever sent it for the full link, including the part after " +
+      "<code>?k=</code>.</p><p style='color:#555'>If you are on the Nidaan team, " +
+      "<a href='/nidaan/ops'>sign in to ops</a> in this browser, then open this link again.</p>";
+  }
+  var t = null;
+  try { t = localStorage.getItem("nidaan_ops_token"); } catch (e) { t = null; }
+  if (!t) { refuse(); return; }
+  fetch("/nidaan/ops/api/doc/" + encodeURIComponent(slug),
+        { headers: { "Authorization": "Bearer " + t } })
+    .then(function(r){ if (!r.ok) { refuse(); return null; } return r.text(); })
+    .then(function(html){
+      if (html === null) return;
+      document.open(); document.write(html); document.close();
+    })
+    .catch(function(){ refuse(); });
+})();
+</script></body></html>"""
+
+
+@app.get("/nidaan/ops/api/doc/{slug}", include_in_schema=False)
+async def ops_doc_content(slug: str, request: Request):
+    """One shared document, for a signed-in staff member. Records that they read it.
+
+    This exists because a browser tab cannot send the ops token: it lives in localStorage and is
+    attached by JavaScript. The loader page fetches this. The authorisation is here, on the
+    server, exactly as it is for the share-key path.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request)
+    if slug not in _DOC_KEYS:
+        raise HTTPException(status_code=404)
+    f = static_dir / _DOC_KEYS[slug]
+    if not f.exists():
+        raise HTTPException(status_code=404)
+    try:
+        await _ops_audit(request, "doc.read", "doc", slug, "%s opened it" % _actor_label(staff))
+    except Exception as _e:  # noqa: BLE001
+        logger.debug("could not record a document read: %s", _e)
+    return HTMLResponse(f.read_text(encoding="utf-8"),
+                        headers={"Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow"})
+
+
 async def _serve_shared_doc(request: Request, slug: str, k: str) -> HTMLResponse:
     """One handler for every shared document, so a new one is a line in _DOC_KEYS and nothing
     else. The access rule, the refusal page and the no-index headers stay in a single place —
@@ -8576,12 +8635,11 @@ async def _serve_shared_doc(request: Request, slug: str, k: str) -> HTMLResponse
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     if not await _doc_access_ok(request, k):
-        return HTMLResponse(
-            "<div style='font-family:system-ui;max-width:30rem;margin:18vh auto;padding:0 1.5rem;"
-            "line-height:1.6'><h2 style='margin:0 0 .5rem'>This page needs its share link</h2>"
-            "<p style='color:#555'>Ask whoever sent it for the full link, including the part after "
-            "<code>?k=</code>. If you are on the Nidaan team, sign in to ops first and open it "
-            "again.</p></div>", status_code=403)
+        # A signed-in staff member looks like a stranger here: the ops token is in localStorage
+        # and a browser opening a tab sends no Authorization header. So instead of refusing,
+        # hand back a loader that uses the token already on this origin. The gate itself does
+        # not move - the content still comes from an endpoint that checks the token server-side.
+        return HTMLResponse(_DOC_LOADER_HTML.replace("__SLUG__", slug), status_code=200)
     f = static_dir / _DOC_KEYS[slug]
     if not f.exists():
         raise HTTPException(status_code=404)

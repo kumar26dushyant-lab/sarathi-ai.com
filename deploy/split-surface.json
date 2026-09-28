@@ -17758,6 +17758,33 @@
     "_require_staff",
     "app"
    ]
+  },
+  {
+   "func": "ops_doc_content",
+   "paths": [
+    "/nidaan/ops/api/doc/{slug}"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_STAFF_ACTIVE_TTL",
+    "_doc_ext_for",
+    "_doc_magic_ok",
+    "_get_staff_from_request",
+    "_is_nidaan_host",
+    "_require_staff",
+    "_sniff_file",
+    "_staff_active_cache",
+    "_staff_still_active",
+    "app",
+    "limiter"
+   ],
+   "uses": [
+    "_doc_magic_ok",
+    "_is_nidaan_host",
+    "_require_staff",
+    "app",
+    "limiter"
+   ]
   }
  ],
  "shared_core": [

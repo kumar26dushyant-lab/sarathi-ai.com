@@ -1624,6 +1624,11 @@
   "func": "ops_doc_readers",
   "guard": "nidaan-host,staff:sub_super_admin"
  },
+ "GET /nidaan/ops/api/doc/{slug}": {
+  "file": "sarathi_biz.py",
+  "func": "ops_doc_content",
+  "guard": "nidaan-host,staff:any"
+ },
  "GET /nidaan/ops/api/docsplit/jobs": {
   "file": "sarathi_biz.py",
   "func": "ops_docsplit_jobs",
