@@ -19,7 +19,10 @@ const path = require('path');
 const { chromium, devices } = require('playwright');
 
 const PAGE = process.argv[2] || path.join(__dirname, '..', 'static', 'nidaan_ops.html');
-const src = fs.readFileSync(PAGE, 'utf8');
+// Normalised to LF. git stores LF; core.autocrlf=true gives a Windows checkout CRLF, and
+// the markers below contain a literal newline - so without this the test reports a
+// feature missing on one machine and present on another.
+const src = fs.readFileSync(PAGE, 'utf8').replace(/\r\n/g, '\n');
 
 function cut(from, to, label) {
   const a = src.indexOf(from);

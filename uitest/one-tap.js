@@ -7,7 +7,9 @@ const fs = require('fs');
 const path = require('path');
 const { chromium } = require('playwright');
 
-const src = fs.readFileSync(process.argv[2] || path.join(__dirname, '..', 'static', 'nidaan_ops.html'), 'utf8');
+// Normalised to LF - see uitest/device-audit.js. The guard marker below contains a
+// literal newline, so on a CRLF checkout this said the guard was missing when it was not.
+const src = fs.readFileSync(process.argv[2] || path.join(__dirname, '..', 'static', 'nidaan_ops.html'), 'utf8').replace(/\r\n/g, '\n');
 const a = src.indexOf('(function(){\n  if (window.__ndOneTap) return;');
 const b = src.indexOf('})();', a) + '})();'.length;
 if (a < 0 || b < 5) { console.error('guard not found in the page'); process.exit(1); }
