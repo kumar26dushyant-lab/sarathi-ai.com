@@ -186,6 +186,23 @@ async def main():
           t4["doc_type"] != odd["doc_type"] or odd["doc_type"] == "other",
           "before=%s after=%s" % (odd["doc_type"], t4["doc_type"]))
 
+    print("\nA rule taught LATER reaches a claim already read\n")
+
+    settled_read = await cs.sets_for_claim(77, "health")
+    check("(the claim is cached now)", settled_read["from_cache"] is True)
+    rid2 = await store.teach("other", ["freight", "consignment", "loading", "order"], "Asha", 11)
+    later_read = await cs.sets_for_claim(77, "health")
+    check("a newly taught rule makes the claim read again, without the button",
+          later_read["from_cache"] is False,
+          "keyed on documents alone, the claim kept yesterday's answer after a rule was taught")
+    again_read = await cs.sets_for_claim(77, "health")
+    check("...once - after that it is cached again", again_read["from_cache"] is True)
+    fp_a = cs._fingerprint([{"doc_id": 1}], [])
+    cs.READER_VERSION += 1
+    fp_b = cs._fingerprint([{"doc_id": 1}], [])
+    cs.READER_VERSION -= 1
+    check("an improved reader re-reads every claim once", fp_a != fp_b)
+
     print("\nWhen a file is not where the database says\n")
 
     os.remove(os.path.join(os.environ["NIDAAN_DOCS_DIR"], "bill.pdf"))

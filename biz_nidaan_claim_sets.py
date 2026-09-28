@@ -67,11 +67,26 @@ async def claim_documents(claim_id: int) -> list:
         return []
 
 
-def _fingerprint(docs: list) -> str:
-    """What the cached reading covered. Changes the moment a document is added or removed."""
+# Bump when the way a document is identified changes (new file names, new page signals), so
+# every claim re-reads once instead of keeping the old answer until somebody presses the button.
+READER_VERSION = 2
+
+
+def _fingerprint(docs: list, rules: list = ()) -> str:
+    """What the cached reading covered: these documents, read this way, under these rules.
+
+    Changes the moment a document is added or removed, a rule is taught or undone, or the
+    reader itself improves. Keyed on documents alone, a claim kept yesterday's answer after an
+    admin taught a rule - exactly when staff expect it to have got better.
+    """
     h = hashlib.sha256()
+    h.update(b"v%d|" % READER_VERSION)
     for d in docs:
         h.update(str(d.get("doc_id") or "").encode())
+        h.update(b"|")
+    h.update(b"rules|")
+    for rid in sorted(int(r.get("rule_id") or 0) for r in (rules or [])):
+        h.update(str(rid).encode())
         h.update(b"|")
     return h.hexdigest()[:16]
 
@@ -116,7 +131,9 @@ async def read_claim(claim_id: int, *, force: bool = False) -> dict:
     if not docs:
         return {"pages": [], "docs": [], "truncated": False, "from_cache": False}
 
-    fp = _fingerprint(docs)
+    import biz_nidaan_doc_store as store
+    rules = await store.load_rules()
+    fp = _fingerprint(docs, rules)
     if not force:
         cached = load_cached(claim_id, fp)
         if cached:
@@ -146,8 +163,6 @@ async def read_claim(claim_id: int, *, force: bool = False) -> dict:
     # "Other" and dragged the whole claim into "please arrange". Measured on claims 204, 39 and
     # 151 before this changed.
     import biz_nidaan_doc_brain as brain
-    import biz_nidaan_doc_store as store
-    rules = await store.load_rules()
 
     pages = []
     page_no = 0
