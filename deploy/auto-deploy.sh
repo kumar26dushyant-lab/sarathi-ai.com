@@ -24,6 +24,21 @@ git -C "$APP_DIR" fetch origin master
 git -C "$APP_DIR" reset --hard origin/master
 echo "Code: $(git -C "$APP_DIR" log --oneline -1)"
 
+# ── HAND OVER TO THE SCRIPT WE JUST PULLED ───────────────────────────────────
+# The reset above rewrites THIS FILE while bash is part way through executing it. Bash reads a
+# script incrementally and remembers a byte offset, so when the file changes length underneath it
+# execution continues at an offset pointing into different text - later commands get skipped or
+# half-read, silently. On 28 Sep two consecutive deploys each skipped a different live site this
+# way, both reporting "complete", while the file on disk was correct the whole time.
+#
+# exec replaces this process with the freshly pulled copy, so everything below is read from a
+# file that is no longer changing. The guard stops it looping; the second fetch is a no-op.
+if [ "${DEPLOY_REEXECED:-}" != "1" ]; then
+    export DEPLOY_REEXECED=1
+    echo "Re-running the deploy script that was just pulled…"
+    exec bash "$APP_DIR/deploy/auto-deploy.sh"
+fi
+
 # Syntax gate — abort BEFORE touching any running process if the code is broken.
 "$APP_DIR/venv/bin/python" -c "
 import ast
