@@ -82,7 +82,16 @@ roll() {
             continue
         fi
         echo "Rolling $unit (port $port)…"
-        sudo -n systemctl restart "$unit"
+        if ! sudo -n systemctl restart "$unit"; then
+            # The deploy user is granted each unit BY NAME in /etc/sudoers.d/sarathi-deploy.
+            # A unit added later is not in that list, and the restart fails with a password
+            # prompt. Fail loudly with the fix rather than cryptically: a deploy that cannot
+            # load the code must stop, but it should say exactly why.
+            echo "  !! not allowed to restart $unit."
+            echo "     Add it to /etc/sudoers.d/sarathi-deploy (validate with: visudo -c -f <file>):"
+            echo "       /usr/bin/systemctl restart $unit"
+            exit 1
+        fi
         wait_health "$port" || exit 1
     done
 }
