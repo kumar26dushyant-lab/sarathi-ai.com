@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import aiosqlite                       # noqa: E402
 import biz_database as db              # noqa: E402
-import biz_nidaan_claim_access as acc  # noqa: E402
+import biz_nidaan_claim_authz as acc  # noqa: E402
 
 FAILED = 0
 DB = os.path.join(tempfile.mkdtemp(prefix="claimacc-"), "t.db")

@@ -1588,26 +1588,34 @@ async def _approvals_view(staff: dict) -> tuple[str, list]:
 
 
 # ── Gemini brain (read-only, role-scoped) ────────────────────────────────────
-async def _ask_gemini(staff: dict, question: str) -> str:
-    """Answer a natural-language question using ONLY the tasks this staffer may see.
-    Read-only by design: the model summarises context we hand it, it cannot act."""
-    import os as _os
+async def _answer_question(staff: dict, question: str) -> str:
+    """Answer a staffer's question about their own work, ON THIS SERVER.
+
+    Founder, 28 Sep: *"prevent ask AI, should not send data out PII informations should be
+    protected."* This used to post the task records to Gemini - titles, staff names, and up to
+    220 characters of a description, which on this system routinely names a claimant and their
+    illness - and get the same records back, rephrased.
+
+    The rows are fetched exactly as before, including the authorisation on a task named by
+    number. Only the last step changed: biz_nidaan_ask_local reads the question and answers from
+    the rows, here. Nothing about a claimant leaves the building, it answers instantly, the
+    counts are the table's rather than a model's reading of a truncated list, and it still works
+    when Gemini is down.
+    """
     import biz_nidaan as nidaan
+    import biz_nidaan_ask_local as ask
     lang = _lang(staff)
-    key = _os.getenv("GEMINI_API_KEY", "").strip()
-    if not key:
-        return ("AI ब्रेन अभी सेट नहीं है।" if lang == "hi"
-                else "The AI brain isn't configured yet (no GEMINI_API_KEY).")
     admin = _can(staff, "sub_super_admin")
     try:
         rows = await nidaan.list_quick_tasks(
             viewer_staff_id=(None if admin else staff["staff_id"]),
-            include_done=True, sort="updated", limit=80)
-    except Exception:
+            include_done=True, sort="updated", limit=200)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("could not read tasks for the ask feature: %s", e)
         rows = []
     seen_ids = {r.get("quick_task_id") for r in rows}
-    # ALWAYS include any task the user names by number, even if it's older than the
-    # recent window — otherwise "status of #333" wrongly answers "not found".
+    # ALWAYS include any task the user names by number, even if it is older than the recent
+    # window - otherwise "status of #333" wrongly answers "not found".
     import re as _re
     asked_ids = []
     for _m in _re.findall(r"(?:task\s*#?|#|number\s*)\s*0*(\d{1,7})", question, _re.I):
@@ -1624,51 +1632,14 @@ async def _ask_gemini(staff: dict, question: str) -> str:
             _qt = None
         if not _qt:
             continue
-        # Respect access: associates only get their own / involved tasks.
+        # Respect access: associates only get their own / involved tasks. UNCHANGED.
         if not admin and not await nidaan.is_task_participant(_tid, staff["staff_id"]):
             continue
         rows.append(_qt)
         seen_ids.add(_tid)
 
-    def _fmt(r):
-        line = (f"#{r['quick_task_id']} | {r.get('title','')} | status={r.get('status')} | "
-                f"priority={r.get('priority')} | assignee={r.get('assignee_name') or '-'} | "
-                f"creator={r.get('creator_name') or '-'} | due={str(r.get('due_date') or '-')[:10]} | "
-                f"category={r.get('category_code') or '-'}")
-        # Richer detail for explicitly-asked tasks so status answers are useful.
-        if r.get("quick_task_id") in asked_ids and r.get("description"):
-            line += f" | details: {str(r['description'])[:220]}"
-        return line
-    ctx = [_fmt(r) for r in rows]
-    _reply_lang = ("Reply in simple Hindi (Devanagari). Keep task titles, names, numbers "
-                   "and #ids exactly as-is (do not translate them)."
-                   if lang == "hi" else "Reply in English.")
-    prompt = (
-        "You are the NidaanPartner office assistant inside Telegram. Answer the staff "
-        "member's question using ONLY the task records below. Be concise and practical "
-        "(a few short lines, Telegram-friendly, no markdown tables). Refer to tasks as #id. "
-        "If the answer isn't in the data, say so plainly and suggest what to check. "
-        + _reply_lang + "\n\n"
-        f"Staff member: {staff.get('name')} (role: {staff.get('role')})\n"
-        f"Today: {__import__('datetime').date.today().isoformat()}\n\n"
-        f"TASK RECORDS ({len(ctx)}):\n" + "\n".join(ctx) +
-        f"\n\nQUESTION: {question}\n\nANSWER:")
-    model = _os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
-    try:
-        async with httpx.AsyncClient(timeout=45.0) as client:
-            r = await client.post(url, json={"contents": [{"parts": [{"text": prompt}]}]})
-            data = r.json()
-        cand = ((data.get("candidates") or [{}])[0].get("content") or {}).get("parts") or [{}]
-        out = (cand[0].get("text") or "").strip()
-        if out:
-            return out
-        return ("इसका जवाब नहीं बना — दोबारा पूछें।" if lang == "hi"
-                else "I couldn't form an answer for that — try rephrasing.")
-    except Exception as e:
-        logger.warning("Gemini ask failed: %s", e)
-        return ("AI ब्रेन अभी उपलब्ध नहीं है, थोड़ी देर में दोबारा कोशिश करें।" if lang == "hi"
-                else "The AI brain is unreachable right now. Please try again in a moment.")
+    res = ask.answer(question, rows, lang=lang)
+    return res["text"]
 
 
 # ── update routing ───────────────────────────────────────────────────────────
@@ -1861,7 +1832,7 @@ async def _process_message_text(staff: dict, text: str, chat_id) -> None:
         if not g["ok"]:
             await send_message(str(chat_id), g["reason"]); return
         import biz_nidaan_bot_docs as _bdocs
-        import biz_nidaan_claim_access as _access
+        import biz_nidaan_claim_authz as _access
         ok = await _access.assert_claim_access(staff, cid)
         if not ok["allowed"]:
             import biz_nidaan_bot_guard as _g2
@@ -1907,8 +1878,9 @@ async def _process_message_text(staff: dict, text: str, chat_id) -> None:
         return
     if act == "ai":
         await _set_pending(staff["staff_id"], None)
-        await send_message(str(chat_id), T(lang, "thinking"))
-        ans = await _ask_gemini(staff, text)
+        # No "Thinking…" any more: the answer comes from this server and arrives at once, so the
+        # placeholder would be a second message on their phone saying nothing true.
+        ans = await _answer_question(staff, text)
         await send_message(str(chat_id), ans,
                            _kb([[{"text": T(lang, "b_ask_again"), "callback_data": "ai:ask"},
                                  {"text": T(lang, "b_menu"), "callback_data": "m:home"}]]))
@@ -1921,9 +1893,8 @@ async def _process_message_text(staff: dict, text: str, chat_id) -> None:
         await _set_pending(staff["staff_id"], None)
         await _do_leave(staff, pending["kind"], text, chat_id)
         return
-    # Free text with no pending flow → treat as a question for the AI.
-    await send_message(str(chat_id), T(lang, "thinking"))
-    ans = await _ask_gemini(staff, text)
+    # Free text with no pending flow → treat as a question about their work.
+    ans = await _answer_question(staff, text)
     await send_message(str(chat_id), ans,
                        _kb([[{"text": T(lang, "b_menu"), "callback_data": "m:home"}]]))
 

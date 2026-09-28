@@ -8914,55 +8914,6 @@
    ]
   },
   {
-   "func": "ops_docsplit_tasks",
-   "paths": [
-    "/nidaan/ops/api/docsplit/tasks"
-   ],
-   "product": "nidaan",
-   "reaches": [
-    "_STAFF_ACTIVE_TTL",
-    "_get_staff_from_request",
-    "_is_nidaan_host",
-    "_require_staff",
-    "_staff_active_cache",
-    "_staff_still_active",
-    "app"
-   ],
-   "uses": [
-    "_is_nidaan_host",
-    "_require_staff",
-    "app"
-   ]
-  },
-  {
-   "func": "ops_docsplit_ai_task",
-   "paths": [
-    "/nidaan/ops/api/docsplit/{job}/ai-task"
-   ],
-   "product": "nidaan",
-   "reaches": [
-    "_DocSplitTaskReq",
-    "_STAFF_ACTIVE_TTL",
-    "_actor_label",
-    "_get_staff_from_request",
-    "_is_nidaan_host",
-    "_ops_audit",
-    "_require_staff",
-    "_staff_active_cache",
-    "_staff_still_active",
-    "app",
-    "limiter"
-   ],
-   "uses": [
-    "_DocSplitTaskReq",
-    "_is_nidaan_host",
-    "_ops_audit",
-    "_require_staff",
-    "app",
-    "limiter"
-   ]
-  },
-  {
    "func": "ops_account_detail",
    "paths": [
     "/nidaan/ops/api/accounts/{account_id}/detail"

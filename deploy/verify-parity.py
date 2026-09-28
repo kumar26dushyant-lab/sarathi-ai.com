@@ -64,7 +64,7 @@ async def call(name, fn, *args, **kw):
 
 MODULES = (
     "biz_nidaan", "biz_nidaan_buckets", "biz_nidaan_doc_checklist", "biz_nidaan_doc_request",
-    "biz_nidaan_stats", "biz_nidaan_claimant", "biz_nidaan_claim_access", "biz_nidaan_case_state",
+    "biz_nidaan_stats", "biz_nidaan_claimant", "biz_nidaan_claim_access", "biz_nidaan_claim_authz", "biz_nidaan_case_state",
     "biz_nidaan_claim_parties", "biz_nidaan_channel_partners", "biz_nidaan_capabilities",
     "biz_nidaan_wa_messages", "biz_nidaan_notify_policy", "biz_nidaan_alarm_policy",
     "biz_nidaan_login_health", "biz_nidaan_guide", "biz_nidaan_stage_guide",

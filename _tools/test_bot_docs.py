@@ -29,7 +29,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
 import biz_nidaan_bot_docs as bd     # noqa: E402
-import biz_nidaan_claim_access as access  # noqa: E402
+import biz_nidaan_claim_authz as access  # noqa: E402
 
 FAILED = 0
 CLAIM = 700

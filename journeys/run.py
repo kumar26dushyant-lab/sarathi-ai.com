@@ -129,7 +129,7 @@ async def main() -> int:
     nidaan.DB_PATH = copy
     import biz_nidaan_claimant as claimant
     claimant.DB_PATH = copy
-    import biz_nidaan_claim_access as access
+    import biz_nidaan_claim_authz as access
     access.DB_PATH = copy
     import biz_nidaan_buckets as buckets
     buckets.DB_PATH = copy

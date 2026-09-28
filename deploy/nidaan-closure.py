@@ -34,7 +34,7 @@ OUT = os.path.join(ROOT, "deploy", "nidaan-closure.json")
 ENTRY = [
     "biz_nidaan.py", "biz_nidaan_telegram.py", "biz_nidaan_notifications.py",
     "biz_nidaan_pay_guard.py", "biz_nidaan_bot_docs.py", "biz_nidaan_bot_guard.py",
-    "biz_nidaan_claim_access.py", "biz_nidaan_doc_intake.py", "biz_nidaan_doc_checklist.py",
+    "biz_nidaan_claim_access.py", "biz_nidaan_claim_authz.py", "biz_nidaan_doc_intake.py", "biz_nidaan_doc_checklist.py",
     "biz_claimshield.py", "biz_database.py",
 ]
 

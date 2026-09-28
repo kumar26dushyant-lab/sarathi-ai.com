@@ -114,6 +114,7 @@ var T = {
     timelineTitle:"Progress", updateTitle:"Latest update",
     reassure:"Rest assured — our legal team is working on your claim. You will see updates here.",
     expired:"This link is invalid or has expired. Please contact NidaanPartner for a fresh link.",
+    ourFault:"Sorry \u2014 this is a problem at our end, not with your link. Your claim and your documents are safe. Please try again in a few minutes. If it keeps happening, tell us and we will fix it \u2014 you do not need a new link.",
     sending:"Saving…", ok:"OK",
     vTitle:"Is this you?",
     vWhy:"Your claim page holds your documents and your authorisation, so we check it is really you before opening it. We will send a 6-digit code to the number or email already on your claim — not to anything typed here.",
@@ -162,6 +163,7 @@ var T = {
     timelineTitle:"प्रगति", updateTitle:"ताज़ा अपडेट",
     reassure:"निश्चिंत रहें — हमारी कानूनी टीम आपके दावे पर काम कर रही है। अपडेट आपको यहाँ दिखेंगे।",
     expired:"यह लिंक अमान्य है या समाप्त हो गया है। कृपया नए लिंक के लिए NidaanPartner से संपर्क करें।",
+    ourFault:"क्षमा कीजिए — यह समस्या हमारी ओर से है, आपके लिंक में कोई गलती नहीं है। आपका क्लेम और दस्तावेज़ सुरक्षित हैं। कृपया कुछ मिनट बाद फिर कोशिश कीजिए। फिर भी न खुले तो हमें बताइए — नए लिंक की ज़रूरत नहीं है।",
     sending:"सहेजा जा रहा है…", ok:"ठीक है",
     vTitle:"क्या यह आप ही हैं?",
     vWhy:"आपके क्लेम पेज पर आपके दस्तावेज़ और आपकी अनुमति होती है, इसलिए खोलने से पहले हम यह पक्का करते हैं कि यह आप ही हैं। 6 अंकों का कोड उसी नंबर या ईमेल पर जाएगा जो पहले से आपके क्लेम पर दर्ज है।",
@@ -241,9 +243,9 @@ async function askWhoYouAre(){
   var where = null;
   try{
     var r = await fetch("/nidaan/claim/api/verify/where", { headers: auth() });
-    if(!r.ok) return showErr();
+    if(!r.ok) return showErr(errIsOurs(r));
     where = await r.json();
-  }catch(e){ return showErr(); }
+  }catch(e){ return showErr(true); }
   var ch = where.channels || [];
   document.getElementById("greetWrap").innerHTML =
     '<h1>' + esc(t("greet")) + (where.name ? " " + esc(where.name) : "") + '</h1>';
@@ -413,17 +415,25 @@ async function checkCode(){
     keepSession(d.session);
     msg.textContent = "";
     var me = await fetch("/nidaan/claim/api/me", { headers: auth() });
-    if(!me.ok) return showErr();
+    if(!me.ok) return showErr(errIsOurs(me));
     DATA = await me.json();
     render();
   }catch(e){ msg.style.color = "#b91c1c"; msg.textContent = "Could not check that code."; }
 }
-function showErr(){
+// `ours` means the failure was on OUR side - a 5xx, or no answer at all. The claimant's link is
+// fine and asking them to fetch a new one only wastes their morning and ours.
+function showErr(ours){
   document.getElementById("greetWrap").innerHTML = "";
+  var icon = ours ? "\u26a0\ufe0f" : "\ud83d\udd12";
   document.getElementById("content").innerHTML =
-    '<div class="err"><p style="font-size:2rem">🔒</p><p><b>'+esc(t("expired"))+'</b></p></div>';
+    '<div class="err"><p style="font-size:2rem">'+icon+'</p><p><b>'
+    + esc(t(ours ? "ourFault" : "expired")) + '</b></p></div>';
   document.getElementById("reassure").textContent = "";
 }
+
+// A response we could not use: 401/404 means the link really is unknown, anything else is ours.
+// No response at all (thrown) is ours too - we cannot blame a link for our own server.
+function errIsOurs(r){ return !r || !(r.status === 401 || r.status === 403 || r.status === 404); }
 
 function render(){
   var c = DATA.claim, con = DATA.consent, il = con.illustration;

@@ -180,7 +180,7 @@ async def commit(staff: dict, claim_id: int, job: str) -> dict:
     # path is only as reliable as an unrelated dependency, and the cheapest answer (no) becomes
     # the one most likely to fail.
     import biz_nidaan_bot_guard as guard
-    import biz_nidaan_claim_access as access
+    import biz_nidaan_claim_authz as access
 
     ok = await access.assert_claim_access(staff, claim_id)
     if not ok["allowed"]:

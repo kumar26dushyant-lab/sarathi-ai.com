@@ -8,9 +8,11 @@
     "check:ops": "node deploy/verify-page-js.mjs static/nidaan_ops.html",
     "check:pages": "node deploy/verify-page-js.mjs static/nidaan_ops.html static/nidaan_dashboard.html static/nidaan_start.html static/nidaan_review.html static/nidaan_signup.html static/nidaan_login.html static/nidaan_index.html static/partner.html static/dashboard.html static/superadmin.html",
     "check:py": "py -3.13 deploy/verify-python-names.py",
-    "check:all": "npm run check:pages && npm run check:py && npm run check:notif && npm run check:routes",
+    "check:all": "npm run check:pages && npm run check:py && npm run check:notif && npm run check:routes && npm run check:attrs && npm run check:portal",
     "check:notif": "py -3.13 deploy/verify-notify-registry.py",
-    "check:routes": "py -3.13 deploy/route-census.py"
+    "check:routes": "py -3.13 deploy/route-census.py",
+    "check:attrs": "py -3.14 deploy/verify-module-attrs.py",
+    "check:portal": "py -3.13 deploy/verify-code-email.py && py -3.13 deploy/verify-22sep-list.py"
   },
   "devDependencies": {
     "eslint": "^10.11.0"
