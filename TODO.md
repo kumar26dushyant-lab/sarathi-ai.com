@@ -12,8 +12,10 @@ it. Newest first within each group._
 ### Waiting on the founder
 | # | What | Why it is waiting |
 |---|---|---|
-| 1 | **The official WhatsApp number** for the SOP page | I could not verify it from the code - only sample numbers. Left as `OFFICIAL NUMBER` on `/sop-documents`; a wrong number there sends a patient's papers to a stranger |
-| 2 | **Test the radar** with authority-sounding wording once forwarding lands | He said he will; the code is ready for direct and forwarded mail |
+| 1 | **Turn on "Complainant picks reminder time"** after the run-through, if he wants it | Built, tested, deployed OFF (WhatsApp → Doc-collection defaults). It answers inside the live conversation, so it waits for his word |
+| 2 | **Rotate the doc share key** | It was printed into a task log on 28 Sep. Rotating breaks existing shared SOP links, so it is his call |
+| 3 | **Send the 29 Sep announcement** | Drafted and updated in `ANNOUNCEMENTS.md` (names documents, Don't send, fast-track, reminder nudge) |
+| 4 | **Test the radar** with authority-sounding wording once forwarding lands | He said he will; the code is ready for direct and forwarded mail |
 | 3 | **Sarathi-AI in its own VS Code session** | Needs the source split first - see below. Today both products are generated from one `sarathi_biz.py`, so two sessions would collide |
 
 ### Nidaan — built, not finished
@@ -23,7 +25,10 @@ it. Newest first within each group._
 | 2 | **Correction Support** — fixing a claim's chain (My Business / subscriber / direct / branch / CP / staff) | Discussed, not designed. Must handle commission and revenue impact |
 | 3 | **DPDP 10-day advance reminder** to super-admin Telegram | Raised 27 Sep, not built |
 | 4 | **Splitter: rules do not yet re-run on an open job** | Teaching a rule improves the NEXT file. Re-reading the open one is a small addition |
-| 5 | **`biz_nidaan_wa_flow` has no tests** | Its old test tested a Marathi menu the product no longer has, and was retired 28 Sep. The gap is real |
+| 5 | **`biz_nidaan_wa_flow` has few tests** | `failure_reason` is tested now (29 Sep); the inbound routing still is not |
+| 7 | **Claim sets: hospital case papers** (consent, assessment, IPD file, "DC") go to a person | On purpose - DC is a discharge card or a death certificate, an IPD file holds several documents. A "Hospital records" type would let them be filed confidently; ask him first |
+| 8 | **Claim sets: 11 files named `Document_1.pdf` on claim 39** | Nothing to read in the name; the pages decide. Worth checking why a source names every file the same |
+| 9 | **WhatsApp: 72 free messages + 22 templates failed in two weeks, reason never kept** | Now kept. Look again in a week: 131047 means the 24-hour rule, 131026 means a number not on WhatsApp - opposite fixes |
 | 6 | **@SarathiBizBot token still dead** | Separate from the Nidaan bot, which is fine |
 
 ### The app split — where it actually stands
@@ -53,7 +58,13 @@ needed before starting.
 
 ---
 
-**Last updated:** 2026-09-29 — 📂 **Claim-level sets LIVE**: the three bundles build
+**Last updated:** 2026-09-29 (night) — 🚫 **"Don't send this page"** and the download now
+matches the screen; file names read first (claims 204/39/151: 35/39, 14/28, 12/25 recognised);
+⚡ **fast-track** wording + the staff ask in the reader's language; ⏰ scheduled reminders say if
+they LANDED, fall back to the approved template past 24 hours, and nudge whoever set them;
+complainant-picks-the-time built and deployed **OFF**; page linter hole closed.
+
+**Earlier on 29 Sep:** 📂 **Claim-level sets LIVE**: the three bundles build
 themselves from the documents already on a claim, with a per-claim arrange switch. 📘 SOP
 updated and fixed (it never opened for a signed-in staff member). 📢 Announcement drafted.
 

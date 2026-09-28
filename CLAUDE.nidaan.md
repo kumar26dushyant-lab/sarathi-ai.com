@@ -211,6 +211,36 @@ Corrections are taught as **readable word rules** somebody can undo, never a sco
 beats the engine's reading. Adding a document type means `DOC_TYPES` and the `SETS` orders in
 `biz_nidaan_doc_sets`.
 
+**The claim-level sets** (`biz_nidaan_claim_sets`, the "Ready to send" box) use the same engine.
+Each DOCUMENT is identified once - **its file name first** (`type_from_filename`: a name a person
+gave it is the best clue, and a camera name like `IMG-2026...` is ignored), then its first readable
+pages - and every page takes that answer. Reading all 134 pages of a claim page by page took
+minutes and was worse. `final_pages()` is the ONE place the reading meets what people decided
+(type corrections and **"Don't send"** exclusions); the screen and `build_set_pdf()` both use it,
+and the PDF is built by (document, page inside it), never by merged page number. The reading is
+cached under a key that includes **`READER_VERSION` and the active rule ids** - bump the version
+when identification changes, or claims keep yesterday's answer. Measured 29 Sep on claims
+204/39/151: 35/39, 14/28 and 12/25 documents recognised; what is left is camera photos,
+`Document_1.pdf` and hospital case papers, which go to a person on purpose.
+
+### The complainant's WhatsApp - reminders and the 24-hour rule
+
+Inside 24 hours of the complainant's last message we may send free text; outside it, only an
+approved template. `np_doc_reminder` is approved and delivers. A **scheduled reminder**
+(`biz_nidaan_wa_schedule`) counts as sent only when the complainant was **reached** -
+`doc_request.send()` says ok when it merely recorded the ask - and falls back to the template when
+the window is closed. The person who set it is told what happened (`doc.schedule_due`, bell +
+Telegram), with "please call" and the number when it did not land. Meta's failed receipts keep
+their reason (`wa_flow.failure_reason`: 131047 = the 24-hour rule, 131026 = not on WhatsApp).
+
+**The complainant can pick the time** (`biz_nidaan_wa_remind`, setting `wa_remind_ask_enabled`,
+**off** until a super-admin turns it on). Local rules read the reply; nothing is booked without
+their yes; STOP and unrelated questions are never caught.
+
+**Wording:** "fast-tracked in our internal process" - the founder's framing. Never "same day",
+never a promise about the insurer. One copy (`wa_messages.FAST_TRACK`) used by the bot and by the
+staff ask, which is written in the reader's language (`doc_request._DRAFT`).
+
 ### The bot
 
 **@NidaanPartnerOpsBot** (`biz_nidaan_telegram.py`, long-polling). Tasks, claims, notes, stage
@@ -236,7 +266,13 @@ bot becomes a way to enumerate claim numbers).
 - **The ops Telegram bot was owned by a staff member's personal account** and vanished when that
   account did. BotFather ownership cannot be transferred. Company-owned accounts only.
 - **Git Bash heredocs mangle backslashes, and backticks get executed.** Patch scripts go through
-  a file written by the editor. This has bitten five times.
+  a file written by the editor. This has bitten six times - the sixth wrote `'Don't send'` into
+  the ops page, which would have stopped its whole script.
+- **The page linter skipped a broken ops page as a "template".** A block that MENTIONS `{{1}}` and
+  failed to compile was skipped with "0 problems". Fixed 29 Sep: skipped only if it compiles once
+  placeholders are filled. Prove a check can fail before trusting it.
+- **Hindi text in these files mixes two encodings of ज़/फ़/ड़** (one character vs letter + dot).
+  They look identical and do not match byte for byte - an exact-match patch anchor fails.
 
 ---
 

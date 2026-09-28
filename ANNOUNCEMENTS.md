@@ -18,14 +18,31 @@ are on leave.
 
 • **The authorization call does not change.** Keep doing exactly what you do now.
 
+• **Say “fast-track”, the right way.** Tell complainants: *“When the documents come the right
+way — one at a time, a clear photo or PDF — your case is fast-tracked in our internal
+process.”* Never say “same day”, and never promise anything about the insurance company. The
+WhatsApp messages now say the same thing, in Hindi, Hinglish or English — whichever the person
+reads — and so does the “Ask for documents” message you send.
+
+• **When you set a document reminder, you hear when it goes.** A message comes on the bell and
+Telegram. If it could not reach them, it says **“please call”** with the number.
+
 • **You no longer build the sets by hand.** Open the claim → **📂 Documents**. Next to the
 checklist there is a new box, **Ready to send**, built from the documents already on that claim.
 Three bundles — **CIO documents**, **All documents merged**, **Claim set** — each with a
 Download button. No uploading, no joining files together.
 
-• **It will tell you when it is unsure.** If a page could not be read clearly it says
-**“Please arrange these”** and gives you the page numbers. Tap the page, tap the right name.
-That is the whole job.
+• **It will tell you when it is unsure — by name.** It says **“Please check these
+documents”** and lists them: *“Clinical_Notes.pdf — not sure what it is”*. Open the list, tap
+the page, tap the right name. That is the whole job. Most of what it asks about is files with no
+useful name — photos straight from a phone, *Document_1.pdf* — so that is normal.
+
+• **“Don't send” keeps a page out.** Every page has a **Don't send** button. The page stays in
+the list, struck through, with your name — so nobody wonders later why it is missing — and
+**Send again** puts it back. It is written in the claim's remarks.
+
+• **The download is exactly what you see.** If you change a page, the PDF you download follows
+your change.
 
 • **Your correction sticks.** It is not undone when the pages are read again, and it stays on
 the right page even when a new document arrives later.
@@ -57,14 +74,30 @@ you expected — say so. That is how it gets better, and it only learns from you
 
 • **अथॉराइज़ेशन कॉल में कुछ नहीं बदला।** जैसे करते हैं वैसे ही करते रहिये।
 
+• **“फ़ास्ट-ट्रैक” सही तरीके से कहिये।** दावेदार से कहिये: *“दस्तावेज़ सही तरीके से आएँ — एक-एक
+करके, साफ़ फ़ोटो या PDF — तो आपका केस हमारी अंदरूनी प्रक्रिया में फ़ास्ट-ट्रैक हो जाता है।”*
+“उसी दिन” कभी मत कहिये, और बीमा कंपनी के बारे में कोई वादा नहीं। WhatsApp संदेश भी अब यही कहते
+हैं — हिंदी, हिंग्लिश या अंग्रेज़ी में, जो वह व्यक्ति पढ़ता है — और आपका “Ask for documents”
+संदेश भी।
+
+• **रिमाइंडर तय करेंगे तो जाते समय आपको पता चलेगा।** घंटी और Telegram पर संदेश आता है। अगर
+वह उन तक नहीं पहुँचा, तो उसमें **“कृपया कॉल कीजिये”** और नंबर होगा।
+
 • **अब सेट हाथ से नहीं बनाने।** क्लेम खोलिये → **📂 Documents**। चेकलिस्ट के पास
 नया बॉक्स **Ready to send** है, जो उसी क्लेम के दस्तावेज़ों से बनता है। तीन बंडल —
 **CIO documents**, **All documents merged**, **Claim set** — हर एक पर डाउनलोड बटन।
 न अपलोड करना, न फ़ाइलें जोड़नी।
 
-• **शक हो तो वह खुद बताएगा।** कोई पेज साफ़ न पढ़ा जा सका हो तो
-**“Please arrange these”** लिखकर पेज नंबर देता है। पेज पर टैप, फ़िर सही नाम पर टैप।
-बस इतना ही काम है।
+• **शक हो तो वह खुद बताएगा — नाम से।** वह **“Please check these documents”** लिखकर
+फ़ाइलों के नाम देता है: *“Clinical_Notes.pdf — not sure what it is”*। सूची खोलिये, पेज पर
+टैप, फ़िर सही नाम पर टैप। बस इतना ही काम है। ज़्यादातर वही फ़ाइलें पूछी जाती हैं जिनका नाम कुछ
+नहीं बताता — फ़ोन से सीधी फ़ोटो, *Document_1.pdf* — यह सामान्य है।
+
+• **“Don't send” से पेज बाहर रहता है।** हर पेज पर **Don't send** बटन है। पेज सूची में दिखता
+रहता है, कटा हुआ, आपके नाम के साथ — ताकि बाद में कोई न सोचे कि वह कहाँ गया — और
+**Send again** से वापस आ जाता है। यह क्लेम के रिमार्क में लिखा जाता है।
+
+• **डाउनलोड वही होता है जो आप देखते हैं।** आप पेज बदलें, तो डाउनलोड की PDF भी बदल जाती है।
 
 • **आपकी सुधार टिकी रहती है।** दोबारा पढ़ने पर मिटती नहीं, और बाद में नया दस्तावेज़
 आने पर भी सही पेज पर ही रहती है।

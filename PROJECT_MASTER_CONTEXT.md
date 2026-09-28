@@ -8079,3 +8079,40 @@ call.
 - **`channel='telegram'` is still never recorded** in `nidaan_notifications` (dashboard 4055 /
   email 280 / telegram **0**). There is no delivery record for the channel we are standardising
   on, so a switch's *effect* cannot be proven from the data. Control shipped; measurement did not.
+
+---
+
+## 29 Sep 2026 (night) — documents you can hold back, reminders that say if they landed
+
+**Asked:** a visible, recorded "don't send this page" (not folder editing); real numbers on claims
+204/39/151 before the 9am run-through; "fast-track" wording that motivates without promising;
+the complainant choosing when to be reminded, with clarity and confirmation; staff nudged for
+their scheduled collection; the 24-hour rule analysed; keep it simple.
+
+**Built and live (commits e6a3e45, c6bf577, 286f5ac, 8662b96):**
+- **Don't send** per page: kept out of every set, still listed, struck through, who did it, in the
+  remarks and audit; Send again flips the same row (`nidaan_claim_page_excluded`, never deleted).
+- **The download ignored staff corrections** - fixed at the cause: `final_pages()` feeds screen
+  and PDF, and the PDF is built by (document, page in it). Verified on the three live claims: all
+  nine sets download with exactly the page count the screen shows.
+- **File names first**, plus names seen on real claims (MED BILLS, PRESC, DEATH SUMMARY, CANCEL
+  CHEQUE, our own authorization letter). Claim 204: 6 unsure -> 4 in 13s; claim 39: 18 -> 14 in
+  93s; claim 151: 18 -> 13 in 99s. The rest is camera photos, `Document_1.pdf` x11 and hospital
+  case papers - with a person, deliberately.
+- **Cache key includes the reader version and the rules**, so a taught rule reaches claims
+  already read.
+- **Fast-track** line (one copy, bot + staff ask, EN/HI/Hinglish); the staff ask was English for
+  every reader and is now in their language; the pre-send check no longer warns on Hindi names.
+- **Scheduled reminders:** sent = reached (it used to be "recorded"); template fallback past 24h;
+  the setter is nudged (`doc.schedule_due`), "please call" with the number when it failed.
+- **Meta failure reasons kept** - 94 failures in two weeks had none.
+- **Complainant picks the time** (`biz_nidaan_wa_remind`) - deployed OFF.
+- **WhatsApp panel** showed two switches ON while OFF and wrote ON back on save - fixed.
+- **Page linter** skipped a broken script as a template - fixed and proven.
+
+**The 24-hour rule, in one paragraph:** inside 24 hours of the complainant's last message we may
+send anything; after that only an approved template, charged per conversation. Their reply
+"remind me Sunday" opens a window, so a reminder within 24 hours goes as a normal message; a
+later one goes as `np_doc_reminder` (approved, delivering: 10 read / 20 sent in two weeks, 9
+failed with no reason recorded - now recorded). Staff nudges are internal (bell + Telegram) and
+have no such rule.
