@@ -53,7 +53,34 @@ needed before starting.
 
 ---
 
-**Last updated:** 2026-09-28 (evening, 2) — 📘 **SOP published** at
+**Last updated:** 2026-09-29 — 📂 **Claim-level sets LIVE**: the three bundles build
+themselves from the documents already on a claim, with a per-claim arrange switch. 📘 SOP
+updated and fixed (it never opened for a signed-in staff member). 📢 Announcement drafted.
+
+### 📂 29 Sep — THE SETS ARE ON THE CLAIM
+
+Staff open the claim → **Documents**, and beside the checklist there is **Ready to send**: the
+three bundles built from what is already attached. No uploading, no joining files.
+
+- **One doubtful page holds the whole claim** and is NAMED. A set that is nearly right is the
+  dangerous kind — nobody checks it.
+- **Corrections stick**, and are keyed to (document, page inside it) rather than the merged page
+  number — which moves the moment another document arrives.
+- **The arrange switch is per claim, off by default**, and a person can always change a page by
+  hand afterwards — the audit case.
+- **Teaching a rule is admin-only**; correcting a page is anyone's own work.
+- Every change writes to the claim's **own remarks timeline**, beside "Renamed a document".
+
+### 🔧 29 Sep — THE SOP NEVER OPENED FOR STAFF, AND THE CODE SAID IT DID
+
+`_get_staff_from_request` reads only the `Authorization: Bearer` header; the ops token lives in
+browser storage and is attached by JavaScript. So a signed-in staff member opening any shared
+document in a tab always looked like a stranger — true of `/l2-manual`, `/end-to-end` and the
+rest since the first one, while the docstring promised the opposite. I repeated that promise to
+the founder as advice. Fixed with a loader that uses the token on that origin; the gate still
+decides on the server.
+
+**Previously:** 2026-09-28 (evening, 2) — 📘 **SOP published** at
 `nidaanpartner.com/sop-documents` (share key or staff login). 📡 **Email radar re-read**: the
 screen went from 8 red + 41 amber of noise to **4 amber**. 🧰 Splitter deployed. ⚖️ Entity
 name corrected everywhere.
