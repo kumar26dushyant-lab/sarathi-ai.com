@@ -1624,9 +1624,24 @@
   "func": "ops_docsplit_jobs",
   "guard": "nidaan-host,staff:any"
  },
+ "GET /nidaan/ops/api/docsplit/rules": {
+  "file": "sarathi_biz.py",
+  "func": "ops_docsplit_rules",
+  "guard": "nidaan-host,staff:any"
+ },
+ "GET /nidaan/ops/api/docsplit/{job}/pages": {
+  "file": "sarathi_biz.py",
+  "func": "ops_docsplit_pages",
+  "guard": "nidaan-host,staff:any"
+ },
  "GET /nidaan/ops/api/docsplit/{job}/pdf": {
   "file": "sarathi_biz.py",
   "func": "ops_docsplit_collate",
+  "guard": "nidaan-host,staff:any"
+ },
+ "GET /nidaan/ops/api/docsplit/{job}/set/{set_key}": {
+  "file": "sarathi_biz.py",
+  "func": "ops_docsplit_set",
   "guard": "nidaan-host,staff:any"
  },
  "GET /nidaan/ops/api/docsplit/{job}/thumb/{page}": {
@@ -3734,6 +3749,11 @@
   "func": "crm_convert_lead",
   "guard": "nidaan-host,staff:team_member"
  },
+ "POST /nidaan/ops/api/docsplit/rules/{rule_id}/undo": {
+  "file": "sarathi_biz.py",
+  "func": "ops_docsplit_rule_undo",
+  "guard": "nidaan-host,staff:any,rate-limited"
+ },
  "POST /nidaan/ops/api/docsplit/upload": {
   "file": "sarathi_biz.py",
   "func": "ops_docsplit_upload",
@@ -3748,6 +3768,11 @@
   "file": "sarathi_biz.py",
   "func": "ops_docsplit_export",
   "guard": "nidaan-host,staff:any"
+ },
+ "POST /nidaan/ops/api/docsplit/{job}/retype": {
+  "file": "sarathi_biz.py",
+  "func": "ops_docsplit_retype",
+  "guard": "nidaan-host,staff:any,rate-limited"
  },
  "POST /nidaan/ops/api/health/action": {
   "file": "sarathi_biz.py",

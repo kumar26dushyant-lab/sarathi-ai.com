@@ -12224,11 +12224,170 @@ async def ops_docsplit_upload(request: Request, files: list[UploadFile] = File(.
     job = docsplit.save_job(pdf)
     await _store.create_job(job, staff.get("staff_id"),
                             (raw[0][0] if raw else "Upload"), n)
+    # Classified ONCE, here, and saved beside the working PDF. Reading a scanned page costs
+    # about fifteen seconds; doing it again every time the screen opens would make a long bundle
+    # unusable, and would also throw away any correction somebody had made.
+    import biz_nidaan_doc_brain as _brain
+    try:
+        page_types = await _brain.classify_pages(pdf, await _store.load_rules())
+        docsplit.save_pages(job, page_types)
+    except Exception as _e:  # noqa: BLE001
+        logger.info("classify failed for job %s: %s", job, _e)
     documents = await docsplit.segment(pdf, n)
     # Report files rejected as not-a-real-document alongside the pipeline's own skips, so the
     # staffer sees WHY something didn't make it in rather than silently losing a page.
     return {"job_id": job, "page_count": n, "documents": documents,
             "skipped": list(skipped or []) + skipped_bad}
+
+
+async def _docsplit_pages(job: str) -> list:
+    """What each page is, reading the saved answer and only classifying if there is none.
+
+    Classifying costs about fifteen seconds a page where OCR is needed, so re-reading on every
+    screen open would make a 40-page scanned bundle unusable. It is saved once at upload; this
+    is the fallback for a job from before that existed.
+    """
+    pages = docsplit.load_pages(job)
+    if pages:
+        return pages
+    pdf = docsplit.load_job(job)
+    if not pdf:
+        return []
+    import biz_nidaan_doc_brain as _brain
+    import biz_nidaan_doc_store as _store
+    pages = await _brain.classify_pages(pdf, await _store.load_rules())
+    docsplit.save_pages(job, pages)
+    return pages
+
+
+@app.get("/nidaan/ops/api/docsplit/{job}/pages")
+async def ops_docsplit_pages(job: str, request: Request):
+    """Every page with what it was read as, and the sets those types compose into."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request)
+    await _docsplit_job(job, staff)
+    import biz_nidaan_doc_sets as _sets
+    pages = await _docsplit_pages(job)
+    return {
+        "pages": [{"page": p.get("page"), "doc_type": p.get("doc_type") or "other",
+                   "label": _sets.type_label(p.get("doc_type") or "other"),
+                   "confidence": round(float(p.get("confidence") or 0), 2),
+                   "why": p.get("why") or "", "source": p.get("source") or "",
+                   "locked": bool(p.get("locked")),
+                   "taught_by": p.get("taught_by") or ""} for p in pages],
+        "types": [{"key": k, "label": _sets.type_label(k)} for k in _sets.DOC_TYPES],
+        "sets": [{"key": st["key"], "label": st["label"], "why": st.get("why") or "",
+                  "pages": [p.get("page") for p in st.get("pages") or []],
+                  "missing": [_sets.type_label(m) for m in st.get("missing") or []]}
+                 for st in _sets.compose_all(pages)],
+    }
+
+
+class _DocSplitRetypeReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    page: int = Field(..., ge=1, le=500)
+    doc_type: str = Field(..., max_length=40)
+    teach: bool = False
+
+
+@app.post("/nidaan/ops/api/docsplit/{job}/retype")
+@limiter.limit("120/minute")
+async def ops_docsplit_retype(job: str, body: _DocSplitRetypeReq, request: Request):
+    """A person says what a page really is. LOCKS it, and optionally teaches a rule.
+
+    Locked means a later re-read cannot quietly undo it. Teaching is opt-in per correction,
+    because "this page, this once" and "pages like this, always" are different decisions and the
+    screen asks which one is meant.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request)
+    await _docsplit_job(job, staff)
+    import biz_nidaan_doc_sets as _sets
+    import biz_nidaan_doc_store as _store
+    if body.doc_type not in _sets.DOC_TYPES:
+        raise HTTPException(status_code=400, detail="Unknown document type")
+    pages = await _docsplit_pages(job)
+    hit = None
+    for p in pages:
+        if int(p.get("page") or 0) == body.page:
+            p["was"] = p.get("doc_type")
+            p["doc_type"] = body.doc_type
+            p["confidence"] = 1.0
+            p["locked"] = True
+            p["why"] = "you said so"
+            hit = p
+            break
+    if not hit:
+        raise HTTPException(status_code=404, detail="No such page in this file")
+    docsplit.save_pages(job, pages)
+    rule_id = 0
+    if body.teach:
+        rule_id = await _store.teach(body.doc_type, hit.get("words") or [],
+                                     _actor_label(staff), staff.get("staff_id"))
+        if rule_id:
+            await _ops_audit(request, "docsplit.teach", "docsplit", job,
+                             "taught: %s" % body.doc_type)
+    return {"ok": True, "taught": bool(rule_id),
+            "sets": [{"key": st["key"], "label": st["label"],
+                      "pages": [q.get("page") for q in st.get("pages") or []],
+                      "missing": [_sets.type_label(m) for m in st.get("missing") or []]}
+                     for st in _sets.compose_all(pages)]}
+
+
+@app.get("/nidaan/ops/api/docsplit/{job}/set/{set_key}")
+async def ops_docsplit_set(job: str, set_key: str, request: Request):
+    """One ready-made set, as a PDF, composed by type across the whole file."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request)
+    await _docsplit_job(job, staff)
+    import biz_nidaan_doc_sets as _sets
+    if set_key not in _sets.SETS:
+        raise HTTPException(status_code=404, detail="Unknown set")
+    pdf = docsplit.load_job(job)
+    if not pdf:
+        raise HTTPException(status_code=404, detail="Job expired — please re-upload")
+    composed = _sets.compose(await _docsplit_pages(job), set_key)
+    nums = [p.get("page") for p in composed.get("pages") or []]
+    if not nums:
+        raise HTTPException(status_code=400, detail="Nothing in this set yet")
+    out = docsplit.extract_pages(pdf, nums)
+    if not out:
+        raise HTTPException(status_code=400, detail="Could not build that set")
+    await _ops_audit(request, "docsplit.set", "docsplit", job,
+                     "%s (%d pages)" % (set_key, len(nums)))
+    return Response(content=out, media_type="application/pdf",
+                    headers={"Content-Disposition":
+                             'attachment; filename="%s.pdf"' % docsplit._safe_name(set_key)})
+
+
+@app.get("/nidaan/ops/api/docsplit/rules")
+async def ops_docsplit_rules(request: Request):
+    """What the splitter has been taught - readable, so a person can disagree with it."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request)
+    import biz_nidaan_doc_sets as _sets
+    import biz_nidaan_doc_store as _store
+    rules = await _store.list_rules()
+    return {"rules": [{**r, "label": _sets.type_label(r.get("doc_type") or "other")}
+                      for r in rules]}
+
+
+@app.post("/nidaan/ops/api/docsplit/rules/{rule_id}/undo")
+@limiter.limit("30/minute")
+async def ops_docsplit_rule_undo(rule_id: int, request: Request):
+    """Turn a taught rule off. ARCHIVED, so 'why was this filed there' stays answerable."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request)
+    import biz_nidaan_doc_store as _store
+    if not await _store.undo_rule(rule_id, _actor_label(staff)):
+        raise HTTPException(status_code=404, detail="That rule is already off")
+    await _ops_audit(request, "docsplit.rule_undo", "docsplit", str(rule_id), "rule turned off")
+    return {"ok": True, "rules": await _store.list_rules()}
 
 
 @app.get("/nidaan/ops/api/docsplit/{job}/thumb/{page}")

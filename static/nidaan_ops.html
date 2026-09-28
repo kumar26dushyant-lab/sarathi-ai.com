@@ -5986,22 +5986,140 @@ async function dsUpload(){
 }
 function dsRenderReview(skipped){
   const res=document.getElementById('dsResult');
-  const thumbs=Array.from({length:_dsPages},(_,i)=>{const p=i+1;return `<div style="text-align:center;flex:0 0 auto"><img id="dsThumb_${p}" alt="page ${p}" style="width:104px;height:142px;object-fit:contain;background:var(--nd-bg-surface-2);border:1px solid var(--nd-border);border-radius:6px"><div style="font-size:.66rem;color:var(--nd-text-muted)">Page ${p}</div></div>`;}).join('');
   res.innerHTML=`
     ${skipped&&skipped.length?`<div style="color:var(--nd-warning-text);font-size:.8rem;margin-bottom:.6rem">⚠️ Skipped (unsupported): ${skipped.map(esc).join(', ')}</div>`:''}
-    <div style="font-size:.82rem;color:var(--nd-text-muted);margin-bottom:.5rem;line-height:1.65">📑 <b>${_dsPages} page(s) read on this server.</b> Nothing was sent anywhere else.<br>We have made a first guess at where each document starts and ends. It is only a guess, so please do these three things in order:<br><b>1.</b> Look at the page pictures below and find where each document really begins.<br><b>2.</b> Fix the name and the page numbers of each document in the list. Use “＋ Add a document” if one is missing.<br><b>3.</b> When the list is right, choose how you want it out — separate PDFs, or all in one.</div>
-    <div style="display:flex;gap:.5rem;overflow-x:auto;padding:.3rem 0 .7rem;margin-bottom:.6rem">${thumbs}</div>
-    <div id="dsDocList"></div>
-    <div style="display:flex;gap:.6rem;margin-top:.9rem;flex-wrap:wrap">
-      <button class="btn-sm btn-ghost" onclick="dsAddDoc()">＋ Add a document</button>
-      <button class="btn btn-primary" onclick="dsExport(this)">⬇ Split → separate PDFs (zip)</button>
-      <button class="btn btn-success" onclick="dsCollate(this)" title="Combine all pages into a single PDF">⬇ Merge → one PDF</button>
-      <button class="btn-sm btn-ghost" onclick="loadDocSplit()">↻ Start over</button>
+    <div style="font-size:.82rem;color:var(--nd-text-muted);margin-bottom:.6rem;line-height:1.65">
+      📑 <b>${_dsPages} page(s) read on this server.</b> Nothing was sent anywhere else.<br>
+      We have made a first guess at what each page is. It is only a guess, so please do these
+      three things in order:<br>
+      <b>1.</b> Look down the pages below and check what each one says it is.<br>
+      <b>2.</b> Wrong? <b>Tap the page, then tap the right name.</b> The sets update as you go.<br>
+      <b>3.</b> When it looks right, download the set you need at the bottom.
     </div>
-`;
-  dsRenderDocs();
+    <div id="dsPageList"></div>
+    <div id="dsSets" style="margin-top:1.1rem"></div>
+    <div style="display:flex;gap:.6rem;margin-top:1rem;flex-wrap:wrap">
+      <button class="btn-sm btn-ghost" onclick="dsCollate(this)">⬇ Everything as one PDF</button>
+      <button class="btn-sm btn-ghost" onclick="loadDocSplit()">↻ Start over</button>
+    </div>`;
+  dsLoadPages();
+}
+
+// The page list and the sets come from one call, so they can never disagree.
+let _dsTypes=[], _dsPageInfo=[], _dsPicked=null;
+
+async function dsLoadPages(){
+  const list=document.getElementById('dsPageList'); if(!list) return;
+  list.innerHTML='<div class="empty" style="padding:1rem"><div class="ei">⏳</div><p>Reading the pages… a scanned file can take a minute.</p></div>';
+  let d=null;
+  try{
+    const r=await fetch(`/nidaan/ops/api/docsplit/${_dsJob}/pages`,{headers:{'Authorization':'Bearer '+_token}});
+    if(!r.ok) throw new Error('bad');
+    d=await r.json();
+  }catch(e){
+    list.innerHTML='<div class="empty"><p>Could not read the pages. Please try again, or start over.</p></div>';
+    return;
+  }
+  _dsTypes=d.types||[]; _dsPageInfo=d.pages||[];
+  dsRenderPages();
+  dsRenderSets(d.sets||[]);
   dsLoadThumbs();
 }
+
+function dsRenderPages(){
+  const list=document.getElementById('dsPageList'); if(!list) return;
+  list.innerHTML=_dsPageInfo.map(p=>{
+    const unread = p.source==='none';
+    // A page nobody could read is said so plainly rather than shown as a confident guess.
+    const note = unread ? 'could not be read — please tell us what it is'
+                        : (p.locked ? 'you set this' : (p.why||''));
+    return `
+    <div class="nd-card" id="dsPg_${p.page}" style="padding:.5rem .7rem;margin-bottom:.45rem;display:flex;gap:.7rem;align-items:center;flex-wrap:wrap">
+      <img id="dsThumb_${p.page}" alt="page ${p.page}" style="width:54px;height:72px;object-fit:contain;background:var(--nd-bg-surface-2);border:1px solid var(--nd-border);border-radius:4px;flex:0 0 auto">
+      <div style="flex:1;min-width:150px">
+        <div style="font-size:.7rem;color:var(--nd-text-muted)">Page ${p.page}</div>
+        <div style="font-weight:600;font-size:.9rem">${esc(p.label||'Something else')}${p.locked?' ✓':''}</div>
+        <div style="font-size:.72rem;color:var(--nd-text-muted)">${esc(note)}</div>
+      </div>
+      <button class="btn-sm btn-ghost" onclick="dsPick(${p.page})">Change</button>
+    </div>`;
+  }).join('') || '<div class="empty"><p>No pages.</p></div>';
+}
+
+// Two taps: the page, then the name. No dragging - this is used on a phone.
+function dsPick(page){
+  _dsPicked=page;
+  const row=document.getElementById('dsPg_'+page); if(!row) return;
+  const old=document.getElementById('dsPickBox'); if(old) old.remove();
+  const box=document.createElement('div');
+  box.id='dsPickBox';
+  box.style.cssText='flex:1 1 100%;margin-top:.5rem;border-top:1px solid var(--nd-border);padding-top:.55rem';
+  box.innerHTML=`
+    <div style="font-size:.78rem;color:var(--nd-text-muted);margin-bottom:.4rem">What is page ${page}? Tap the right name.</div>
+    <div style="display:flex;flex-wrap:wrap;gap:.35rem">
+      ${_dsTypes.map(t=>`<button class="btn-sm btn-ghost" style="font-size:.78rem" onclick="dsRetype(${page},'${esc(t.key)}')">${esc(t.label)}</button>`).join('')}
+    </div>
+    <label style="display:flex;gap:.4rem;align-items:center;margin-top:.55rem;font-size:.78rem;color:var(--nd-text-muted)">
+      <input type="checkbox" id="dsTeach"> Remember this, so pages like it are filed the same way next time
+    </label>
+    <button class="btn-sm btn-ghost" style="margin-top:.4rem" onclick="dsCancelPick()">Cancel</button>`;
+  row.appendChild(box);
+}
+
+function dsCancelPick(){
+  const b=document.getElementById('dsPickBox'); if(b) b.remove();
+  _dsPicked=null;
+}
+
+async function dsRetype(page,type){
+  const teach=!!(document.getElementById('dsTeach')||{}).checked;
+  dsCancelPick();
+  try{
+    const r=await fetch(`/nidaan/ops/api/docsplit/${_dsJob}/retype`,{
+      method:'POST',
+      headers:{'Authorization':'Bearer '+_token,'Content-Type':'application/json'},
+      body:JSON.stringify({page:page,doc_type:type,teach:teach})});
+    if(!r.ok){ alert('Could not change that page. Please try again.'); return; }
+    const d=await r.json();
+    const t=_dsTypes.find(x=>x.key===type);
+    const p=_dsPageInfo.find(x=>x.page===page);
+    if(p){ p.doc_type=type; p.label=(t&&t.label)||type; p.locked=true; p.why='you said so'; }
+    dsRenderPages();
+    dsRenderSets(d.sets||[]);
+    dsLoadThumbs();
+  }catch(e){ alert('Could not change that page. Please try again.'); }
+}
+
+// The sets are the point: what the team actually sends, ready to download.
+function dsRenderSets(sets){
+  const wrap=document.getElementById('dsSets'); if(!wrap) return;
+  if(!sets.length){ wrap.innerHTML=''; return; }
+  wrap.innerHTML=`
+    <div style="font-weight:700;margin-bottom:.15rem">Ready to download</div>
+    <div style="font-size:.78rem;color:var(--nd-text-muted);margin-bottom:.6rem">Each one is built from the pages above, in a sensible order.</div>
+    ${sets.map(st=>`
+      <div class="nd-card" style="padding:.6rem .8rem;margin-bottom:.5rem;display:flex;gap:.6rem;align-items:center;flex-wrap:wrap">
+        <div style="flex:1;min-width:160px">
+          <div style="font-weight:600;font-size:.9rem">${esc(st.label)}</div>
+          <div style="font-size:.72rem;color:var(--nd-text-muted)">${(st.pages||[]).length} page(s)${st.missing&&st.missing.length?` · not in this file: ${st.missing.map(esc).join(', ')}`:''}</div>
+        </div>
+        ${(st.pages||[]).length
+          ? `<button class="btn-sm btn-primary" onclick="dsGetSet('${esc(st.key)}')">Download</button>`
+          : `<span style="font-size:.75rem;color:var(--nd-text-muted)">nothing for this yet</span>`}
+      </div>`).join('')}`;
+}
+
+async function dsGetSet(key){
+  try{
+    const r=await fetch(`/nidaan/ops/api/docsplit/${_dsJob}/set/${key}`,{headers:{'Authorization':'Bearer '+_token}});
+    if(!r.ok){ const e=await r.json().catch(()=>({})); alert((typeof e.detail==='string'&&e.detail)||'Could not build that set.'); return; }
+    const blob=await r.blob();
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob); a.download=key+'.pdf';
+    document.body.appendChild(a); a.click(); a.remove();
+  }catch(e){ alert('Could not download that set.'); }
+}
+
 function dsCopyPrompt(el){
   const txt=el.getAttribute('data-copy')||'';
   navigator.clipboard.writeText(txt).then(()=>{ const o=el.textContent; el.textContent=' ✓'; setTimeout(()=>el.textContent=o,1200); }).catch(()=>{});
@@ -6050,6 +6168,8 @@ async function dsCollate(btn){
   finally{ btn.disabled=false; btn.textContent=orig; }
 }
 window.dsLoadInbox=dsLoadInbox; window.dsOpen=dsOpen; window.dsClose=dsClose;
+window.dsLoadPages=dsLoadPages; window.dsPick=dsPick; window.dsCancelPick=dsCancelPick;
+window.dsRetype=dsRetype; window.dsGetSet=dsGetSet;
 window.loadDocSplit=loadDocSplit; window.dsUpload=dsUpload; window.dsAddDoc=dsAddDoc; window.dsExport=dsExport; window.dsCollate=dsCollate;
 window.dsCopyPrompt=dsCopyPrompt;
 

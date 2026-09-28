@@ -109,6 +109,72 @@ def load_job(job: str) -> Optional[bytes]:
         return f.read()
 
 
+def pages_path(job: str) -> str:
+    return os.path.join(TMP_ROOT, _safe_job(job), "pages.json")
+
+
+def save_pages(job: str, pages: list) -> bool:
+    """Keep what each page was read as, beside the working PDF.
+
+    Plain JSON on purpose: when somebody asks why page 7 ended up in the bills, the answer should
+    be readable without a tool. Best-effort - failing to save costs a re-read, not the job.
+    """
+    try:
+        import json
+        d = os.path.join(TMP_ROOT, _safe_job(job))
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, "pages.json"), "w", encoding="utf-8") as f:
+            json.dump(pages or [], f, ensure_ascii=False)
+        return True
+    except Exception as e:  # noqa: BLE001
+        logger.warning("could not save page types for job %s: %s", job, e)
+        return False
+
+
+def load_pages(job: str) -> list:
+    """What each page was read as, or [] if we never got that far.
+
+    An empty list means "not classified yet", which the caller turns into a re-read. It never
+    means "no pages": a job with no pages could not have been created.
+    """
+    try:
+        import json
+        with open(pages_path(job), encoding="utf-8") as f:
+            v = json.load(f)
+        return v if isinstance(v, list) else []
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def extract_pages(pdf_bytes: bytes, page_numbers: list) -> bytes:
+    """One PDF from the pages listed, in the order given. 1-indexed.
+
+    extract() cuts contiguous ranges, which is the wrong shape for a SET: a set is composed by
+    type, so "every bill in this file" is pages 4, 9 and 17. Out-of-range and duplicate numbers
+    are dropped rather than raising - a page list comes from a screen somebody has been dragging
+    things around on.
+    """
+    src = fitz.open(stream=pdf_bytes, filetype="pdf")
+    try:
+        nd = fitz.open()
+        try:
+            seen = set()
+            for n in page_numbers or []:
+                try:
+                    i = int(n)
+                except (TypeError, ValueError):
+                    continue
+                if i < 1 or i > src.page_count or i in seen:
+                    continue
+                seen.add(i)
+                nd.insert_pdf(src, from_page=i - 1, to_page=i - 1)
+            return nd.tobytes() if nd.page_count else b""
+        finally:
+            nd.close()
+    finally:
+        src.close()
+
+
 def _job_size(d: str) -> int:
     try:
         return sum(os.path.getsize(os.path.join(d, f)) for f in os.listdir(d))
