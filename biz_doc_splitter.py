@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import os
 import io
-import time
 import uuid
 import re
 import zipfile
@@ -86,8 +85,14 @@ def normalize_to_pdf(files: list) -> tuple[bytes, int, list]:
 
 # ── Job storage (short-lived working PDF on disk) ────────────────────────────
 def save_job(pdf_bytes: bytes) -> str:
+    """Put the working PDF on disk under a new job id. NOTHING is removed to make room.
+
+    This used to call _cleanup_old(), which deleted every job folder over six hours old - no
+    owner, no record, nobody asked, and the folder holds a working copy of a real claimant's
+    hospital file. A staffer who came back after lunch found their work gone. Removed 28 Sep at
+    the founder's instruction; see reclaimable() for the deliberate path.
+    """
     os.makedirs(TMP_ROOT, exist_ok=True)
-    _cleanup_old()
     job = uuid.uuid4().hex[:16]
     d = os.path.join(TMP_ROOT, job)
     os.makedirs(d, exist_ok=True)
@@ -104,20 +109,76 @@ def load_job(job: str) -> Optional[bytes]:
         return f.read()
 
 
-def _cleanup_old(max_age: int = 6 * 3600) -> None:
+def _job_size(d: str) -> int:
     try:
-        now = time.time()
-        for name in os.listdir(TMP_ROOT):
+        return sum(os.path.getsize(os.path.join(d, f)) for f in os.listdir(d))
+    except Exception:  # noqa: BLE001
+        return 0
+
+
+async def reclaimable() -> list:
+    """Job folders whose job is archived, or which have no job row at all. Read-only.
+
+    The replacement for the six-hour delete: it tells somebody what COULD be freed and leaves
+    the decision to them. A folder with no row is usually a job from before jobs had owners - it
+    is listed rather than assumed to be rubbish, because the one time that assumption is wrong it
+    is somebody's evidence.
+
+    Returns [{job, bytes, why}] and never raises: a listing that fails should not take a screen
+    down with it.
+    """
+    out = []
+    try:
+        import aiosqlite
+        import biz_database as _db
+        live = set()
+        async with aiosqlite.connect(_db.DB_PATH) as c:
+            rows = await (await c.execute(
+                "SELECT job_id FROM nidaan_doc_jobs WHERE archived_at IS NULL")).fetchall()
+        live = {r[0] for r in rows}
+        known = set()
+        async with aiosqlite.connect(_db.DB_PATH) as c:
+            rows = await (await c.execute("SELECT job_id FROM nidaan_doc_jobs")).fetchall()
+        known = {r[0] for r in rows}
+        for name in sorted(os.listdir(TMP_ROOT)):
             d = os.path.join(TMP_ROOT, name)
-            try:
-                if os.path.isdir(d) and (now - os.path.getmtime(d)) > max_age:
-                    for f in os.listdir(d):
-                        os.remove(os.path.join(d, f))
-                    os.rmdir(d)
-            except Exception:
-                pass
-    except Exception:
-        pass
+            if not os.path.isdir(d) or name in live:
+                continue
+            out.append({"job": name, "bytes": _job_size(d),
+                        "why": "closed by the person who opened it" if name in known
+                               else "no job record - from before jobs had owners"})
+    except Exception as e:  # noqa: BLE001
+        logger.info("could not list reclaimable splitter jobs: %s", e)
+    return out
+
+
+async def discard_job_file(job: str) -> bool:
+    """Remove ONE job's working files, and only if that job is already archived.
+
+    The deliberate path, called from an action where somebody pressed a button. It re-checks the
+    archive state here rather than trusting the caller: a live job must not be removable by a
+    stale screen or a mistyped id.
+    """
+    try:
+        import aiosqlite
+        import biz_database as _db
+        async with aiosqlite.connect(_db.DB_PATH) as c:
+            row = await (await c.execute(
+                "SELECT archived_at FROM nidaan_doc_jobs WHERE job_id=?", (str(job),))).fetchone()
+        if row and not row[0]:
+            logger.warning("refused to discard files for LIVE job %s", job)
+            return False
+        d = os.path.join(TMP_ROOT, _safe_job(job))
+        if not os.path.isdir(d):
+            return False
+        for f in os.listdir(d):
+            os.remove(os.path.join(d, f))
+        os.rmdir(d)
+        logger.info("discarded working files for archived job %s", job)
+        return True
+    except Exception as e:  # noqa: BLE001
+        logger.warning("could not discard job %s: %s", job, e)
+        return False
 
 
 # ── segmentation, on this server ─────────────────────────────────────────────
