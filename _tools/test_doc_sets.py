@@ -138,6 +138,24 @@ check("'other' is a real type, not a failure code", "other" in ds.DOC_TYPES)
 check("the founder's 10 MB cap is recorded where the composer can see it",
       ds.OTHER_DOCS_CAP_MB == 10)
 
+print("\nA document stays in one piece, even when the set does not name its type\n")
+
+# The shape of claim 204 (29 Sep): claim_set names no prescription, claim form or KYC, and they
+# arrived interleaved. Sorted by page alone, the prescriptions landed in three places.
+mixed = [{"page": i, "doc_type": t} for i, t in enumerate(
+    ["prescription", "claim_form", "prescription", "kyc", "discharge", "claim_form",
+     "prescription", "kyc", "other", "prescription"], 1)]
+got = [p["doc_type"] for p in ds.compose(mixed, "claim_set")["pages"]]
+runs = [t for i, t in enumerate(got) if i == 0 or got[i - 1] != t]
+check("each type appears as ONE run of pages", len(runs) == len(set(runs)), got)
+check("...named types first, in the set's order", got[0] == "discharge", got)
+check("...the others in the order they first arrived",
+      runs[1:] == ["prescription", "claim_form", "kyc", "other"], runs)
+rx = [p["page"] for p in ds.compose(mixed, "claim_set")["pages"] if p["doc_type"] == "prescription"]
+check("...and a document's own pages keep their order", rx == sorted(rx), rx)
+check("nothing lost, nothing doubled", sorted(p["page"] for p in ds.compose(mixed, "claim_set")
+                                              ["pages"]) == list(range(1, 11)))
+
 print("\n" + ("%d failed" % FAILED if FAILED
               else "one page, many sets - nothing lost, nothing invented"))
 sys.exit(1 if FAILED else 0)

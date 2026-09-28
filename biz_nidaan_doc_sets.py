@@ -162,8 +162,17 @@ def compose(pages: list, set_key: str) -> dict:
             used.add(int(p["page"]))
 
     if spec.get("catch_all"):
+        # The types the set does not name, still kept TOGETHER - each type in the order it first
+        # appears, its pages in order. Sorted by page alone they interleaved: on claim 204 the
+        # claim set held prescriptions in three places, so "one PDF per document" gave three
+        # Prescription PDFs and the single PDF scattered one document across it.
         leftovers = [p for p in (pages or []) if int(p.get("page") or 0) not in used]
         leftovers.sort(key=lambda x: int(x.get("page") or 0))
+        first: dict = {}
+        for p in leftovers:
+            first.setdefault(p.get("doc_type") or "other", int(p.get("page") or 0))
+        leftovers.sort(key=lambda x: (first[x.get("doc_type") or "other"],
+                                      int(x.get("page") or 0)))
         out.extend(leftovers)
 
     return {"key": set_key, "label": spec["label"], "label_hi": spec["label_hi"],
