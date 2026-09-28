@@ -1309,6 +1309,11 @@
   "func": "nidaan_claim_sw",
   "guard": "open"
  },
+ "GET /nidaan/cookies": {
+  "file": "sarathi_biz.py",
+  "func": "nidaan_cookies_page",
+  "guard": "nidaan-host"
+ },
  "GET /nidaan/dashboard": {
   "file": "sarathi_biz.py",
   "func": "nidaan_dashboard_page",

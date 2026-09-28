@@ -113,6 +113,34 @@ Money, security and system health **cannot be switched off**. The dashboard bell
 silenced — turning it off would delete the record of having been told, not stop an interruption.
 Authorisation fails **closed**; notification routing fails **open**. Opposite on purpose.
 
+### Two module names that sound alike
+
+    biz_nidaan_claim_access   IS THIS THE COMPLAINANT?  a code to the phone/email on the claim
+    biz_nidaan_claim_authz    MAY THIS STAFFER SEE IT?  assigned, mentioned, or an admin
+
+Opposite sides of the same counter. On 26 Sep the second was written over the first, and every
+claimant who opened their link was told "this link is invalid or has expired" until 28 Sep.
+`npm run check:attrs` now fails on any `module.attribute` a route reaches for that does not
+exist - it runs on **3.14**, because on 3.13 most modules will not import and it would pass
+without looking.
+
+### Cookies
+
+Consent is REAL, not a notice. `nidaan_ga.js` loads nothing until the visitor allows analytics,
+and refusing later deletes the `_ga` cookies. `nidaan_cookies.js` must load BEFORE it on every
+page - a gate that loads second is not a gate, and `_tools/test_cookie_consent.py` asserts the
+order. The policy at `/nidaan/cookies` lists the cookies this application really sets, read out
+of the `set_cookie` calls: naming one we do not use, or missing one we do, is a false statement
+to a regulator. Adding any new cookie or tag means updating that page in **both languages**.
+
+### Deploying
+
+`git push` then `sudo systemctl start sarathi-deploy.service`. It rolls `nidaan-web@N`
+(8031/8032, nidaanpartner.com) and `sarathi-new-web@N` (8021/8022, sarathi-ai.com) as well as the
+old `sarathi-web@N` kept for rollback. Until 28 Sep it rolled only the last of those, so every
+deploy after the split pulled the code and loaded none of it. **Verify the outcome on the ports
+that serve the domain**, never just that the unit restarted.
+
 ### Claim documents
 
 **NO CLAIM DOCUMENT LEAVES THIS SERVER.** Not to Gemini, not to any hosted model, for any purpose -

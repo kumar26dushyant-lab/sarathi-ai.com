@@ -4,7 +4,83 @@ _Auto-maintained by Claude **every conversation**, alongside `PROJECT_MASTER_CON
 _**Two-terminal workflow:** work 🟦 NidaanPartner items in one VS Code terminal, 🟩 Sarathi items in another. Each app's section is self-contained so both can progress simultaneously without collision._
 _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned · ✅ done_
 
-**Last updated:** 2026-09-28 (morning) — 🔒 **No claim document goes to Google any more.**
+**Last updated:** 2026-09-28 (afternoon) — 🚨 **The claimant portal had been dead for two
+days** (a module-name collision I caused on 26 Sep) — found, fixed, **deployed** and verified from
+outside. 🍪 **Cookie consent shipped** on advisor and policyholder pages: Google Analytics no
+longer runs until somebody says yes. 🔒 The bot's "Ask AI" no longer sends task records out.
+
+### 🚨 28 Sep — THE CLAIMANT PORTAL WAS DEAD FOR TWO DAYS, AND THE DEPLOY WAS NOT DEPLOYING
+
+**What you saw:** claim 153, *"this link is invalid or has expired"*. The link was perfect.
+`/nidaan/claim/api/verify/where` had been returning **HTTP 500 to every claimant** since 26 Sep
+13:10 IST — three different people, two different claims, every request, all day.
+
+**Cause, and it was mine.** I added a staff-authorisation module named
+`biz_nidaan_claim_access.py` — a name already used by the module that verifies a COMPLAINANT by
+sending a code to the number on their claim. It did not shadow it, it replaced it: 375 lines gone,
+along with `channels`, `start`, `check`, `SESSION_MIN` and `PREVIEW_MIN`. Restored byte-for-byte
+from `04cc829`; mine is now `biz_nidaan_claim_authz.py`, with the collision written into its
+docstring.
+
+**Three things let it run for two days. All now closed:**
+- `verify-code-email` and `verify-22sep-list` would have caught it on **day one**, but were in
+  nobody's routine → now `npm run check:portal`, inside `check:all`.
+- Nothing checked that a `module.attribute` a route reaches for actually exists → new
+  `check:attrs`: 655 references across 43 modules. It runs on **3.14**, because on 3.13 most of
+  these modules will not import and it would pass without looking at anything.
+- **`auto-deploy.sh` restarted `sarathi-web@1/2`, which has served neither domain since the
+  split.** Every deploy since 27 Sep pulled the code and loaded none of it. It now rolls
+  `nidaan-web@N` (8031/2) and `sarathi-new-web@N` (8021/2) as well, one at a time, health-gated,
+  and a unit that is not installed is skipped **with a line saying so**.
+
+**The second fault made it worse.** The page turned our 500 into *"your link is invalid — contact
+NidaanPartner for a fresh link"*, so claimants asked staff for new links, staff reissued, and the
+new links failed identically. Now 401/404 means "ask us for a fresh one" and 5xx means "this is
+our problem, your claim and documents are safe, you do **not** need a new link" — English + Hindi.
+
+**Verified from outside after deploying:** magic link 303, portal 200, `verify/where` 200 with the
+right claim and both masked channels, a bogus token still refused 401, sarathi-ai.com still up.
+
+### 🍪 28 Sep — COOKIE CONSENT, ON BOTH AUDIENCES
+
+Google Analytics had been loading on five public pages **the moment they opened**, setting `_ga`
+cookies on people who had never been asked. A banner on its own would have been decoration over
+tracking that had already started.
+
+- `nidaan_ga.js` loads **nothing** until analytics is allowed; refusing later **deletes** `_ga`.
+- The banner is on 12 advisor and policyholder pages, and loads **before** GA — a gate that loads
+  second is not a gate.
+- **Accept all / Only essential / Choose what to allow**, same size, side by side. Nothing
+  pre-ticked. Ignoring it consents to nothing.
+- **Cookie policy** at `/nidaan/cookies`, English + Hindi, listing the cookies we really set —
+  read out of the `set_cookie` calls, not written from memory. A policy naming cookies we do not
+  use is a false statement to a regulator.
+- **Cookie settings** in the footer of every page including the claimant portal, so a yes can be
+  withdrawn. 44 checks, proven to fail against the ungated version.
+
+🔴 **Still your call:** `affiliate_token` is classified **essential** — "remembers which
+partner referred you, so they are credited". Commission depends on it. If your counsel would
+rather it were optional, that is a one-line change; but a visitor who then refused would cost that
+partner their credit.
+
+### 🧪 28 Sep — A TEST SWEEP THAT MEANT NOTHING
+
+Eleven tests had been failing for long enough that nobody read the output — and a sweep nobody
+believes is where a real failure hides. It did: not one check said a word about the dead portal.
+`_tools/test_*.py` held three different things: local logic tests, tests that need the live
+database, and manual toolkits (one of which deletes an account).
+
+- Server-only tests now **skip with a sentence saying what was not checked** and how to run it
+  there. Skipping is honest; failing for the wrong reason is not.
+- `test_step5_pay` prints its usage instead of crashing on `sys.argv[1]`.
+- `test_doc_checklist` was both stale and broken: its fixture never created the documents table
+  its module joins to, and its numbers were from when a health claim needed 5 documents — it
+  needs 8 (7 required + `other_docs`). **13 passed/9 failed → 23 passed/0 failed.**
+- `test_wa_flow` **retired**: it tested a Marathi language menu and helpers the rewritten module
+  no longer has. 🔴 **`biz_nidaan_wa_flow` is now untested** — written here so the gap stays
+  visible rather than quietly disappearing.
+
+**Previously:** 2026-09-28 (morning) — 🔒 **No claim document goes to Google any more.**
 Intake, the splitter and the WhatsApp pipeline now read pages **on our own server**, and nothing is
 filed automatically — a person says what each document is. 🔴 **Not deployed** (team is working;
 after 6pm IST).

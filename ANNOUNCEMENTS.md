@@ -1,5 +1,67 @@
 # Staff Announcement Drafts
 
+## 2026-09-28 (2) — A cookie choice now appears on the website, for advisors and policyholders
+
+_For: all staff, so nobody is surprised by what customers will ask about._
+_Not yet sent._
+
+**Title (EN):**
+🍪 Visitors are now asked about cookies — and “no” is a real option
+
+**Details (EN):**
+• **What visitors will see.** The first time somebody opens NidaanPartner.com — an advisor,
+or a policyholder opening their claim page — a small box appears at the bottom with three
+choices: **Accept all**, **Only essential**, or **Choose what to allow**.
+
+• **Nothing breaks if they say no.** Signing in, staying signed in, and the referral credit
+to the partner who brought them all keep working whatever they choose. Those are marked
+essential and cannot be switched off, and the box says so plainly.
+
+• **What the choice actually changes.** Only whether we may count visits (Google Analytics).
+Until now that counting started the moment anyone opened the site, without being asked. It no
+longer runs unless the visitor says yes.
+
+• **Nothing about a claim is ever involved.** No document, no claim detail, no name goes into
+that counting — ever. If a customer asks, you can say that plainly.
+
+• **They can change their mind any time.** There is a **Cookie settings** link at the bottom
+of every page, and a full **Cookie policy** page at nidaanpartner.com/nidaan/cookies listing every
+cookie, what it does and how long it lasts — in English and Hindi.
+
+• **If a customer asks you “is it safe to accept?”** — both answers are safe. Accepting only
+helps us see which pages confuse people. Refusing changes nothing for them.
+
+---
+
+**शीर्षक (HI):**
+🍪 वेबसाइट पर अब कुकीज़ का विकल्प पूछा जाता है — और “नहीं” कहना भी पूरा विकल्प है
+
+**विवरण (HI):**
+• **लोगों को क्या दिखेगा।** जब कोई पहली बार NidaanPartner.com खोलेगा — चाहे ऐडवाइज़र
+हो या अपना क्लेम पेज खोलने वाला पॉलिसीधारक — नीचे एक छोटा बॉक्स आएगा जिसमें तीन
+विकल्प होंगे: **सभी स्वीकार करें**, **केवल ज़रूरी**, या **चुनिए क्या-क्या अनुमति है**।
+
+• **ना कहने से कुछ नहीं टूटता।** लॉग-इन करना, लॉग-इन बने रहना, और जिस पार्टनर ने भेजा
+उनका श्रेय — ये सब किसी भी विकल्प में चलते रहेंगे। ये “ज़रूरी” हैं और बंद नहीं हो
+सकतीं, और बॉक्स में यह साफ़ लिखा है।
+
+• **विकल्प से सचमुच क्या बदलता है।** सिर्फ़ यह कि हम विज़िट गिन सकें या नहीं (Google
+Analytics)। अब तक यह गिनती पूछे बिना ही साइट खुलते ही शुरू हो जाती थी। अब यह तब तक
+नहीं चलती जब तक व्यक्ति हाँ न कहे।
+
+• **क्लेम से जुड़ी कोई बात इसमें कभी नहीं जाती।** न कोई दस्तावेज़, न क्लेम की कोई
+जानकारी, न नाम — कभी नहीं। कोई ग्राहक पूछे तो यह साफ़ कह सकते हैं।
+
+• **वे कभी भी अपनी पसंद बदल सकते हैं।** हर पेज के नीचे **कुकी सेटिंग्स** लिंक है, और
+nidaanpartner.com/nidaan/cookies पर पूरी **कुकी नीति** है जिसमें हर कुकी, उसका काम और समय
+लिखा है — अंग्रेज़ी और हिंदी दोनों में।
+
+• **अगर ग्राहक पूछे “स्वीकार करना सुरक्षित है?”** — दोनों जवाब सुरक्षित हैं। हाँ कहने से
+सिर्फ़ हमें यह समझने में मदद मिलती है कि कौन से पेज लोगों को उलझाते हैं। मना करने से
+उनके लिए कुछ नहीं बदलता।
+
+---
+
 ## 2026-09-28 — Claim documents now stay on our own server, and you decide what each one is
 
 _For: all staff who handle claim documents, and anyone who uses the PDF splitter._

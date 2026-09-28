@@ -66,6 +66,11 @@
   .donebox{background:#ecfdf5;border:1px solid #10b981;color:#065f46;border-radius:10px;
     padding:.6rem .7rem;font-size:.9rem;line-height:1.5;margin:.2rem 0 .6rem}
 </style>
+<script src="/static/nidaan_cookies.js"></script>
+<style>
+.ckfoot{margin:1.6rem 0 .6rem;text-align:center;font-size:.76rem;line-height:2;opacity:.75}
+.ckfoot a{color:inherit;text-decoration:underline;cursor:pointer}
+</style>
 </head>
 <body>
 <header>
@@ -79,6 +84,9 @@
 <div class="wrap">
   <div id="content"><div class="loading" id="loader">…</div></div>
   <div class="reassure" id="reassure"></div>
+  <!-- The claimant needs a way back to their cookie choice too. Small, quiet, and at the end -
+       it must be reachable, not prominent, on a page about somebody's claim. -->
+  <div class="ckfoot" id="ckfoot"></div>
 </div>
 
 <script>
@@ -116,6 +124,7 @@ var T = {
     expired:"This link is invalid or has expired. Please contact NidaanPartner for a fresh link.",
     ourFault:"Sorry \u2014 this is a problem at our end, not with your link. Your claim and your documents are safe. Please try again in a few minutes. If it keeps happening, tell us and we will fix it \u2014 you do not need a new link.",
     sending:"Saving…", ok:"OK",
+    ckPolicy:"Cookie policy", ckSettings:"Cookie settings",
     vTitle:"Is this you?",
     vWhy:"Your claim page holds your documents and your authorisation, so we check it is really you before opening it. We will send a 6-digit code to the number or email already on your claim — not to anything typed here.",
     vWhats:"Send the code on WhatsApp",
@@ -165,6 +174,7 @@ var T = {
     expired:"यह लिंक अमान्य है या समाप्त हो गया है। कृपया नए लिंक के लिए NidaanPartner से संपर्क करें।",
     ourFault:"क्षमा कीजिए — यह समस्या हमारी ओर से है, आपके लिंक में कोई गलती नहीं है। आपका क्लेम और दस्तावेज़ सुरक्षित हैं। कृपया कुछ मिनट बाद फिर कोशिश कीजिए। फिर भी न खुले तो हमें बताइए — नए लिंक की ज़रूरत नहीं है।",
     sending:"सहेजा जा रहा है…", ok:"ठीक है",
+    ckPolicy:"कुकी नीति", ckSettings:"कुकी सेटिंग्स",
     vTitle:"क्या यह आप ही हैं?",
     vWhy:"आपके क्लेम पेज पर आपके दस्तावेज़ और आपकी अनुमति होती है, इसलिए खोलने से पहले हम यह पक्का करते हैं कि यह आप ही हैं। 6 अंकों का कोड उसी नंबर या ईमेल पर जाएगा जो पहले से आपके क्लेम पर दर्ज है।",
     vWhats:"WhatsApp पर कोड भेजें",
@@ -198,9 +208,28 @@ function getToken(){
 function inr(n){ try{ return "₹" + Math.round(n).toLocaleString("en-IN"); }catch(e){ return "₹"+Math.round(n); } }
 function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];}); }
 
+// Drawn from the same translation table as the rest of the page, so it switches with the
+// language button instead of sitting in English on a Hindi page.
+function renderCookieFoot(){
+  var f = document.getElementById("ckfoot");
+  if(!f) return;
+  f.innerHTML = "";
+  var a = document.createElement("a");
+  a.href = "/nidaan/cookies"; a.textContent = t("ckPolicy");
+  var sep = document.createTextNode("  ·  ");
+  var b = document.createElement("a");
+  b.href = "#"; b.textContent = t("ckSettings");
+  b.addEventListener("click", function(e){
+    e.preventDefault();
+    if(window.nidaanCookies) window.nidaanCookies.open();
+  });
+  f.appendChild(a); f.appendChild(sep); f.appendChild(b);
+}
+
 function toggleLang(){
   LANG = (LANG==="en") ? "hi" : "en";
   localStorage.setItem("claim_lang", LANG);
+  renderCookieFoot();
   document.getElementById("langBtn").textContent = (LANG==="en") ? "हिंदी" : "English";
   document.documentElement.lang = LANG;
   if(DATA) render();
@@ -225,6 +254,9 @@ function auth(){ return { "Authorization":"Bearer " + (SESSION || TOKEN) }; }
 async function load(){
   TOKEN = getToken();
   document.getElementById("langBtn").textContent = (LANG==="en") ? "हिंदी" : "English";
+  // Before any of the early returns below: on the expired-link screen a claimant still needs
+  // their cookie choice, and every one of those paths returns without reaching the end.
+  renderCookieFoot();
   SESSION = getSession();
   if(!TOKEN && !SESSION){ return showErr(); }
   if(SESSION){

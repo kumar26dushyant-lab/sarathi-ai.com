@@ -788,6 +788,20 @@ async def nidaan_privacy_page(request: Request):
     return _nidaan_page("nidaan_privacy.html", request)
 
 
+@app.get("/nidaan/cookies", response_class=HTMLResponse)
+async def nidaan_cookies_page(request: Request):
+    """Which cookies this site sets, what each one does, and how to change the answer.
+
+    Linked from the consent banner and from the footer of every Nidaan page. It lists the cookies
+    this application actually sets - read out of the set_cookie calls, not written from memory -
+    because a cookie policy that names cookies we do not use, or omits ones we do, is worse than
+    none: it is a statement to a regulator that happens to be false.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    return _nidaan_page("nidaan_cookies.html", request)
+
+
 @app.get("/nidaan/terms", response_class=HTMLResponse)
 async def nidaan_terms_page(request: Request):
     """NidaanPartner's own terms of service (see the note on /nidaan/privacy)."""

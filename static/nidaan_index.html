@@ -7,6 +7,7 @@
 <meta name="google-site-verification" content="5nsPx04_faef65tYouBeBPGETEr-e_ZnHI3rQjplzUk" />
 <!-- Google Analytics (GA4) — shared include; loads ONLY on the live nidaanpartner.com
      host (never staging/localhost), so test traffic never pollutes analytics. -->
+<script src="/static/nidaan_cookies.js"></script>
 <script src="/static/nidaan_ga.js"></script>
 <title>Nidaan — The Legal Consultants | Insurance Claim Dispute Resolution India</title>
 <link rel="stylesheet" href="/static/nidaan_design.css?v=6">
@@ -1589,6 +1590,10 @@ body.aud-advisor .aud-switch.only-adv,body.aud-policyholder .aud-switch.only-ph{
       <ul>
         <li><a href="/nidaan/privacy" class="en">Privacy Policy</a><a href="/nidaan/privacy" class="hi" style="display:none">गोपनीयता नीति</a></li>
         <li><a href="/nidaan/terms" class="en">Terms of Service</a><a href="/nidaan/terms" class="hi" style="display:none">सेवा शर्तें</a></li>
+        <li><a href="/nidaan/cookies" class="en">Cookie Policy</a><a href="/nidaan/cookies" class="hi" style="display:none">कुकी नीति</a></li>
+        <!-- Withdrawing permission has to be as reachable as giving it, so it lives in the
+             footer of the page rather than only inside the banner nobody can get back to. -->
+        <li><a href="#" class="en" onclick="if(window.nidaanCookies){window.nidaanCookies.open()}return false">Cookie settings</a><a href="#" class="hi" style="display:none" onclick="if(window.nidaanCookies){window.nidaanCookies.open()}return false">कुकी सेटिंग्स</a></li>
       </ul>
       <div style="margin-top:1.5rem">
         <h4 class="en">Leadership</h4>

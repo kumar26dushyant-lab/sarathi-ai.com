@@ -17527,6 +17527,27 @@
     "app",
     "logger"
    ]
+  },
+  {
+   "func": "nidaan_cookies_page",
+   "paths": [
+    "/nidaan/cookies"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_PAGE_ETAG",
+    "_etag_matches",
+    "_is_nidaan_host",
+    "_nidaan_page",
+    "_page_etag",
+    "app",
+    "static_dir"
+   ],
+   "uses": [
+    "_is_nidaan_host",
+    "_nidaan_page",
+    "app"
+   ]
   }
  ],
  "shared_core": [
