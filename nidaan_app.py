@@ -12296,6 +12296,75 @@ async def ops_docsplit_close(job: str, request: Request):
     return {"ok": True, "jobs": await _store.list_jobs(staff.get("staff_id"))}
 
 
+@app.get("/nidaan/ops/api/claims/{claim_id}/doc-sets")
+async def ops_claim_doc_sets(claim_id: int, request: Request, refresh: int = 0):
+    """The three sets built from the documents already on this claim, and what is still missing.
+
+    Same reader and same taught rules as the standalone splitter - one engine, or staff would be
+    told two different things about the same page. What this adds is the claim: which documents
+    the checklist is still waiting for, and where each one came from.
+
+    Reading a scanned page costs about fifteen seconds, so the answer is cached against the
+    claim and reused until its documents change. `refresh=1` re-reads - for the button somebody
+    presses after teaching a rule.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request)
+    import biz_nidaan_claim_authz as _authz
+    if not (await _authz.assert_claim_access(staff, claim_id)).get("allowed"):
+        raise HTTPException(status_code=404, detail="Claim not found")
+    claim = await nidaan.get_claim_with_account(claim_id) or {}
+    import biz_nidaan_claim_sets as _cs
+    return await _cs.sets_for_claim(claim_id, claim.get("claim_type") or "",
+                                    force=bool(refresh))
+
+
+@app.get("/nidaan/ops/api/claims/{claim_id}/doc-sets/{set_key}")
+async def ops_claim_doc_set_pdf(claim_id: int, set_key: str, request: Request):
+    """One set for this claim, as a PDF, composed by type across everything on the claim."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request)
+    import biz_nidaan_claim_authz as _authz
+    if not (await _authz.assert_claim_access(staff, claim_id)).get("allowed"):
+        raise HTTPException(status_code=404, detail="Claim not found")
+    import biz_nidaan_claim_sets as _cs
+    import biz_nidaan_doc_sets as _sets
+    if set_key not in _sets.SETS:
+        raise HTTPException(status_code=404, detail="Unknown set")
+
+    read = await _cs.read_claim(claim_id)
+    if not read["pages"]:
+        raise HTTPException(status_code=400, detail="Nothing readable on this claim yet")
+    composed = _sets.compose(read["pages"], set_key)
+    nums = [p.get("page") for p in composed.get("pages") or []]
+    if not nums:
+        raise HTTPException(status_code=400, detail="Nothing in this set yet")
+
+    # Rebuilt from the same merge the reading used, so a page number means the same thing.
+    import biz_doc_splitter as _split
+    import os as _os
+    docs_dir = _os.getenv("NIDAAN_DOCS_DIR", "uploads/nidaan-docs")
+    files = []
+    for d in read["docs"]:
+        try:
+            with open(_os.path.join(docs_dir, d.get("stored_name") or ""), "rb") as f:
+                files.append((d.get("original_name") or "document", f.read()))
+        except Exception:  # noqa: BLE001
+            continue
+    merged, _n, _sk = _split.normalize_to_pdf(files)
+    out = _split.extract_pages(merged, nums) if merged else b""
+    if not out:
+        raise HTTPException(status_code=400, detail="Could not build that set")
+    await _ops_audit(request, "claim.doc_set", "claim", str(claim_id),
+                     "%s (%d pages)" % (set_key, len(nums)))
+    return Response(content=out, media_type="application/pdf",
+                    headers={"Content-Disposition":
+                             'attachment; filename="claim-%d-%s.pdf"'
+                             % (claim_id, _split._safe_name(set_key))})
+
+
 @app.post("/nidaan/ops/api/docsplit/upload")
 @limiter.limit("20/minute")
 async def ops_docsplit_upload(request: Request, files: list[UploadFile] = File(...)):

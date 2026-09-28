@@ -1524,6 +1524,16 @@
   "func": "ops_claim_consent_proof",
   "guard": "nidaan-host,staff:super_admin"
  },
+ "GET /nidaan/ops/api/claims/{claim_id}/doc-sets": {
+  "file": "sarathi_biz.py",
+  "func": "ops_claim_doc_sets",
+  "guard": "nidaan-host,staff:any"
+ },
+ "GET /nidaan/ops/api/claims/{claim_id}/doc-sets/{set_key}": {
+  "file": "sarathi_biz.py",
+  "func": "ops_claim_doc_set_pdf",
+  "guard": "nidaan-host,staff:any"
+ },
  "GET /nidaan/ops/api/claims/{claim_id}/doc-window": {
   "file": "sarathi_biz.py",
   "func": "ops_doc_window",

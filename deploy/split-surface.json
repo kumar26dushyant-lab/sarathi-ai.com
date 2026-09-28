@@ -17785,6 +17785,60 @@
     "app",
     "limiter"
    ]
+  },
+  {
+   "func": "ops_claim_doc_sets",
+   "paths": [
+    "/nidaan/ops/api/claims/{claim_id}/doc-sets"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_STAFF_ACTIVE_TTL",
+    "_doc_ext_for",
+    "_doc_magic_ok",
+    "_get_staff_from_request",
+    "_is_nidaan_host",
+    "_require_staff",
+    "_sniff_file",
+    "_staff_active_cache",
+    "_staff_still_active",
+    "app",
+    "limiter"
+   ],
+   "uses": [
+    "_doc_magic_ok",
+    "_is_nidaan_host",
+    "_require_staff",
+    "app",
+    "limiter"
+   ]
+  },
+  {
+   "func": "ops_claim_doc_set_pdf",
+   "paths": [
+    "/nidaan/ops/api/claims/{claim_id}/doc-sets/{set_key}"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_STAFF_ACTIVE_TTL",
+    "_doc_ext_for",
+    "_doc_magic_ok",
+    "_get_staff_from_request",
+    "_is_nidaan_host",
+    "_require_staff",
+    "_sniff_file",
+    "_staff_active_cache",
+    "_staff_still_active",
+    "app",
+    "limiter"
+   ],
+   "uses": [
+    "_doc_magic_ok",
+    "_is_nidaan_host",
+    "_require_staff",
+    "app",
+    "limiter"
+   ]
   }
  ],
  "shared_core": [
