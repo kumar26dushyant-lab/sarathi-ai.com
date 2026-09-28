@@ -5882,14 +5882,67 @@ function loadDocSplit(){
   el.innerHTML=`
     <div class="section-hdr"><div>
       <div class="section-title">📄 Document Splitter & Collator</div>
-      <div class="section-sub">Upload a customer's mixed file(s). <b>Split</b> — the AI separates the different documents (discharge summary, bills, reports, policy…) into individual PDFs to send to the authorities. <b>Merge</b> — combine everything into one clean PDF. You review before exporting.</div>
+      <div class="section-sub">Upload a customer's mixed file(s). The pages are read <b>on our own server</b> — nothing is sent outside. <b>Split</b> — it makes a first guess at where each document starts and ends (discharge summary, bills, reports, policy…) and <b>you correct it</b> before exporting. <b>Merge</b> — combine everything into one clean PDF.</div>
     </div></div>
     <div style="background:var(--nd-bg-surface);border:2px dashed var(--nd-border-strong);border-radius:12px;padding:1.6rem;text-align:center">
       <div style="font-size:2rem;margin-bottom:.5rem">📤</div>
       <label class="btn btn-primary" style="cursor:pointer">Choose file(s)<input id="dsFiles" type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.webp" style="display:none" onchange="dsUpload()"></label>
       <div style="font-size:.78rem;color:var(--nd-text-muted);margin-top:.7rem">PDF · JPG · PNG · WebP &nbsp;·&nbsp; up to 12 files &nbsp;·&nbsp; 30 MB each &nbsp;·&nbsp; <i>(DOC/DOCX support coming)</i></div>
     </div>
+    <div id="dsInbox" style="margin-top:1rem"></div>
     <div id="dsResult" style="margin-top:1rem"></div>`;
+  dsLoadInbox();
+}
+
+// ── the inbox: three files open at a time, per person ────────────────────────
+// Three is the founder's number, and the point of showing them is that "you already have 3 open"
+// is useless on its own - somebody has to be able to see WHICH three before deciding what to
+// finish. Nothing here closes anything on its own.
+async function dsLoadInbox(){
+  const wrap=document.getElementById('dsInbox'); if(!wrap) return;
+  let d={jobs:[],limit:3};
+  try{
+    const r=await fetch('/nidaan/ops/api/docsplit/jobs',{headers:{'Authorization':'Bearer '+_token}});
+    if(r.ok) d=await r.json();
+  }catch(e){ wrap.innerHTML=''; return; }
+  const jobs=d.jobs||[];
+  if(!jobs.length){ wrap.innerHTML=''; return; }
+  wrap.innerHTML=`
+    <div class="nd-card" style="padding:.8rem 1rem">
+      <div style="font-weight:700;margin-bottom:.15rem">Your open files (${jobs.length} of ${d.limit||3})</div>
+      <div style="font-size:.78rem;color:var(--nd-text-muted);margin-bottom:.7rem">These stay here until you close them. Nothing is removed on its own.</div>
+      ${jobs.map(j=>`
+        <div style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;padding:.45rem 0;border-top:1px solid var(--nd-border)">
+          <div style="flex:1;min-width:150px">
+            <div style="font-weight:600;font-size:.88rem">${esc(j.title||'Upload')}</div>
+            <div style="font-size:.72rem;color:var(--nd-text-muted)">${j.page_count||0} page(s) · started ${esc(String(j.created_at||'').slice(0,16))}</div>
+          </div>
+          <button class="btn-sm btn-ghost" onclick="dsOpen('${esc(j.job_id)}',${j.page_count||0})">Open</button>
+          <button class="btn-sm btn-ghost" style="color:var(--nd-danger-text)" onclick="dsClose('${esc(j.job_id)}','${esc((j.title||'this file').replace(/'/g,''))}')">Close</button>
+        </div>`).join('')}
+    </div>`;
+}
+
+async function dsOpen(job,pages){
+  _dsJob=job; _dsPages=pages||0; _dsDocs=[];
+  const res=document.getElementById('dsResult');
+  res.innerHTML='<div class="empty"><div class="ei">⏳</div><p>Opening…</p></div>';
+  // The page ranges are not stored yet, so re-opening starts from one document over every page
+  // and the person adjusts. Honest about that rather than pretending to remember.
+  _dsDocs=[{name:'Document 1',start:1,end:_dsPages||1,summary:''}];
+  dsRenderReview([]);
+}
+
+// Closing somebody's work is confirmed first, every time (founder's standing rule), and it
+// ARCHIVES - the file is not destroyed, so "I closed the wrong one" is recoverable.
+async function dsClose(job,label){
+  if(!confirm('Close "'+label+'"?\n\nIt comes out of your open list. The file is kept, not deleted — ask an admin if you need it back.')) return;
+  try{
+    const r=await fetch(`/nidaan/ops/api/docsplit/${job}/close`,{method:'POST',headers:{'Authorization':'Bearer '+_token}});
+    if(!r.ok){ alert('Could not close that file. Please try again.'); return; }
+  }catch(e){ alert('Could not close that file. Please try again.'); return; }
+  if(_dsJob===job){ _dsJob=null; document.getElementById('dsResult').innerHTML=''; }
+  dsLoadInbox();
 }
 async function dsUpload(){
   const inp=document.getElementById('dsFiles'); if(!inp||!inp.files.length) return;
@@ -5898,11 +5951,38 @@ async function dsUpload(){
   const fd=new FormData(); for(const f of inp.files) fd.append('files', f);
   let r; try{ r=await fetch('/nidaan/ops/api/docsplit/upload',{method:'POST',headers:{'Authorization':'Bearer '+_token},body:fd}); }
   catch(e){ res.innerHTML='<div class="empty"><p>Upload failed. Please try again.</p></div>'; return; }
-  if(!r.ok){ const e=await r.json().catch(()=>({})); res.innerHTML=`<div class="empty"><div class="ei">⚠️</div><p>${esc(e.detail||'Could not process the file(s).')}</p></div>`; return; }
+  if(!r.ok){
+    const e=await r.json().catch(()=>({}));
+    const d=e.detail;
+    // The server refuses a fourth file and says which one is in the way. This branch exists
+    // because the line below prints detail through esc(), and a staffer would have read
+    // "[object Object]" at the exact moment they needed to know what to do.
+    if(r.status===409 && d && d.reason==='inbox_full'){
+      const o=d.oldest||{};
+      res.innerHTML=`
+        <div class="nd-card" style="padding:1rem">
+          <div style="font-weight:700;margin-bottom:.3rem">You already have ${d.limit||3} files open</div>
+          <div style="font-size:.85rem;color:var(--nd-text-muted);line-height:1.6">
+            Finish or close one before starting another. The one you started first is
+            <b>${esc(o.title||'an earlier upload')}</b>${o.page_count?` (${o.page_count} pages)`:''}.
+          </div>
+          <div style="display:flex;gap:.6rem;margin-top:.8rem;flex-wrap:wrap">
+            ${o.job_id?`<button class="btn-sm btn-ghost" onclick="dsOpen('${esc(o.job_id)}',${o.page_count||0})">Open it</button>
+            <button class="btn-sm btn-ghost" style="color:var(--nd-danger-text)" onclick="dsClose('${esc(o.job_id)}','${esc((o.title||'that file').replace(/'/g,''))}')">Close it</button>`:''}
+          </div>
+        </div>`;
+      dsLoadInbox();
+      return;
+    }
+    const msg=(typeof d==='string'&&d)?d:'Could not process the file(s).';
+    res.innerHTML=`<div class="empty"><div class="ei">⚠️</div><p>${esc(msg)}</p></div>`;
+    return;
+  }
   const d=await r.json();
   _dsJob=d.job_id; _dsPages=d.page_count;
   _dsDocs=(d.documents||[]).map(x=>({name:x.name,start:x.start,end:x.end,summary:x.summary||''}));
   dsRenderReview(d.skipped||[]);
+  dsLoadInbox();
 }
 function dsRenderReview(skipped){
   const res=document.getElementById('dsResult');
@@ -5969,6 +6049,7 @@ async function dsCollate(btn){
   }catch(e){ alert('Merge failed.'); }
   finally{ btn.disabled=false; btn.textContent=orig; }
 }
+window.dsLoadInbox=dsLoadInbox; window.dsOpen=dsOpen; window.dsClose=dsClose;
 window.loadDocSplit=loadDocSplit; window.dsUpload=dsUpload; window.dsAddDoc=dsAddDoc; window.dsExport=dsExport; window.dsCollate=dsCollate;
 window.dsCopyPrompt=dsCopyPrompt;
 
