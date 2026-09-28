@@ -58,11 +58,18 @@ TYPE_TO_CHECKLIST: dict[str, tuple] = {
 
 
 async def classify_pages(pdf_bytes: bytes, rules: list | None = None) -> list:
-    """Every page: what it is, how sure, and why. The splitter's replacement for `segment`."""
+    """Every page: what it is, how sure, and why. The splitter's replacement for `segment`.
+
+    IN A WORKER THREAD, not on the event loop. Reading a page is ordinary blocking work and OCR
+    costs about fifteen seconds of it; awaited directly, one scanned bundle would stall every
+    other request on this worker. The engine it replaced was a single network call, so this is a
+    hazard the swap introduced rather than one it inherited.
+    """
     if PROVIDER != "local":
         logger.warning("doc brain provider %r is not implemented - using local", PROVIDER)
+    import asyncio
     import biz_nidaan_doc_local as local
-    return local.classify_pdf(pdf_bytes, rules or [])
+    return await asyncio.to_thread(local.classify_pdf, pdf_bytes, rules or [])
 
 
 async def match_document(pdf_bytes: bytes, candidates: list,

@@ -113,6 +113,31 @@ Money, security and system health **cannot be switched off**. The dashboard bell
 silenced — turning it off would delete the record of having been told, not stop an interruption.
 Authorisation fails **closed**; notification routing fails **open**. Opposite on purpose.
 
+### Claim documents
+
+**NO CLAIM DOCUMENT LEAVES THIS SERVER.** Not to Gemini, not to any hosted model, for any purpose -
+naming it, summarising it, splitting it or checking its quality. They are people's hospital papers.
+Reading happens here: the PDF's own text layer first, then local `tesseract` (`eng+hin`).
+`biz_nidaan_doc_brain` is the only door, `biz_nidaan_doc_local` the engine, and
+`_tools/test_intake_no_ai.py` reads the source of every module on that path so a future one-line
+`import biz_ai` fails a test instead of shipping.
+
+**AND NOTHING IS FILED AUTOMATICALLY on the claimant path.** The local reader agrees with staff
+about two times in three - measured on this firm's own 1,242 documents, not guessed. That is a good
+*suggestion* where a person presses yes (the Telegram upload still offers one) and a mis-filed claim
+on intake, where nobody checks. So `doc_intake.accept()` stores the document, runs a
+**readability-only** check, and puts it in a staff queue. A guess that is right two times in three
+is worse than no guess: no guess is honest and brings somebody to look.
+
+The one thing a complainant is still told is the one thing only they can fix - nothing on it could
+be read, please send a clearer photograph. Everything else is our problem, never theirs.
+
+**Reading is blocking work, so it runs in a worker thread** with a **120s OCR budget per file**
+(`NIDAAN_OCR_BUDGET_S`). Past the budget the remaining pages come back honestly marked "not read"
+rather than the request timing out. Awaiting it on the loop would freeze every other request on that
+worker for minutes - the hazard the local engine introduced, which the network call it replaced
+never had (`_tools/test_ocr_budget.py`).
+
 ### The bot
 
 **@NidaanPartnerOpsBot** (`biz_nidaan_telegram.py`, long-polling). Tasks, claims, notes, stage
@@ -159,6 +184,16 @@ py -3.14 _tools/test_*.py                      # behaviour
 **Done and live:** notification controller · Telegram document upload + splitter + Hinglish ·
 claim authorisation · bot rate limits + audit · payment idempotency (₹11,776 corrected) · DPDP
 legal pages with the right entity · Grievance Officer editable from ops · Lokpal bucket completed.
+
+**Done, awaiting deploy:** documents read on our own server, nothing filed automatically (see
+**Claim documents** above). The staff-facing half - the set-builder inbox, the review screen and the
+screen where a correction becomes a rule - is **still to build**; `biz_nidaan_doc_sets` has the sets
+and the rule matching, and `biz_doc_splitter._learned_rules()` is the single seam where stored rules
+will arrive.
+
+**Still sends data out, and it is the founder's call:** the bot's 🤖 Ask AI reads task
+records to Gemini - titles, staff names and up to 220 characters of a description, which here
+routinely name a claimant. No documents. Raised 28 Sep, undecided.
 
 **In flight — the split (`SPLIT_PLAN.md`):** stages 0–5 done. Both products run on their own
 apps. **Stage 6, the worker, is mapped but not executed** — `main()` launches 26 loops and both

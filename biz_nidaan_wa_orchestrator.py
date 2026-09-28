@@ -17,8 +17,6 @@ that path is marked and no-ops cleanly until the templates exist.
 """
 from __future__ import annotations
 
-import os
-import json
 import uuid
 import logging
 from pathlib import Path
@@ -343,32 +341,10 @@ async def start_or_continue(msisdn: str, *, force_ask: bool = False) -> dict:
 
 
 # ── inbound document pipeline ────────────────────────────────────────────────
-async def classify_document(pdf_bytes: bytes, expected_label: str) -> dict:
-    """Gemini vision: is this the expected document, and is it legible? Best-effort — on any
-    failure we ACCEPT (fail-open) so a Gemini hiccup never blocks a genuine document."""
-    try:
-        import biz_ai
-        client = biz_ai._get_client()
-        if not client:
-            return {"is_expected": True, "legible": True, "looks_like": "", "reason": "no_ai"}
-        from google.genai import types as gt
-        prompt = (
-            f"A complainant was asked to send their '{expected_label}' for an insurance claim. "
-            "Look at the attached document and answer STRICTLY as JSON: "
-            '{"is_expected": <true if this IS that document type, else false>, '
-            '"looks_like": "<what document it actually appears to be, short>", '
-            '"legible": <true if clear/complete enough to read and process, false if blurry/cropped/dark/partial>, '
-            '"reason": "<one short reason>"}')
-        resp = await client.aio.models.generate_content(
-            model=os.getenv("DOCSPLIT_MODEL", "gemini-2.5-flash"),
-            contents=[gt.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"), prompt],
-            config=gt.GenerateContentConfig(response_mime_type="application/json"))
-        v = json.loads(resp.text) or {}
-        return {"is_expected": bool(v.get("is_expected", True)), "legible": bool(v.get("legible", True)),
-                "looks_like": str(v.get("looks_like", ""))[:60], "reason": str(v.get("reason", ""))[:120]}
-    except Exception as e:  # noqa: BLE001
-        logger.info("classify_document failed (accepting): %s", e)
-        return {"is_expected": True, "legible": True, "looks_like": "", "reason": "classify_error"}
+# The claimant document pipeline used to start here, with a Gemini call asking "is this the
+# document we asked for, and can you read it?". Both halves are gone: no claim document leaves
+# this server (founder, 28 Sep), and nothing is judged automatically any more. What arrives is
+# stored by biz_nidaan_doc_intake and a staff member says what it is. See that module's docstring.
 
 
 async def _save_wa_doc(account_id, claim_id: int, doc_key: str, pdf_bytes: bytes) -> int | None:

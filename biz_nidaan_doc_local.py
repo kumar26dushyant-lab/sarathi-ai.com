@@ -34,7 +34,9 @@ guessed at. Nothing here ever reaches for the network.
 from __future__ import annotations
 
 import logging
+import os
 import re
+import time
 
 logger = logging.getLogger("nidaan.doc.local")
 
@@ -199,12 +201,16 @@ def score_page(text: str) -> dict:
 
 
 # ── getting the text off the page, locally ──────────────────────────────────
-def page_text(doc, index: int) -> tuple:
+def page_text(doc, index: int, allow_ocr: bool = True) -> tuple:
     """(text, source) for one page. source is 'pdf', 'ocr' or 'none'.
 
     The text layer first, because it is exact and free. OCR only when there is nothing - a
     photograph of a bill. If OCR is not installed, say so honestly: the page becomes `other`
     with no confidence and the review screen puts it in front of somebody.
+
+    allow_ocr=False means the caller has run out of time for rendering pages. The text layer is
+    still read; a page without one comes back as 'none' and goes to a person. Defaults to True so
+    every existing caller behaves exactly as it did.
     """
     try:
         text = doc[index].get_text() or ""
@@ -214,7 +220,7 @@ def page_text(doc, index: int) -> tuple:
     if len(text.strip()) >= 40:
         return text, "pdf"
 
-    ocr = _ocr_page(doc, index)
+    ocr = _ocr_page(doc, index) if allow_ocr else ""
     if ocr:
         return ocr, "ocr"
     return text, ("pdf" if text.strip() else "none")
@@ -247,6 +253,15 @@ def _ocr_page(doc, index: int) -> str:
         return ""
 
 
+# How long OCR may spend on ONE file, in seconds. Pages already carrying a text layer are free
+# and are never counted against it; only rendering-and-reading a photograph is.
+#
+# 120s is about eight scanned pages on this box. A staff member watching an upload will wait that
+# long; they will not wait twenty minutes, and neither will a proxy. When it runs out the rest of
+# the file is still returned - marked not-read, which is honest and puts it in front of somebody.
+OCR_BUDGET_S = float(os.getenv("NIDAAN_OCR_BUDGET_S", "120"))
+
+
 def classify_pdf(pdf_bytes: bytes, rules: list | None = None) -> list:
     """Every page of a merged PDF: what it is, how sure, and why. Nothing leaves the server.
 
@@ -257,10 +272,15 @@ def classify_pdf(pdf_bytes: bytes, rules: list | None = None) -> list:
     import biz_nidaan_doc_sets as sets
 
     out = []
+    spent = 0.0
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     try:
         for i in range(doc.page_count):
-            text, src = page_text(doc, i)
+            t0 = time.monotonic()
+            # Once the budget is gone we stop RENDERING pages, but still read any that carry
+            # their own text - that costs nothing and is the better answer where it exists.
+            text, src = page_text(doc, i, allow_ocr=(spent < OCR_BUDGET_S))
+            spent += time.monotonic() - t0
             res = score_page(text)
             out.append({
                 "page": i + 1,
@@ -275,8 +295,15 @@ def classify_pdf(pdf_bytes: bytes, rules: list | None = None) -> list:
 
     # A page that looks like the one before it, and is not sure of itself, is almost always a
     # continuation - page 2 of a bill rarely repeats the heading that named it.
+    #
+    # ONLY A PAGE WE ACTUALLY READ. A page whose text we never saw ('none' - a photograph we had
+    # no time or no OCR for) has nothing to continue FROM: calling it page 2 of the bill above is
+    # a guess about content nobody has looked at, and it would file the page into that bundle.
+    # Left as 'other' with no confidence, it goes to a person instead, which is the honest answer.
     for i in range(1, len(out)):
         prev, cur = out[i - 1], out[i]
+        if cur["source"] == "none":
+            continue
         if cur["doc_type"] == "other" and cur["confidence"] < 0.5 and prev["confidence"] >= 0.6:
             cur["doc_type"] = prev["doc_type"]
             cur["confidence"] = 0.5

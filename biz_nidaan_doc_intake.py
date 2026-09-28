@@ -7,16 +7,29 @@ inbound file was judged as ONE document against ONE expected line: a fat PDF con
 documents was classified as "not the discharge summary" and the sender was told it was wrong. If
 nothing was outstanding the file was thanked for and then DISCARDED without being stored at all.
 
-The tool to fix this already existed in the building, in the wrong room: the doc splitter, sitting
-in the ops feature list where nobody opens it. It knows how to find where one document ends and
-the next begins. Moved in here, it turns one upload into nine ticked lines.
+So this module accepts whatever arrives, in whatever shape, and stores all of it on the claim.
 
-The rules this module is built on (founder, 19 Sep):
+WHAT IT DOES NOT DO, SINCE 28 SEP: it does not decide what any of it is.
+
+It used to. Every inbound file went to Google's Gemini to be named and, above 0.75 confidence,
+ticked off the checklist automatically. Two things ended that. A claim document here is somebody's
+discharge summary, and it does not leave this server - that removed Gemini. And a reader running
+on this server, measured on this firm's own files, agrees with staff about two times in three -
+that removed the automatic tick, because on this path nobody checks the answer. A wrong one means
+the checklist claiming a document that never arrived, and nobody finding out until the claim
+stalls. Two-in-three is worse than nothing here, because nothing is honest and brings a person.
+
+What survives is the one judgement that needs no classification and that only the complainant can
+act on: whether any text can be read on it at all. Everything else is a staff decision, made on
+a screen, by somebody looking at the document.
+
+The rules this module is built on (founder, 19 Sep and 28 Sep):
   • ACCEPT ANYTHING. A format we cannot read is our problem, never "you did it wrong".
-  • NOTHING IS EVER DISCARDED. Every piece is stored on the claim even when we cannot name it -
-    a document we failed to classify is still the complainant's evidence.
-  • WHEN WE ARE UNSURE, A PERSON DECIDES - NOT THE COMPLAINANT. Low confidence goes to a staff
-    queue with our best guess. They are never asked to fix our uncertainty.
+  • NOTHING IS EVER DISCARDED. Every piece is stored on the claim even when nobody has named it -
+    a document nobody has filed yet is still the complainant's evidence.
+  • NOTHING LEAVES THIS SERVER. No claim document goes to an outside model, for any purpose.
+  • A PERSON DECIDES - NOT THE MACHINE, AND NEVER THE COMPLAINANT. Everything lands in a staff
+    queue. They are never asked to fix our uncertainty.
   • ONE REPLY PER BATCH, never one per file.
 """
 from __future__ import annotations
@@ -36,11 +49,6 @@ import biz_doc_splitter as _split
 logger = logging.getLogger("nidaan.doc.intake")
 
 DOCS_DIR = Path(os.getenv("NIDAAN_DOCS_DIR", "uploads/nidaan-docs"))
-
-# Below this we do not tell the complainant anything about the piece - a person looks first.
-# Deliberately high: the cost of a wrong "this is your discharge summary" is a mis-filed case,
-# and the cost of a staff glance is ten seconds.
-CONFIDENT = 0.75
 
 # A ZIP arrives as one file and can hold the whole case. One level deep only: a zip inside a zip
 # is rare enough, and unbounded recursion on an untrusted archive is how you get a zip bomb.
@@ -85,54 +93,56 @@ def unpack(files: list) -> tuple[list, list]:
 
 
 async def match_document(pdf_bytes: bytes, candidates: list) -> dict:
-    """Which of the documents this claim still needs is this? Best-effort, fails OPEN as unknown.
+    """Which of the documents this claim still needs is this? Read ON THIS SERVER.
 
-    Deliberately different from the old classify_document, which could only answer yes/no about
-    ONE expected document. Asking "which of these is it" is what lets a single upload satisfy
-    several lines at once, and it is also kinder: an unexpected-but-useful document is recognised
-    instead of rejected.
+    Used where a PERSON confirms the answer - the Telegram upload shows staff "this looks like a
+    discharge summary" and they say yes or pick something else. A suggestion that is right about
+    two times in three is genuinely useful when somebody approves it, and useless when nobody
+    does, which is why accept() no longer calls this at all.
+
+    Fails OPEN as unknown, exactly as it always did.
     """
-    unknown = {"key": "", "label": "", "confidence": 0.0, "looks_like": "", "legible": True,
-               "reason": ""}
-    if not candidates:
-        return unknown
     try:
-        import biz_ai
-        client = biz_ai._get_client()
-        if not client:
-            return unknown
-        from google.genai import types as gt
-        listing = "\n".join("  - %s: %s" % (c["key"], c.get("en") or c["key"])
-                            for c in candidates)
-        prompt = (
-            "An insurance claim needs these documents:\n%s\n\n"
-            "Look at the attached document and answer STRICTLY as JSON:\n"
-            '{"key": "<the key above it matches, or \\"\\" if it matches none>", '
-            '"confidence": <0.0-1.0>, '
-            '"looks_like": "<what it actually is, short>", '
-            '"legible": <true if clear and complete enough to read and use, false if blurry, '
-            'cropped, dark or partial>, '
-            '"reason": "<one short reason>"}' % listing)
-        resp = await client.aio.models.generate_content(
-            model=os.getenv("DOCSPLIT_MODEL", "gemini-2.5-flash"),
-            contents=[gt.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"), prompt],
-            config=gt.GenerateContentConfig(response_mime_type="application/json"))
-        v = json.loads(resp.text) or {}
-        key = str(v.get("key") or "").strip()
-        if key and key not in {c["key"] for c in candidates}:
-            key = ""
-        label = next((c.get("en") or c["key"] for c in candidates if c["key"] == key), "")
-        try:
-            conf = float(v.get("confidence") or 0)
-        except (TypeError, ValueError):
-            conf = 0.0
-        return {"key": key, "label": label, "confidence": max(0.0, min(1.0, conf)),
-                "looks_like": str(v.get("looks_like") or "")[:60],
-                "legible": bool(v.get("legible", True)),
-                "reason": str(v.get("reason") or "")[:120]}
+        import biz_nidaan_doc_brain as brain
+        return await brain.match_document(pdf_bytes, candidates)
     except Exception as e:  # noqa: BLE001
         logger.info("match_document failed (treating as unknown): %s", e)
-        return unknown
+        return {"key": "", "label": "", "confidence": 0.0, "looks_like": "",
+                "legible": True, "reason": ""}
+
+
+async def _can_be_read(pdf_bytes: bytes) -> bool:
+    """Is there any readable text at all - text layer or OCR? Nothing leaves this server.
+
+    Only the first few pages: a photograph that is unreadable is unreadable from page one, and
+    OCR costs about fifteen seconds a page on this machine. Any failure counts as READABLE, so a
+    broken reader can never cause us to tell a claimant their perfectly good document is bad.
+    """
+    def _look() -> bool:
+        import fitz
+        import biz_nidaan_doc_local as local
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        try:
+            for i in range(min(doc.page_count, 3)):
+                _text, src = local.page_text(doc, i)
+                if src in ("pdf", "ocr"):
+                    return True
+        finally:
+            doc.close()
+        return False
+
+    try:
+        # In a thread, and with a ceiling. Every inbound WhatsApp document comes through here, so
+        # blocking the loop on OCR would make one bad photograph everybody else's problem. If it
+        # runs long we call it readable and say nothing - never accuse a claimant on a timeout.
+        import asyncio
+        return await asyncio.wait_for(asyncio.to_thread(_look), timeout=60)
+    except asyncio.TimeoutError:
+        logger.info("readability check took too long - treating as readable")
+        return True
+    except Exception as e:  # noqa: BLE001
+        logger.info("readability check failed, treating as readable: %s", e)
+        return True
 
 
 async def _store(account_id, claim_id: int, filename: str, pdf_bytes: bytes,
@@ -212,67 +222,42 @@ async def accept(claim_id: int, account_id, files: list, *, claim_type: str = ""
         out["error"] = "nothing_accepted"
         return out
 
-    # Everything becomes one PDF so the splitter can look across the whole batch at once - that is
-    # what lets eight photos of one bill be recognised as a single document.
+    # Everything the claimant sent in one go becomes one PDF - eight photographs of one bill are
+    # one document, and keeping them together is what a person opening it expects to see.
     try:
-        merged, pages, skipped = _split.normalize_to_pdf(files)
+        merged, _, skipped = _split.normalize_to_pdf(files)
     except Exception as e:  # noqa: BLE001
         logger.info("normalize failed for claim %s: %s", claim_id, e)
-        merged, pages, skipped = None, 0, []
+        merged, skipped = None, []
     if not merged:
         out["error"] = "unreadable"
         return out
     if skipped:
         out["notes"].append("%d file(s) could not be opened" % len(skipped))
 
-    pending = await _ck.pending_required_docs(claim_id, claim_type)
     out["total"] = len(_ck.doc_template_for(claim_type) or [])
 
-    # One page is one document; more than one gets split properly.
-    pieces = [{"name": "Document 1", "start": 1, "end": pages}]
-    if pages > 1:
-        try:
-            pieces = await _split.segment(merged, pages) or pieces
-        except Exception as e:  # noqa: BLE001
-            logger.info("segment failed for claim %s: %s", claim_id, e)
-    try:
-        cut = _split.extract(merged, pieces)
-    except Exception as e:  # noqa: BLE001
-        logger.info("extract failed for claim %s: %s", claim_id, e)
-        cut = [("document.pdf", merged)]
+    # NOTHING IS TICKED AUTOMATICALLY, AND NOTHING IS GUESSED. It is stored whole and a person
+    # says what it is.
+    #
+    # Measured on this firm's own documents, a reader running on this server agrees with staff
+    # about two times in three. On a staff screen that is a useful suggestion, because somebody
+    # approves it. Here nobody would: a wrong answer means a claimant's discharge summary ticked
+    # off as something else, the checklist claiming a document that never arrived, and nobody
+    # finding out until the claim stalls. Two-in-three is worse than nothing, because nothing is
+    # honest and brings a person to look.
+    doc_id = await _store(account_id, claim_id, "document.pdf", merged, source)
+    if doc_id:
+        out["stored"] += 1
 
-    seen_keys = set()
-    for filename, blob in cut:
-        # Match against what is STILL outstanding, minus anything this same batch just satisfied,
-        # so two copies of the discharge summary do not both claim the same line.
-        candidates = [c for c in pending if c["key"] not in seen_keys]
-        m = await match_document(blob, candidates)
-        doc_id = await _store(account_id, claim_id, filename, blob, source)
-        if doc_id:
-            out["stored"] += 1
-
-        if m["key"] and m["confidence"] >= CONFIDENT and m["legible"]:
-            # The return value is CHECKED. Ignoring it is how a recognised document went on
-            # showing as outstanding: the update matched no checklist row and said so, and
-            # nobody listened. If it still cannot be ticked, the piece is stored and put in
-            # front of a person rather than reported to the complainant as received.
-            if await _ck.mark_doc_received(claim_id, m["key"], via=source, doc_id=doc_id):
-                seen_keys.add(m["key"])
-                out["ticked"].append({"key": m["key"], "label": m["label"]})
-            else:
-                logger.warning("claim %s: recognised %s but could not tick it", claim_id, m["key"])
-                out["unsorted"].append({"doc_id": doc_id, "looks_like": m["label"],
-                                        "confidence": m["confidence"]})
-        elif m["key"] and m["confidence"] >= CONFIDENT and not m["legible"]:
-            # We know what it is and cannot read it. This is the ONE thing worth asking them for,
-            # because only they can take a better photograph.
-            out["unclear"].append({"key": m["key"], "label": m["label"],
-                                   "reason": m.get("reason") or "it is hard to read"})
-        else:
-            # We do not know what this is. It is stored and a person will look - the complainant
-            # is not told anything, because our uncertainty is not their problem.
-            out["unsorted"].append({"doc_id": doc_id, "looks_like": m.get("looks_like") or "",
-                                    "confidence": m["confidence"]})
+    # The one thing only the claimant can fix: if not a word can be read even with OCR, the
+    # photograph is unusable. That needs no classification - only "could we read anything at all".
+    if await _can_be_read(merged):
+        out["unsorted"].append({"doc_id": doc_id, "looks_like": "", "confidence": 0.0})
+    else:
+        out["unclear"].append({
+            "key": "", "label": "the document you sent",
+            "reason": "we could not read anything on it - it may be blurred, dark or cropped"})
 
     out["pending"] = await _ck.pending_required_docs(claim_id, claim_type)
     out["ok"] = True
@@ -288,9 +273,11 @@ async def _record(claim_id: int, res: dict, source: str) -> None:
         if res["ticked"]:
             bits.append("ticked " + ", ".join(t["label"] or t["key"] for t in res["ticked"]))
         if res["unclear"]:
-            bits.append("%d too unclear to use" % len(res["unclear"]))
+            bits.append("%d nothing readable on it — resend asked for" % len(res["unclear"]))
         if res["unsorted"]:
-            bits.append("%d could not be identified — needs a look" % len(res["unsorted"]))
+            # Not "could not be identified" - we no longer try. Say what is true: it is here, and
+            # it is waiting for a person to open it and say what it is.
+            bits.append("%d waiting to be filed" % len(res["unsorted"]))
         await _n.record_claim_activity(
             claim_id, "doc_batch", channel=source, direction="in", actor="complainant",
             summary="Received %d document(s): %s" % (res["stored"], "; ".join(bits) or "stored"),
@@ -302,10 +289,11 @@ async def _record(claim_id: int, res: dict, source: str) -> None:
 
 
 async def needs_a_look(limit: int = 50) -> list:
-    """Documents the machine could not name, waiting for a person.
+    """Documents waiting for a person to open them and say what they are.
 
-    This is the queue that keeps our uncertainty away from the complainant: everything in here was
-    accepted, stored and never questioned out loud.
+    Since nothing is named automatically, this is now every batch a complainant sends - which is
+    the point. It is the filing queue, and it is the ONLY place the work shows up, so an empty
+    queue means the team is up to date rather than that nothing arrived.
     """
     import aiosqlite
     async with aiosqlite.connect(db.DB_PATH) as c:

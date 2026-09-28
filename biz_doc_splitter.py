@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import os
 import io
-import json
 import time
 import uuid
 import re
@@ -35,49 +34,6 @@ _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TMP_ROOT = os.getenv("DOCSPLIT_TMP") or os.path.join(_BASE_DIR, "var", "docsplit")
 MAX_PAGES = 80          # safety cap for a single job
 IMAGE_EXTS = ("jpg", "jpeg", "png", "webp", "gif", "bmp", "tif", "tiff")
-
-# ── AI prompt-library (Phase c) — ready-made tasks the ops team runs on an uploaded file ──
-# Each task is a curated prompt run on the merged job PDF via Gemini. Ops-only; cost logged.
-# `prompt` is the copy-paste text (also shown so staff can run it in their own AI if they prefer).
-AI_TASKS = {
-    "summary": {
-        "label": "📋 Summarise the whole file",
-        "desc": "Treatment, hospital, dates, amounts, and what each document is.",
-        "prompt": ("Summarise this insurance-claim file for our legal team. State: the patient/insured, "
-                   "the hospital, admission & discharge dates, the diagnosis/treatment, the total amount "
-                   "claimed/billed, and a bullet list of every document present. Be factual — do not guess "
-                   "anything not in the file."),
-    },
-    "bill_extract": {
-        "label": "🧾 Extract all bills & totals",
-        "desc": "Every charge/line item with amounts and the grand total.",
-        "prompt": ("From this file, extract every bill and charge. For each bill give the hospital/vendor, "
-                   "date, line items with amounts, and the bill total. Then give the GRAND TOTAL across all "
-                   "bills. Present as a clean list. Only use figures actually printed in the documents."),
-    },
-    "doc_inventory": {
-        "label": "🗂️ List every document + pages",
-        "desc": "An inventory of each distinct document and its page range.",
-        "prompt": ("List every distinct document in this file. For each, give its type/name, the page range "
-                   "it spans, and a one-line description. Cover all pages in order."),
-    },
-    "missing_docs": {
-        "label": "🔎 Flag likely-missing documents",
-        "desc": "Which standard claim documents appear present vs missing.",
-        "prompt": ("For a health-insurance claim, review this file and list (A) the standard documents that "
-                   "ARE present (discharge summary, final hospital bill, payment receipts, investigation/lab "
-                   "reports, prescriptions, policy copy, claim form, KYC/ID, cashless/denial letter), and "
-                   "(B) the common ones that appear to be MISSING. Base it only on what you can see."),
-    },
-    "chronology": {
-        "label": "🗓️ Build a date-wise chronology",
-        "desc": "Events ordered by date — admission, procedures, discharge, billing.",
-        "prompt": ("From these documents, build a date-ordered chronology of events (admission, key "
-                   "procedures/investigations, discharge, billing, any insurer correspondence). One line "
-                   "per event as 'DATE — event'. Use only dates present in the documents."),
-    },
-}
-
 
 def _safe_job(job: str) -> str:
     return re.sub(r"[^a-f0-9]", "", (job or "").lower())[:32]
@@ -164,90 +120,62 @@ def _cleanup_old(max_age: int = 6 * 3600) -> None:
         pass
 
 
-# ── AI segmentation ──────────────────────────────────────────────────────────
+# ── segmentation, on this server ─────────────────────────────────────────────
 async def segment(pdf_bytes: bytes, page_count: int) -> list:
-    """Detect the distinct documents in the merged PDF + their page ranges (1-indexed).
+    """Find the separate documents in a merged PDF and their page ranges (1-indexed).
 
-    Page-level strategy (more accurate than one-shot range guessing): ask the model to label
-    EACH page with its document type + a `new_doc` flag, then build contiguous documents from
-    the boundaries. This reasons per page, so it nails the split points even when many short
-    documents are stacked. Same single API call — no extra cost. Best-effort: any failure →
-    one document covering all pages (the human then splits)."""
+    Reads every page HERE - the text layer where there is one, local OCR where there is not -
+    and cuts a new document wherever the page's type changes. Nothing is uploaded anywhere.
+
+    This replaced a Gemini call on 28 Sep. A claim bundle is somebody's hospital file and it does
+    not leave this server. The local reader is less certain than the model was, which is why the
+    page ranges land in front of a person to adjust before anything is exported - and why a rule
+    a staff member teaches (biz_nidaan_doc_sets) beats whatever this works out.
+
+    Best-effort, exactly as before: any failure gives one document covering every page, and the
+    person splits it by hand.
+    """
     fallback = [{"name": "Document 1", "start": 1, "end": page_count, "summary": ""}]
     try:
-        import biz_ai
-        client = biz_ai._get_client()
-        if not client:
+        import biz_nidaan_doc_brain as brain
+        import biz_nidaan_doc_sets as sets
+        pages = await brain.classify_pages(pdf_bytes, await _learned_rules())
+        if not pages:
             return fallback
-        from google.genai import types as gt
-        prompt = (
-            f"This PDF has {page_count} page(s) and usually contains SEVERAL different documents merged "
-            "together — e.g. discharge summary, hospital/final bills, lab or investigation reports, "
-            "prescriptions, insurance policy copy, claim form, ID/KYC, referral or cashless letters, etc.\n\n"
-            f"Go through the pages IN ORDER (1..{page_count}) and label EACH page. For every page give:\n"
-            "  - page: the page number (int)\n"
-            "  - doc_type: a short, clear name for the document that page belongs to (its type)\n"
-            "  - new_doc: true if this page STARTS a new/different document from the previous page, "
-            "else false (page 1 is always true)\n"
-            "  - summary: a few words on what the page shows.\n"
-            "Judge new_doc from real cues — a new letterhead/logo, a form's first page, a bill header, "
-            "a report cover, a change of document type. Multi-page documents keep new_doc=false on their "
-            "continuation pages. Cover every page exactly once. Respond with JSON ONLY: "
-            '{"pages":[{"page":<int>,"doc_type":"...","new_doc":<bool>,"summary":"..."}]}')
-        resp = await client.aio.models.generate_content(
-            model=os.getenv("DOCSPLIT_MODEL", "gemini-2.5-flash"),
-            contents=[gt.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"), prompt],
-            config=gt.GenerateContentConfig(response_mime_type="application/json"))
-        _log_usage(resp, page_count)
-        pages = (json.loads(resp.text) or {}).get("pages") or []
-        docs = _pages_to_docs(pages, page_count)
+        # The engine speaks in keys ("discharge"); a person reading the review screen needs the
+        # words ("Discharge summary"). `why` carries what the page actually said that decided it,
+        # which is the one thing that makes a wrong guess quick to correct rather than puzzling.
+        labelled = []
+        for pg in pages:
+            t = pg.get("doc_type") or "other"
+            labelled.append({**pg,
+                             "doc_type": sets.type_label(t),
+                             "summary": pg.get("why") or ""})
+        docs = _pages_to_docs(labelled, page_count)
         return docs or fallback
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.warning("docsplit segment failed: %s", e)
         return fallback
 
 
-async def run_ai_task(pdf_bytes: bytes, task_key: str) -> dict:
-    """Run a prompt-library task (AI_TASKS) on the merged job PDF and return the text result.
-    Ops-only; cost logged. Returns {ok, text} or {ok:False, error}."""
-    task = AI_TASKS.get(task_key)
-    if not task:
-        return {"ok": False, "error": "Unknown task"}
-    try:
-        import biz_ai
-        client = biz_ai._get_client()
-        if not client:
-            return {"ok": False, "error": "AI is not configured"}
-        from google.genai import types as gt
-        prompt = task["prompt"] + ("\n\nReturn clear, readable plain text (use short headings and "
-                                   "bullet points). No preamble.")
-        resp = await client.aio.models.generate_content(
-            model=os.getenv("DOCSPLIT_MODEL", "gemini-2.5-flash"),
-            contents=[gt.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"), prompt])
-        _log_usage(resp, 0)
-        text = (getattr(resp, "text", "") or "").strip()
-        if not text:
-            return {"ok": False, "error": "No result — please try again"}
-        return {"ok": True, "text": text}
-    except Exception as e:  # noqa: BLE001
-        logger.warning("docsplit ai-task %s failed: %s", task_key, e)
-        return {"ok": False, "error": "The AI task failed — please try again"}
+async def _learned_rules() -> list:
+    """The rules staff have taught, so a correction made once holds the next time.
 
+    THE ONE SEAM. Storing the rules is the next piece of work (the review screen has to exist
+    before there is anything to store from), so today this is empty and the engine's own reading
+    stands. When the table lands, `load_rules` appears in biz_nidaan_doc_sets and this starts
+    returning them - no other file has to change, and nothing here breaks in the meantime.
 
-def _log_usage(resp, page_count: int) -> None:
-    """Record the Gemini call's token cost (ops-only tool — not billed, but tracked for margin)."""
+    Fails to an EMPTY list, never an error: a splitter that still works without rules is worth
+    more than one that refuses because a table is missing.
+    """
     try:
-        um = getattr(resp, "usage_metadata", None)
-        t_in = int(getattr(um, "prompt_token_count", 0) or 0)
-        t_out = int(getattr(um, "candidates_token_count", 0) or 0)
-        if not (t_in or t_out):
-            return
-        import asyncio
-        import biz_database as _db
-        asyncio.create_task(_db.log_ai_usage(
-            feature="nidaan_docsplit", tokens_in=t_in, tokens_out=t_out, source="nidaan_ops"))
+        import biz_nidaan_doc_sets as sets
+        load = getattr(sets, "load_rules", None)
+        return (await load()) if load else []
     except Exception as e:  # noqa: BLE001
-        logger.debug("docsplit usage log skipped: %s", e)
+        logger.debug("no learned rules available: %s", e)
+        return []
 
 
 def _pages_to_docs(pages: list, n: int) -> list:

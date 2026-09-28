@@ -1,5 +1,95 @@
 # Staff Announcement Drafts
 
+## 2026-09-28 — Claim documents now stay on our own server, and you decide what each one is
+
+_For: all staff who handle claim documents, and anyone who uses the PDF splitter._
+_Not yet sent. Deploy first (after 6pm IST), then send._
+
+**Title (EN):**
+🔒 Patients' documents no longer go outside. From now on a person names every document.
+
+**Details (EN):**
+• **Why we changed this.** Our claim files are people's hospital papers — discharge summaries,
+bills, test reports. Until now, when a document reached us it was sent to an outside company's
+computer to work out what it was. **That has stopped.** Everything is now read on our own server.
+Nobody outside Nidaan Legal sees a patient's paper.
+
+• **What changes for you: nothing is ticked off by itself any more.** Before, if the app was
+fairly sure a document was the discharge summary, it ticked that line on its own. It was right
+about **two times out of three** — which means one in three was wrong, and a wrongly ticked line
+makes us believe we have a paper we do not have. So now **the document is saved and it waits for
+you.** You open it, see what it is, and tick it yourself.
+
+• **Where to find them.** Everything a claimant sends lands in the claim's documents, waiting to
+be named. Please look at your claims daily — this is the one place this work shows up.
+
+• **The claimant is not left guessing.** They are told we have their papers, that our team will
+check them and update their list, usually within a few hours, and that they need not do anything.
+If a photo is so dark or blurred that nothing on it can be read, we still ask them for a better
+one — that part has not changed.
+
+• **The PDF splitter still works, but check it more carefully than before.** It still reads the
+pages and makes a first guess at where each document starts and ends. That guess is **weaker than
+it used to be**, because it is now our own reading rather than an outside company's. The screen now
+walks you through it in three steps: look at the page pictures, fix the names and page numbers,
+then export. **Please do check the page numbers before you export.**
+
+• **A big scanned file takes longer now.** Reading a photographed page takes a few seconds, so a
+long scanned bundle may take a minute or two. If it takes too long, it will still give you the
+pages — the ones it could not read will simply say so, and you name those yourself.
+
+• **The "🤖 AI tasks on this file" buttons are gone** (summarise the file, extract all bills).
+Those sent the whole file outside, which is exactly what we have stopped.
+
+• **If something looks wrong, say so.** A document that will not open, a split that comes out
+strange, a page that says it could not be read when it looks fine to you — tell us. Every report
+makes the reading better, and these corrections are what we build on next.
+
+---
+
+**शीर्षक (HI):**
+🔒 मरीज़ों के कागज़ अब बाहर नहीं जाते। अब हर दस्तावेज़ का नाम इंसान रखेगा।
+
+**विवरण (HI):**
+• **यह बदलाव क्यों।** हमारी मिसालों में लोगों के अस्पताल के कागज़ होते हैं —
+डिस्चार्ज समरी, बिल, जाँच की रिपोर्ट। अब तक जब कोई दस्तावेज़ आता था, तो यह
+समझने के लिये कि वह क्या है, वह बाहर की कंपनी के कंप्यूटर पर भेजा जाता था।
+**यह बंद हो गया है।** अब सब कुछ हमारे अपने सर्वर पर पढ़ा जाता है। निदान लीगल के
+बाहर कोई मरीज़ का कागज़ नहीं देखता।
+
+• **आपके लिये क्या बदला: अब कोई लाइन अपने आप टिक नहीं होगी।** पहले, अगर ऐप को
+लगता था कि यह डिस्चार्ज समरी है, तो वह खुद टिक लगा देता था। वह **तीन में से दो
+बार** सही होता था — यानी तीन में से एक गलत, और गलत टिक का मतलब है हम मान लें
+कि कागज़ आ गया जो वाकई में नहीं आया। इसलिये अब **दस्तावेज़ सेव होता है और आपका
+इंतज़ार करता है।** आप खोलकर देखिये, और खुद टिक लगाइये।
+
+• **कहाँ मिलेंगे।** जो कुछ क्लेमंट भेजता है वह उसी क्लेम के दस्तावेज़ों में नाम का
+इंतज़ार करता मिलेगा। रोज़ अपने क्लेम देखिये — यह काम सिर्फ़ वहीं दिखता है।
+
+• **क्लेमंट को अंधेरे में नहीं रखा जाता।** उसे बताया जाता है कि कागज़ मिल गये हैं,
+हमारी टीम देखकर उसकी सूची अपडेट करेगी — आम तौर पर कुछ घंटों में — और उसे कुछ
+करने की ज़रूरत नहीं है। अगर कोई फ़ोटो इतनी धुंधली या काली हो कि उस पर कुछ भी
+नहीं पढ़ा जा सकता, तो हम अब भी उससे बेहतर फ़ोटो मांगते हैं — यह नहीं बदला।
+
+• **PDF स्प्लिटर चलता रहेगा, पर अब पहले से ज़्यादा ध्यान से जाँचिये।** वह अब भी
+पेज पढ़कर बताता है कि कौन सा दस्तावेज़ कहाँ से कहाँ तक है। यह अंदाज़ा **पहले से
+कमज़ोर** है, क्योंकि अब यह हमारा अपना पढ़ना है। स्क्रीन अब तीन कदमों में ले जाती
+है: पेज की तस्वीरें देखिये, नाम और पेज नंबर सुधारिये, फ़िर निकालिये। **निकालने से
+पहले पेज नंबर ज़रूर जाँच लीजिये।**
+
+• **बड़ी स्कैन की फ़ाइल में अब थोड़ा ज़्यादा समय लगेगा।** फ़ोटो वाले पेज पढ़ने में
+कुछ सेकंड लगते हैं, तो लंबी फ़ाइल में एक-दो मिनट लग सकते हैं। ज़्यादा समय लगे तो भी
+पेज मिल जायेंगे — जो पढ़े नहीं जा सके, वे साफ़ लिखेंगे, और उनका नाम आप रखिये।
+
+• **"🤖 AI tasks on this file" वाले बटन हटा दिये गये हैं** (पूरी फ़ाइल का सार, सब बिल
+निकालना)। वे पूरी फ़ाइल बाहर भेजते थे — और बिल्कुल यही हमने बंद किया है।
+
+• **कुछ गलत लगे तो बताइये।** दस्तावेज़ नहीं खुल रहा, स्प्लिट अजीब आया, या कोई
+पेज "पढ़ा नहीं जा सका" कह रहा है पर आपको साफ़ दिख रहा है — बताइये। हर सूचना से
+पढ़ना बेहतर होता है, और इन्हीं सुधारों पर अगला काम खड़ा होगा।
+
+---
+
 ## 2026-09-25 (1) — Notifications you do not need can now be switched off, without a code change
 
 _For: all staff. Super admins also get a new screen — Settings → 🔔 Notifications._

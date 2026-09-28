@@ -4,7 +4,76 @@ _Auto-maintained by Claude **every conversation**, alongside `PROJECT_MASTER_CON
 _**Two-terminal workflow:** work 🟦 NidaanPartner items in one VS Code terminal, 🟩 Sarathi items in another. Each app's section is self-contained so both can progress simultaneously without collision._
 _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned · ✅ done_
 
-**Last updated:** 2026-09-26 (afternoon) — ✅ New bot **@NidaanPartnerOpsBot** live and verified (`getMe` 200, `poll_active=1`). **"Ask everyone to connect" deployed** — 23 pending, 23 reachable. ✅ **All six Telegram pieces built and tested** — claim authorisation, rate limits + audit, document upload, bot wiring, splitter, Hinglish. 🔴 **Not deployed.**
+**Last updated:** 2026-09-28 (morning) — 🔒 **No claim document goes to Google any more.**
+Intake, the splitter and the WhatsApp pipeline now read pages **on our own server**, and nothing is
+filed automatically — a person says what each document is. 🔴 **Not deployed** (team is working;
+after 6pm IST).
+
+### 🔒 28 Sep — MEDICAL DOCUMENTS NO LONGER LEAVE THE SERVER, AND THE MACHINE NO LONGER FILES THEM
+
+> *"nidaanpartner.com carries medical data, so we cannot plug AI directly to see doc and identify
+> and do the all doc splitter bot work live."* · *"make it simplify and staff to use it rather
+> multiple automations keep staff confused about process."*
+
+**What was happening until today.** Every document a complainant sent — discharge summaries,
+hospital bills, lab reports — was uploaded to Google's Gemini to be named, and anything the model
+was 75% sure of was **ticked off the checklist automatically**. The staff splitter did the same
+with whole bundles, and an "🤖 AI tasks" panel would send an entire hospital file out to be
+summarised.
+
+**Two separate decisions, and the second one matters more.**
+
+1. **Nothing leaves the server.** Reading is now done here — the PDF's own text layer where there
+   is one, local `tesseract` (English + Hindi) where there is not.
+2. **Nothing is filed automatically.** Measured on this firm's own 1,242 documents, the local
+   reader agrees with staff **about two times in three**. That is a useful *suggestion* on a screen
+   where somebody presses yes — which is why the Telegram upload still offers one — and a
+   mis-filed claim on the claimant path, where nobody checks. So intake stores the document and
+   asks a person. **A guess that is right two times in three is worse than no guess**, because no
+   guess is honest and brings somebody to look.
+
+**What a complainant still hears** is the one thing only they can fix: if not a word can be read
+on what they sent, we ask for a clearer photograph. That needs no classification.
+
+**One trap this created, and closed.** With nothing ticked automatically, the outstanding list is a
+snapshot from *before* a person looked — so an unqualified "Still needed: discharge summary" would
+go to somebody who had **just sent** exactly that. The WhatsApp reply now says our team will open
+them and update the list, usually within a few hours, and frames what is outstanding as *"as far as
+we know … if you have just sent any of these, it will come off this list"* — in all three
+languages.
+
+**Two real faults found by the new tests rather than by the team:**
+- **OCR would have taken the site down.** The old call was one network round trip; reading pages is
+  blocking CPU work at ~15s a page. Awaited straight from a request, one scanned 40-page bundle
+  would have frozen **every other request on that worker** for ten minutes. Now: a worker thread,
+  plus a **120s OCR budget per file** (`NIDAAN_OCR_BUDGET_S`) after which remaining pages are
+  returned honestly marked "not read" rather than timing out.
+- **An unread page was inheriting its neighbour's document type.** A page nobody could read was
+  being called "page 2 of the bill above" and would have been filed into that bundle. It now stays
+  unknown and goes to a person.
+
+**Removed:** the `🤖 AI tasks on this file` panel and its two routes, and a dead Gemini
+`classify_document` in the WhatsApp orchestrator that nothing had called for weeks.
+
+**The splitter review screen now reads as three numbered steps** rather than "the AI split it into
+the documents below", per *"we need to run staff step by step … kind of a baby step."*
+
+**Tests:** `_tools/test_intake_no_ai.py` (21 checks) and `_tools/test_ocr_budget.py` (8 checks).
+Both were **proven to fail** against yesterday's code — and the first version of the no-tick check
+passed on this machine for the wrong reason (no API key), so it now forces a *certain* matcher and
+asserts no classifier is consulted at all.
+
+**🔴 Two things for you:**
+1. **The bot's "🤖 Ask AI" still sends task records to Gemini** — titles, names and up to 220
+   characters of a task's description, which here routinely name a claimant. No documents, and out
+   of scope for today's change, but it is the same question and it is your call. Options: leave it,
+   strip names before sending, or move it to the local engine (it would get notably weaker).
+2. **11 behaviour tests were already failing before today** and are not related to this work: they
+   need a schema-bearing database this dev checkout does not have, and `test_wa_flow.py` calls
+   `parse_language_choice`, which no longer exists. Worth a session to fix or retire — a red suite
+   teaches nothing.
+
+**Previously:** 2026-09-26 (afternoon) — ✅ New bot **@NidaanPartnerOpsBot** live and verified (`getMe` 200, `poll_active=1`). **"Ask everyone to connect" deployed** — 23 pending, 23 reachable. ✅ **All six Telegram pieces built and tested** — claim authorisation, rate limits + audit, document upload, bot wiring, splitter, Hinglish. 🔴 **Not deployed.**
 
 ### 💰 26 Sep — REVENUE WAS Rs 11,776 TOO HIGH (`da50597`, built, NOT deployed)
 

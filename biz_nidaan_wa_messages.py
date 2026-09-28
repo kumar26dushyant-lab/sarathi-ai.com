@@ -229,10 +229,17 @@ def doc_batch(ctx: dict, lang: str = "hinglish") -> str:
     complainant's problem to solve (founder, 19 Sep).
     """
     l = _lang(lang)
-    got = ctx.get("ticked") or []          # [label, ...] we recognised and ticked
-    unclear = ctx.get("unclear") or []     # [label, ...] we know but cannot read
+    got = ctx.get("ticked") or []          # [label, ...] a PERSON has confirmed and ticked
+    unclear = ctx.get("unclear") or []     # [label, ...] nothing on it could be read
     still = ctx.get("pending") or []       # [label, ...] still outstanding
     n = int(ctx.get("stored") or 0)
+
+    # Nothing is identified automatically any more - a staff member opens what arrived and files
+    # it. So the outstanding list is a snapshot from BEFORE this batch was looked at, and saying
+    # "still needed: X" to somebody who has just sent X reads as though we lost it. When we are
+    # holding documents nobody has filed yet, the list is framed as what we know so far and the
+    # human step is named, with roughly how long it takes.
+    checking = bool(n and not got)
 
     if got:
         head = {
@@ -257,15 +264,37 @@ def doc_batch(ctx: dict, lang: str = "hinglish") -> str:
             "en": "\n\n📷 Could you resend *%s*? The copy we have is not clear enough to read. "
                   "Good light, and the whole page." % ", ".join(unclear),
         }[l])
+    if checking:
+        parts.append({
+            "hinglish": "\n\n👀 Hamari team inhe khol kar dekhegi aur aapki list update karegi — "
+                        "aam taur par kuch ghanton mein. Aapko kuch karne ki zaroorat nahi hai.",
+            "hi": "\n\n👀 हमारी टीम इन्हें खोलकर देखेगी और आपकी सूची अपडेट करेगी — आम तौर पर कुछ "
+                  "घंटों में। आपको कुछ करने की ज़रूरत नहीं है।",
+            "en": "\n\n👀 Our team will open these and update your list — usually within a few "
+                  "hours. You do not need to do anything.",
+        }[l])
+
     if still:
         shown = ", ".join(still[:4])
         more = (" (+%d)" % (len(still) - 4)) if len(still) > 4 else ""
-        parts.append({
-            "hinglish": "\n\n📄 Ab bhi chahiye: *%s*%s" % (shown, more),
-            "hi": "\n\n📄 अभी भी चाहिए: *%s*%s" % (shown, more),
-            "en": "\n\n📄 Still needed: *%s*%s" % (shown, more),
-        }[l])
-    elif not unclear:
+        if checking:
+            # "as far as we know" - because what they just sent has not been counted yet.
+            parts.append({
+                "hinglish": "\n\n📄 Jahan tak humein pata hai, ab bhi chahiye: *%s*%s\n"
+                            "Agar inme se koi aapne abhi bheja hai, to woh is list se hat "
+                            "jaayega." % (shown, more),
+                "hi": "\n\n📄 जहाँ तक हमें पता है, अभी भी चाहिए: *%s*%s\nइनमें से कोई आपने अभी "
+                      "भेजा है, तो वह इस सूची से हट जाएगा।" % (shown, more),
+                "en": "\n\n📄 As far as we know, still needed: *%s*%s\nIf you have just sent any "
+                      "of these, it will come off this list." % (shown, more),
+            }[l])
+        else:
+            parts.append({
+                "hinglish": "\n\n📄 Ab bhi chahiye: *%s*%s" % (shown, more),
+                "hi": "\n\n📄 अभी भी चाहिए: *%s*%s" % (shown, more),
+                "en": "\n\n📄 Still needed: *%s*%s" % (shown, more),
+            }[l])
+    elif not unclear and not checking:
         parts.append({
             "hinglish": "\n\nSab kuch mil gaya hai — ab hum aage badh rahe hain. 🙏",
             "hi": "\n\nसब कुछ मिल गया है — अब हम आगे बढ़ रहे हैं। 🙏",

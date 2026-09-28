@@ -1614,11 +1614,6 @@
   "func": "ops_doc_desk",
   "guard": "nidaan-host,staff:team_member,rate-limited"
  },
- "GET /nidaan/ops/api/docsplit/tasks": {
-  "file": "sarathi_biz.py",
-  "func": "ops_docsplit_tasks",
-  "guard": "nidaan-host,staff:any"
- },
  "GET /nidaan/ops/api/docsplit/{job}/pdf": {
   "file": "sarathi_biz.py",
   "func": "ops_docsplit_collate",
@@ -3732,11 +3727,6 @@
  "POST /nidaan/ops/api/docsplit/upload": {
   "file": "sarathi_biz.py",
   "func": "ops_docsplit_upload",
-  "guard": "nidaan-host,staff:any,rate-limited"
- },
- "POST /nidaan/ops/api/docsplit/{job}/ai-task": {
-  "file": "sarathi_biz.py",
-  "func": "ops_docsplit_ai_task",
   "guard": "nidaan-host,staff:any,rate-limited"
  },
  "POST /nidaan/ops/api/docsplit/{job}/export": {
