@@ -54,11 +54,19 @@ def body_of(name):
 # ── the loader ───────────────────────────────────────────────────────────────
 print("\nWhat a browser gets without a share key\n")
 
-i = SRC.index("_DOC_LOADER_HTML = ")
-seg = SRC[i:]
-loader = ast.parse(seg[:seg.index("\n\n\n@app.get")]).body[0].value.value
+# Extracted defensively: when the loader is absent EVERY check below is the finding, and a
+# test that dies on a ValueError reports one instead of all of them. That shape has cost a
+# diagnosis four times today, so it stops here.
+loader = ""
+try:
+    _i = SRC.index("_DOC_LOADER_HTML = ")
+    _seg = SRC[_i:]
+    loader = ast.parse(_seg[:_seg.index("\n\n\n@app.get")]).body[0].value.value
+except Exception:  # noqa: BLE001
+    loader = ""
 
-check("there is a loader at all", len(loader) > 300)
+check("there is a loader at all", len(loader) > 300,
+      "without it a signed-in staff member cannot open any shared document")
 check("it reads the ops token already on this origin",
       "localStorage.getItem(\"nidaan_ops_token\")" in loader, loader[:120])
 check("...and sends it as a header, never in the URL",
