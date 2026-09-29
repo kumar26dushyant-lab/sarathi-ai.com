@@ -395,6 +395,32 @@ async def main():
     check("...for that claim only - another claim is untouched",
           (await cs.excluded_pages(999)) == {})
 
+    print("\nThe screen never waits on a read (Cloudflare cuts at 100 s)\n")
+    async with aiosqlite.connect(db.DB_PATH) as c:
+        await add(c, 88, "policy.pdf", "claimant")
+        await add(c, 88, "bill.pdf", "claimant")
+    first = await cs.sets_for_claim(88, "health", background=True)
+    check("an unread claim answers at once: reading, not the sets",
+          first.get("reading") is True and first.get("documents") == 2, first)
+    check("...and the read is under way, visible to both web processes",
+          cs.reading_state(88) is not None)
+    again = await cs.sets_for_claim(88, "health", background=True)
+    check("asking again while it reads does not start a second read",
+          again.get("reading") is True and len(cs._BG_TASKS) <= 1, (again, len(cs._BG_TASKS)))
+    while cs._BG_TASKS:
+        await asyncio.sleep(0.05)
+    done = await cs.sets_for_claim(88, "health", background=True)
+    check("once read, the sets come back", not done.get("reading") and len(done.get("sets") or []) == 3,
+          done.get("reading"))
+    check("...and the progress file is gone", cs.reading_state(88) is None)
+    cs._write_marker(88, done=0, total=0, failed="Reading stopped. Press Read the pages again.")
+    f1 = await cs.sets_for_claim(88, "health", background=True)
+    check("a failed read is said once, with what to do", f1.get("failed") and "Read the pages again"
+          in f1["failed"], f1)
+    f2 = await cs.sets_for_claim(88, "health", background=True)
+    check("...and then the stored reading is shown again", not f2.get("failed")
+          and not f2.get("reading"), f2.get("failed"))
+
     print("\nThe filename is read before the pages\n")
 
     import biz_nidaan_doc_local as _loc

@@ -17036,6 +17036,27 @@ async function dcSetsLoad(refresh){
       + '<a href="#" onclick="dcSetsLoad(1);return false">Try again</a></div>';
     return;
   }
+  // Reading in the background (29 Sep): a first read of a big claim takes longer than a request
+  // may. The box says how far it has got and asks again until the sets are ready.
+  if (d.reading){
+    const pct = d.total ? Math.round(100 * (d.done || 0) / d.total) : 0;
+    box.innerHTML = '<div class="dch">Ready to send · ' + (d.documents || 0) + ' document(s)</div>'
+      + '<div class="bdsub">Reading the documents on this claim'
+      + (d.total ? (' — document ' + Math.min((d.done || 0) + 1, d.total) + ' of ' + d.total) : '')
+      + '. Scanned pages take a few seconds each. You can keep working; this fills in by itself.</div>'
+      + '<div style="height:8px;background:var(--nd-bg-surface-2);border-radius:99px;margin:.5rem 0;overflow:hidden">'
+      + '<div style="height:100%;width:' + pct + '%;background:var(--nd-cyan-text);transition:width .4s"></div></div>';
+    const claimNow = _dcClaim;
+    setTimeout(function(){
+      if (_dcClaim === claimNow && document.getElementById('dcSets')) dcSetsLoad();
+    }, 4000);
+    return;
+  }
+  if (d.failed){
+    box.innerHTML = '<div class="dch">Ready to send</div><div class="bdsub">' + esc(d.failed)
+      + ' <a href="#" onclick="dcSetsLoad(1);return false">Read the pages again</a></div>';
+    return;
+  }
   _dcSets = d;
   dcSetsRender();
 }

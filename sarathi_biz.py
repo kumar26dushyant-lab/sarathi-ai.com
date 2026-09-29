@@ -12522,8 +12522,9 @@ async def ops_claim_doc_sets(claim_id: int, request: Request, refresh: int = 0):
         raise HTTPException(status_code=404, detail="Claim not found")
     claim = await nidaan.get_claim_with_account(claim_id) or {}
     import biz_nidaan_claim_sets as _cs
+    # In the background: a first read of a big claim takes longer than Cloudflare waits (100 s).
     return await _cs.sets_for_claim(claim_id, claim.get("claim_type") or "",
-                                    force=bool(refresh))
+                                    force=bool(refresh), background=True)
 
 
 @app.get("/nidaan/ops/api/claims/{claim_id}/doc-sets/{set_key}/parts")

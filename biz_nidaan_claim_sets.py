@@ -120,7 +120,7 @@ def save_cached(claim_id: int, fingerprint: str, pages: list) -> None:
         logger.info("could not cache the reading for claim %s: %s", claim_id, e)
 
 
-async def read_claim(claim_id: int, *, force: bool = False) -> dict:
+async def read_claim(claim_id: int, *, force: bool = False, progress=None) -> dict:
     """Read every document on the claim and return {pages, docs, truncated, from_cache}.
 
     `force` re-reads even when the cache matches - for the button a staff member presses after
@@ -171,7 +171,7 @@ async def read_claim(claim_id: int, *, force: bool = False) -> dict:
     # document without one took 7m30s on claim 151; past it, names and text layers still count and
     # only photographed pages stop being rendered - those go to a person.
     budget = float(os.getenv("NIDAAN_CLAIM_OCR_BUDGET_S", "90"))
-    got_pages, per_file = await brain.read_files(files, rules, budget_s=budget)
+    got_pages, per_file = await brain.read_files(files, rules, budget_s=budget, progress=progress)
     for f in per_file:
         d = readable[f["index"]]
         if f.get("unreadable"):
@@ -197,14 +197,122 @@ async def read_claim(claim_id: int, *, force: bool = False) -> dict:
             "merged_pages": pages_n}
 
 
-async def sets_for_claim(claim_id: int, claim_type: str = "", *, force: bool = False) -> dict:
+# ── reading in the background (29 Sep) ───────────────────────────────────────
+# A first read of a big claim took 92-116 s; Cloudflare cuts a request at 100 s, so the Ready to
+# send box would have failed on exactly the claims that need it. Now the screen asks, the read
+# runs in the background, and the screen polls. Progress lives in a small file beside the cache
+# so BOTH web processes see the same read and never start a second one.
+READ_STALE_S = 600
+_BG_TASKS: set = set()
+
+
+def _marker(claim_id: int) -> str:
+    return os.path.join(CACHE_ROOT, "claim_%d.reading" % int(claim_id))
+
+
+def reading_state(claim_id: int):
+    """{done, total, started, failed?} while a read is under way (or just failed); else None."""
+    try:
+        with open(_marker(claim_id), encoding="utf-8") as f:
+            st = json.load(f)
+    except (OSError, ValueError):
+        return None
+    import time as _t
+    if _t.time() - float(st.get("at") or 0) > READ_STALE_S:
+        return None                          # stopped moving: treated as no read at all
+    return st
+
+
+def _write_marker(claim_id: int, **kw) -> None:
+    import time as _t
+    os.makedirs(CACHE_ROOT, exist_ok=True)
+    kw["at"] = _t.time()
+    tmp = _marker(claim_id) + ".tmp%d" % os.getpid()
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(kw, f)
+    os.replace(tmp, _marker(claim_id))
+
+
+def _clear_marker(claim_id: int) -> None:
+    try:
+        os.remove(_marker(claim_id))         # our own progress file, never data
+    except OSError:
+        pass
+
+
+async def is_fresh(claim_id: int) -> bool:
+    """Is there a stored reading that covers exactly these documents, read this way?"""
+    docs = await claim_documents(claim_id)
+    if not docs:
+        return True
+    import biz_nidaan_doc_store as store
+    return bool(load_cached(claim_id, _fingerprint(docs, await store.load_rules())))
+
+
+async def start_read(claim_id: int, *, force: bool = False) -> dict:
+    """Begin a background read unless one is already under way (in either process)."""
+    import asyncio
+    st = reading_state(claim_id)
+    if st and not st.get("failed"):
+        return st
+    os.makedirs(CACHE_ROOT, exist_ok=True)
+    try:
+        # Exclusive create: of two processes asked at the same moment, only one starts.
+        fd = os.open(_marker(claim_id) + ".lock", os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        os.close(fd)
+    except FileExistsError:
+        st = reading_state(claim_id)
+        if st and not st.get("failed"):
+            return st
+        # A lock left by a read that died - take it over.
+    _write_marker(claim_id, done=0, total=0)
+
+    async def _run():
+        try:
+            async def _prog(done, total):
+                _write_marker(claim_id, done=done, total=total)
+            await read_claim(claim_id, force=force, progress=_prog)
+            _clear_marker(claim_id)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("claim %s: background read failed: %s", claim_id, e)
+            _write_marker(claim_id, done=0, total=0,
+                          failed="Reading stopped. Press Read the pages again.")
+        finally:
+            try:
+                os.remove(_marker(claim_id) + ".lock")
+            except OSError:
+                pass
+
+    t = asyncio.create_task(_run())
+    _BG_TASKS.add(t)
+    t.add_done_callback(_BG_TASKS.discard)
+    return {"done": 0, "total": 0}
+
+
+async def sets_for_claim(claim_id: int, claim_type: str = "", *, force: bool = False,
+                         background: bool = False) -> dict:
     """The three sets for this claim, and what the claim still needs.
 
     The MISSING list is the claim-level difference. The standalone tool can only say "no page in
     this file looked like a policy copy"; here we can also say "and the checklist is still
     waiting for it", which is the sentence a staff member actually acts on.
+
+    background=True (the screen): if the documents have not been read this way yet, start reading
+    them and return {"reading": True, done, total} straight away; the screen asks again.
     """
     import biz_nidaan_doc_sets as sets
+
+    if background:
+        st = reading_state(claim_id)
+        if st and st.get("failed") and not force:
+            _clear_marker(claim_id)
+            return {"reading": False, "failed": st["failed"],
+                    "documents": len(await claim_documents(claim_id))}
+        if (st and not st.get("failed")) or force or not await is_fresh(claim_id):
+            st = await start_read(claim_id, force=force) if not (st and not st.get("failed")) else st
+            return {"reading": True, "done": int(st.get("done") or 0),
+                    "total": int(st.get("total") or 0),
+                    "documents": len(await claim_documents(claim_id))}
 
     read, pages = await final_pages(claim_id, force=force)
     # Excluded pages are shown on the screen (so somebody can put them back) but never composed

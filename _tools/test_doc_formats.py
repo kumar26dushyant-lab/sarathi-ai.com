@@ -137,6 +137,14 @@ async def main():
     check("a named file whose pages agree stays as named", r["doc_type"] == "final_bill"
           and not r["mixed"], r)
 
+    renamed = pdf_of("DISCHARGE SUMMARY   date of admission   final diagnosis",
+                     "DISCHARGE SUMMARY   condition at discharge   treating doctor")
+    r = await brain.identify_document(renamed, [], filename="Hospital Bill.pdf")
+    check("pages that all agree on ANOTHER type win over an imprecise name",
+          r["doc_type"] == "discharge" and not r["mixed"], r)
+    check("...and it is NOT flagged as several documents (claim 204's 'Medical_Bill' files)",
+          not r["mixed"], r)
+
     print("\nOne reader, page by page for a mixed file\n")
     seen = []
 

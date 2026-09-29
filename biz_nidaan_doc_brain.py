@@ -153,13 +153,24 @@ async def identify_document(pdf_bytes: bytes, rules: list | None = None,
         named_result["pages"] = total
         named_result["sampled"] = len(seen)
         named_result["words"] = got["words"]
-        other = {r.get("doc_type") for r in seen
-                 if float(r.get("confidence") or 0) >= 0.6
-                 and (r.get("doc_type") or "other") not in ("other", named_result["doc_type"])}
-        if other:
+        strong = [r for r in seen if float(r.get("confidence") or 0) >= 0.6
+                  and (r.get("doc_type") or "other") != "other"]
+        kinds = {r.get("doc_type") for r in strong}
+        if len(kinds) >= 2:
+            # The PAGES disagree with each other: several documents in one file.
             named_result["mixed"] = True
-            named_result["kinds"] = sorted(other | {named_result["doc_type"]})
-            named_result["why"] += " - but some pages read as something else"
+            named_result["kinds"] = sorted(kinds | {named_result["doc_type"]})
+            named_result["why"] += " - but its pages are different documents"
+        elif len(kinds) == 1 and named_result["doc_type"] not in kinds:
+            # Every readable page agrees on ONE type the name did not say: one document with an
+            # imprecise name ("Medical_Bill" that is a pharmacy bill, claim 204). The pages win;
+            # it is not flagged as mixed.
+            best = max(strong, key=lambda r: float(r.get("confidence") or 0))
+            named_result.update(doc_type=best.get("doc_type"),
+                                confidence=float(best.get("confidence") or 0),
+                                why="its pages read as this (the file is named “%s”)"
+                                    % (filename or "")[:60],
+                                kinds=sorted(kinds), from_name=False)
         return named_result
     if not seen:
         return {"doc_type": "other", "confidence": 0.0,
