@@ -142,7 +142,14 @@ var T = {
     vOnWay:"Code sent. It can take a minute or two to arrive \u2014 please do not press again.",
     vHelpTitle:"Not received it?",
     vHelpBody:"Check your spam or junk folder, and that your phone has signal. If it still has not arrived, call us on +91-98260 11116 and we will open your claim page with you.",
-    vOther:"Try the other way instead"
+    vOther:"Try the other way instead",
+    eTitle:"Please confirm your email",
+    eWhy:"We send your case letters and updates to this email. Is it yours?",
+    eYes:"Yes, send me a code", eNo:"No, change it", eSkip:"Not now",
+    eSent:"We sent a 6-digit code to your email. Type it here:",
+    eConfirm:"Confirm", eNew:"Your correct email", eSave:"Save and send me a code",
+    eDone:"\u2705 Email confirmed. Thank you!", eFail:"That did not work. Please try again.",
+    eSpam:"Not in your inbox? Look in spam or promotions."
   },
   hi: {
     greet:"नमस्ते", sub:"यहाँ आपके बीमा दावे की स्थिति है। हम इसे आपके लिए संभाल रहे हैं।",
@@ -192,7 +199,14 @@ var T = {
     vOnWay:"कोड भेज दिया गया है। पहुँचने में एक-दो मिनट लग सकते हैं — कृपया दोबारा न दबाएँ।",
     vHelpTitle:"कोड नहीं मिला?",
     vHelpBody:"अपना spam या junk folder देखिए, और यह भी कि फ़ोन में signal है। फिर भी न मिले तो हमें +91-98260 11116 पर कॉल कीजिए, हम साथ में आपका क्लेम पेज खोल देंगे।",
-    vOther:"दूसरा तरीका आज़माइए"
+    vOther:"दूसरा तरीका आज़माइए",
+    eTitle:"कृपया अपना ईमेल कन्फ़र्म करें",
+    eWhy:"आपके केस के पत्र और अपडेट हम इसी ईमेल पर भेजते हैं। क्या यह आपका है?",
+    eYes:"हाँ, मुझे कोड भेजिए", eNo:"नहीं, बदलना है", eSkip:"अभी नहीं",
+    eSent:"हमने आपके ईमेल पर 6 अंकों का कोड भेजा है। यहाँ डालिए:",
+    eConfirm:"कन्फ़र्म करें", eNew:"आपका सही ईमेल", eSave:"सेव करें और कोड भेजें",
+    eDone:"\u2705 ईमेल कन्फ़र्म हो गया। धन्यवाद!", eFail:"नहीं हो पाया। कृपया दोबारा कोशिश कीजिए।",
+    eSpam:"इनबॉक्स में नहीं दिखा? spam या promotions फ़ोल्डर देखिए।"
   }
 };
 function t(k){ return (T[LANG]||T.en)[k] || T.en[k] || k; }
@@ -467,6 +481,67 @@ function showErr(ours){
 // No response at all (thrown) is ours too - we cannot blame a link for our own server.
 function errIsOurs(r){ return !r || !(r.status === 401 || r.status === 403 || r.status === 404); }
 
+// ── confirm your email ──────────────────────────────────────────────────────
+function _emailMsg(k, bad){ var m = document.getElementById("emailMsg"); if (m){ m.textContent = t(k); m.style.color = bad ? "#b42318" : ""; } }
+function _emailCodeBox(){
+  var st = document.getElementById("emailStep"); if (!st) return;
+  st.innerHTML = '<div style="width:100%">'+esc(t("eSent"))+'</div>'
+    + '<input id="emailCodeIn" inputmode="numeric" maxlength="6" autocomplete="one-time-code" style="font-size:1.2rem;letter-spacing:.2em;width:8rem;padding:.4rem">'
+    + '<button class="btn btn-primary" onclick="emailCheck(this)">'+esc(t("eConfirm"))+'</button>'
+    + '<div class="note" style="width:100%">'+esc(t("eSpam"))+'</div>';
+}
+async function emailCode(btn){
+  if (btn) btn.disabled = true;
+  try{
+    var r = await fetch("/nidaan/claim/api/email/code", {method:"POST", headers: auth()});
+    var d = await r.json().catch(function(){ return {}; });
+    if (r.ok && d.already){ await _emailReload(); return; }
+    if (!r.ok){ _emailMsg("eFail", true); if (btn) btn.disabled = false; return; }
+    _emailCodeBox();
+  }catch(e){ _emailMsg("eFail", true); if (btn) btn.disabled = false; }
+}
+async function emailCheck(btn){
+  var v = ((document.getElementById("emailCodeIn")||{}).value||"").replace(/\D/g,"");
+  if (v.length !== 6){ _emailMsg("eFail", true); return; }
+  if (btn) btn.disabled = true;
+  try{
+    var r = await fetch("/nidaan/claim/api/email/check", {method:"POST",
+      headers: Object.assign({"Content-Type":"application/json"}, auth()), body: JSON.stringify({code: v})});
+    if (!r.ok){ var d = await r.json().catch(function(){ return {}; });
+      var m = document.getElementById("emailMsg"); if (m){ m.textContent = (typeof d.detail === "string" && d.detail) || t("eFail"); m.style.color = "#b42318"; }
+      if (btn) btn.disabled = false; return; }
+    await _emailReload(true);
+  }catch(e){ _emailMsg("eFail", true); if (btn) btn.disabled = false; }
+}
+function emailChangeShow(){
+  var st = document.getElementById("emailStep"); if (!st) return;
+  st.innerHTML = '<label style="width:100%">'+esc(t("eNew"))+'<br><input id="emailNewIn" type="email" autocomplete="email" style="width:100%;padding:.45rem;margin-top:.3rem"></label>'
+    + '<button class="btn btn-primary" onclick="emailChangeSave(this)">'+esc(t("eSave"))+'</button>';
+}
+async function emailChangeSave(btn){
+  var v = ((document.getElementById("emailNewIn")||{}).value||"").trim();
+  if (!v){ _emailMsg("eFail", true); return; }
+  if (btn) btn.disabled = true;
+  try{
+    var r = await fetch("/nidaan/claim/api/email/change", {method:"POST",
+      headers: Object.assign({"Content-Type":"application/json"}, auth()), body: JSON.stringify({email: v})});
+    if (!r.ok){ var d = await r.json().catch(function(){ return {}; });
+      var m = document.getElementById("emailMsg"); if (m){ m.textContent = (typeof d.detail === "string" && d.detail) || t("eFail"); m.style.color = "#b42318"; }
+      if (btn) btn.disabled = false; return; }
+    _emailCodeBox();
+  }catch(e){ _emailMsg("eFail", true); if (btn) btn.disabled = false; }
+}
+async function emailSkip(){
+  try{ sessionStorage.setItem("np_email_skip", String(DATA.claim.claim_id)); }catch(e){}
+  try{ await fetch("/nidaan/claim/api/email/skip", {method:"POST", headers: auth()}); }catch(e){}
+  render();
+}
+async function _emailReload(done){
+  try{ var me = await fetch("/nidaan/claim/api/me", {headers: auth()}); DATA = await me.json(); }catch(e){}
+  render();
+  if (done){ var box = document.getElementById("content"); if (box) box.insertAdjacentHTML("afterbegin", '<div class="card"><div class="accepted">'+esc(t("eDone"))+'</div></div>'); }
+}
+
 function render(){
   var c = DATA.claim, con = DATA.consent, il = con.illustration;
   document.getElementById("greetWrap").innerHTML =
@@ -476,8 +551,9 @@ function render(){
   var profileCard =
     '<div class="card"><h2>'+esc(t("profileTitle"))+'</h2>'+
       '<div class="row"><span class="lbl">'+esc(t("pName"))+'</span><span class="val">'+esc(c.insured_name||'—')+'</span></div>'+
-      (c.insured_phone?'<div class="row"><span class="lbl">'+esc(t("pPhone"))+'</span><span class="val">'+esc(c.insured_phone)+'</span></div>':'')+
-      (c.insured_email?'<div class="row"><span class="lbl">'+esc(t("pEmail"))+'</span><span class="val" style="font-size:.82rem">'+esc(c.insured_email)+'</span></div>':'')+
+      // The contacts this claim USES - the complainant's own, not the insured's (1 Oct).
+      ((DATA.contact||{}).phone_masked?'<div class="row"><span class="lbl">'+esc(t("pPhone"))+'</span><span class="val">'+esc(DATA.contact.phone_masked)+'</span></div>':'')+
+      ((DATA.contact||{}).email?'<div class="row"><span class="lbl">'+esc(t("pEmail"))+'</span><span class="val" style="font-size:.82rem">'+esc(DATA.contact.email)+(DATA.contact.email_verified?' \u2705':'')+'</span></div>':'')+
     '</div>';
 
   var statusCard =
@@ -557,7 +633,21 @@ function render(){
                + esc(t("submitDocs"))+'</button>' : '')+
     '</div></div>';
 
-  document.getElementById("content").innerHTML = profileCard + statusCard + feeCard + tlCard + docsCard;
+  // CONFIRM YOUR EMAIL - asked before the authorization (founder, 1 Oct), never a block:
+  // "Not now" lets them carry on, and staff are told to follow it up.
+  var ct = DATA.contact || {}, emailCard = "", skipped = false;
+  try { skipped = sessionStorage.getItem("np_email_skip") === String(c.claim_id); } catch(e){}
+  if (ct.email && !ct.email_verified && !skipped){
+    emailCard = '<div class="card" id="emailCard"><h2>'+esc(t("eTitle"))+'</h2>'
+      + '<p class="note">'+esc(t("eWhy"))+'</p>'
+      + '<div style="font-weight:700;margin:.4rem 0 .7rem;word-break:break-all">'+esc(ct.email)+'</div>'
+      + '<div id="emailStep" style="display:flex;flex-wrap:wrap;gap:.5rem">'
+      +   '<button class="btn btn-primary" onclick="emailCode(this)">'+esc(t("eYes"))+'</button>'
+      +   '<button class="btn" onclick="emailChangeShow()">'+esc(t("eNo"))+'</button>'
+      +   '<button class="btn" onclick="emailSkip()">'+esc(t("eSkip"))+'</button>'
+      + '</div><div id="emailMsg" class="note" style="margin-top:.5rem"></div></div>';
+  }
+  document.getElementById("content").innerHTML = profileCard + emailCard + statusCard + feeCard + tlCard + docsCard;
   document.getElementById("reassure").textContent = t("reassure");
   maybeShowUpdate(tl);
 }

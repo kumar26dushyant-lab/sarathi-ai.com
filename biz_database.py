@@ -3628,6 +3628,45 @@ async def init_db():
             )
         """)
 
+        # A contact is PROVEN for an exact address (biz_nidaan_contact_verify). The old yes/no
+        # `insured_email_verified` was set by any claim-page sign-in - a WhatsApp code included -
+        # and was not tied to the address, so a corrected email kept the badge (claim 174). Rows
+        # here are never deleted; a contact is verified if its CURRENT value has one.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nidaan_contact_verifications (
+                vid         INTEGER PRIMARY KEY AUTOINCREMENT,
+                claim_id    INTEGER,
+                account_id  INTEGER,
+                kind        TEXT NOT NULL,          -- email | phone
+                value       TEXT NOT NULL,          -- normalised: lower-case email / 10-digit mobile
+                method      TEXT NOT NULL,          -- how it was proven (METHOD_WORDS)
+                actor       TEXT NOT NULL DEFAULT '',
+                verified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_contact_verif_value "
+            "ON nidaan_contact_verifications(kind, value)")
+        # A confirmation sent to a contact: a code on WhatsApp, a link by email. Hashes only.
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nidaan_contact_confirm (
+                cid         INTEGER PRIMARY KEY AUTOINCREMENT,
+                claim_id    INTEGER NOT NULL,
+                kind        TEXT NOT NULL,
+                value       TEXT NOT NULL,
+                code_hash   TEXT NOT NULL DEFAULT '',
+                token_hash  TEXT NOT NULL DEFAULT '',
+                sent_by     TEXT NOT NULL DEFAULT '',
+                sent_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                expires_at  TIMESTAMP NOT NULL,
+                used_at     TEXT,
+                attempts    INTEGER NOT NULL DEFAULT 0
+            )
+        """)
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_contact_confirm_claim "
+            "ON nidaan_contact_confirm(claim_id, kind)")
+
         # Backfill: store the actual Razorpay payment_id so refunds have something
         # to call against (column razorpay_subscription_id holds the order_id, not payment_id).
         try:

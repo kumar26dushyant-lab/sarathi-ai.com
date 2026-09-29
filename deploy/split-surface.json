@@ -78,6 +78,8 @@
   "_CaseBlockerReq",
   "_ChangeReq",
   "_ClaimAutoReq",
+  "_ClaimEmailChangeReq",
+  "_ClaimEmailCodeReq",
   "_ClaimExcludeReq",
   "_ClaimInvolveReq",
   "_ClaimMuteReq",
@@ -86,6 +88,7 @@
   "_ClaimVerifyCheckReq",
   "_ClaimVerifyStartReq",
   "_ClaimantTermsReq",
+  "_ContactConfirmReq",
   "_CpReq",
   "_CpStatusReq",
   "_CrmCommentReq",
@@ -197,8 +200,10 @@
   "_branch_bearer",
   "_branch_claim_row",
   "_claimant_accept_thankyou",
+  "_claimant_contact",
   "_claimant_ctx",
   "_claimant_link_ctx",
+  "_claimant_live_ctx",
   "_claimshield_webhook_secret",
   "_clean_complainant_contact",
   "_create_rzp_payment_link",
@@ -1278,17 +1283,112 @@
    "reaches": [
     "_DOC_URL_TTL",
     "_bearer",
+    "_claimant_contact",
     "_claimant_ctx",
     "_doc_sig",
     "_is_nidaan_host",
     "_nidaan_doc_url",
-    "app"
+    "app",
+    "logger"
    ],
    "uses": [
+    "_claimant_contact",
     "_claimant_ctx",
     "_is_nidaan_host",
     "_nidaan_doc_url",
     "app"
+   ]
+  },
+  {
+   "func": "nidaan_claim_email_code",
+   "paths": [
+    "/nidaan/claim/api/email/code"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_bearer",
+    "_claimant_ctx",
+    "_claimant_live_ctx",
+    "_is_nidaan_host",
+    "_nidaan_origin",
+    "app",
+    "limiter"
+   ],
+   "uses": [
+    "_claimant_live_ctx",
+    "_is_nidaan_host",
+    "_nidaan_origin",
+    "app",
+    "limiter"
+   ]
+  },
+  {
+   "func": "nidaan_claim_email_check",
+   "paths": [
+    "/nidaan/claim/api/email/check"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_ClaimEmailCodeReq",
+    "_bearer",
+    "_claimant_ctx",
+    "_claimant_live_ctx",
+    "_is_nidaan_host",
+    "app",
+    "limiter"
+   ],
+   "uses": [
+    "_ClaimEmailCodeReq",
+    "_claimant_live_ctx",
+    "_is_nidaan_host",
+    "app",
+    "limiter"
+   ]
+  },
+  {
+   "func": "nidaan_claim_email_change",
+   "paths": [
+    "/nidaan/claim/api/email/change"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_ClaimEmailChangeReq",
+    "_bearer",
+    "_claimant_ctx",
+    "_claimant_live_ctx",
+    "_is_nidaan_host",
+    "_nidaan_origin",
+    "app",
+    "limiter"
+   ],
+   "uses": [
+    "_ClaimEmailChangeReq",
+    "_claimant_live_ctx",
+    "_is_nidaan_host",
+    "_nidaan_origin",
+    "app",
+    "limiter"
+   ]
+  },
+  {
+   "func": "nidaan_claim_email_skip",
+   "paths": [
+    "/nidaan/claim/api/email/skip"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_bearer",
+    "_claimant_ctx",
+    "_claimant_live_ctx",
+    "_is_nidaan_host",
+    "app",
+    "limiter"
+   ],
+   "uses": [
+    "_claimant_live_ctx",
+    "_is_nidaan_host",
+    "app",
+    "limiter"
    ]
   },
   {
@@ -8375,6 +8475,54 @@
    ]
   },
   {
+   "func": "ops_claim_contact_confirm",
+   "paths": [
+    "/nidaan/ops/api/claims/{claim_id}/contacts/confirm"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_ContactConfirmReq",
+    "_STAFF_ACTIVE_TTL",
+    "_actor_label",
+    "_get_staff_from_request",
+    "_is_nidaan_host",
+    "_nidaan_origin",
+    "_ops_audit",
+    "_require_staff",
+    "_staff_active_cache",
+    "_staff_still_active",
+    "app",
+    "limiter"
+   ],
+   "uses": [
+    "_ContactConfirmReq",
+    "_actor_label",
+    "_is_nidaan_host",
+    "_nidaan_origin",
+    "_ops_audit",
+    "_require_staff",
+    "app",
+    "limiter"
+   ]
+  },
+  {
+   "func": "nidaan_confirm_email",
+   "paths": [
+    "/nidaan/confirm-email"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_is_nidaan_host",
+    "app",
+    "limiter"
+   ],
+   "uses": [
+    "_is_nidaan_host",
+    "app",
+    "limiter"
+   ]
+  },
+  {
    "func": "ops_assign_claim",
    "paths": [
     "/nidaan/ops/api/claims/{claim_id}/assign"
@@ -8468,6 +8616,7 @@
    ],
    "uses": [
     "OpsClaimInfoUpdate",
+    "_actor_label",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
@@ -18617,6 +18766,10 @@
   "nidaan_change_password",
   "nidaan_claim_consent",
   "nidaan_claim_delete_doc",
+  "nidaan_claim_email_change",
+  "nidaan_claim_email_check",
+  "nidaan_claim_email_code",
+  "nidaan_claim_email_skip",
   "nidaan_claim_icon",
   "nidaan_claim_magic",
   "nidaan_claim_manifest",
@@ -18634,6 +18787,7 @@
   "nidaan_claim_verify_start",
   "nidaan_claim_verify_where",
   "nidaan_claimshield_status",
+  "nidaan_confirm_email",
   "nidaan_cookies_page",
   "nidaan_dashboard_page",
   "nidaan_delete_claim_doc",
@@ -18786,6 +18940,7 @@
   "ops_case_report",
   "ops_case_secret",
   "ops_claim_consent_proof",
+  "ops_claim_contact_confirm",
   "ops_claim_doc_auto",
   "ops_claim_doc_exclude",
   "ops_claim_doc_page",

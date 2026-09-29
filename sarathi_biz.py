@@ -1801,6 +1801,18 @@ async def nidaan_claim_verify_check(body: _ClaimVerifyCheckReq, request: Request
     # First time the COMPLAINANT proves who they are, that is the real first-open.
     try:
         await claimant.mark_activated(ctx["claim_id"])
+        # The code proves ONLY the channel it went through: an emailed code proves the email, a
+        # WhatsApp code proves the phone. This used to mark the EMAIL verified either way - how a
+        # wrong email came to show "verified" on claim 174 (proven by WhatsApp, 29 Sep).
+        import biz_nidaan_contact_verify as _cv
+        _cl = await _cv._claim(ctx["claim_id"])
+        _cur = _cv.current(_cl)
+        if res.get("channel") == "email":
+            await _cv.record("email", _cur["email"], "portal_email_code",
+                             claim_id=ctx["claim_id"], actor="complainant")
+        elif res.get("channel") == "whatsapp":
+            await _cv.record("phone", _cur["phone"], "portal_whatsapp_code",
+                             claim_id=ctx["claim_id"], actor="complainant")
         await nidaan.record_claim_activity(
             ctx["claim_id"], "portal_open", channel="system", actor="complainant",
             summary="Complainant confirmed their identity by %s and opened their claim page"
@@ -1858,6 +1870,9 @@ async def nidaan_claim_me(request: Request):
             "terms_html_hi": cfg["terms_html_hi"],
             "illustration": illustration,
         },
+        # The contacts this claim actually USES (the complainant's, else the insured's) and whether
+        # each is proven - the page asks them to confirm an unproven email before authorising.
+        "contact": await _claimant_contact(ctx),
         "timeline": await claimant.claim_timeline(ctx["claim_id"]),
         "documents": [
             {"doc_id": d["doc_id"], "name": d["original_name"],
@@ -1868,6 +1883,111 @@ async def nidaan_claim_me(request: Request):
             for d in await claimant.list_claimant_docs(ctx["claim_id"])
         ],
     }
+
+
+async def _claimant_contact(ctx: dict) -> dict:
+    try:
+        import biz_nidaan_contact_verify as _cv
+        cl = await _cv._claim(ctx["claim_id"])
+        st = await _cv.status(cl)
+        cur = _cv.current(cl)
+        return {"email": cur["email"], "email_verified": bool(st["email"]["verified"]),
+                "email_pending": bool(st["email"].get("pending_since")),
+                "phone_masked": _cv.mask("phone", cur["phone"]) if cur["phone"] else "",
+                "phone_verified": bool(st["phone"]["verified"])}
+    except Exception as e:  # noqa: BLE001
+        logger.info("claimant contact status failed: %s", e)
+        return {}
+
+
+async def _claimant_live_ctx(request: Request) -> dict:
+    """A signed-in complainant - never a staff preview - or 401/403."""
+    ctx = await _claimant_ctx(request)
+    if not ctx:
+        raise HTTPException(401, "Please open your claim page again")
+    if ctx.get("preview"):
+        raise HTTPException(403, "A staff preview cannot change this")
+    return ctx
+
+
+@app.post("/nidaan/claim/api/email/code")
+@limiter.limit("6/hour")
+async def nidaan_claim_email_code(request: Request):
+    """Send a confirmation code (and link) to the email on the claim. 3 a day at most."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    ctx = await _claimant_live_ctx(request)
+    import biz_nidaan_contact_verify as _cv
+    res = await _cv.send_confirm(ctx["claim_id"], "email", actor="complainant (claim page)",
+                                 base_url=_nidaan_origin(request))
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("why") or "Could not send the code")
+    return {"ok": True, "already": bool(res.get("already"))}
+
+
+class _ClaimEmailCodeReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    code: str = Field(..., min_length=4, max_length=12)
+
+
+@app.post("/nidaan/claim/api/email/check")
+@limiter.limit("20/hour")
+async def nidaan_claim_email_check(body: _ClaimEmailCodeReq, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    ctx = await _claimant_live_ctx(request)
+    import biz_nidaan_contact_verify as _cv
+    res = await _cv.confirm_email_code(ctx["claim_id"], body.code)
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("why") or "That code is not right")
+    return {"ok": True}
+
+
+class _ClaimEmailChangeReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    email: str = Field(..., min_length=5, max_length=120)
+
+
+@app.post("/nidaan/claim/api/email/change")
+@limiter.limit("5/hour")
+async def nidaan_claim_email_change(body: _ClaimEmailChangeReq, request: Request):
+    """The complainant corrects their own email - after proving who they are to open this page.
+    The new address is unproven until they confirm the code sent to it; the handler is told."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    ctx = await _claimant_live_ctx(request)
+    new = auth.sanitize_email(body.email)
+    if not new:
+        raise HTTPException(400, "Please enter a valid email address")
+    import biz_nidaan_contact_verify as _cv
+    before = await _cv._claim(ctx["claim_id"])
+    old = _cv.current(before)["email"]
+    if new == old:
+        res = await _cv.send_confirm(ctx["claim_id"], "email", actor="complainant (claim page)",
+                                     base_url=_nidaan_origin(request))
+        return {"ok": True, "same": True, "sent": bool(res.get("ok"))}
+    if not await nidaan.update_claim_info(ctx["claim_id"], complainant_email=new):
+        raise HTTPException(400, "Could not save that email")
+    res = await _cv.on_change(ctx["claim_id"], {"email": (old, new)},
+                              actor="complainant (claim page)")
+    await _cv.tell_handler(
+        ctx["claim_id"], "\u2709\ufe0f NP-%s \u2014 the complainant changed their email" % ctx["claim_id"],
+        "On their claim page: %s \u2192 %s. A confirmation code was sent to the new address; "
+        "it shows as verified once they enter it." % (_cv.mask("email", old), _cv.mask("email", new)))
+    return {"ok": True, "sent": bool((res.get("confirm") or {}).get("email", {}).get("ok"))}
+
+
+@app.post("/nidaan/claim/api/email/skip")
+@limiter.limit("20/hour")
+async def nidaan_claim_email_skip(request: Request):
+    """'Not now' - never a block. Written on the claim so staff follow it up."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    ctx = await _claimant_live_ctx(request)
+    await nidaan.record_claim_activity(
+        ctx["claim_id"], "contact_skip", channel="web", actor="complainant",
+        summary="Complainant chose not to confirm their email yet - please follow up")
+    return {"ok": True}
 
 
 @app.delete("/nidaan/claim/api/documents/{doc_id}")
@@ -3327,6 +3447,13 @@ async def nidaan_api_verify_email_otp(req: NidaanVerifyOTPReq, request: Request)
             plan = "per_claim"
     token = nidaan.create_nidaan_token(account["account_id"], account["email"], plan)
     logger.info("🔑 Nidaan Email OTP Login: account %d (%s)", account["account_id"], email)
+    # Signing in with an emailed code PROVES this email - for this account's claims too.
+    try:
+        import biz_nidaan_contact_verify as _cv
+        await _cv.record("email", email, "login_email_code", account_id=account["account_id"],
+                         actor="account holder")
+    except Exception:  # noqa: BLE001 - never allowed to fail a sign-in
+        pass
     return {
         "access_token": token,
         "account": {
@@ -3432,6 +3559,14 @@ async def nidaan_api_google_signin(req: NidaanGoogleReq, request: Request):
             plan = "per_claim"
     token = nidaan.create_nidaan_token(account["account_id"], account["email"], plan)
     logger.info("🔑 Nidaan Google Login: account %d (%s)", account["account_id"], email)
+    # Google has verified this address; signing in with it proves it for this account.
+    try:
+        import biz_nidaan_contact_verify as _cv
+        if google_user.get("email_verified", True):
+            await _cv.record("email", email, "login_google", account_id=account["account_id"],
+                             actor="account holder")
+    except Exception:  # noqa: BLE001 - never allowed to fail a sign-in
+        pass
     return {
         "access_token": token,
         "account": {
@@ -11672,7 +11807,76 @@ async def ops_get_claim(claim_id: int, request: Request):
     except Exception as _oe:  # noqa: BLE001
         logger.info("could not resolve the origin of claim %s: %s", claim_id, _oe)
         claim["origin_detail"] = {}
+    # Each contact's REAL status: proven for the current address, how, and when. The old
+    # `insured_email_verified` flag is no longer shown (it was wrong for 40 of 65 claims).
+    try:
+        import biz_nidaan_contact_verify as _cv
+        claim["contacts"] = await _cv.status(claim)
+    except Exception as _ce:  # noqa: BLE001
+        logger.info("contact status failed for claim %s: %s", claim_id, _ce)
+        claim["contacts"] = {}
     return claim
+
+
+class _ContactConfirmReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["email", "phone"]
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/contacts/confirm")
+@limiter.limit("10/minute")
+async def ops_claim_contact_confirm(claim_id: int, body: _ContactConfirmReq, request: Request):
+    """Send the complainant a confirmation for their email (a link) or mobile (a WhatsApp code
+    they reply in the chat). At most 3 a day per contact; never to one already proven."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request)
+    import biz_nidaan_claim_authz as _authz
+    if not (await _authz.assert_claim_access(staff, claim_id)).get("allowed"):
+        raise HTTPException(status_code=404, detail="Claim not found")
+    import biz_nidaan_contact_verify as _cv
+    res = await _cv.send_confirm(claim_id, body.kind, actor=_actor_label(staff),
+                                 base_url=_nidaan_origin(request))
+    await _ops_audit(request, "claim.contact_confirm", "claim", str(claim_id),
+                     "%s: %s" % (body.kind, "sent" if res.get("ok") else res.get("why") or "not sent"))
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("why") or "Could not send it")
+    import biz_nidaan_contact_verify as _cv2
+    claim = await _cv2._claim(claim_id)
+    return {"ok": True, "already": bool(res.get("already")), "contacts": await _cv2.status(claim)}
+
+
+@app.get("/nidaan/confirm-email")
+@limiter.limit("20/minute")
+async def nidaan_confirm_email(request: Request, t: str = ""):
+    """The link in the confirmation email. Proves the email - if it is still the claim's email."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    import biz_nidaan_contact_verify as _cv
+    res = await _cv.confirm_link((t or "")[:80])
+    if res.get("ok"):
+        head, body_en, body_hi = ("✅ Email confirmed",
+                                  "Thank you. Your case updates will come to this email.",
+                                  "धन्यवाद। आपके केस की जानकारी इसी ईमेल पर आएगी।")
+    elif res.get("changed"):
+        head, body_en, body_hi = ("This email is no longer on the claim",
+                                  "Your claim now has a different email. Please check your newest message from us.",
+                                  "आपके क्लेम पर अब दूसरा ईमेल है। कृपया हमारा सबसे नया संदेश देखें।")
+    else:
+        head, body_en, body_hi = ("This link has expired",
+                                  "Please ask our team to send a new confirmation.",
+                                  "कृपया हमारी टीम से नया पुष्टि लिंक मँगवाइए।")
+    html = ("<!doctype html><html lang='en'><head><meta charset='utf-8'>"
+            "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+            "<title>NidaanPartner</title><style>body{font-family:system-ui,Segoe UI,Roboto,sans-serif;"
+            "background:#f4f6f4;color:#16201b;display:flex;min-height:100vh;align-items:center;"
+            "justify-content:center;margin:0;padding:16px}.c{background:#fff;border:1px solid #d5ddd7;"
+            "border-radius:12px;padding:24px;max-width:420px}@media(prefers-color-scheme:dark){"
+            "body{background:#0e1411;color:#e4ebe7}.c{background:#151d19;border-color:#2a3830}}"
+            "</style></head><body><div class='c'><h2>%s</h2><p>%s</p><p>%s</p>"
+            "<p style='color:#56635c;font-size:14px'>— NidaanPartner</p></div></body></html>"
+            % (head, body_en, body_hi))
+    return HTMLResponse(html, headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"})
 
 
 class OpsClaimAssign(BaseModel):
@@ -11799,23 +12003,59 @@ async def ops_update_claim_info(claim_id: int, body: OpsClaimInfoUpdate, request
         for k, old in zip(hit, cur or [None] * len(hit)):
             if str(old if old is not None else "").strip().lower() != str(data[k]).strip().lower():
                 raise HTTPException(400, _bk.lock_message(locks[k]))
-    # What the claim could be reached on BEFORE the edit, so we can tell whether this is the
-    # moment it became reachable at all.
-    had_email = ""
-    try:
-        import aiosqlite as _aioc
-        async with _aioc.connect(nidaan.DB_PATH) as c:
-            r0 = await (await c.execute(
-                "SELECT COALESCE(complainant_email, insured_email, '') FROM nidaan_claims "
-                "WHERE claim_id=?", (claim_id,))).fetchone()
-        had_email = ((r0[0] if r0 else "") or "").strip().lower()
-    except Exception:
-        had_email = ""
+    # A contact typed here is checked like at claim creation: a real 10-digit mobile, a real email.
+    # Blank is allowed - it means "use the insured's".
+    for _k in ("complainant_phone", "insured_phone"):
+        if (data.get(_k) or "").strip():
+            _d = "".join(ch for ch in data[_k] if ch.isdigit())
+            _d = _d[-10:] if len(_d) >= 11 and _d.startswith("91") else _d
+            if len(_d) != 10:
+                raise HTTPException(400, "Enter a valid 10-digit mobile number")
+            data[_k] = _d
+    for _k in ("complainant_email", "insured_email"):
+        if (data.get(_k) or "").strip():
+            _e = auth.sanitize_email(data[_k])
+            if not _e:
+                raise HTTPException(400, "Enter a valid email address")
+            data[_k] = _e
+
+    # The claim BEFORE the edit: what really changes, and which contact it could be reached on.
+    import biz_nidaan_contact_verify as _cv
+    before = await _cv._claim(claim_id)
+    if not before:
+        raise HTTPException(404, "Claim not found")
+    import aiosqlite as _aioc
+    async with _aioc.connect(nidaan.DB_PATH) as c:
+        c.row_factory = _aioc.Row
+        _full = await (await c.execute("SELECT * FROM nidaan_claims WHERE claim_id=?",
+                                       (claim_id,))).fetchone()
+    _full = dict(_full) if _full else {}
+    had_email = _cv.current(before)["email"]
 
     if not await nidaan.update_claim_info(claim_id, **data):
         raise HTTPException(404, "Claim not found or nothing changed")
+    after = await _cv._claim(claim_id)
+
+    # ONLY what really changed. The edit form sends every field on every save, so this used to
+    # log all ten names each time and the log could not say what anybody had changed.
+    changed = [k for k, v in data.items()
+               if str(_full.get(k) if _full.get(k) is not None else "").strip().lower()
+               != str(v if v is not None else "").strip().lower()]
+    contact_changes = {}
+    for kind in ("email", "phone"):
+        o, n = _cv.current(before)[kind], _cv.current(after)[kind]
+        if o != n:
+            contact_changes[kind] = (o, n)
+    _desc = [k for k in changed if not k.endswith(("_email", "_phone"))]
+    _desc += ["%s %s -> %s" % ("email" if k == "email" else "mobile", _cv.mask(k, o), _cv.mask(k, n))
+              for k, (o, n) in contact_changes.items()]
     await _ops_audit(request, "claim.info_edit", "claim", str(claim_id),
-                     ", ".join(f"{k}" for k in data))
+                     ", ".join(_desc) if _desc else "saved with no change")
+    # A contact change cuts everything tied to the old one and asks the new one to confirm.
+    confirm = {}
+    if contact_changes:
+        _res = await _cv.on_change(claim_id, contact_changes, actor=_actor_label(caller))
+        confirm = _res.get("confirm") or {}
 
     # PUTTING AN EMAIL ON A CLAIM IS THE MOMENT IT BECOMES REACHABLE, and it is exactly when
     # somebody expects the dashboard link to arrive (founder, 22 Sep). Sent only when the address
@@ -11832,7 +12072,9 @@ async def ops_update_claim_info(claim_id: int, body: OpsClaimInfoUpdate, request
         except Exception as e:  # noqa: BLE001
             logger.warning("portal email after info edit failed claim=%s: %s", claim_id, e)
             emailed = False
-    return {"ok": True, "emailed": emailed}
+    return {"ok": True, "emailed": emailed, "changed": changed,
+            "confirm": {k: {"ok": bool(v.get("ok")), "why": v.get("why") or ""}
+                        for k, v in confirm.items()}}
 
 
 class OpsAdvisorUpdate(BaseModel):
@@ -30557,6 +30799,27 @@ async def main():
                     logger.error("daily payment check error: %s", e)
                     await asyncio.sleep(3600)
         asyncio.create_task(daily_payment_check_loop())
+
+        # Step 6h-c: every day at 10:30 IST, each handler hears which of their active claims have
+        # an email or mobile still not proven (biz_nidaan_contact_verify.nudge_unverified).
+        async def contact_nudge_loop():
+            import biz_nidaan_contact_verify as _cvn
+            from datetime import datetime as _dtm, timedelta as _td, timezone as _tz
+            _IST = _tz(_td(hours=5, minutes=30))
+            while True:
+                try:
+                    now = _dtm.now(_IST)
+                    nxt = now.replace(hour=10, minute=30, second=0, microsecond=0)
+                    if nxt <= now:
+                        nxt = nxt + _td(days=1)
+                    await asyncio.sleep(max(60, (nxt - _dtm.now(_IST)).total_seconds()))
+                    logger.info("📇 contact nudge: %s", await _cvn.nudge_unverified())
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error("contact nudge error: %s", e)
+                    await asyncio.sleep(3600)
+        asyncio.create_task(contact_nudge_loop())
 
         # Step 6i: Payment watchdog — deterministic self-healing guard. Every ~15 min it scans for
         # amount↔plan mismatches, stuck (captured-but-unrecorded) payments, and failure spikes;

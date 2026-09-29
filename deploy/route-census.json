@@ -104,6 +104,26 @@
   "func": "nidaan_branch_delete_claim_doc",
   "guard": "nidaan-host"
  },
+ "POST /nidaan/claim/api/email/change": {
+  "file": "sarathi_biz.py",
+  "func": "nidaan_claim_email_change",
+  "guard": "nidaan-host,rate-limited"
+ },
+ "POST /nidaan/claim/api/email/check": {
+  "file": "sarathi_biz.py",
+  "func": "nidaan_claim_email_check",
+  "guard": "nidaan-host,rate-limited"
+ },
+ "POST /nidaan/claim/api/email/code": {
+  "file": "sarathi_biz.py",
+  "func": "nidaan_claim_email_code",
+  "guard": "nidaan-host,rate-limited"
+ },
+ "POST /nidaan/claim/api/email/skip": {
+  "file": "sarathi_biz.py",
+  "func": "nidaan_claim_email_skip",
+  "guard": "nidaan-host,rate-limited"
+ },
  "DELETE /nidaan/claim/api/documents/{doc_id}": {
   "file": "sarathi_biz.py",
   "func": "nidaan_claim_delete_doc",
@@ -1528,6 +1548,16 @@
   "file": "sarathi_biz.py",
   "func": "ops_claims_awaiting_fee",
   "guard": "nidaan-host,staff:team_member,rate-limited"
+ },
+ "GET /nidaan/confirm-email": {
+  "file": "sarathi_biz.py",
+  "func": "nidaan_confirm_email",
+  "guard": "nidaan-host,rate-limited"
+ },
+ "POST /nidaan/ops/api/claims/{claim_id}/contacts/confirm": {
+  "file": "sarathi_biz.py",
+  "func": "ops_claim_contact_confirm",
+  "guard": "nidaan-host,staff:any,rate-limited"
  },
  "GET /nidaan/ops/api/claims/{claim_id}": {
   "file": "sarathi_biz.py",

@@ -825,6 +825,16 @@ CAPABILITIES: list[dict] = [
         "telegram": True, "web": False, "min_role": "super_admin",
     },
     {
+        "id": "contact_proof",
+        "en": {"t": "A complainant's email and mobile show verified only when proven",
+               "d": "Verified means THIS address was proven - a code entered, a link clicked, a WhatsApp message from the number - with how and when. Change an email or mobile and it is unverified at once: the old contact is cut off, the change is recorded old to new, and a confirmation goes to the new one. On the claim page the complainant is asked to confirm their email before authorising.",
+               "u": "Open a claim - see Email and Contact mobile. Not verified? Press Send confirmation. Handlers get a daily Telegram list of unconfirmed contacts."},
+        "hi": {"t": "शिकायतकर्ता का ईमेल और मोबाइल तभी वेरिफ़ाइड दिखता है जब साबित हो",
+               "d": "वेरिफ़ाइड का मतलब है कि यही पता साबित हुआ - कोड डाला, लिंक दबाया, या उस नंबर से WhatsApp आया - कैसे और कब, दोनों दिखते हैं। ईमेल या मोबाइल बदलते ही वह अनवेरिफ़ाइड हो जाता है: पुराना संपर्क कट जाता है, बदलाव पुराने से नए तक दर्ज होता है, और नए पर पुष्टि भेजी जाती है। क्लेम पेज पर शिकायतकर्ता से अनुमति देने से पहले ईमेल कन्फ़र्म करने को कहा जाता है।",
+               "u": "क्लेम खोलें - Email और Contact mobile देखें। वेरिफ़ाइड नहीं? Send confirmation दबाइए। हैंडलर को रोज़ Telegram पर बिना-कन्फ़र्म संपर्कों की सूची मिलती है।"},
+        "telegram": False, "web": True, "min_role": "team_member",
+    },
+    {
         "id": "doc_followup_record",
         "en": {"t": "Follow-up so far \u2014 who chased the documents, and what to do next",
                "d": "Every ask, booked reminder, call and automatic-reminder switch on a claim, with who did it and when \u2014 and one line saying what to do next. It says plainly when automatic reminders are off, so nobody waits for a reminder that will never go.",

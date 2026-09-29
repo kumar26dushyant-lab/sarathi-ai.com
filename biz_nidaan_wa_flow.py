@@ -354,6 +354,22 @@ async def handle_inbound_payload(payload: dict) -> dict:
                         await _bkq.on_query_reply(msisdn, mtype, _t)
                     except Exception as _qe:  # noqa: BLE001
                         logger.info("query reply hook failed: %s", _qe)
+                    # A message from a claim's mobile PROVES that mobile; a confirmation code
+                    # replied here confirms it and is answered, not passed to the bot.
+                    try:
+                        import biz_nidaan_contact_verify as _cv
+                        await _cv.note_inbound(msisdn)
+                        if mtype == "text":
+                            _cid = await _cv.confirm_whatsapp_reply(
+                                msisdn, (m.get("text") or {}).get("body", ""))
+                            if _cid:
+                                await wa.send_text(msisdn, (
+                                    "\u2705 Aapka mobile number claim NP-%s ke liye confirm ho gaya. "
+                                    "Dhanyavaad!\n\u2705 आपका मोबाइल नंबर क्लेम NP-%s के लिए कन्फ़र्म "
+                                    "हो गया। धन्यवाद!" % (_cid, _cid)))
+                                continue
+                    except Exception as _ce:  # noqa: BLE001 - never allowed to break the inbox
+                        logger.info("contact proof hook failed: %s", _ce)
                     if mtype == "text":
                         await _on_inbound_text(msisdn, (m.get("text") or {}).get("body", ""))
                     elif mtype in ("image", "document", "audio", "video"):

@@ -15047,6 +15047,27 @@ async def main():
                     await asyncio.sleep(3600)
         asyncio.create_task(daily_payment_check_loop())
 
+        # Step 6h-c: every day at 10:30 IST, each handler hears which of their active claims have
+        # an email or mobile still not proven (biz_nidaan_contact_verify.nudge_unverified).
+        async def contact_nudge_loop():
+            import biz_nidaan_contact_verify as _cvn
+            from datetime import datetime as _dtm, timedelta as _td, timezone as _tz
+            _IST = _tz(_td(hours=5, minutes=30))
+            while True:
+                try:
+                    now = _dtm.now(_IST)
+                    nxt = now.replace(hour=10, minute=30, second=0, microsecond=0)
+                    if nxt <= now:
+                        nxt = nxt + _td(days=1)
+                    await asyncio.sleep(max(60, (nxt - _dtm.now(_IST)).total_seconds()))
+                    logger.info("📇 contact nudge: %s", await _cvn.nudge_unverified())
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error("contact nudge error: %s", e)
+                    await asyncio.sleep(3600)
+        asyncio.create_task(contact_nudge_loop())
+
         # Step 6i: Payment watchdog — deterministic self-healing guard. Every ~15 min it scans for
         # amount↔plan mismatches, stuck (captured-but-unrecorded) payments, and failure spikes;
         # alerts super-admins ONLY on anomalies. Worker-only singleton.

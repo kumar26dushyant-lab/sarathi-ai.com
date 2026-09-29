@@ -4025,8 +4025,10 @@ function _portalBadge(c){
   return `<span>🖥️ ${c.portal_opened?'opened':'not opened'}</span>${enter}`;
 }
 function _contactBadge(c){
-  const em=!!(c.insured_email && String(c.insured_email).includes('@'));
-  const ph=String(c.insured_phone||'').replace(/\D/g,'').length>=10;
+  // The contacts the claim USES - the complainant's, falling back to the insured's (1 Oct).
+  const _em = c.complainant_email || c.insured_email, _ph = c.complainant_phone || c.insured_phone;
+  const em=!!(_em && String(_em).includes('@'));
+  const ph=String(_ph||'').replace(/\D/g,'').length>=10;
   if(em&&ph) return '<span style="color:var(--nd-success-text)">✓ reachable</span>';
   if(!em&&!ph) return '<span style="color:var(--nd-danger-text)">⚠ no contact</span>';
   if(!em) return '<span style="color:var(--nd-warning-text)">⚠ no complainant email</span>';
@@ -4364,8 +4366,9 @@ function _renderOutcome(key){
     else if(_l2f.auth==='no') rows=rows.filter(c=>!c.consent_accepted_at);
     if(_l2f.dash==='yes') rows=rows.filter(c=>!!c.portal_activated_at);
     else if(_l2f.dash==='no') rows=rows.filter(c=>!c.portal_activated_at);
-    if(_l2f.mail==='yes') rows=rows.filter(c=>!!c.insured_email_verified);
-    else if(_l2f.mail==='no') rows=rows.filter(c=>!c.insured_email_verified);
+    // email_proven: the claim's CURRENT email has a proof (1 Oct) - not the old yes/no flag.
+    if(_l2f.mail==='yes') rows=rows.filter(c=>!!c.email_proven);
+    else if(_l2f.mail==='no') rows=rows.filter(c=>!c.email_proven);
     if(_l2f.type) rows=rows.filter(c=>(c.claim_type||'')===_l2f.type);
   }
   // Reflect the active view on the switcher (L2 only).
@@ -5962,6 +5965,48 @@ async function radarDelete(id){
 }
 window.loadRadar=loadRadar; window.radarEdit=radarEdit; window.radarSave=radarSave; window.radarTest=radarTest; window.radarDelete=radarDelete; window.radarTestDrawer=radarTestDrawer;
 
+// ══════════ CONTACT PROOF on the claim screen (1 Oct) ══════════
+// The badge used to read a yes/no flag that ANY claim-page sign-in set - a WhatsApp code included -
+// and that was not tied to the address, so a corrected email kept "verified" (claim 174). Now it
+// shows whether the CURRENT email / mobile has been proven, how, and when; and offers to send a
+// confirmation when it has not.
+function _contactProofBadge(kind, st, claimId){
+  st = st || {};
+  if (!st.present) return '';
+  if (st.verified){
+    return ' <span title="' + esc('Proven: ' + (st.how || '') + (st.at ? ' · ' + String(st.at).slice(0, 16) : '')) + '" '
+      + 'style="background:var(--nd-success-bg,rgba(16,185,129,.15));color:var(--nd-success-text);padding:.05rem .4rem;border-radius:8px;font-size:.66rem;font-weight:700">✓ verified</span>';
+  }
+  return ' <span title="Not proven for this address yet" style="background:var(--nd-warning-bg,rgba(234,179,8,.15));color:var(--nd-warning-text);padding:.05rem .4rem;border-radius:8px;font-size:.66rem;font-weight:700">unverified</span>'
+    + (st.pending_since ? ' <span style="font-size:.7rem;color:var(--nd-text-muted)">confirmation sent ' + esc(String(st.pending_since).slice(0, 16)) + '</span>' : '')
+    + ' <button class="btn-sm btn-ghost" style="font-size:.7rem;padding:.1rem .45rem" onclick="contactConfirm(' + claimId + ',\'' + kind + '\',this)">'
+    + (st.pending_since ? 'Send again' : 'Send confirmation') + '</button>';
+}
+function _contactRows(c){
+  const k = c.contacts || {};
+  const email = (c.complainant_email || c.insured_email || '').trim();
+  const phone = (c.complainant_phone || c.insured_phone || '').trim();
+  let h = '';
+  if (email) h += '<div class="kv"><span class="kv-label">Email</span><span class="kv-val">' + esc(email)
+    + _contactProofBadge('email', k.email, c.claim_id) + '</span></div>';
+  if (phone) h += '<div class="kv"><span class="kv-label">Contact mobile</span><span class="kv-val">' + esc(phone)
+    + _contactProofBadge('phone', k.phone, c.claim_id) + '</span></div>';
+  return h;
+}
+async function contactConfirm(claimId, kind, btn){
+  if (btn) btn.disabled = true;
+  try{
+    const r = await API('/claims/' + claimId + '/contacts/confirm', {method:'POST', body: JSON.stringify({kind: kind})});
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok){ ndUI.toast((typeof d.detail === 'string' && d.detail) || 'Could not send it.', 'error'); if (btn) btn.disabled = false; return; }
+    ndUI.toast(d.already ? 'Already verified.' : (kind === 'email'
+      ? 'Confirmation link emailed. It turns green when they click it.'
+      : 'Code sent on WhatsApp. It turns green when they reply it in the chat.'), 'success');
+    if (btn) btn.textContent = 'Sent';
+  }catch(e){ ndUI.toast('Could not send it.', 'error'); if (btn) btn.disabled = false; }
+}
+window.contactConfirm = contactConfirm;
+
 // ══════════ DOCUMENT SPLITTER (all staff) ══════════
 let _dsJob=null, _dsPages=0, _dsDocs=[];
 function loadDocSplit(){
@@ -6644,7 +6689,7 @@ async function openClaimDrawer(claimId) {
                 + (cp ? ' · <a href="tel:' + esc(cp) + '">' + esc(cp) + '</a>' : ''))
           + '</span></div>';
       })()}
-      ${c.insured_email?`<div class="kv"><span class="kv-label">Email</span><span class="kv-val">${esc(c.insured_email)} ${c.insured_email_verified?'<span title="Verified when the complainant opened the authorization link" style="background:rgba(16,185,129,.15);color:var(--nd-success-text);padding:.05rem .4rem;border-radius:8px;font-size:.66rem;font-weight:700">✓ verified</span>':'<span title="Not yet verified — verifies when the complainant opens the Level-2 authorization link" style="background:rgba(234,179,8,.15);color:#a16207;padding:.05rem .4rem;border-radius:8px;font-size:.66rem;font-weight:700">unverified</span>'}</span></div>`:''}
+      ${_contactRows(c)}
       <div class="kv"><span class="kv-label">Insurance Company</span><span class="kv-val">${esc(c.insurer_name||'—')}</span></div>
       <div class="kv"><span class="kv-label">Policy No.</span><span class="kv-val">${esc(c.policy_no||'—')}</span></div>
       <div class="kv"><span class="kv-label">Disputed Amt</span><span class="kv-val">₹${fmt(c.disputed_amount||0)}</span></div>

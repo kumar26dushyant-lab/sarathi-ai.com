@@ -7319,6 +7319,16 @@ async def get_claims_ops(
                     COALESCE(NULLIF(c.branch_code,''), a.branch_code) AS ref_code,
                     (SELECT COUNT(*) FROM nidaan_followups f
                      WHERE f.claim_id = c.claim_id AND f.status = 'pending') AS pending_tasks,
+                    -- Is the claim's CURRENT email proven (biz_nidaan_contact_verify)? The same
+                    -- rule as the claim screen: a proof for this exact address, on this claim or
+                    -- by this account's holder. Replaces the old yes/no flag, wrong for 40 of 65.
+                    EXISTS(SELECT 1 FROM nidaan_contact_verifications v
+                           WHERE v.kind = 'email'
+                             AND v.value = LOWER(TRIM(COALESCE(NULLIF(c.complainant_email,''),
+                                                               c.insured_email, '')))
+                             AND (v.claim_id = c.claim_id
+                                  OR (v.account_id IS NOT NULL AND v.account_id = c.account_id))
+                    ) AS email_proven,
                     (SELECT COUNT(*) FROM nidaan_claim_notes cn
                      WHERE cn.claim_id = c.claim_id AND cn.staff_id != ?
                        AND NOT EXISTS(SELECT 1 FROM nidaan_claim_note_reads r
