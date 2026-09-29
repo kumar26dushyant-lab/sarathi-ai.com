@@ -13677,8 +13677,11 @@ async def _subsystem_checks() -> list:
     try:
         import biz_ai as _bai
         _chk("AI (Gemini)", bool(_bai._get_client()),
-             "configured — radar triage, WhatsApp brain, doc splitter" if _bai._get_client()
-             else "NOT configured — radar triage, WA brain and doc splitter all degrade")
+             # What still uses it (29 Sep inventory). The radar and the splitter read locally now.
+             "configured — WhatsApp free-text replies, website chat, Telegram translate + voice, "
+             "daily summary" if _bai._get_client()
+             else "NOT configured — WhatsApp free-text replies hand off to a person; website chat, "
+                  "Telegram translate/voice and the daily summary degrade")
     except Exception as _e:
         _chk("AI (Gemini)", False, f"check failed: {str(_e)[:70]}")
     # Doc splitter — needs a writable job dir (workers share it; /tmp would break under PrivateTmp).
