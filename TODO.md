@@ -9,6 +9,20 @@ _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned ·
 _Anything raised and not finished lives here until it is done, so an interruption does not lose
 it. Newest first within each group._
 
+### ▶ NEXT SESSION (30 Sep, founder's answers - all decided, build in this order)
+| # | What | Founder's answer |
+|---|---|---|
+| N1 | **Plan ended**: 3-day grace, then the dashboard shows only welcome-back / renew; registered claims keep being worked for the complainant; ex-subscriber gets no updates; WhatsApp warm welcome + renew link, nothing private | "we do keep working the claims already registered ... with a 3-day grace" |
+| N2 | **Referrers see documents**: APs and staff see which documents are in / missing on customers they referred **and the files too** (read-only; per-claim scope via referral match; audit each open) | "should see only which documents are in or missing ... and files too" |
+| N3 | **Follow-up buttons**: Start reminders again / I'll follow up myself / Book the customer's time; every switch on/off recorded with who; the Follow-up box summarises what other staff did so far | "yes ... switch on switch off who did what should be recorded" |
+| N4 | **"Your day"**: adopt the scenarios as written on the draft-3 page; change later if needed | "so far good let's adopt it" |
+| N5 | **Staff sessions expire** and ask to relogin (add `exp` + a "void before" stamp on archive / role change / password reset). Passwords CANNOT be listed - they are stored as one-way bcrypt hashes; offer a "set a temporary password" / reset flow for anyone who forgets | "we should expire the session and ask to relogin" |
+| N6 | **Remove the legacy `NIDAAN_ADMIN_TOKEN` routes** (`/nidaan/api/admin/*`). Checked 30 Sep: the key is not set on the server, so they already refuse everyone - dispose of the dead code | "check and secure or dispose if not in use" |
+| N7 | **WhatsApp intake**: all "decide" points as per recommendations; Phase 0 (one intake for the six web doors) first | "all are as per your best recommendations" |
+| N8 | Rs 499 review documents onto the claim; verify ledger rows for webhook/recovery-confirmed Rs 499 payments on live data | from the 30 Sep review |
+
+Done 30 Sep (night): "Claims used" relabelled "Claims filed with us" / "हमारे साथ दर्ज क्लेम"; new house accounts named "Authorized Partner X" / "Staff SP-X" and the 19 existing ones renamed (display name only, founder's yes).
+
 ### Waiting on the founder
 | # | What | Why it is waiting |
 |---|---|---|

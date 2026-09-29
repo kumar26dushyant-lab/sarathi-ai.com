@@ -1940,7 +1940,7 @@ async def get_or_create_branch_house_account(branch_code: str) -> int:
         cur = await conn.execute(
             "INSERT INTO nidaan_accounts (owner_name, email, phone, password_hash, firm_name, branch_code) "
             "VALUES (?,?,?,?,?,?)",
-            (f"Branch {code} — house account", house_email, house_phone, pw, "", ""))
+            ((("Staff %s — house account" if code.upper().startswith("SP-") else "Authorized Partner %s — house account") % code), house_email, house_phone, pw, "", ""))
         await conn.commit()
         return cur.lastrowid
 
