@@ -51,8 +51,8 @@ MARK_FIXED = "✅ BACK TO NORMAL"
 # notifications, normal notifications, and no impact notification".) Gaps stay RED in App Health,
 # where the work actually gets done, and never page.
 _GAPS = {
-    "Branch login — a way in",
-    "Branch login — WhatsApp fallback",
+    "Authorized Partner login — a way in",
+    "Authorized Partner login — WhatsApp fallback",
     "Subscriber login — a way in",
     "Complainant portal — a way in",
     "Staff login",
@@ -68,7 +68,7 @@ _CRITICAL = {
     "Doc Splitter",
     # Delivery checks only: these judge what actually happened to the codes we sent, so a failure
     # here means people are being turned away right now.
-    "Branch login — code delivery",
+    "Authorized Partner login — code delivery",
     "Subscriber login — code delivery",
     "Complainant portal — code delivery",
 } - _GAPS

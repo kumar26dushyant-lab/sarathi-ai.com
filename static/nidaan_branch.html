@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Branch Portal — Nidaan Partner</title>
+<title>Authorized Partner (AP) Portal — Nidaan Partner</title>
 <link rel="icon" href="/static/nidaan_logo.png">
 <link rel="stylesheet" href="/static/nidaan_design.css?v=6">
 <script src="/static/nidaan_theme.js?v=2"></script>
@@ -65,7 +65,7 @@
 <nav>
   <a class="brand" href="/"><img src="/static/nidaan_logo.png" alt="" onerror="this.style.display='none'">Nidaan Partner</a>
   <div style="display:flex;align-items:center;gap:.7rem">
-    <span style="font-size:.8rem;color:var(--nd-text-muted)">Branch Portal</span>
+    <span style="font-size:.8rem;color:var(--nd-text-muted)">Authorized Partner Portal</span>
     <span id="guideMic" style="display:inline-flex;align-items:center"></span>
     <button class="nd-theme-toggle" style="font-size:.78rem;background:transparent;border:1px solid var(--nd-border-strong);color:var(--nd-text-secondary);border-radius:6px;padding:.25rem .55rem;cursor:pointer"></button>
   </div>
@@ -75,11 +75,11 @@
 <div id="loginView" class="login-wrap">
   <div class="card">
     <div class="icon">🏢</div>
-    <h1>Branch Login</h1>
-    <p class="sub">Sign in with your branch email to see your referrals &amp; earnings.</p>
+    <h1>Authorized Partner (AP) Login</h1>
+    <p class="sub">Sign in with your Authorized Partner email to see your referrals &amp; earnings.</p>
 
     <div id="emailStep">
-      <label>Branch email</label>
+      <label>Authorized Partner email</label>
       <input id="brEmail" type="email" placeholder="yourbranch@nidaanpartner.com" autocomplete="email" inputmode="email">
       <button class="btn btn-cyan" id="sendBtn" onclick="requestOtp('email')">Email me the code →</button>
       <button class="btn btn-ghost" id="sendWaBtn" style="margin-top:.55rem" onclick="requestOtp('whatsapp')">
@@ -95,14 +95,14 @@
     </div>
     <div class="msg" id="loginMsg"></div>
   </div>
-  <p class="foot">Only branches with a registered email can log in. Contact the head office if you need access.</p>
+  <p class="foot">Only Authorized Partners with a registered email can log in. Contact the head office if you need access.</p>
 </div>
 
 <!-- ══ DASHBOARD ══ -->
 <div id="dashView" class="wrap hidden">
   <div class="row-between">
     <div>
-      <h1 style="text-align:left;margin:0" id="brTitle">Branch</h1>
+      <h1 style="text-align:left;margin:0" id="brTitle">Authorized Partner</h1>
       <div style="font-size:.85rem;color:var(--nd-text-muted)" id="brSubtitle"></div>
     </div>
     <button class="logout" onclick="logout()">Log out</button>
@@ -112,9 +112,9 @@
 
   <!-- Branch profile -->
   <div class="card" id="profileCard" style="display:none">
-    <div style="font-weight:700;margin-bottom:.7rem;color:var(--nd-text-primary)">🏢 Branch profile</div>
+    <div style="font-weight:700;margin-bottom:.7rem;color:var(--nd-text-primary)">🏢 Authorized Partner profile</div>
     <div id="profileGrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.6rem"></div>
-    <div style="font-size:.75rem;color:var(--nd-text-faint);margin-top:.8rem">To update your branch name, email, or share rate, please contact the head office.</div>
+    <div style="font-size:.75rem;color:var(--nd-text-faint);margin-top:.8rem">To update your Authorized Partner name, email, or share rate, please contact the head office.</div>
   </div>
 
   <div class="card" id="shareCard" style="display:none">
@@ -143,7 +143,7 @@
       <summary style="cursor:pointer;font-weight:700;color:var(--nd-cyan-text);padding:.6rem 0">📖 How sharing works — quick guide</summary>
       <ol style="font-size:.85rem;color:var(--nd-text-primary);line-height:1.7;margin:.1rem 0 .8rem 1.1rem;padding:0">
         <li>Send your link via <b>WhatsApp/SMS</b> above, or copy it and share.</li>
-        <li>They open your link and create a free account — your branch code auto-fills and locks to your branch.</li>
+        <li>They open your link and create a free account — your Authorized Partner code auto-fills and locks to you.</li>
         <li><b>Advisors (subscribers):</b> they pick a plan → you earn commission on their subscription.</li>
         <li><b>One-time review customers:</b> they submit a claim → pay ₹499 (₹2000 if disputed &gt; ₹10L) → get an expert review.</li>
         <li>Or raise a claim yourself below for a walk-in customer — free review; you pay only if it goes to Level-2.</li>
@@ -246,7 +246,7 @@ function fmtDate(s){ if(!s) return '—'; const d=new Date(String(s).replace(' '
 async function requestOtp(channel){
   channel = channel || 'email';
   const email = ($('brEmail').value||'').trim().toLowerCase();
-  if(!email || !email.includes('@')){ msg('Please enter your branch email.','err'); return; }
+  if(!email || !email.includes('@')){ msg('Please enter your Authorized Partner email.','err'); return; }
   _email = email;
   $('sendBtn').disabled = true; $('sendWaBtn').disabled = true;
   msg(channel === 'whatsapp' ? 'Sending on WhatsApp\u2026' : 'Sending code\u2026','info');
@@ -270,7 +270,7 @@ async function requestOtp(channel){
     $('otpStep').classList.remove('hidden');
     msg(channel === 'whatsapp'
         ? 'Code sent on WhatsApp.'
-        : 'If this is a registered branch email, a code has been sent. Check your inbox \u2014 and your spam folder.','ok');
+        : 'If this is a registered Authorized Partner email, a code has been sent. Check your inbox \u2014 and your spam folder.','ok');
     $('brOtp').focus();
   }catch(e){ msg('Network error. Try again.','err');
     $('sendBtn').disabled=false; $('sendWaBtn').disabled=false; }
@@ -466,7 +466,7 @@ async function showDashboard(){
     const me = (await mr.json()).branch || {};
     const accounts = (await ar.json()).accounts || [];
     // Tag support chats from this branch so ops can identify/filter them.
-    try{ window.NSW_NAME = 'Branch ' + (me.branch_code || me.name || ''); }catch(e){}
+    try{ window.NSW_NAME = 'Authorized Partner ' + (me.branch_code || me.name || ''); }catch(e){}
     $('brTitle').textContent = (me.name || me.branch_code || 'Branch');
     $('brSubtitle').textContent = [me.branch_code, me.city].filter(Boolean).join(' · ');
     // Branch profile card
@@ -476,8 +476,8 @@ async function showDashboard(){
         <div style="font-size:.72rem;color:var(--nd-text-muted);margin-bottom:.2rem">${label}</div>
         <div style="font-size:.9rem;color:var(--nd-text-primary);font-weight:600;word-break:break-word">${val}</div></div>`;
       pf.innerHTML =
-        pItem('Branch name', esc(me.name || '—')) +
-        pItem('Branch code', esc(me.branch_code || '—')) +
+        pItem('Authorized Partner name', esc(me.name || '—')) +
+        pItem('Authorized Partner code', esc(me.branch_code || '—')) +
         pItem('City', esc(me.city || '—')) +
         pItem('Contact email', esc(me.contact_email || '—')) +
         pItem('Your share rate', (me.share_pct != null ? (me.share_pct + '%') : '—')) +
@@ -492,7 +492,7 @@ async function showDashboard(){
       <div class="stat"><div class="stat-label">Revenue</div><div class="stat-val">${inr(me.revenue)}</div></div>
       <div class="stat"><div class="stat-label">Your share (${me.share_pct||0}%)</div><div class="stat-val money">${inr(me.share)}</div></div>`;
     if(!accounts.length){
-      $('acctWrap').innerHTML = '<div class="empty">No referrals yet. Share your branch code at signup to start earning.</div>';
+      $('acctWrap').innerHTML = '<div class="empty">No referrals yet. Share your Authorized Partner code at signup to start earning.</div>';
     } else {
       const rows = accounts.map(a=>`<tr onclick="brOpenRef(${a.account_id})" style="cursor:pointer" title="View details">
         <td>${esc(a.owner_name)} <span style="color:var(--nd-text-faint);font-size:.8em">›</span></td>
@@ -652,7 +652,7 @@ async function raiseBranchClaim(){
     // Expired / inactive one-click link → tell the user to request a fresh code.
     const e=new URLSearchParams(location.search).get('e');
     if(e && typeof msg==='function'){
-      msg(e==='inactive' ? 'This branch login is not active. Please contact Nidaan.'
+      msg(e==='inactive' ? 'This Authorized Partner login is not active. Please contact Nidaan.'
                          : 'That login link has expired. Enter your email below to get a new code.', 'err');
       history.replaceState(null,'',location.pathname);
     }

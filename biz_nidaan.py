@@ -1183,7 +1183,7 @@ async def reattribute_account(account_id: int, new_code: str, *, clear: bool = F
         if not code:
             return {"ok": False, "error": "Enter a referral code, or choose Clear (Direct)."}
         if not await is_valid_ref_code(code):
-            return {"ok": False, "error": f"'{code}' is not a valid staff/branch referral code."}
+            return {"ok": False, "error": f"'{code}' is not a valid staff/Authorized Partner referral code."}
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         row = await (await conn.execute(
@@ -1206,7 +1206,7 @@ async def reattribute_claim(claim_id: int, new_code: str, *, clear: bool = False
         if not code:
             return {"ok": False, "error": "Enter a referral code, or choose Clear (use account)."}
         if not await is_valid_ref_code(code):
-            return {"ok": False, "error": f"'{code}' is not a valid staff/branch referral code."}
+            return {"ok": False, "error": f"'{code}' is not a valid staff/Authorized Partner referral code."}
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         row = await (await conn.execute(
@@ -1265,7 +1265,7 @@ async def create_branch(code: str, city: str, name: str = "", contact_email: str
     city = (city or "").strip()
     email = (contact_email or "").strip().lower()
     if not code or not city:
-        return {"error": "Branch code and city are required."}
+        return {"error": "Authorized Partner code and city are required."}
     if not re.match(r"^[A-Z0-9][A-Z0-9\-]{1,19}$", code):
         return {"error": "Code must be 2–20 chars: letters, digits, hyphens."}
     if email and "@" not in email:
@@ -1278,7 +1278,7 @@ async def create_branch(code: str, city: str, name: str = "", contact_email: str
             await conn.commit()
         return {"ok": True, "branch_code": code}
     except aiosqlite.IntegrityError:
-        return {"error": f"Branch code '{code}' already exists."}
+        return {"error": f"Authorized Partner code '{code}' already exists."}
 
 
 async def update_branch(code: str, status: Optional[str] = None,
@@ -2043,8 +2043,8 @@ async def mark_l2_paid(claim_id: int, branch_code: str, fee: int, payment_id: st
             (int(fee or 0), (payment_id or "")[:80], claim_id))
         if not (_cur.rowcount or 0):
             return True  # the other path won the race — already queued
-        note = (f"Branch L2 fee Rs.{int(fee)} paid — queued for legal" if fee
-                else "Branch sent to Level-2 (no charge) — queued for legal")
+        note = (f"Authorized Partner L2 fee Rs.{int(fee)} paid — queued for legal" if fee
+                else "Authorized Partner sent to Level-2 (no charge) — queued for legal")
         await conn.execute(
             "INSERT INTO nidaan_claim_status_log (claim_id, to_status, note, changed_by_type, changed_by_id) "
             "VALUES (?, 'l2_queued', ?, 'branch', 0)", (claim_id, note))
@@ -2068,7 +2068,7 @@ async def mark_l2_paid(claim_id: int, branch_code: str, fee: int, payment_id: st
                 dedup_key=(payment_id or f"l2:{claim_id}"), razorpay_payment_id=(payment_id or ""),
                 account_id=_acct, claim_id=claim_id, branch_code=code,
                 verified=bool(payment_id), verify_method=("signature" if payment_id else "manual"),
-                note="branch L2 acceptance fee")
+                note="Authorized Partner L2 acceptance fee")
         except Exception as _pe:
             logger.warning("record_payment (branch_l2) failed: %s", _pe)
     # Branch/staff L2 fee now paid on a reviewed-GO claim → auto-move to ClaimShield.
@@ -2464,7 +2464,7 @@ _ORIGIN_LABELS = {
     # the code on the claim is very often a colleague's, not an office's, and 64 claims were
     # being announced as coming from a branch that does not exist. HOW it arrived and WHO brought
     # it are two facts; the rows below say the second.
-    "branch":        ("🏢", "Raised on the branch portal", "ब्रांच पोर्टल से दर्ज किया गया"),
+    "branch":        ("🏢", "Raised on the Authorized Partner portal", "अधिकृत पार्टनर पोर्टल से दर्ज किया गया"),
     "ops_on_behalf": ("👤", "Our staff raised it for a subscriber",
                       "हमारे स्टाफ़ ने सब्सक्राइबर की ओर से दर्ज किया"),
     "d2c_review":    ("🌐", "Website — ₹499 review", "वेबसाइट — ₹499 रिव्यू"),
@@ -2555,8 +2555,8 @@ async def claim_origin(claim_id: int, lang: str = "en") -> dict:
             icon, en, hin = "👤", "Brought in by a colleague's referral code (worked out)", \
                             "एक साथी के रेफ़रल कोड से आया (अनुमान)"
         elif branch or code:
-            icon, en, hin = "🏢", "A branch raised it (from the branch code)", \
-                            "ब्रांच ने दर्ज किया (ब्रांच कोड से)"
+            icon, en, hin = "🏢", "An Authorized Partner raised it (from the Authorized Partner code)", \
+                            "अधिकृत पार्टनर ने दर्ज किया (अधिकृत पार्टनर कोड से)"
         elif c.get("account_id"):
             icon, en, hin = "💳", "A subscriber filed it themselves (from the account)", \
                             "सब्सक्राइबर ने ख़ुद दर्ज किया (खाते से)"
@@ -2579,15 +2579,15 @@ async def claim_origin(claim_id: int, lang: str = "en") -> dict:
             gaps.append("%s is no longer active" % code_staff.get("name") if not hi
                         else "%s अब सक्रिय नहीं हैं" % code_staff.get("name"))
     elif branch:
-        add("Branch", "ब्रांच", "🏢 " + (branch.get("name") or code),
+        add("Authorized Partner", "अधिकृत पार्टनर", "🏢 " + (branch.get("name") or code),
             " · ".join(x for x in (branch.get("branch_code"), branch.get("city")) if x))
-        add("Branch contact", "ब्रांच संपर्क",
+        add("Authorized Partner contact", "अधिकृत पार्टनर संपर्क",
             branch.get("contact_phone") or branch.get("contact_email") or "",
             (branch.get("contact_email") or "") if branch.get("contact_phone") else "")
     elif code:
         add("Code on the claim", "क्लेम पर कोड", code)
-        gaps.append("the code %s matches neither a branch nor a staff referral" % code if not hi
-                    else "कोड %s न किसी ब्रांच से मेल खाता है, न किसी स्टाफ़ रेफ़रल से" % code)
+        gaps.append("the code %s matches neither an Authorized Partner nor a staff referral" % code if not hi
+                    else "कोड %s न किसी अधिकृत पार्टनर से मेल खाता है, न किसी स्टाफ़ रेफ़रल से" % code)
 
     if cp:
         add("Channel partner", "चैनल पार्टनर", cp.get("name") or "",
@@ -2612,7 +2612,7 @@ async def claim_origin(claim_id: int, lang: str = "en") -> dict:
             "opened for %s — no separate subscriber" % (code_staff.get("name") or "this referral"))
     elif is_house:
         add("Billing account", "बिलिंग खाता", "🏠 House account · %s" % code,
-            "the branch's own account — no separate subscriber")
+            "the Authorized Partner's own account — no separate subscriber")
     else:
         add("Subscriber account", "सब्सक्राइबर खाता", acct_name,
             " · ".join(x for x in (c.get("firm_name") if c.get("owner_name") else "",

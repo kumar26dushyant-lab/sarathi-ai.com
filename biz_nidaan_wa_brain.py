@@ -173,7 +173,7 @@ async def decide(text: str, lang: str = "hinglish", *, history: str = "",
             # this only stops it filling the gap with a guess.
             ctx = ("(NOT VERIFIED. You are talking to a member of the public. You know NOTHING "
                    "about any individual — no customer, no claim, no case status, no staff "
-                   "member, no branch, no amounts, no documents on file, no internal matter. "
+                   "member, no Authorized Partner, no amounts, no documents on file, no internal matter. "
                    "Do not confirm or deny whether anyone is our customer. Explain the SERVICE "
                    "warmly and answer general questions about it. If they ask anything about a "
                    "specific person, case, claim or account — including their own — do not "

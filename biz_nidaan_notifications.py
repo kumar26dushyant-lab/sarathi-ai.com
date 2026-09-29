@@ -1869,7 +1869,7 @@ async def sweep_empty_claims(hours: int = 48) -> int:
         row = dict(r)
         cid = row["claim_id"]
         who = (row.get("complainant_name") or row.get("insured_name") or "").strip()
-        where = ("branch %s" % row["branch_code"]) if row.get("branch_code") else (
+        where = ("Authorized Partner %s" % row["branch_code"]) if row.get("branch_code") else (
             row.get("origin") or "a form")
         try:
             ids = [a["staff_id"] for a in await _super_admin_staff()]
@@ -1945,7 +1945,7 @@ async def on_ops_claim_raised(claim_id: int, raised_by: str = ""):
     if not ids:
         return
     code = (c.get("branch_code") or "").strip()
-    who = raised_by or (f"Branch/Partner {code}" if code else "A branch/partner")
+    who = raised_by or (f"Authorized Partner {code}" if code else "An Authorized Partner")
     disp = c.get("disputed_amount")
     subj = f"🆕 New claim raised — #{_cn(claim_id)} {c.get('insured_name','')}"
     body = (f"{who} raised a new claim for a customer.\n\n"
@@ -2105,15 +2105,15 @@ async def on_payment_failed(kind: str, amount_rupees=0, detail: str = "",
         elif brow and (brow["contact_email"] or "").strip():
             import biz_email as _email_svc
             _bname = brow["name"] or rc
-            _bsubj = "⚠️ A payment from your branch failed" + (f" — ₹{amount_rupees}" if amount_rupees else "")
-            _bhtml = (f"<p>A payment from a customer attributed to your branch <b>{_bname}</b> "
+            _bsubj = "⚠️ A payment under your Authorized Partner code failed" + (f" — ₹{amount_rupees}" if amount_rupees else "")
+            _bhtml = (f"<p>A payment from a customer attributed to you (Authorized Partner <b>{_bname}</b>) "
                       "has <b>failed</b>.</p><p>"
                       f"Type: {kind}<br>"
                       + (f"Amount: ₹{amount_rupees}<br>" if amount_rupees else "")
                       + (f"Customer: {contact}<br>" if contact else "")
                       + (f"Reason: {reason}" if reason else "")
                       + "</p><p>Please help them retry their payment. "
-                      "Log in to your branch dashboard for details.</p>")
+                      "Log in to your Authorized Partner dashboard for details.</p>")
             await _email_svc.send_email((brow["contact_email"]).strip(), _bsubj, _bhtml)
     except Exception as _re:
         logger.warning("on_payment_failed referrer alert failed (ref=%s): %s", rc, _re)
@@ -2216,7 +2216,7 @@ async def on_ledger_payment(*, source: str, total_paise: int, account_id=None, c
         if claim_bit:
             lines.append("Claim: " + claim_bit)
         if branch_code:
-            lines.append("Branch: " + branch_code)
+            lines.append("Authorized Partner: " + branch_code)
         if account_id:
             lines.append("Account #%s%s" % (account_id, (" — " + who) if who else ""))
         if not verified:
@@ -2310,7 +2310,7 @@ async def on_branch_l2_paid(claim_id: int, branch_code: str):
     subj = (f"🟢 Payment RECEIVED — Level-2 fee {_money} · #{_cn(claim_id)} "
             f"{c.get('insured_name','')} queued for legal" if fee else
             f"⚖️ Level-2 queued — #{_cn(claim_id)} {c.get('insured_name','')} (no fee)")
-    body = (f"Branch {branch_code} moved a claim to Level-2 — queued for the legal team.\n\n"
+    body = (f"Authorized Partner {branch_code} moved a claim to Level-2 — queued for the legal team.\n\n"
             f"Case: #{_cn(claim_id)} {c.get('insured_name','')} ({c.get('claim_type','')})\n"
             f"Level-2 fee: {_money if fee else 'no charge (free policy)'}\n\n"
             f"Open: /nidaan/ops")

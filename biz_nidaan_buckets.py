@@ -1949,11 +1949,11 @@ def _origin_of(r: dict) -> str:
     if via == "on_behalf" and who:
         return "Raised for subscriber by %s" % who
     if (r.get("origin") or "") == "branch" and branch:
-        return "Raised by branch %s" % branch
+        return "Raised by Authorized Partner %s" % branch
     if branch.startswith("SP-"):
         return "Raised by staff %s" % branch
     if branch:
-        return "Raised by branch %s" % branch
+        return "Raised by Authorized Partner %s" % branch
     if r.get("account_id"):
         return "Subscriber raised"
     return "Direct"
@@ -2578,7 +2578,7 @@ async def readiness(claim_id: int) -> dict:
     # ── the channel that brought it, so they can be copied in ────────────────
     chans = []
     if branch:
-        chans.append(("branch", "Branch %s" % (branch.get("name") or branch.get("branch_code")),
+        chans.append(("branch", "Authorized Partner %s" % (branch.get("name") or branch.get("branch_code")),
                       branch.get("contact_phone"), branch.get("contact_email")))
     if cp:
         chans.append(("cp", "Channel partner %s" % (cp.get("name") or cp.get("cp_id")),

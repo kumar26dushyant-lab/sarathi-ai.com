@@ -67,10 +67,10 @@ GUIDE_CONTENT = {
         ],
     },
     "branch": {
-        "title": {"hi": "ब्रांच गाइड", "en": "Branch Guide"},
+        "title": {"hi": "अधिकृत पार्टनर गाइड", "en": "Authorized Partner Guide"},
         "greeting": {
-            "hi": "नमस्ते! यह आपका Nidaan ब्रांच डैशबोर्ड है। यहाँ से आप ग्राहकों के क्लेम दर्ज कर सकते हैं, एडवाइज़र जोड़ सकते हैं और अपनी कमाई देख सकते हैं। आइए समझते हैं।",
-            "en": "Hello! This is your Nidaan branch dashboard. From here you can file customers' claims, bring in advisors, and see your earnings. Let me walk you through it.",
+            "hi": "नमस्ते! यह आपका Nidaan अधिकृत पार्टनर डैशबोर्ड है। यहाँ से आप ग्राहकों के क्लेम दर्ज कर सकते हैं, एडवाइज़र जोड़ सकते हैं और अपनी कमाई देख सकते हैं। आइए समझते हैं।",
+            "en": "Hello! This is your Nidaan Authorized Partner dashboard. From here you can file customers' claims, bring in advisors, and see your earnings. Let me walk you through it.",
         },
         "steps": [
             {"hi": {"t": "ग्राहक के लिए क्लेम दर्ज करें", "b": "किसी वॉक-इन ग्राहक का रिजेक्ट या कम भुगतान वाला क्लेम यहाँ दर्ज करें। समीक्षा मुफ़्त है — शुल्क तभी लगता है जब केस Level-2 पर जाए।"},
@@ -110,8 +110,8 @@ GUIDE_CONTENT = {
              "en": {"t": "Reply to support chats", "b": "Answer customer chats in Support. (Messages are now clearly readable in Light mode.)"}},
             {"hi": {"t": "अपना बिज़नेस (My Business)", "b": "अपने रेफ़रल कोड से सब्सक्राइबर और ₹499 ग्राहक जोड़ें, खुद क्लेम दर्ज करें, और कमीशन कमाएँ। यहाँ आपके रेफ़र किए सब्सक्राइबर की सूची भी दिखती है।"},
              "en": {"t": "Your Business (My Business)", "b": "Use your referral code to bring in subscribers and ₹499 customers, raise claims yourself, and earn commission. Your referred subscribers are listed here too."}},
-            {"hi": {"t": "ब्रांच मैनेज करें (सुपर-एडमिन)", "b": "ब्रांच बनाएँ और मैनेज करें। ब्रांच बनाते ही उन्हें अपने-आप एक-क्लिक लॉगिन लिंक ईमेल हो जाता है।"},
-             "en": {"t": "Manage branches (super-admin)", "b": "Create and manage branches. Creating one auto-emails the branch a one-click login link."}},
+            {"hi": {"t": "अधिकृत पार्टनर मैनेज करें (सुपर-एडमिन)", "b": "अधिकृत पार्टनर बनाएँ और मैनेज करें। अधिकृत पार्टनर बनाते ही उन्हें अपने-आप एक-क्लिक लॉगिन लिंक ईमेल हो जाता है।"},
+             "en": {"t": "Manage Authorized Partners (super-admin)", "b": "Create and manage Authorized Partners. Creating one auto-emails the Authorized Partner a one-click login link."}},
             {"hi": {"t": "मदद चाहिए?", "b": "कोई सवाल हो तो ऑफ़िस के IT SPOC से पूछें।"},
              "en": {"t": "Need help?", "b": "For any question, reach out to the office IT SPOC."}},
         ],
@@ -130,7 +130,7 @@ def kb_text(lang: str = "en") -> str:
     lang = "hi" if lang == "hi" else "en"
     labels = {"subscriber": ("Subscriber (paid plan)", "सब्सक्राइबर (प्लान)"),
               "review": ("One-time ₹499 review customer", "एक-बार ₹499 रिव्यू ग्राहक"),
-              "branch": ("Branch portal", "ब्रांच पोर्टल"),
+              "branch": ("Authorized Partner portal", "अधिकृत पार्टनर पोर्टल"),
               "staff": ("Ops staff portal", "ऑप्स स्टाफ़ पोर्टल")}
     out = []
     for ctx, data in GUIDE_CONTENT.items():

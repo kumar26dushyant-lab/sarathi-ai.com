@@ -31,7 +31,7 @@ _WINDOW_HOURS = 24   # what "recently" means in the summary
 
 # The ways in we track. The label is what App Health shows.
 SYSTEMS = {
-    "branch": "Branch login",
+    "branch": "Authorized Partner login",
     "subscriber": "Subscriber login",
     "staff": "Staff login",
     "portal": "Complainant portal",

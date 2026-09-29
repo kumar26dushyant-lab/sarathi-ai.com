@@ -266,7 +266,7 @@ button.send:disabled{opacity:.45; cursor:not-allowed}
     <div class="fig"><div class="v hot">27</div><div class="k">told “we can fight”, never proceeded</div></div>
     <div class="fig"><div class="v hot">0</div><div class="k">claims with a CP or advisor recorded</div></div>
   </div>
-  <div class="src">Live database at the time of writing &middot; 32 claims carry a branch code &middot; 14 branches active</div>
+  <div class="src">Live database at the time of writing &middot; 32 claims carry an Authorized Partner code &middot; 14 Authorized Partners active</div>
 
   <div class="note stop">
     <span class="lbl">Finding 1 — the conversion gap</span>
@@ -322,7 +322,7 @@ button.send:disabled{opacity:.45; cursor:not-allowed}
 
   <div class="grid2">
     <div class="panel"><h4>Who brought them?</h4>
-      <p><strong>Nobody</strong> (direct) &middot; a <strong>branch</strong> &middot; a
+      <p><strong>Nobody</strong> (direct) &middot; an <strong>Authorized Partner</strong> &middot; a
         <strong>staff member</strong> (channel partners live inside staff) &middot; a
         <strong>campaign</strong> or the WhatsApp bot.</p></div>
     <div class="panel"><h4>How did they arrive?</h4>
@@ -337,12 +337,12 @@ button.send:disabled{opacity:.45; cursor:not-allowed}
       <tr class="grp"><td colspan="4">No referrer</td></tr>
       <tr><td class="id">A1</td><td><strong>Direct subscriber</strong></td><td>Finds the site, subscribes, raises claims from their dashboard</td><td>Nobody</td></tr>
       <tr><td class="id">A2</td><td><strong>Direct one-time ₹499</strong></td><td>No plan — pays for a single claim review</td><td>Nobody</td></tr>
-      <tr class="grp"><td colspan="4">Branch — five modes</td></tr>
-      <tr><td class="id">B1</td><td><strong>Referred subscriber</strong></td><td>Signs up on the branch’s subscription link, raises claims from their own dashboard</td><td>Branch — recurring on the plan</td></tr>
-      <tr><td class="id">B2</td><td><strong>Referred ₹499 review</strong></td><td>Uses the branch’s review link for one claim</td><td>Branch</td></tr>
-      <tr><td class="id">B3</td><td><strong>Advisor relay</strong></td><td>Branch sends the link to an <strong>advisor</strong>, who subscribes and brings their own clients</td><td>Branch earns on the <em>advisor’s referral and subscription</em> — <strong>not</strong> on the advisor’s cases</td></tr>
-      <tr><td class="id">B4</td><td><strong>Walk-in</strong></td><td>Complainant walks into the branch; the branch files and holds the relationship</td><td>Branch</td></tr>
-      <tr><td class="id">B5</td><td><strong>Walk-in with CP</strong></td><td>A channel partner is also involved and earns separately</td><td>Branch + CP</td></tr>
+      <tr class="grp"><td colspan="4">Authorized Partner — five modes</td></tr>
+      <tr><td class="id">B1</td><td><strong>Referred subscriber</strong></td><td>Signs up on the Authorized Partner’s subscription link, raises claims from their own dashboard</td><td>Authorized Partner — recurring on the plan</td></tr>
+      <tr><td class="id">B2</td><td><strong>Referred ₹499 review</strong></td><td>Uses the Authorized Partner’s review link for one claim</td><td>Authorized Partner</td></tr>
+      <tr><td class="id">B3</td><td><strong>Advisor relay</strong></td><td>Authorized Partner sends the link to an <strong>advisor</strong>, who subscribes and brings their own clients</td><td>Authorized Partner earns on the <em>advisor’s referral and subscription</em> — <strong>not</strong> on the advisor’s cases</td></tr>
+      <tr><td class="id">B4</td><td><strong>Walk-in</strong></td><td>Complainant walks into the Authorized Partner; the Authorized Partner files and holds the relationship</td><td>Authorized Partner</td></tr>
+      <tr><td class="id">B5</td><td><strong>Walk-in with CP</strong></td><td>A channel partner is also involved and earns separately</td><td>Authorized Partner + CP</td></tr>
       <tr class="grp"><td colspan="4">Staff — the same five</td></tr>
       <tr><td class="id">S1&ndash;S5</td><td><strong>Mirror of B1&ndash;B5</strong></td><td>Identical modes on a staff referral code. Channel partners live inside staff</td><td>Staff, same rules</td></tr>
       <tr class="grp"><td colspan="4">No human referrer</td></tr>
@@ -373,7 +373,7 @@ button.send:disabled{opacity:.45; cursor:not-allowed}
   <pre class="mermaid">
 flowchart TB
     A["Direct — A1, A2"] --> CL
-    B["Branch — B1 to B5"] --> CL
+    B["Authorized Partner — B1 to B5"] --> CL
     S["Staff and CP — S1 to S5"] --> CL
     C["Campaign, WhatsApp — C1, C2"] --> CL
     CL["ONE CLAIM RECORD — referrer chain and payer recorded once"] --> RV["Review — doctor or advocate by claim type"]
@@ -386,7 +386,7 @@ flowchart TB
 
   <div class="note warn">
     <span class="lbl">A leak visible in your own UI</span>
-    <p>The branch referral panel carries two links and warns: <em>“Sharing the wrong link is why a
+    <p>The Authorized Partner referral panel carries two links and warns: <em>“Sharing the wrong link is why a
       customer sometimes lands on the review flow instead of subscribing.”</em> That is likely feeding
       the 27. Two fixes: record <strong>which link was used</strong> so the leak becomes measurable, and
       offer <strong>one link that asks the complainant what they need</strong> so the referrer cannot
@@ -404,8 +404,8 @@ flowchart TB
     <thead><tr><th style="width:220px">Chain</th><th>Example</th><th style="width:150px">Doors</th></tr></thead>
     <tbody>
       <tr><td><strong>Complainant only</strong></td><td>Someone finds the site and subscribes</td><td>A1, A2, C1, C2</td></tr>
-      <tr><td><strong>Referrer &rarr; complainant</strong></td><td>A branch code brings a subscriber</td><td>B1, B2, B4, S1, S2, S4</td></tr>
-      <tr><td><strong>Referrer &rarr; advisor &rarr; complainant</strong></td><td>Branch gives its link to an advisor, who brings their own clients</td><td>B3, S3</td></tr>
+      <tr><td><strong>Referrer &rarr; complainant</strong></td><td>An Authorized Partner code brings a subscriber</td><td>B1, B2, B4, S1, S2, S4</td></tr>
+      <tr><td><strong>Referrer &rarr; advisor &rarr; complainant</strong></td><td>Authorized Partner gives its link to an advisor, who brings their own clients</td><td>B3, S3</td></tr>
       <tr><td><strong>Referrer &rarr; CP &rarr; complainant</strong></td><td>Walk-in where a channel partner is also owed</td><td>B5, S5</td></tr>
     </tbody>
   </table></div>
@@ -415,13 +415,13 @@ flowchart TB
     <thead><tr><th style="width:150px">Party</th><th>Who they are</th><th style="width:190px">What that means for us</th></tr></thead>
     <tbody>
       <tr><td><strong>Advisor</strong></td><td>An insurance advisor who <strong>takes a subscription</strong> — silver, gold or platinum. They are a paying customer of ours who happens to bring claims</td><td>No review fee, no L2 fee. Their claims flow straight through. We earn the settlement fee at the end</td></tr>
-      <tr><td><strong>Channel partner</strong></td><td>Someone who does <strong>not</strong> want a subscription — either not an advisor at all, or an advisor who wants to stay off a plan. They pass leads to a branch or staff member and prefer to stay in the background</td><td>No plan revenue. They earn a share of the settlement, and their visibility is deliberately limited</td></tr>
+      <tr><td><strong>Channel partner</strong></td><td>Someone who does <strong>not</strong> want a subscription — either not an advisor at all, or an advisor who wants to stay off a plan. They pass leads to an Authorized Partner or staff member and prefer to stay in the background</td><td>No plan revenue. They earn a share of the settlement, and their visibility is deliberately limited</td></tr>
     </tbody>
   </table></div>
 
   <div class="note good">
-    <span class="lbl">Settled — the branch rule</span>
-    <p>A branch earns <strong>for referring the advisor</strong> — the referral and the advisor’s
+    <span class="lbl">Settled — the Authorized Partner rule</span>
+    <p>An Authorized Partner earns <strong>for referring the advisor</strong> — the referral and the advisor’s
       recurring subscription. It earns <strong>nothing on that advisor’s claims</strong>. Those belong to
       the advisor.</p>
     <p style="margin-top:9px"><strong>Subscribers take no share of award money.</strong> A subscription
@@ -444,14 +444,14 @@ flowchart TB
   <div class="note">
     <span class="lbl">The design point</span>
     <p>Store an <strong>ordered chain</strong> on the claim, not a single referrer:
-      <code>[referrer, intermediary?]</code> with a role on each — branch, staff, advisor, CP. Settlement
+      <code>[referrer, intermediary?]</code> with a role on each — Authorized Partner, staff, advisor, CP. Settlement
       walks the chain and applies each party’s own rule. The fields already exist and are unused; this is
       filling in scaffolding, not new schema.</p>
   </div>
 
   <div class="note warn">
     <span class="lbl">Still open (Q1)</span>
-    <p>The default percentages themselves — what an advisor, a branch, a staff member and a channel
+    <p>The default percentages themselves — what an advisor, an Authorized Partner, a staff member and a channel
       partner each get out of the settlement fee — and whether a case can carry <strong>both</strong> an
       advisor and a channel partner. The engine does not care what the numbers are; it does need to know
       the starting set.</p>
@@ -545,7 +545,7 @@ flowchart TB
     <tbody>
       <tr><td class="id">C3.1</td><td>Verdict is “can fight”</td><td>Send the complainant what we found and what happens next, in their language. Notify the referrer the same hour</td></tr>
       <tr><td class="id">C3.2</td><td>No response in 3 days</td><td>WhatsApp, plus a call task to the referrer who holds the relationship</td></tr>
-      <tr><td class="id">C3.3</td><td>No response in 7 days</td><td>Task to the branch or staff owner. Ask what the obstacle is rather than repeating the ask</td></tr>
+      <tr><td class="id">C3.3</td><td>No response in 7 days</td><td>Task to the Authorized Partner or staff owner. Ask what the obstacle is rather than repeating the ask</td></tr>
       <tr><td class="id">C3.4</td><td>The fee is the obstacle</td><td>Route to someone with authority to offer instalments or a waiver. Record the decision and who made it</td></tr>
       <tr><td class="id">C3.5</td><td>Nobody will pay, but the case is strong</td><td>A super-admin or sub-super-admin may move it forward anyway. <strong>Whoever does becomes responsible for the fee, and it is recorded against their real name — even under impersonation</strong></td></tr>
       <tr><td class="id">C3.6</td><td>Rejection is older than 9 months</td><td>Escalate hard. The one-year filing window is closing (section 9)</td></tr>
@@ -585,7 +585,7 @@ flowchart TB
       <tr><td class="id">H3</td><td><strong>Partial reimbursement</strong></td><td>Pre-auth approval letter</td><td><span class="chip c-wait">copies + original receipts</span></td></tr>
       <tr><td class="id">H4</td><td><strong>Query</strong></td><td>Query letter, query reply documents</td><td><span class="chip c-mute">photocopies</span></td></tr>
       <tr><td class="id">H5</td><td><strong>Delay in process</strong></td><td>Acknowledgement of file submission</td><td><span class="chip c-mute">photocopies</span></td></tr>
-      <tr><td class="id">H6</td><td><strong>Pre/post hospitalisation</strong></td><td><em>Not yet submitted:</em> everything, original.<br><em>Already submitted:</em> copy of what was submitted, receiving proof, rejection letter, final bill, discharge summary, receipts</td><td><span class="chip c-wait">branches</span></td></tr>
+      <tr><td class="id">H6</td><td><strong>Pre/post hospitalisation</strong></td><td><em>Not yet submitted:</em> everything, original.<br><em>Already submitted:</em> copy of what was submitted, receiving proof, rejection letter, final bill, discharge summary, receipts</td><td><span class="chip c-wait">Authorized Partners</span></td></tr>
       <tr><td class="id">H7</td><td><strong>Daily cash benefit</strong></td><td>Claim form and policy copy are the core</td><td><span class="chip c-mute">copies</span></td></tr>
     </tbody>
   </table></div>
@@ -887,14 +887,14 @@ flowchart TB
     <p>A verified mobile means the WhatsApp bot can actually drive the process. A verified email means
       correspondence never disappears. Both take one extra step at the one moment the complainant is most
       motivated — right after deciding to come to us. Every later stall costs far more than that step.</p>
-    <p style="margin-top:9px"><strong>Every door, without exception</strong>: the website form, the branch
+    <p style="margin-top:9px"><strong>Every door, without exception</strong>: the website form, the Authorized Partner
       walk-in screen, the advisor link, the ₹499 flow, the WhatsApp bot, the CRM lead conversion. One
       shared validation routine, so no channel can create an unreachable case.</p>
   </div>
 
   <div class="note warn">
     <span class="lbl">The trade-off, stated honestly</span>
-    <p>Validation adds friction at exactly the moment a walk-in complainant is standing at a branch counter
+    <p>Validation adds friction at exactly the moment a walk-in complainant is standing at an Authorized Partner counter
       with a staff member typing for them. Two mitigations: the OTP can be completed by the complainant on
       their own phone while they are still there, and a branch can save a partial claim as a
       <strong>draft</strong> that cannot advance until validation completes — so nothing is lost, but
@@ -1032,7 +1032,7 @@ flowchart TB
     <tbody>
       <tr><td><strong>An active subscriber’s claim</strong><br><span style="color:var(--ink-3);font-size:12.5px">advisor on silver, gold or platinum</span></td><td><span class="chip c-good">none</span></td><td><span class="chip c-good">none</span></td><td><strong>15% + GST</strong> of the settled amount</td></tr>
       <tr><td><strong>Direct client</strong></td><td><span class="chip c-wait">paid up front</span><br><span style="color:var(--ink-3);font-size:12.5px">non-refundable</span></td><td>Paid before L2 work starts</td><td><strong>15% + GST</strong></td></tr>
-      <tr><td><strong>Branch or staff walk-in</strong></td><td>Whoever brings the case pays</td><td>Whoever moves it forward pays</td><td><strong>15% + GST</strong>, split down the chain</td></tr>
+      <tr><td><strong>Authorized Partner or staff walk-in</strong></td><td>Whoever brings the case pays</td><td>Whoever moves it forward pays</td><td><strong>15% + GST</strong>, split down the chain</td></tr>
     </tbody>
   </table></div>
 
@@ -1305,7 +1305,7 @@ flowchart TB
   <div class="tw"><table>
     <thead><tr><th style="width:44px">ID</th><th style="width:250px">Question</th><th>Why it matters</th></tr></thead>
     <tbody>
-      <tr><td class="id">Q1</td><td><strong>The starting percentages.</strong> What does an advisor, a branch, a staff member and a channel partner each get out of the 15%? And can one case carry both an advisor and a channel partner?</td><td>The commission engine is configurable, so these are defaults rather than fixed rules — but it needs a starting set to launch with</td></tr>
+      <tr><td class="id">Q1</td><td><strong>The starting percentages.</strong> What does an advisor, an Authorized Partner, a staff member and a channel partner each get out of the 15%? And can one case carry both an advisor and a channel partner?</td><td>The commission engine is configurable, so these are defaults rather than fixed rules — but it needs a starting set to launch with</td></tr>
       <tr><td class="id">Q2</td><td><strong>Two details on the insurer ladder.</strong> If no acknowledgement ever arrives, the 30-day clock still runs from the send date — confirm. And does a partial reply reset the window, or does it run regardless?</td><td>Completes the ladder in section 7</td></tr>
       <tr><td class="id">Q3</td><td><strong>How long each task actually takes.</strong> Roughly how many minutes does a health review take today? Writing a gist and draft? Filing at the Ombudsman? Even rough numbers from the people doing the work beat my estimates</td><td>Section 16 currently runs on my guesses. Real numbers turn it from arithmetic into a plan you can hire against — and tell you which role to hire <em>first</em></td></tr>
       <tr><td class="id">Q4</td><td><strong>The Lokpal flow itself</strong> — expected from the team</td><td>Section 9 is a placeholder until it arrives, and will be rebuilt around it rather than patched</td></tr>

@@ -486,7 +486,7 @@ async def _recover_payment(p: dict) -> str:
             return "mark_l2_paid declined claim %s (already paid?)" % cid
         logger.warning("RECOVERED a branch L2 payment the webhook never delivered: %s -> "
                        "claim %s branch %s", pid, cid, branch)
-        await _announce_recovery(p, "a branch Level-2 fee on claim #%s" % cid)
+        await _announce_recovery(p, "an Authorized Partner Level-2 fee on claim #%s" % cid)
         return ""
 
     if prod == "nidaan_review_999":

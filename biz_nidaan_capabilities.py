@@ -256,9 +256,9 @@ CAPABILITIES: list[dict] = [
     },
     {
         "id": "claims_accounts",
-        "en": {"t": "Work on claims, accounts and branches",
+        "en": {"t": "Work on claims, accounts and Authorized Partners",
                "d": "The full case records and customer information."},
-        "hi": {"t": "क्लेम, अकाउंट और ब्रांच पर काम करें",
+        "hi": {"t": "क्लेम, अकाउंट और अधिकृत पार्टनर पर काम करें",
                "d": "पूरे केस रिकॉर्ड और ग्राहक जानकारी।"},
         "telegram": False, "web": True, "min_role": "sub_super_admin",
     },
@@ -408,7 +408,7 @@ CAPABILITIES: list[dict] = [
                     "words. The standard list comes from the claim type and you can add anything "
                     "else this case needs; removing something asks why, and your reason stays on "
                     "the claim. Documents that arrive turn green. Everyone involved \u2014 the "
-                    "subscriber, the branch, the channel partner \u2014 is copied, and you can "
+                    "subscriber, the Authorized Partner, the channel partner \u2014 is copied, and you can "
                     "add or remove any mobile or email. Before it goes you read it back once, "
                     "and you are recorded as the person who sent it.",
                "u": "Level-2 \u2192 Settlement \u2192 click the document count on any row."},
@@ -517,13 +517,13 @@ CAPABILITIES: list[dict] = [
         "en": {"t": "Ask the complainant one thing",
                "d": "From any Level-2 case: call them, or send ONE query message on WhatsApp (our "
                     "approved message carrying your exact words) and email, copied by email to the "
-                    "branch or subscriber. A second message is refused while the first is unanswered, "
+                    "Authorized Partner or subscriber. A second message is refused while the first is unanswered, "
                     "so nobody is bombarded. When they reply on WhatsApp, the super admins and you are "
                     "told at once.",
                "u": "Consolidation → open a case → Contact the complainant."},
         "hi": {"t": "शिकायतकर्ता से एक बात पूछें",
                "d": "Level-2 के किसी भी केस से: कॉल करें, या WhatsApp पर एक क्वेरी संदेश भेजें (हमारा "
-                    "मंज़ूर संदेश, आपके शब्दों के साथ) और ईमेल, जिसकी कॉपी ब्रांच/सब्सक्राइबर को ईमेल से जाती है। "
+                    "मंज़ूर संदेश, आपके शब्दों के साथ) और ईमेल, जिसकी कॉपी अधिकृत पार्टनर/सब्सक्राइबर को ईमेल से जाती है। "
                     "पहले का जवाब आने तक दूसरा संदेश नहीं जाता। WhatsApp पर जवाब आते ही सुपर एडमिन और आपको खबर मिलती है।",
                "u": "Consolidation → केस खोलें → Contact the complainant।"},
         "telegram": False, "web": True, "min_role": "team_member",
@@ -615,7 +615,7 @@ CAPABILITIES: list[dict] = [
                "u": "See which branches/advisors bring the most business and where customers abandon."},
         "hi": {"t": "बिज़नेस एनालिटिक्स",
                "d": "चैनल एट्रिब्यूशन, फ़नल और कहाँ दावे/लीड छूटते हैं।",
-               "u": "देखें कौन-सी ब्रांच/सलाहकार सबसे ज़्यादा बिज़नेस लाते हैं और ग्राहक कहाँ छोड़ते हैं।"},
+               "u": "देखें कौन-से अधिकृत पार्टनर/सलाहकार सबसे ज़्यादा बिज़नेस लाते हैं और ग्राहक कहाँ छोड़ते हैं।"},
         "telegram": False, "web": True, "min_role": "super_admin",
     },
     # ── Content ──────────────────────────────────────────────────────────
@@ -736,10 +736,10 @@ CAPABILITIES: list[dict] = [
         "id": "br_share", "audience": ["branch"],
         "en": {"t": "Share your referral link",
                "d": "Invite advisors/clients with your own link so business is credited to you.",
-               "u": "Send your link on WhatsApp — anyone who signs up is tagged to your branch."},
+               "u": "Send your link on WhatsApp — anyone who signs up is tagged to your Authorized Partner code."},
         "hi": {"t": "अपना रेफ़रल लिंक साझा करें",
                "d": "अपने लिंक से सलाहकार/ग्राहक जोड़ें ताकि बिज़नेस आपके नाम दर्ज हो।",
-               "u": "अपना लिंक WhatsApp पर भेजें — जो भी जुड़ता है वह आपकी ब्रांच से टैग होता है।"},
+               "u": "अपना लिंक WhatsApp पर भेजें — जो भी जुड़ता है वह आपके अधिकृत पार्टनर कोड से टैग होता है।"},
         "telegram": False, "web": True, "min_role": "team_member",
     },
     # ── Money, attribution & records (Aug 2026) ───────────────────────────────
@@ -757,10 +757,10 @@ CAPABILITIES: list[dict] = [
         "id": "reattribute_referral",
         "en": {"t": "Fix a referral attribution",
                "d": "Correct who gets credit for an account or a single claim (overrides the locked first-touch). Audited with your name.",
-               "u": "Accounts → 🏷️ on a row, or a claim's 'Referred by → Fix', to set the right staff/branch code or mark Direct."},
+               "u": "Accounts → 🏷️ on a row, or a claim's 'Referred by → Fix', to set the right staff/Authorized Partner code or mark Direct."},
         "hi": {"t": "रेफ़रल एट्रिब्यूशन ठीक करें",
                "d": "किसी अकाउंट या क्लेम का सही श्रेय तय करें (लॉक्ड फर्स्ट-टच को बदलता है)। आपके नाम से लॉग होता है।",
-               "u": "Accounts में पंक्ति पर 🏷️, या क्लेम के 'Referred by → Fix' से सही स्टाफ/ब्रांच कोड सेट करें या Direct करें।"},
+               "u": "Accounts में पंक्ति पर 🏷️, या क्लेम के 'Referred by → Fix' से सही स्टाफ/अधिकृत पार्टनर कोड सेट करें या Direct करें।"},
         "telegram": False, "web": True, "min_role": "super_admin",
     },
     {
@@ -887,21 +887,21 @@ CAPABILITIES: list[dict] = [
     {
         "id": "health_ways_in",
         "en": {"t": "See whether people can actually log in",
-               "d": "App Health now reports each way into the system — branch, subscriber, staff and the complainant portal — and says what is broken and why. It judges delivery on the codes we actually sent in the last 24 hours, not on whether the settings look right, because on 17 Sep every setting was right and no branch received a single code. A branch with no email and no mobile is named, so it can be fixed. 'Test login delivery' sends a real login email down the same path to your own address and tells you which route carried it.",
+               "d": "App Health now reports each way into the system — Authorized Partner, subscriber, staff and the complainant portal — and says what is broken and why. It judges delivery on the codes we actually sent in the last 24 hours, not on whether the settings look right, because on 17 Sep every setting was right and no Authorized Partner received a single code. An Authorized Partner with no email and no mobile is named, so it can be fixed. 'Test login delivery' sends a real login email down the same path to your own address and tells you which route carried it.",
                "u": "App Health → 🔑 Ways in — logins. A failing row links to the screen that holds the missing detail."},
         "hi": {"t": "देखें कि लोग सचमुच लॉगिन कर पा रहे हैं या नहीं",
-               "d": "App Health अब हर लॉगिन रास्ते की हालत बताता है — ब्रांच, सब्सक्राइबर, स्टाफ़ और शिकायतकर्ता पोर्टल — और यह भी कि क्या टूटा है और क्यों। पिछले 24 घंटे में भेजे गए असली कोड के आधार पर फ़ैसला होता है, सेटिंग देखकर नहीं, क्योंकि 17 सितंबर को सेटिंग सही थी और किसी ब्रांच को एक भी कोड नहीं मिला। जिस ब्रांच के पास न ईमेल है न मोबाइल, उसका नाम दिखता है। 'Test login delivery' उसी रास्ते से आपके अपने पते पर असली ईमेल भेजकर बताता है कि वह किस रूट से गया।",
+               "d": "App Health अब हर लॉगिन रास्ते की हालत बताता है — अधिकृत पार्टनर, सब्सक्राइबर, स्टाफ़ और शिकायतकर्ता पोर्टल — और यह भी कि क्या टूटा है और क्यों। पिछले 24 घंटे में भेजे गए असली कोड के आधार पर फ़ैसला होता है, सेटिंग देखकर नहीं, क्योंकि 17 सितंबर को सेटिंग सही थी और किसी अधिकृत पार्टनर को एक भी कोड नहीं मिला। जिस अधिकृत पार्टनर के पास न ईमेल है न मोबाइल, उसका नाम दिखता है। 'Test login delivery' उसी रास्ते से आपके अपने पते पर असली ईमेल भेजकर बताता है कि वह किस रूट से गया।",
                "u": "App Health → 🔑 Ways in — logins। जो पंक्ति लाल है, वह उसी स्क्रीन पर ले जाती है जहाँ कमी भरनी है।"},
         "telegram": False, "web": True, "min_role": "super_admin",
     },
     {
         "id": "br_login_whatsapp", "audience": ["branch"],
         "en": {"t": "Log in with a WhatsApp code if email is not reaching you",
-               "d": "The login page has two buttons. If the email code is not arriving, ask for it on WhatsApp instead — the same code, a different road. It reaches you straight away, with a button to copy the code; you do not have to message us first. The one thing we need is your branch mobile on file, so please give it to the office if we do not have it.",
-               "u": "Branch portal login → type your branch email → 'Send it on WhatsApp instead'."},
+               "d": "The login page has two buttons. If the email code is not arriving, ask for it on WhatsApp instead — the same code, a different road. It reaches you straight away, with a button to copy the code; you do not have to message us first. The one thing we need is your mobile number on file, so please give it to the office if we do not have it.",
+               "u": "Authorized Partner portal login → type your Authorized Partner email → 'Send it on WhatsApp instead'."},
         "hi": {"t": "ईमेल न पहुँचे तो WhatsApp कोड से लॉगिन करें",
-               "d": "लॉगिन पेज पर दो बटन हैं। अगर ईमेल कोड नहीं आ रहा, तो वही कोड WhatsApp पर मँगाइए — रास्ता अलग, कोड वही। कोड सीधे आ जाता है और उसे कॉपी करने का बटन भी मिलता है; पहले हमें कोई मैसेज भेजने की ज़रूरत नहीं। बस आपकी ब्रांच का मोबाइल नंबर हमारे पास दर्ज होना चाहिए — न हो तो ऑफ़िस को बता दीजिए।",
-               "u": "ब्रांच पोर्टल लॉगिन → अपना ब्रांच ईमेल लिखें → 'Send it on WhatsApp instead'।"},
+               "d": "लॉगिन पेज पर दो बटन हैं। अगर ईमेल कोड नहीं आ रहा, तो वही कोड WhatsApp पर मँगाइए — रास्ता अलग, कोड वही। कोड सीधे आ जाता है और उसे कॉपी करने का बटन भी मिलता है; पहले हमें कोई मैसेज भेजने की ज़रूरत नहीं। बस आपका मोबाइल नंबर हमारे पास दर्ज होना चाहिए — न हो तो ऑफ़िस को बता दीजिए।",
+               "u": "अधिकृत पार्टनर पोर्टल लॉगिन → अपना अधिकृत पार्टनर ईमेल लिखें → 'Send it on WhatsApp instead'।"},
         "telegram": False, "web": True, "min_role": "team_member",
     },
 ]

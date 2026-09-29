@@ -1269,7 +1269,7 @@ function buildSidebar() {
       {id:'docsplit', label:'📄 Doc Splitter',     minRank:0},
     ]},
     {h:'People', items:[
-      {id:'branches', label:'🏢 Branches',         minRank:1},
+      {id:'branches', label:'🏢 Authorized Partners',         minRank:1},
       {id:'cp',       label:'🤝 Channel Partners', minRank:0},
       {id:'staff',    label:'👤 Staff',            minRank:2},
     ]},
@@ -3932,7 +3932,7 @@ window._insuredLabel = _insuredLabel;
 // about where the work had come from.
 function _claimChannel(c){
   const o = (c.origin||'').toLowerCase();
-  if (o === 'branch')        return '🏢 Branch' + (c.branch_code ? ' · ' + esc(c.branch_code) : '');
+  if (o === 'branch')        return '🏢 Authorized Partner' + (c.branch_code ? ' · ' + esc(c.branch_code) : '');
   if (o === 'ops_on_behalf') return '👤 Raised by staff for a subscriber'
                                     + (c.raised_by_name ? ' · ' + esc(c.raised_by_name) : '');
   if (o === 'd2c_review')    return '🌐 Website — ₹499 review';
@@ -3940,12 +3940,12 @@ function _claimChannel(c){
   if (o === 'cp')            return '🤝 Channel partner';
   if (o)                     return esc(o.replace(/_/g, ' '));
   // No origin recorded (73 older claims): say what we DO know rather than an empty dash.
-  return c.branch_code ? ('🏢 Branch · ' + esc(c.branch_code))
+  return c.branch_code ? ('🏢 Authorized Partner · ' + esc(c.branch_code))
                        : (c.account_id ? '👤 Subscriber dashboard' : '—');
 }
 // The whole origin of a claim, in one block. Built server-side by biz_nidaan.claim_origin()
 // so the claim panel, the lists and anything later all give the same answer - they were already
-// disagreeing, which is how "Branch · SP-GJG7BA" survived on 64 claims that no branch raised.
+// disagreeing, which is how "Authorized Partner · SP-GJG7BA" survived on 64 claims that no branch raised.
 function _originBlock(c){
   const d = c.origin_detail || {};
   const how = d.how || {};
@@ -3987,7 +3987,7 @@ function _l2CsBadge(c){
   return _l2Eligible(c) ? '<span style="color:var(--nd-text-faint)">not sent</span>' : '<span style="color:var(--nd-warning-text)">fee due</span>';
 }
 // ── Per-claim TRAIL badges (full journey visible without opening the claim) ──
-const _SRC = {branch:'🏢 Branch', staff:'👤 Staff', subscriber:'💳 Subscriber', review:'📋 ₹499', direct:'🌐 Direct'};
+const _SRC = {branch:'🏢 Authorized Partner', staff:'👤 Staff', subscriber:'💳 Subscriber', review:'📋 ₹499', direct:'🌐 Direct'};
 function _claimSrcBadge(c){
   if(!c) return '';
   const k=c.source_kind||'direct';
@@ -4206,7 +4206,7 @@ function _renderPipeline(){
                             && (_pipeCust==='all' || _pipeCustKind(c)===_pipeCust));
   if(q) rows=rows.filter(c=>((c.insured_name||'')+' '+(c.claim_type||'')+' '+(c.owner_name||'')+' '+fmtClaimNum(c.claim_id)).toLowerCase().includes(q));
   const byStage={}; rows.forEach(c=>{ const s=_pipeStage(c); (byStage[s]=byStage[s]||[]).push(c); });
-  const origins=[['all','All'],['branch','🏢 Branch'],['staff','👤 Staff'],['subscriber','💳 Self'],['review','📋 ₹499'],['direct','🌐 Direct']];
+  const origins=[['all','All'],['branch','🏢 Authorized Partner'],['staff','👤 Staff'],['subscriber','💳 Self'],['review','📋 ₹499'],['direct','🌐 Direct']];
   const chip=(v,l)=>`<div class="tab-pill ${_pipeOrigin===v?'active':''}" onclick="pipeSetOrigin('${v}')">${l}${v!=='all'?` <span style="opacity:.6">${_pipeRows.filter(c=>(c.source_kind||'direct')===v).length}</span>`:''}</div>`;
   const custs=[['all','All'],['subscription','💳 Subscriber'],['paid','✅ ₹499 paid'],['unpaid_lead','🟠 Lead (unpaid)']];
   const cchip=(v,l)=>`<div class="tab-pill ${_pipeCust===v?'active':''}" onclick="pipeSetCust('${v}')">${l}${v!=='all'?` <span style="opacity:.6">${_pipeRows.filter(c=>_pipeCustKind(c)===v).length}</span>`:''}</div>`;
@@ -4395,7 +4395,7 @@ function _renderOutcome(key){
             // Paid claims auto-move to ClaimShield; a DUE claim still shows the fee note
             // PLUS a manual "Send to CS" override (whoever taps it gets their name stamped).
             const _due=!(c.l2_payment_status==='paid'||c.payment_status==='paid'||c.payment_status==='subscription');
-            csCell=`<td>${_due?'<div style="color:var(--nd-warning-text);font-size:.66rem;margin-bottom:.25rem;white-space:nowrap">Awaiting branch ₹499 + GST L2 fee</div>':''}<button class="btn btn-primary" style="font-size:.68rem;padding:.25rem .55rem;white-space:nowrap" onclick="event.stopPropagation();opsSendToClaimShield(${c.claim_id})">⚖️ Send to CS</button></td>`;
+            csCell=`<td>${_due?'<div style="color:var(--nd-warning-text);font-size:.66rem;margin-bottom:.25rem;white-space:nowrap">Awaiting Authorized Partner ₹499 + GST L2 fee</div>':''}<button class="btn btn-primary" style="font-size:.68rem;padding:.25rem .55rem;white-space:nowrap" onclick="event.stopPropagation();opsSendToClaimShield(${c.claim_id})">⚖️ Send to CS</button></td>`;
           }
         }
         // The move into Level-2 lives on this row, because this is the screen somebody is looking
@@ -4440,7 +4440,7 @@ function _referredByCell(c){
 }
 // Why this claim is eligible for L2 (transparency in the send modal + tooltip).
 function _l2PayBasis(c){
-  if(c.l2_payment_status==='paid') return 'Branch/staff ₹499 L2 fee paid';
+  if(c.l2_payment_status==='paid') return 'Authorized Partner/staff ₹499 L2 fee paid';
   if(c.payment_status==='subscription') return 'Subscription plan (covers legal)';
   if(c.payment_status==='paid') return '₹499 review paid (credited toward legal)';
   return 'DUE — ₹499 + GST L2 fee not yet paid';
@@ -4583,13 +4583,13 @@ async function loadClaims(statusFilter='', search='', branch='', plan='', assign
         <option value="platinum">Platinum</option>
       </select>
       <select id="claimBranchFilter" onchange="applyClaimFilters()">
-        <option value="">All Branches</option>
+        <option value="">All Authorized Partners</option>
         ${branchOptsHtml}
       </select>
       ${_role!=='team_member'?'<select id="claimAssignFilter" onchange="applyClaimFilters()"><option value="">All Staff</option></select>':''}
       <select id="claimOriginFilter" onchange="applyClaimFilters()" title="Who introduced this claim">
         <option value="">Brought by: anyone</option>
-        <option value="branch">🏢 Branch</option>
+        <option value="branch">🏢 Authorized Partner</option>
         <option value="staff">👤 Staff</option>
         <option value="subscriber">💳 Self</option>
         <option value="review">📋 ₹499</option>
@@ -4751,7 +4751,7 @@ function _renderClaimResults(){
   // Universal "how the claim came in + who's behind it" badge (source_kind from the backend).
   window._sourceBadge = window._sourceBadge || function(c){
     const k = c.source_kind || '';
-    if (k==='branch') return `🏢 <span style="color:var(--nd-purple-text);font-weight:700">${esc(c.ref_name||('Branch '+(c.ref_code||'')))}</span>${c.ref_code?`<br><span style="font-size:.68rem;color:var(--nd-text-faint)">${esc(c.ref_code)}</span>`:''}`;
+    if (k==='branch') return `🏢 <span style="color:var(--nd-purple-text);font-weight:700">${esc(c.ref_name||('Authorized Partner '+(c.ref_code||'')))}</span>${c.ref_code?`<br><span style="font-size:.68rem;color:var(--nd-text-faint)">${esc(c.ref_code)}</span>`:''}`;
     if (k==='staff') return `👤 <span style="color:var(--nd-cyan-text);font-weight:700">${esc(c.ref_name||'Staff')}</span><br><span style="font-size:.68rem;color:var(--nd-text-faint)">staff referral · ${esc(c.ref_code||'')}</span>`;
     if (k==='subscriber') return `⭐ <span style="font-weight:700">${esc(c.owner_name||'—')}</span><br><span style="font-size:.68rem;color:var(--nd-success-text)">Subscriber${c.account_plan?' · '+esc(String(c.account_plan).toUpperCase()):''}</span>`;
     if (k==='review') return `📄 <span style="font-weight:700">${esc(c.owner_name||'—')}</span><br><span style="font-size:.68rem;color:var(--nd-text-faint)">₹499 review (direct)</span>`;
@@ -4842,24 +4842,24 @@ async function loadBranches() {
   const el = document.getElementById('panel-branches');
   el.innerHTML = `
     <div class="section-hdr">
-      <div><div class="section-title">Branches</div><div class="section-sub">Affiliate city branches. The code a subscriber enters at signup attributes the sale here. <b style="color:var(--nd-cyan-text)">A branch logs into its own dashboard with its email</b> (below) via a one-time code — so setting the email is what gives a branch login access + alerts.</div></div>
+      <div><div class="section-title">Authorized Partners (AP)</div><div class="section-sub">Our partner offices in each city. The code a subscriber enters at signup attributes the sale here. <b style="color:var(--nd-cyan-text)">An Authorized Partner logs into its own dashboard with its email</b> (below) via a one-time code — so setting the email is what gives an Authorized Partner login access + alerts.</div></div>
     </div>
     <div style="background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.25);border-radius:10px;padding:.7rem .9rem;margin-bottom:1rem;font-size:.82rem;color:var(--nd-text-secondary)">
-      🏢 <b>Branch login:</b> branches sign in at <b>nidaanpartner.com/nidaan/branch</b> using their registered email → they get a 6-digit code by email → done (no password). Use <b>🔗 Login link</b> on any branch below to copy ready-to-send instructions. A branch with no email <b>cannot log in</b> until you add one.
+      🏢 <b>Authorized Partner login:</b> Authorized Partners sign in at <b>nidaanpartner.com/nidaan/branch</b> using their registered email → they get a 6-digit code by email → done (no password). Use <b>🔗 Login link</b> on any Authorized Partner below to copy ready-to-send instructions. An Authorized Partner with no email <b>cannot log in</b> until you add one.
     </div>
     <div style="background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:12px;padding:1rem;margin-bottom:1rem;display:flex;gap:.6rem;flex-wrap:wrap;align-items:flex-end">
-      <div><label style="font-size:.72rem;color:var(--nd-text-muted);display:block;margin-bottom:.2rem">Branch code *</label><input id="brCode" placeholder="e.g. PUN-02" style="text-transform:uppercase;max-width:130px"></div>
+      <div><label style="font-size:.72rem;color:var(--nd-text-muted);display:block;margin-bottom:.2rem">Authorized Partner code *</label><input id="brCode" placeholder="e.g. PUN-02" style="text-transform:uppercase;max-width:130px"></div>
       <div><label style="font-size:.72rem;color:var(--nd-text-muted);display:block;margin-bottom:.2rem">City *</label><input id="brCity" placeholder="Pune" style="max-width:140px"></div>
-      <div><label style="font-size:.72rem;color:var(--nd-text-muted);display:block;margin-bottom:.2rem">Name</label><input id="brName" placeholder="Pune Branch" style="max-width:160px"></div>
-      <div style="flex:1;min-width:180px"><label style="font-size:.72rem;color:var(--nd-text-muted);display:block;margin-bottom:.2rem">Login &amp; alert email</label><input id="brEmail" type="email" placeholder="branch@example.com" style="width:100%"></div>
+      <div><label style="font-size:.72rem;color:var(--nd-text-muted);display:block;margin-bottom:.2rem">Name</label><input id="brName" placeholder="e.g. Pune office" style="max-width:160px"></div>
+      <div style="flex:1;min-width:180px"><label style="font-size:.72rem;color:var(--nd-text-muted);display:block;margin-bottom:.2rem">Login &amp; alert email</label><input id="brEmail" type="email" placeholder="partner@example.com" style="width:100%"></div>
       <button class="btn btn-primary" onclick="createBranch()">+ Create code</button>
     </div>
     <div id="branchTableWrap"><div class="empty"><div class="ei">⏳</div><p>Loading…</p></div></div>
     <div id="branchLeadsWrap" style="margin-top:1rem"></div>`;
   const r = await API('/branches');
-  if (!r.ok) { document.getElementById('branchTableWrap').innerHTML='<div class="empty"><p>Failed to load branches</p></div>'; return; }
+  if (!r.ok) { document.getElementById('branchTableWrap').innerHTML='<div class="empty"><p>Failed to load Authorized Partners</p></div>'; return; }
   const d = await r.json();
-  if (!d.branches || !d.branches.length) { document.getElementById('branchTableWrap').innerHTML='<div class="empty"><div class="ei">🏢</div><p>No branches yet — create one above.</p></div>'; return; }
+  if (!d.branches || !d.branches.length) { document.getElementById('branchTableWrap').innerHTML='<div class="empty"><div class="ei">🏢</div><p>No Authorized Partners yet — create one above.</p></div>'; return; }
   const rows = d.branches.map(b=>{
     const active = b.status==='active';
     const unpaid = b.unpaid||0;
@@ -4869,8 +4869,8 @@ async function loadBranches() {
       <td><strong style="color:var(--nd-purple-text)">${esc(b.branch_code)}</strong></td>
       <td>${esc(b.city)}</td>
       <td>${esc(b.name||'—')}</td>
-      <td style="font-size:.74rem">${email?esc(email):'<span style="color:var(--nd-danger-text)" title="This branch cannot log in until you add an email">⚠ no login email</span>'} <a href="#" onclick="editBranchEmail('${esc(b.branch_code)}','${esc(email)}');return false" style="color:var(--nd-cyan-text);font-size:.7rem">${email?'edit':'add'}</a>${email?` · <a href="#" onclick="branchLoginInfo('${esc(b.branch_code)}','${esc(email)}');return false" style="color:var(--nd-cyan-text);font-size:.7rem">🔗 login link</a>`:''}</td>
-      <td style="font-size:.74rem">${phone?esc(phone):'<span style="color:var(--nd-warning-text)" title="Without a number this branch gets claim updates by email only">⚠ no WhatsApp</span>'} <a href="#" onclick="editBranchPhone('${esc(b.branch_code)}','${esc(phone)}');return false" style="color:var(--nd-cyan-text);font-size:.7rem">${phone?'edit':'add'}</a></td>
+      <td style="font-size:.74rem">${email?esc(email):'<span style="color:var(--nd-danger-text)" title="This Authorized Partner cannot log in until you add an email">⚠ no login email</span>'} <a href="#" onclick="editBranchEmail('${esc(b.branch_code)}','${esc(email)}');return false" style="color:var(--nd-cyan-text);font-size:.7rem">${email?'edit':'add'}</a>${email?` · <a href="#" onclick="branchLoginInfo('${esc(b.branch_code)}','${esc(email)}');return false" style="color:var(--nd-cyan-text);font-size:.7rem">🔗 login link</a>`:''}</td>
+      <td style="font-size:.74rem">${phone?esc(phone):'<span style="color:var(--nd-warning-text)" title="Without a number this Authorized Partner gets claim updates by email only">⚠ no WhatsApp</span>'} <a href="#" onclick="editBranchPhone('${esc(b.branch_code)}','${esc(phone)}');return false" style="color:var(--nd-cyan-text);font-size:.7rem">${phone?'edit':'add'}</a></td>
       <td style="text-align:center">${b.signups||0}</td>
       <td style="text-align:center;color:var(--nd-success-text)">${b.paid||0}</td>
       <td style="text-align:center">${unpaid>0?`<a href="#" onclick="showBranchUnpaid('${esc(b.branch_code)}');return false" style="background:rgba(220,38,38,.25);color:var(--nd-danger-text);border-radius:10px;padding:.1rem .5rem;font-weight:700;text-decoration:none">${unpaid}</a>`:'<span style="color:var(--nd-text-disabled)">0</span>'}</td>
@@ -4878,24 +4878,24 @@ async function loadBranches() {
       <td style="text-align:center;font-size:.78rem">${(b.share_pct||0)}%${_role==='super_admin'?` <a href="#" onclick="setBranchShare('${esc(b.branch_code)}',${b.share_pct||0});return false" style="color:var(--nd-cyan-text);font-size:.7rem">edit</a>`:''}</td>
       <td style="text-align:right;font-size:.78rem;color:var(--nd-warning-text)">₹${fmt(b.share||0)}</td>
       <td><span style="font-size:.7rem;font-weight:700;color:${active?'var(--nd-success-text)':'#fca5a5'}">${b.status}</span></td>
-      <td style="white-space:nowrap">${(_role==='super_admin'||_role==='sub_super_admin')?`<button class="btn-sm btn-ghost" style="color:var(--nd-cyan-text)" onclick="impersonateBranch('${esc(b.branch_code)}')" title="See inside this branch's own dashboard (audited)">↪ Enter</button> `:''}<button class="btn-sm btn-ghost" onclick="toggleBranch('${esc(b.branch_code)}','${active?'disabled':'active'}')">${active?'Disable':'Enable'}</button></td>
+      <td style="white-space:nowrap">${(_role==='super_admin'||_role==='sub_super_admin')?`<button class="btn-sm btn-ghost" style="color:var(--nd-cyan-text)" onclick="impersonateBranch('${esc(b.branch_code)}')" title="See inside this Authorized Partner's own dashboard (audited)">↪ Enter</button> `:''}<button class="btn-sm btn-ghost" onclick="toggleBranch('${esc(b.branch_code)}','${active?'disabled':'active'}')">${active?'Disable':'Enable'}</button></td>
     </tr>`;}).join('');
   document.getElementById('branchTableWrap').innerHTML = `
     <div class="table-wrap"><table>
       <thead><tr><th>Code</th><th>City</th><th>Name</th><th>Login / alert email</th><th>WhatsApp</th><th>Signups</th><th>Paid</th><th>Unpaid</th><th>Revenue</th><th>Share %</th><th>Payout</th><th>Status</th><th></th></tr></thead>
       <tbody>${rows}</tbody></table></div>
-    <div style="font-size:.72rem;color:var(--nd-text-faint);margin-top:.5rem">Click an <b style="color:var(--nd-danger-text)">unpaid</b> count to see those leads. <b>Revenue</b> = subscription ₹ collected from accounts that signed up with this branch's code; <b>Payout</b> = Revenue × Share % (a reconciliation figure — not auto-paid). Set Share % per branch.</div>`;
+    <div style="font-size:.72rem;color:var(--nd-text-faint);margin-top:.5rem">Click an <b style="color:var(--nd-danger-text)">unpaid</b> count to see those leads. <b>Revenue</b> = subscription ₹ collected from accounts that signed up with this Authorized Partner's code; <b>Payout</b> = Revenue × Share % (a reconciliation figure — not auto-paid). Set Share % per Authorized Partner.</div>`;
 }
 async function impersonateBranch(code){
-  if (!confirm('Enter branch '+code+"'s dashboard as that branch?\nThis is logged/audited — you'll see exactly what the branch sees.")) return;
+  if (!confirm('Enter Authorized Partner '+code+"'s dashboard as that Authorized Partner?\nThis is logged/audited — you'll see exactly what the Authorized Partner sees.")) return;
   const r = await API('/branches/'+encodeURIComponent(code)+'/impersonate', {method:'POST'});
-  if (!r.ok){ const d=await r.json().catch(()=>({})); alert(d.detail||'Could not enter branch dashboard.'); return; }
+  if (!r.ok){ const d=await r.json().catch(()=>({})); alert(d.detail||'Could not enter Authorized Partner dashboard.'); return; }
   const d = await r.json();
   try{ localStorage.setItem('nidaan_branch_token', d.branch_token); }catch(e){}
   window.open('/nidaan/branch', '_blank');   // opens the branch portal as that branch (same-origin token)
 }
 async function setBranchShare(code, current){
-  const v = prompt('Profit-share % for branch '+code+'\n(0–100 — % of subscription revenue from accounts attributed to this branch):', current||0);
+  const v = prompt('Profit-share % for Authorized Partner '+code+'\n(0–100 — % of subscription revenue from accounts attributed to this Authorized Partner):', current||0);
   if (v===null) return;
   const pct = parseFloat(v);
   if (isNaN(pct) || pct<0 || pct>100){ alert('Enter a number between 0 and 100.'); return; }
@@ -4908,26 +4908,26 @@ async function createBranch() {
   const city = (document.getElementById('brCity').value||'').trim();
   const name = (document.getElementById('brName').value||'').trim();
   const contact_email = (document.getElementById('brEmail').value||'').trim();
-  if (!code || !city) { alert('Branch code and city are required.'); return; }
+  if (!code || !city) { alert('Authorized Partner code and city are required.'); return; }
   const r = await API('/branches', {method:'POST', body: JSON.stringify({branch_code:code, city, name, contact_email})});
   const d = await r.json().catch(()=>({}));
-  if (!r.ok) { alert(d.detail || 'Could not create branch.'); return; }
+  if (!r.ok) { alert(d.detail || 'Could not create Authorized Partner.'); return; }
   loadBranches();
 }
 async function toggleBranch(code, status) {
   const r = await API('/branches/'+encodeURIComponent(code), {method:'PATCH', body: JSON.stringify({status})});
-  if (!r.ok) { const d=await r.json().catch(()=>({})); alert(d.detail||'Failed to update branch.'); return; }
+  if (!r.ok) { const d=await r.json().catch(()=>({})); alert(d.detail||'Failed to update Authorized Partner.'); return; }
   loadBranches();
 }
 async function editBranchPhone(code, current) {
-  const phone = prompt('WhatsApp number for branch '+code+'\n(10-digit mobile — claim updates go here as well as email; blank to clear):', current||'');
+  const phone = prompt('WhatsApp number for Authorized Partner '+code+'\n(10-digit mobile — claim updates go here as well as email; blank to clear):', current||'');
   if (phone===null) return;
   const r = await API('/branches/'+encodeURIComponent(code), {method:'PATCH', body: JSON.stringify({contact_phone: phone.trim()})});
   if (!r.ok) { const d=await r.json().catch(()=>({})); alert(d.detail||'Failed to update the number.'); return; }
   loadBranches();
 }
 async function editBranchEmail(code, current) {
-  const email = prompt('Login & alert email for branch '+code+'\n(this is the email the branch uses to log in — blank to clear):', current||'');
+  const email = prompt('Login & alert email for Authorized Partner '+code+'\n(this is the email the Authorized Partner uses to log in — blank to clear):', current||'');
   if (email===null) return;
   const r = await API('/branches/'+encodeURIComponent(code), {method:'PATCH', body: JSON.stringify({contact_email: email.trim()})});
   if (!r.ok) { const d=await r.json().catch(()=>({})); alert(d.detail||'Failed to update email.'); return; }
@@ -4937,7 +4937,7 @@ async function editBranchEmail(code, current) {
 function branchLoginInfo(code, email){
   const url = location.origin + '/nidaan/branch';
   const text =
-`Your Nidaan Partner branch dashboard login (${code}):
+`Your Nidaan Partner login - Authorized Partner dashboard (${code}):
 
 1. Open: ${url}
 2. Enter your branch email: ${email}
@@ -4945,7 +4945,7 @@ function branchLoginInfo(code, email){
 4. Enter the code to sign in. No password needed.
 
 You'll see your referrals, subscribers, earnings, and can raise claims.`;
-  const done = ()=> ndUI.toast('Login instructions copied — paste to the branch (WhatsApp/email).','success');
+  const done = ()=> ndUI.toast('Login instructions copied — paste to the Authorized Partner (WhatsApp/email).','success');
   if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done).catch(()=>alert(text));
   else alert(text);
 }
@@ -6591,7 +6591,7 @@ async function showBranchUnpaid(code) {
       <td style="font-size:.72rem;color:var(--nd-text-faint)">${fmtDate(L.created_at)}</td>
     </tr>`).join('');
   wrap.innerHTML = `
-    <div class="section-hdr" style="margin-bottom:.5rem"><div><div class="section-title" style="font-size:1rem">Unpaid leads — ${esc(code)}</div><div class="section-sub">Signed up under this branch but not paid yet</div></div></div>
+    <div class="section-hdr" style="margin-bottom:.5rem"><div><div class="section-title" style="font-size:1rem">Unpaid leads — ${esc(code)}</div><div class="section-sub">Signed up under this Authorized Partner but not paid yet</div></div></div>
     <div class="table-wrap"><table>
       <thead><tr><th>Name</th><th>Contact</th><th>Review type</th><th>Disputed</th><th>Signed up</th></tr></thead>
       <tbody>${rows}</tbody></table></div>`;
@@ -6732,10 +6732,10 @@ async function openClaimDrawer(claimId) {
         <div style="font-size:.68rem;color:var(--nd-text-faint);margin-top:.35rem">Only documents still unticked are asked for. If they have never written to us, the first message goes as our approved WhatsApp template; once they reply, the guided chat carries on from their answer.</div>
       </div>
     </div>
-    ${c.origin==='branch'?`<!-- Branch & Level-2 (branch-raised claims only) -->
+    ${c.origin==='branch'?`<!-- Authorized Partner & Level-2 (branch-raised claims only) -->
     <div data-ord="25" class="drawer-section">
-      <h4>Branch &amp; Level-2</h4>
-      <div class="kv"><span class="kv-label">Origin</span><span class="kv-val">Branch${c.branch_code?(' · '+esc(c.branch_code)):''}</span></div>
+      <h4>Authorized Partner &amp; Level-2</h4>
+      <div class="kv"><span class="kv-label">Origin</span><span class="kv-val">Authorized Partner${c.branch_code?(' · '+esc(c.branch_code)):''}</span></div>
       <div class="kv"><span class="kv-label">Review</span><span class="kv-val">${
         c.review_outcome==='can_fight'?'<span style="background:#065f46;color:#6ee7b7;padding:.12rem .5rem;border-radius:10px;font-size:.74rem;font-weight:700">Can be challenged (GO)</span>'
         :(c.review_outcome==='no_scope'?'<span style="background:#7c2d12;color:#fdba74;padding:.12rem .5rem;border-radius:10px;font-size:.74rem;font-weight:700">No scope</span>':'—')
@@ -6743,7 +6743,7 @@ async function openClaimDrawer(claimId) {
       <div class="kv"><span class="kv-label">Level-2</span><span class="kv-val">${
         c.l2_payment_status==='paid'
           ? '<span style="background:#065f46;color:#6ee7b7;padding:.12rem .5rem;border-radius:10px;font-size:.74rem;font-weight:700">Queued for legal ✓</span> <span style="color:var(--nd-text-muted);font-size:.72rem">'+(c.l2_fee_paid?('₹'+fmt(c.l2_fee_paid)+' + GST paid'):'no charge')+'</span>'
-          : (c.review_outcome==='can_fight'?'<span style="background:#78350f;color:#fcd34d;padding:.12rem .5rem;border-radius:10px;font-size:.74rem;font-weight:700">Awaiting branch payment</span>':'—')
+          : (c.review_outcome==='can_fight'?'<span style="background:#78350f;color:#fcd34d;padding:.12rem .5rem;border-radius:10px;font-size:.74rem;font-weight:700">Awaiting Authorized Partner payment</span>':'—')
       }</span></div>
       ${c.l2_paid_at?`<div class="kv"><span class="kv-label">L2 paid</span><span class="kv-val">${fmtDate(c.l2_paid_at)}</span></div>`:''}
     </div>`:''}
@@ -7564,7 +7564,7 @@ async function loadAccounts() {
     </div>`:''}
     <div id="accSegBar" style="display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.6rem"></div>
     <div class="filter-bar">
-      <input id="accSearch" placeholder="🔍 Search name / email / firm / branch…" oninput="filterAccounts(this.value)" style="flex:1;min-width:200px">
+      <input id="accSearch" placeholder="🔍 Search name / email / firm / Authorized Partner…" oninput="filterAccounts(this.value)" style="flex:1;min-width:200px">
     </div>
     <div id="accTableWrap"><div class="empty"><p>Loading…</p></div></div>`;
 
@@ -7745,7 +7745,7 @@ function renderAccounts(accounts) {
       <td>${esc(a.email||'—')}</td>
       <td>${esc(a.phone||'—')}</td>
       <td>${a.branch_code
-            ? `<span style="font-size:.72rem;color:var(--nd-purple-text);font-weight:700">${a.ref_name?esc(a.ref_name):(a.ref_kind==='staff'?'Staff':a.ref_kind==='branch'?'Branch':'')}</span>${a.ref_kind?`<br><span style="font-size:.64rem;color:var(--nd-text-faint)">${a.ref_kind==='staff'?'👤 staff':'🏢 branch'} · ${esc(a.branch_code)}</span>`:`<br><span style="font-size:.64rem;color:var(--nd-text-faint)">${esc(a.branch_code)}</span>`}`
+            ? `<span style="font-size:.72rem;color:var(--nd-purple-text);font-weight:700">${a.ref_name?esc(a.ref_name):(a.ref_kind==='staff'?'Staff':a.ref_kind==='branch'?'Authorized Partner':'')}</span>${a.ref_kind?`<br><span style="font-size:.64rem;color:var(--nd-text-faint)">${a.ref_kind==='staff'?'👤 staff':'🏢 Authorized Partner'} · ${esc(a.branch_code)}</span>`:`<br><span style="font-size:.64rem;color:var(--nd-text-faint)">${esc(a.branch_code)}</span>`}`
             : '<span style="color:var(--nd-text-disabled)">—</span>'}</td>
       <td>${accTypeBadge(a)} ${accPayBadge(a)}</td>
       <td>${accUsageCell(a)}</td>
@@ -7766,7 +7766,7 @@ function renderAccounts(accounts) {
     ${_accBar}
     <div class="table-wrap">
       <table>
-        <thead><tr>${isSA?'<th></th>':''}<th>#</th><th>Name</th><th>Firm</th><th>Email</th><th>Phone</th><th>Branch</th><th>Type</th><th>Usage</th><th>Status</th><th>Joined</th><th></th></tr></thead>
+        <thead><tr>${isSA?'<th></th>':''}<th>#</th><th>Name</th><th>Firm</th><th>Email</th><th>Phone</th><th>Authorized Partner</th><th>Type</th><th>Usage</th><th>Status</th><th>Joined</th><th></th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>
@@ -7790,7 +7790,7 @@ function openReattributeModal(id){
     <div style="font-size:.82rem;color:var(--nd-text-secondary);margin-bottom:1rem">Change who gets credit for referring this account. Use this only to correct a mistake — it is logged with your name.</div>
     <div style="font-size:.82rem;background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:8px;padding:.5rem .7rem;margin-bottom:.9rem">
       Currently credited to: <b>${esc(curName)}</b> <span style="color:var(--nd-text-faint)">(${curCode})</span></div>
-    <label style="font-size:.8rem;font-weight:600;display:block;margin-bottom:4px">New referral code (staff SP-XXXX or branch code)</label>
+    <label style="font-size:.8rem;font-weight:600;display:block;margin-bottom:4px">New referral code (staff SP-XXXX or Authorized Partner code)</label>
     <input id="raCode" autocomplete="off" placeholder="e.g. SP-EE53CU" style="width:100%;margin-bottom:.7rem;text-transform:uppercase">
     <label style="display:flex;gap:.5rem;align-items:center;font-size:.82rem;margin-bottom:1rem;cursor:pointer">
       <input type="checkbox" id="raClear" onchange="const c=this.checked;document.getElementById('raCode').disabled=c;document.getElementById('raCode').style.opacity=c?'.5':'1';">
@@ -7828,7 +7828,7 @@ function openClaimReattributeModal(claimId){
   ov.innerHTML=`<div style="background:var(--nd-bg-base-2);border:1px solid var(--nd-border);border-radius:14px;max-width:440px;width:100%;padding:1.5rem">
     <div style="font-size:1.1rem;font-weight:800;margin-bottom:.3rem">🏷️ Fix referral — Claim #${claimId}</div>
     <div style="font-size:.82rem;color:var(--nd-text-secondary);margin-bottom:1rem">Correct who referred <b>this claim</b>. A claim code overrides the account's referrer. Leave blank + tick below to fall back to the account. Logged with your name.</div>
-    <label style="font-size:.8rem;font-weight:600;display:block;margin-bottom:4px">New referral code (staff SP-XXXX or branch code)</label>
+    <label style="font-size:.8rem;font-weight:600;display:block;margin-bottom:4px">New referral code (staff SP-XXXX or Authorized Partner code)</label>
     <input id="craCode" autocomplete="off" placeholder="e.g. SP-EE53CU" style="width:100%;margin-bottom:.7rem;text-transform:uppercase">
     <label style="display:flex;gap:.5rem;align-items:center;font-size:.82rem;margin-bottom:1rem;cursor:pointer">
       <input type="checkbox" id="craClear" onchange="const c=this.checked;document.getElementById('craCode').disabled=c;document.getElementById('craCode').style.opacity=c?'.5':'1';">
@@ -8999,7 +8999,7 @@ async function loadAnalytics() {
   if (!r.ok) { document.getElementById('anBody').innerHTML='<div class="empty"><p>Failed to load analytics.</p></div>'; return; }
   const d = await r.json();
   const t = d.totals||{};
-  const CH = {direct:'🌐 Direct / Organic', staff:'👤 Staff referral', branch:'🏢 Branch', campaign:'🏷️ Campaign code', marketing:'📣 Marketing (UTM)'};
+  const CH = {direct:'🌐 Direct / Organic', staff:'👤 Staff referral', branch:'🏢 Authorized Partner', campaign:'🏷️ Campaign code', marketing:'📣 Marketing (UTM)'};
 
   const card = (label, value, color, sub) => `
     <div style="flex:1;min-width:150px;background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:14px;padding:1rem 1.1rem">
@@ -9283,7 +9283,7 @@ async function loadRevenue() {
     <div class="stats-row">
       <div class="stat-card ok"><div class="sv">₹${fmt(d.total_revenue)}</div><div class="sl">Collected to date</div></div>
       <div class="stat-card"><div class="sv">₹${fmt(d.total_subscription_revenue)}</div><div class="sl">Subscriptions + renewals</div></div>
-      <div class="stat-card"><div class="sv">₹${fmt(d.total_l2_revenue)}</div><div class="sl">Branch Level-2 fees</div></div>
+      <div class="stat-card"><div class="sv">₹${fmt(d.total_l2_revenue)}</div><div class="sl">Authorized Partner Level-2 fees</div></div>
       <div class="stat-card"><div class="sv">₹${fmt(d.total_d2c_revenue)}</div><div class="sl">₹499 reviews</div></div>
     </div>
 
@@ -10131,7 +10131,7 @@ function fmtDateTime(s){
   try { return d.toLocaleString('en-IN', {day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit', hour12:true, timeZone:'Asia/Kolkata'}); }
   catch(e){ return String(s).slice(0,16); }
 }
-const _SUP_CH = {web:'🌐 Web', homepage:'🏠 Homepage', subscriber:'⭐ Subscriber', review:'📄 One-time review', branch:'🏢 Branch', staff:'🧑‍💼 Staff', whatsapp:'💬 WhatsApp', email:'✉️ Email'};
+const _SUP_CH = {web:'🌐 Web', homepage:'🏠 Homepage', subscriber:'⭐ Subscriber', review:'📄 One-time review', branch:'🏢 Authorized Partner', staff:'🧑‍💼 Staff', whatsapp:'💬 WhatsApp', email:'✉️ Email'};
 
 // ── Customer support inbox ────────────────────────────────────────────────────
 let _supportFilter = 'escalated';
@@ -10199,7 +10199,7 @@ async function loadSupport(){
   const segs = [['escalated','🔔 Needs human'],['ai','AI-handled'],['closed','Closed'],['','All']];
   document.getElementById('supSegBar').innerHTML = segs.map(([k,label])=>
     `<button class="btn ${(_supportFilter===k)?'btn-primary':'btn-ghost'}" style="font-size:.8rem;padding:.35rem .8rem" onclick="_supportFilter='${k}';loadSupport()">${label}</button>`).join('');
-  const chans = [['','All channels'],['homepage','🏠 Homepage'],['subscriber','⭐ Subscriber'],['review','📄 One-time'],['branch','🏢 Branch'],['staff','🧑‍💼 Staff'],['web','🌐 Web']];
+  const chans = [['','All channels'],['homepage','🏠 Homepage'],['subscriber','⭐ Subscriber'],['review','📄 One-time'],['branch','🏢 Authorized Partner'],['staff','🧑‍💼 Staff'],['web','🌐 Web']];
   document.getElementById('supChanBar').innerHTML = chans.map(([k,label])=>
     `<button class="btn ${(_supportChannel===k)?'btn-primary':'btn-ghost'}" style="font-size:.76rem;padding:.3rem .7rem" onclick="_supportChannel='${k}';loadSupport()">${label}</button>`).join('');
   const _qs = [ _supportFilter?('status='+_supportFilter):'', _supportChannel?('channel='+_supportChannel):'' ].filter(Boolean).join('&');
@@ -10557,7 +10557,7 @@ async function loadHealth() {
   // The ways in get their own section. Their reasons are sentences, not two words, and a
   // stat-card truncates them to nothing — which is the opposite of the point: on 17 Sep the
   // whole problem was that nothing anywhere said WHY branches could not log in.
-  const LOGIN_CHECKS = ['Branch login','Subscriber login','Staff login','Complainant portal'];
+  const LOGIN_CHECKS = ['Authorized Partner login','Subscriber login','Staff login','Complainant portal'];
   const isLogin = (n)=> LOGIN_CHECKS.some(p=> (n||'').indexOf(p)===0);
   const loginChecks = (d.checks||[]).filter(c=>isLogin(c.name));
   const otherChecks = (d.checks||[]).filter(c=>!isLogin(c.name));
@@ -10584,7 +10584,7 @@ async function loadHealth() {
   // Where a broken way in is fixed. Nothing is "fixed" by a button that only refreshes a
   // number — these open the screen that holds the missing data.
   const loginFix = (name)=>{
-    if (name.indexOf('Branch login')===0)     return {label:'Branch contacts →', panel:'branches'};
+    if (name.indexOf('Authorized Partner login')===0)     return {label:'Authorized Partner contacts →', panel:'branches'};
     if (name.indexOf('Subscriber login')===0) return {label:'Accounts →',        panel:'accounts'};
     if (name==='Staff login')                 return {label:'Staff →',           panel:'staff'};
     if (name==='Complainant portal')          return {label:'All claims →',      panel:'claims'};
@@ -10664,7 +10664,7 @@ async function loadHealth() {
       <div style="display:flex;gap:.5rem;flex-wrap:wrap">
         <button class="btn-sm btn-ghost" onclick="exportCSV('claims')">📄 Claims</button>
         <button class="btn-sm btn-ghost" onclick="exportCSV('accounts')">📄 Accounts</button>
-        <button class="btn-sm btn-ghost" onclick="exportCSV('branches')">📄 Branches</button>
+        <button class="btn-sm btn-ghost" onclick="exportCSV('branches')">📄 Authorized Partners</button>
         <button class="btn-sm btn-ghost" onclick="exportCSV('tasks')">📄 Tasks</button>
       </div>
     </div>
@@ -10736,7 +10736,7 @@ async function loadHealth() {
           <option value="">All targets</option>
           <option value="account">Account</option>
           <option value="staff">Staff</option>
-          <option value="branch">Branch</option>
+          <option value="branch">Authorized Partner</option>
           <option value="claim">Claim</option>
         </select>
       </div>
@@ -12170,19 +12170,19 @@ async function loadWorkflowSettings(){
         <div id="csRoutingMsg" style="font-size:.8rem;margin-top:.55rem"></div>
       </div>
 
-      <h2 style="font-size:1rem;font-weight:700;margin-bottom:.6rem">💳 Branch Billing — Level-2</h2>
+      <h2 style="font-size:1rem;font-weight:700;margin-bottom:.6rem">💳 Authorized Partner Billing — Level-2</h2>
       <div class="card" style="background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:12px;padding:1rem;margin-bottom:1.5rem">
-        <div style="font-size:.82rem;color:var(--nd-text-muted);margin-bottom:.8rem">What a branch pays to move a claim to Level-2 legal. Fully configurable — change the amount or when to charge any time.</div>
+        <div style="font-size:.82rem;color:var(--nd-text-muted);margin-bottom:.8rem">What an Authorized Partner pays to move a claim to Level-2 legal. Fully configurable — change the amount or when to charge any time.</div>
         <div style="display:flex;flex-wrap:wrap;gap:1rem;align-items:end">
           <div>
             <label style="font-size:.75rem;color:var(--nd-text-muted);display:block;margin-bottom:.25rem">Level-2 fee (₹)</label>
             <input id="brFeeInput" type="number" min="0" max="100000" value="${esc(_brFee)}" style="background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);padding:.5rem .6rem;border-radius:8px;width:130px">
           </div>
           <div>
-            <label style="font-size:.75rem;color:var(--nd-text-muted);display:block;margin-bottom:.25rem">When to charge a branch</label>
+            <label style="font-size:.75rem;color:var(--nd-text-muted);display:block;margin-bottom:.25rem">When to charge an Authorized Partner</label>
             <select id="brPolicySel" style="background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);padding:.5rem .6rem;border-radius:8px">
               <option value="l2_only" ${_brPolicy==='l2_only'?'selected':''}>Only when a claim is GO-to-Level-2</option>
-              <option value="all_claims" ${_brPolicy==='all_claims'?'selected':''}>On every branch claim</option>
+              <option value="all_claims" ${_brPolicy==='all_claims'?'selected':''}>On every Authorized Partner claim</option>
               <option value="free" ${_brPolicy==='free'?'selected':''}>Never charge (free)</option>
             </select>
           </div>
@@ -13453,7 +13453,7 @@ async function loadWhatsapp(){
         <div style="margin:.6rem 0;padding:.6rem .8rem;border-left:3px solid rgba(148,163,184,.5);background:rgba(148,163,184,.08);border-radius:0 8px 8px 0">
           <b>🔒 Not verified (everyone, by default)</b><br>
           The bot only explains what NidaanPartner does, what we handle, what it costs and how to start.
-          It will <b>not</b> reveal anything about any customer, claim, payment, document, staff member or branch &mdash;
+          It will <b>not</b> reveal anything about any customer, claim, payment, document, staff member or Authorized Partner &mdash;
           and it will not even confirm whether someone is our customer.
         </div>
         <div style="margin:.6rem 0;padding:.6rem .8rem;border-left:3px solid rgba(34,197,94,.6);background:rgba(34,197,94,.08);border-radius:0 8px 8px 0">
@@ -13470,7 +13470,7 @@ async function loadWhatsapp(){
         type claim, payment, document or account details into it &mdash; ask the person to send the word <b>CODE</b> first.
         The badge on every conversation tells you which mode it is in.
         <br><br>
-        <span style="color:var(--nd-text-faint)">Behind the scenes the bot is also checked on the way out: if it ever tries to send a claim number, an email, a phone number, a branch code or an amount to an unverified chat, that message is blocked and replaced automatically.</span>
+        <span style="color:var(--nd-text-faint)">Behind the scenes the bot is also checked on the way out: if it ever tries to send a claim number, an email, a phone number, an Authorized Partner code or an amount to an unverified chat, that message is blocked and replaced automatically.</span>
       </div>
     </details>
 
@@ -16407,7 +16407,7 @@ async function l2QuerySend(claimId, preset){
         ? '<label style="display:flex;gap:.45rem;align-items:center;font-size:.86rem">'
           + '<input type="checkbox" id="qSendCc" checked> Copy by email to: '
           + cc.map(function(p){ return esc(p.label + (p.name ? ' (' + p.name + ')' : '')); }).join(', ') + '</label>'
-        : '<div style="font-size:.78rem;color:var(--nd-text-faint)">No branch or subscriber email to copy.</div>')
+        : '<div style="font-size:.78rem;color:var(--nd-text-faint)">No Authorized Partner or subscriber email to copy.</div>')
     + '<div style="font-size:.78rem;color:var(--nd-text-muted)">When they answer on WhatsApp, the super admins '
     + 'and you are told at once.</div>',
     'Send once', async function(){
@@ -20566,7 +20566,7 @@ async function saveBranchBilling(){
     method:'PUT', headers:{...hdrs(),'Content-Type':'application/json'},
     body: JSON.stringify({branch_l2_fee: fee, branch_charge_policy: policy})
   });
-  if (r.ok){ _opsSettingsCache = null; if(msg){msg.style.color='#22c55e'; msg.textContent='Saved ✓';} ndUI.toast('Branch billing updated','success'); }
+  if (r.ok){ _opsSettingsCache = null; if(msg){msg.style.color='#22c55e'; msg.textContent='Saved ✓';} ndUI.toast('Authorized Partner billing updated','success'); }
   else { const d = await r.json().catch(()=>({})); if(msg){msg.style.color='#f87171'; msg.textContent=_extractErr(d,'Failed');} }
 }
 

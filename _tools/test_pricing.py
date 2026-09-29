@@ -154,10 +154,11 @@ async def main():
     for path in ("sarathi_biz.py", "biz_nidaan.py"):
         src = io.open(path, encoding="utf-8").read()
         tree = ast.parse(src)
+        lines = src.splitlines()          # once: get_source_segment re-splits the file per call
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
-            body = ast.get_source_segment(src, node) or ""
+            body = "\n".join(lines[node.lineno - 1:node.end_lineno])
             asks = bool(charging.search(body)) or ("_create_rzp_payment_link(" in body
                                                   and node.name != "_create_rzp_payment_link")
             if not asks:

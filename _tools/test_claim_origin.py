@@ -135,9 +135,9 @@ async def main():
     check("a staff referral code resolves to the PERSON",
           staff is not None and "TAMANNA VASHISHTHA" in staff["value"], all_text(d))
     check("...and is NOT presented as a branch",
-          find(d, "Branch") is None, all_text(d))
+          find(d, "Authorized Partner") is None, all_text(d))
     check("...and the headline does not claim a branch raised it",
-          "branch portal" in d["how"]["label"].lower(), d["how"])
+          "authorized partner portal" in d["how"]["label"].lower(), d["how"])
     check("...while still showing the code, so it can be traced",
           staff and "SP-GJG7BA" in staff["detail"], staff)
     check("the subscriber is named, not just numbered",
@@ -151,7 +151,7 @@ async def main():
 
     # ── a real branch ───────────────────────────────────────────────────────
     d = await n.claim_origin(2)
-    br = find(d, "Branch")
+    br = find(d, "Authorized Partner")
     check("a real branch code resolves to the branch, by name",
           br is not None and "BIAORA BRANCH" in br["value"], all_text(d))
     check("...with its city and code beside it",
@@ -188,7 +188,7 @@ async def main():
     d = await n.claim_origin(7)
     house = find(d, "Billing account")
     check("a REAL branch's house account still reads as the branch's own",
-          house is not None and "branch" in (house["detail"] or "").lower(), all_text(d))
+          house is not None and "authorized partner" in (house["detail"] or "").lower(), all_text(d))
 
     # ── no channel recorded ─────────────────────────────────────────────────
     d = await n.claim_origin(5)

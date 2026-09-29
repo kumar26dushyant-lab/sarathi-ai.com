@@ -642,12 +642,12 @@ async def send_nidaan_branch_login_email(to_email: str, magic_url: str, otp: str
     Sent as Nidaan Partner (info@nidaanpartner.com). Mobile-first single-column layout."""
     greeting = f"Hi {name}," if name else "Hi,"
     if welcome:
-        title = "Your Nidaan Partner branch login is ready"
-        intro = ("<p>Your branch portal has been set up. Tap the button below to log in "
+        title = "Your Nidaan Partner login is ready (Authorized Partner)"
+        intro = ("<p>Your Authorized Partner portal has been set up. Tap the button below to log in "
                  "instantly — no password needed.</p>")
     else:
-        title = "Log in to your Nidaan Partner branch portal"
-        intro = ("<p>Tap the button below to log in to your branch portal instantly — "
+        title = "Log in to your Nidaan Partner portal (Authorized Partner)"
+        intro = ("<p>Tap the button below to log in to your Authorized Partner portal instantly — "
                  "no password needed.</p>")
     button = f"""
 <div style="text-align:center;margin:1.6rem 0">
@@ -674,7 +674,7 @@ async def send_nidaan_branch_login_email(to_email: str, magic_url: str, otp: str
 <p style="color:#64748b;font-size:13px;margin-top:24px">
   You can always log in later at <strong>nidaanpartner.com/nidaan/branch</strong> using this email address.
   If you did not expect this email, you can safely ignore it.</p>"""
-    subject = title if welcome else (f"Nidaan Partner Branch Login Code: {otp}" if otp else title)
+    subject = title if welcome else (f"Nidaan Partner login code: {otp} (Authorized Partner)" if otp else title)
     return await send_email(
         to_email,
         subject,

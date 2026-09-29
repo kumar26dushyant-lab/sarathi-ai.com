@@ -34,7 +34,7 @@ DB_PATH = db.DB_PATH
 ROLE_LABEL = {
     "complainant": "Complainant",
     "subscriber": "Subscriber",
-    "branch": "Branch / My Business",
+    "branch": "Authorized Partner / My Business",
     "channel_partner": "Channel Partner",
     "staff": "Staff",
 }
@@ -261,7 +261,7 @@ async def dashboard_link(party: dict, claim_id: Optional[int] = None) -> str:
 _LINK_CTA = {
     "complainant": "Open your case to upload documents or check progress",
     "subscriber": "Open your dashboard — upload documents for all your cases in one place",
-    "branch": "Open your branch dashboard for the full picture",
+    "branch": "Open your Authorized Partner dashboard for the full picture",
     "staff": "Open My Business in ops",
 }
 
