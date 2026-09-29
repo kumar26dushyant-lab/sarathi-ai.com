@@ -696,10 +696,10 @@ async def _run_branch_unpaid_sweep() -> int:
         try:
             await email_svc.send_email(
                 to_email=to,
-                subject=f"Reminder: lead under branch {L['branch_code']} still unpaid",
+                subject=f"Reminder: lead under Authorized Partner {L['branch_code']} still unpaid",
                 html_body=(
                     f"<p>Hello {_esc(L.get('branch_name') or L.get('branch_city') or L['branch_code'])} team,</p>"
-                    f"<p>This customer signed up under your branch code <b>{_esc(L['branch_code'])}</b> "
+                    f"<p>This customer signed up under your Authorized Partner code <b>{_esc(L['branch_code'])}</b> "
                     f"and started a ₹499 review, but <b>has still not paid</b>:</p>"
                     f"<ul><li><b>Name:</b> {_esc(L.get('owner_name'))}</li>"
                     f"<li><b>Phone:</b> {_esc(L.get('phone'))}</li>"

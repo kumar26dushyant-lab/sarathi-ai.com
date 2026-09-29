@@ -937,7 +937,7 @@ async def nidaan_branch_request_otp(body: BranchOtpReq, request: Request):
         phone = (branch.get("contact_phone") or "").strip()
         if not phone:
             return JSONResponse(
-                {"detail": "We do not have a mobile number for this branch. Use email, or ask the "
+                {"detail": "We do not have a mobile number for this Authorized Partner. Use email, or ask the "
                            "office to add your number."}, status_code=400)
         import biz_nidaan_whatsapp as _wa
         msisdn = _wa.normalize_msisdn(phone)
@@ -948,7 +948,7 @@ async def nidaan_branch_request_otp(body: BranchOtpReq, request: Request):
                 # Last resort: if the template is somehow unavailable, a free-form message still
                 # works for a branch that HAS written to us recently. Outside that window this
                 # fails too, which is no worse than not trying.
-                text = ("Your NidaanPartner branch login code is %s. It expires in 10 minutes. "
+                text = ("Your NidaanPartner Authorized Partner login code is %s. It expires in 10 minutes. "
                         "We will never ask you for this code." % result["otp"])
                 _fallback = await _wa.send_text(msisdn, text)
                 if _fallback.get("ok"):
@@ -1011,7 +1011,7 @@ async def nidaan_branch_verify_otp(body: BranchVerifyReq, request: Request):
         raise HTTPException(status_code=401, detail="Invalid or expired code")
     branch = await nidaan.get_branch_by_email(email)
     if not branch:
-        raise HTTPException(status_code=403, detail="This email is not a branch login")
+        raise HTTPException(status_code=403, detail="This email is not an Authorized Partner login")
     token = nidaan.create_branch_token(branch["branch_code"])
     return {"access_token": token, "branch_code": branch["branch_code"], "name": branch.get("name") or ""}
 
@@ -1058,7 +1058,7 @@ async def nidaan_branch_me(request: Request):
         raise HTTPException(status_code=401, detail="Unauthorized")
     recon = await nidaan.get_branch_reconciliation(code)
     if not recon:
-        raise HTTPException(status_code=404, detail="Branch not found")
+        raise HTTPException(status_code=404, detail="Authorized Partner not found")
     return {"branch": recon}
 
 
@@ -1226,7 +1226,7 @@ async def nidaan_branch_raise_claim(body: _BranchClaimReq, request: Request):
     try:
         import biz_nidaan_notifications as _nnot
         # Reliable all-channel ops alert (bell + email + Telegram) for branch-raised claims.
-        asyncio.create_task(_nnot.on_ops_claim_raised(claim_id, raised_by=f"Branch/Partner {code}"))
+        asyncio.create_task(_nnot.on_ops_claim_raised(claim_id, raised_by=f"Authorized Partner {code}"))
     except Exception:
         pass
     return {"claim_id": claim_id, "status": "intimated"}
@@ -3090,10 +3090,10 @@ async def _notify_branch_signup(branch_code: str, owner_name: str, email: str, p
         label = _esc(branch.get("name") or branch.get("city") or branch_code)
         await email_svc.send_email(
             to_email=to,
-            subject=f"New signup under your branch {branch_code} — payment pending",
+            subject=f"New signup under your Authorized Partner {branch_code} — payment pending",
             html_body=(
                 f"<p>Hello {label} team,</p>"
-                f"<p>A customer just signed up on Nidaan Partner using your branch code "
+                f"<p>A customer just signed up on Nidaan Partner using your Authorized Partner code "
                 f"<b>{_esc(branch_code)}</b>:</p>"
                 f"<ul><li><b>Name:</b> {_esc(owner_name)}</li>"
                 f"<li><b>Email:</b> {_esc(email)}</li>"
@@ -3127,10 +3127,10 @@ async def _run_branch_unpaid_sweep() -> int:
         try:
             await email_svc.send_email(
                 to_email=to,
-                subject=f"Reminder: lead under branch {L['branch_code']} still unpaid",
+                subject=f"Reminder: lead under Authorized Partner {L['branch_code']} still unpaid",
                 html_body=(
                     f"<p>Hello {_esc(L.get('branch_name') or L.get('branch_city') or L['branch_code'])} team,</p>"
-                    f"<p>This customer signed up under your branch code <b>{_esc(L['branch_code'])}</b> "
+                    f"<p>This customer signed up under your Authorized Partner code <b>{_esc(L['branch_code'])}</b> "
                     f"and started a ₹499 review, but <b>has still not paid</b>:</p>"
                     f"<ul><li><b>Name:</b> {_esc(L.get('owner_name'))}</li>"
                     f"<li><b>Phone:</b> {_esc(L.get('phone'))}</li>"
@@ -6217,7 +6217,7 @@ async def nidaan_razorpay_webhook(request: Request):
         _prod = _notes.get("product", "") or _notes.get("purpose", "")
         _kind = {"nidaan": "Subscription", "nidaan_claim_499": "₹499/₹2000 review",
                  "nidaan_review_999": "Review", "nidaan_review": "Review",
-                 "nidaan_branch_l2": "Branch Level-2", "nidaan_plink": "Payment link"}.get(_prod, _prod or "Payment")
+                 "nidaan_branch_l2": "Authorized Partner Level-2", "nidaan_plink": "Payment link"}.get(_prod, _prod or "Payment")
         _amt = int(_pe.get("amount", 0) or 0) // 100
         _reason = (_pe.get("error_description") or _pe.get("error_reason") or "").strip()
         _contact = (_pe.get("contact") or _pe.get("email") or "").strip()
@@ -8102,7 +8102,7 @@ async def ops_case_report(claim_id: int, request: Request):
         if pr and pr[0]:
             fee = "\u20b9%s paid (%s)" % (
                 ("%.2f" % (pr[0] / 100.0)).rstrip("0").rstrip("."),
-                "review fee" if pr[1] == "per_claim_review" else "branch Level-2 fee")
+                "review fee" if pr[1] == "per_claim_review" else "Authorized Partner Level-2 fee")
         else:
             fee = "Not paid"
 
@@ -10469,7 +10469,7 @@ async def ops_update_branch(branch_code: str, body: OpsBranchUpdate, request: Re
     if not await nidaan.update_branch(branch_code, status=body.status,
                                       contact_email=body.contact_email, share_pct=body.share_pct,
                                       contact_phone=body.contact_phone):
-        raise HTTPException(status_code=404, detail="Branch not found, invalid number, or nothing to update")
+        raise HTTPException(status_code=404, detail="Authorized Partner not found, invalid number, or nothing to update")
     _bb = [x for x in ((f"status={body.status}" if body.status else ""),
                        ("email updated" if body.contact_email is not None else ""),
                        ("WhatsApp updated" if body.contact_phone is not None else ""),
@@ -13581,7 +13581,7 @@ async def ops_impersonate_branch(branch_code: str, request: Request):
     caller = _require_staff(request, "sub_super_admin")
     branch = await nidaan.get_branch(branch_code)
     if not branch:
-        raise HTTPException(status_code=404, detail="Branch not found")
+        raise HTTPException(status_code=404, detail="Authorized Partner not found")
     token = nidaan.create_branch_token(branch["branch_code"])
     logger.warning("BRANCH_IMPERSONATE: staff_id=%d entering branch=%s dashboard",
                    caller["staff_id"], branch["branch_code"])
@@ -13994,9 +13994,9 @@ async def _subsystem_checks() -> list:
         # visible - it is why a complainant never hears from us - but amber, and it says where.
         _chk("Contact reachability", True,
              (f"{_nob} branch(es) without WhatsApp, {_noc} claim(s) with no phone at all"
-              if (_nob + _noc) else "every branch and claim has a contact"),
+              if (_nob + _noc) else "every Authorized Partner and claim has a contact"),
              level=("attention" if (_nob + _noc) else "ok"),
-             where="Branches · Claims")
+             where="Authorized Partners · Claims")
     except Exception as _e:
         _chk("Contact reachability", False, f"check failed: {str(_e)[:70]}")
     # Backups — silent backup failure is the classic invisible disaster.
@@ -14133,20 +14133,20 @@ async def _login_checks() -> list:
         # Serious, and still not a subsystem failure: the login system works, these records are
         # incomplete. Amber with the branch codes in it is more actionable than a red ✗ on a
         # working service.
-        _chk("Branch login — a way in", True,
-             "all %d active branches have an email or a mobile" % total if not stranded
-             else "%d of %d branches have NEITHER an email nor a mobile and cannot log in at "
+        _chk("Authorized Partner login — a way in", True,
+             "all %d active Authorized Partners have an email or a mobile" % total if not stranded
+             else "%d of %d Authorized Partners have NEITHER an email nor a mobile and cannot log in at "
                   "all: %s" % (len(stranded), total, ", ".join(stranded[:8])),
              level=("attention" if stranded else "ok"), where="Branches")
         # Email is the only channel most branches have today; the founder's plan is to make
         # WhatsApp primary once every branch has a mobile on file, so track the gap.
-        _chk("Branch login — WhatsApp fallback", bool(with_phone),
-             "%d of %d branches have a mobile, so the rest have email as their only way in"
-             % (len(with_phone), total) if total else "no active branches")
+        _chk("Authorized Partner login — WhatsApp fallback", bool(with_phone),
+             "%d of %d Authorized Partners have a mobile, so the rest have email as their only way in"
+             % (len(with_phone), total) if total else "no active Authorized Partners")
     except Exception as _e:  # noqa: BLE001
-        _chk("Branch login — a way in", False, "check failed: %s" % str(_e)[:70])
+        _chk("Authorized Partner login — a way in", False, "check failed: %s" % str(_e)[:70])
 
-    _delivery("branch", "Branch login — code delivery",
+    _delivery("branch", "Authorized Partner login — code delivery",
               "codes to our own domain go via Gmail SMTP (Workspace discards our domain "
               "arriving from a third party)")
 
@@ -14182,30 +14182,30 @@ async def _login_checks() -> list:
                 except (TypeError, ValueError):
                     _stale = False
             if _fell_back and not _stale:
-                _chk("Branch login — sender name", False,
+                _chk("Authorized Partner login — sender name", False,
                      "switched on, but the last code still went out via %s — Workspace is "
                      "refusing the %s password. Press Test the sender for the exact reason."
                      % (_last_via, _ws_user))
             elif _fell_back:
-                _chk("Branch login — sender name", True,
+                _chk("Authorized Partner login — sender name", True,
                      "now sent through Workspace as %s. The last code (before this was switched "
                      "on) went via %s — the next one will confirm the new setting."
                      % (_ws_user, _last_via))
             else:
-                _chk("Branch login — sender name", True,
+                _chk("Authorized Partner login — sender name", True,
                      "mail to our own domain is sent through Workspace as %s%s"
                      % (_ws_user, (" · last code confirmed via %s" % _last_via) if _last_via
                         else " · no code sent yet to confirm it"))
         else:
-            _chk("Branch login — sender name", False,
-                 "branch codes go out as %s and show as \"External\" — the %s app password is "
+            _chk("Authorized Partner login — sender name", False,
+                 "Authorized Partner login codes go out as %s and show as \"External\" — the %s app password is "
                  "%s. Regenerate it in Google Workspace, put it in biz.env, then set "
                  "NIDAAN_SMTP_ENABLED=1 and press Test the sender."
                  % (os.getenv("SMTP_USER") or "the Gmail account",
                     _ws_user or "info@nidaanpartner.com",
                     "not switched on" if (_ws_user and _ws_pass) else "not configured"))
     except Exception as _e:  # noqa: BLE001
-        _chk("Branch login — sender name", False, "check failed: %s" % str(_e)[:70])
+        _chk("Authorized Partner login — sender name", False, "check failed: %s" % str(_e)[:70])
 
     # ── Subscriber (advisor) login ──────────────────────────────────────────
     try:
@@ -14497,7 +14497,7 @@ async def ops_health_action(body: OpsHealthAction, request: Request):
             _sent = await email_svc.send_email(
                 _to,
                 "Nidaan Partner login path test",
-                "<h2>Login delivery test</h2><p>This message travelled the same path a branch "
+                "<h2>Login delivery test</h2><p>This message travelled the same path an Authorized Partner "
                 "login code takes. If you are reading it in your inbox, that path works. If you "
                 "found it in spam, the codes are arriving but people will not see them.</p>",
                 from_name="Nidaan Partner",
@@ -14536,7 +14536,7 @@ async def ops_health_action(body: OpsHealthAction, request: Request):
                 _on = os.getenv("NIDAAN_SMTP_ENABLED", "0") == "1"
                 result = {"message": ("%s accepted the password. %s" % (_u,
                           "Mail to our own domain already goes out under this name." if _on
-                          else "Now set NIDAAN_SMTP_ENABLED=1 in biz.env and restart, and branch "
+                          else "Now set NIDAAN_SMTP_ENABLED=1 in biz.env and restart, and Authorized Partner "
                                "codes will go out as this address instead of the Gmail one.")),
                           "ok_auth": True}
             except Exception as _se:  # noqa: BLE001
