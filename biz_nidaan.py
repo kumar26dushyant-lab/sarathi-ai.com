@@ -5869,8 +5869,70 @@ async def activate_from_razorpay_webhook(
     return "new"
 
 
+async def stop_razorpay_autopay(rzp_sub: str) -> bool:
+    """Tell Razorpay to stop charging this subscription now. True when Razorpay says it is
+    cancelled (or already was). A local 'cancelled' with the autopay still running is how a
+    customer who cancelled was charged again the next month and quietly re-activated."""
+    rzp_sub = (rzp_sub or "").strip()
+    if not rzp_sub.startswith("sub_"):
+        return True                      # a one-time order: nothing recurs
+    if os.getenv("NIDAAN_NO_OUTBOUND") == "1":
+        logger.info("NIDAAN_NO_OUTBOUND: not cancelling %s at Razorpay", rzp_sub)
+        return True
+    kid = os.getenv("NIDAAN_RAZORPAY_KEY_ID") or os.getenv("RAZORPAY_KEY_ID", "")
+    ksec = os.getenv("NIDAAN_RAZORPAY_KEY_SECRET") or os.getenv("RAZORPAY_KEY_SECRET", "")
+    if not (kid and ksec):
+        return False
+    try:
+        import httpx
+        async with httpx.AsyncClient() as c:
+            r = await c.post(f"https://api.razorpay.com/v1/subscriptions/{rzp_sub}/cancel",
+                             auth=(kid, ksec), json={"cancel_at_cycle_end": 0}, timeout=20)
+        if r.status_code == 200 and (r.json() or {}).get("status") == "cancelled":
+            return True
+        # Already cancelled / completed at Razorpay is the outcome we wanted.
+        g = await _razorpay_sub_status(rzp_sub, kid, ksec)
+        if g in ("cancelled", "completed", "expired"):
+            return True
+        logger.error("Razorpay refused to cancel %s: HTTP %s, now %s", rzp_sub, r.status_code, g)
+    except Exception as e:  # noqa: BLE001
+        logger.error("Razorpay cancel failed for %s: %s", rzp_sub, type(e).__name__)
+    return False
+
+
+async def _razorpay_sub_status(rzp_sub: str, kid: str, ksec: str) -> str:
+    try:
+        import httpx
+        async with httpx.AsyncClient() as c:
+            r = await c.get(f"https://api.razorpay.com/v1/subscriptions/{rzp_sub}",
+                            auth=(kid, ksec), timeout=15)
+        return str((r.json() or {}).get("status") or "") if r.status_code == 200 else ""
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 async def cancel_nidaan_subscription(account_id: int) -> bool:
-    """Mark all active subscriptions for an account as cancelled."""
+    """Cancel every active plan on the account - at Razorpay first (so the autopay stops),
+    then in our books. If Razorpay will not confirm, the super admins are told at once so a
+    person stops it by hand; our record is cancelled either way, as the customer asked."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        subs = [r[0] for r in await (await conn.execute(
+            "SELECT razorpay_subscription_id FROM nidaan_subscriptions "
+            "WHERE account_id=? AND status='active'", (account_id,))).fetchall()]
+    not_stopped = [s for s in subs if not await stop_razorpay_autopay(s or "")]
+    if not_stopped:
+        try:
+            import biz_nidaan_notifications as nn
+            ids = [a["staff_id"] for a in await nn._super_admin_staff()]
+            if ids:
+                await nn.notify_staff_inapp(
+                    ids, "\u26a0\ufe0f A cancelled plan's autopay could not be stopped",
+                    "Account #%s cancelled their plan, but Razorpay did not confirm the autopay "
+                    "stopped: %s\n\nPlease cancel it in the Razorpay dashboard today, or the "
+                    "customer will be charged again." % (account_id, ", ".join(not_stopped)),
+                    event_key="payment.autopay_stop_failed", email=True)
+        except Exception as e:  # noqa: BLE001
+            logger.error("autopay-stop alert failed: %s", e)
     async with aiosqlite.connect(DB_PATH) as conn:
         await conn.execute(
             "UPDATE nidaan_subscriptions SET status='cancelled', cancelled_at=CURRENT_TIMESTAMP "
@@ -5897,21 +5959,7 @@ async def request_account_deletion(account_id: int) -> dict:
     IMMEDIATELY (Razorpay subscription cancelled + local record + Sarathi bundle
     torn down); the account is soft-deleted ('deletion_pending') with a grace
     window for undo. A scheduled sweep hard-purges the PII after the grace."""
-    sub = await get_active_subscription(account_id)
-    rzp_sub = (sub or {}).get("razorpay_subscription_id", "") or ""
-    if rzp_sub.startswith("sub_"):
-        try:
-            import httpx
-            # Nidaan's own Razorpay account (falls back to shared keys until configured)
-            kid = os.getenv("NIDAAN_RAZORPAY_KEY_ID") or os.getenv("RAZORPAY_KEY_ID", "")
-            ksec = os.getenv("NIDAAN_RAZORPAY_KEY_SECRET") or os.getenv("RAZORPAY_KEY_SECRET", "")
-            if kid and ksec:
-                async with httpx.AsyncClient() as c:
-                    await c.post(f"https://api.razorpay.com/v1/subscriptions/{rzp_sub}/cancel",
-                                 auth=(kid, ksec), json={"cancel_at_cycle_end": 0}, timeout=20)
-        except Exception as e:
-            logger.warning("Razorpay cancel during deletion failed (acct %d): %s", account_id, e)
-    await cancel_nidaan_subscription(account_id)
+    await cancel_nidaan_subscription(account_id)     # stops the Razorpay autopay too
     try:
         await apply_bundle_teardown(account_id, reason="account_deleted", grace_days=0)
     except Exception:
@@ -5943,6 +5991,7 @@ async def execute_account_erasure(account_id: int) -> dict:
     account row. KEEPS nidaan_subscriptions (financial record) — those reference
     only account_id, which now points at an anonymised shell."""
     from pathlib import Path as _Path
+    await cancel_nidaan_subscription(account_id)     # an erased account is never billed again
     async with aiosqlite.connect(DB_PATH) as conn:
         claim_ids = [r[0] for r in await (await conn.execute(
             "SELECT claim_id FROM nidaan_claims WHERE account_id=?", (account_id,))).fetchall()]

@@ -196,6 +196,23 @@ regulator). The ops config box is for what changes, and is **additive only**: a 
 sender can set red, never green. Unrecognised is amber; only our own mail and service notices are
 cleared.
 
+### Who is still allowed in (30 Sep)
+
+A token proves who someone WAS at login. `biz_nidaan_access.still_open(kind, key)` is the one
+answer to "still allowed in?" for subscriber accounts (`acct`: active or deletion_pending - an
+allowlist), Authorized Partners (`branch`: active) and staff (`staff`: active, not archived). It is
+read per request with a 30 s cache and FAILS CLOSED without caching the failure. `_nidaan_bearer`,
+`_branch_bearer` and `_staff_still_active` call it - a new login type must too. Staff Telegram
+(`tg.notify_staff`) and push (`push_to_staff`) also check status at the send.
+
+Ending a plan: `cancel_nidaan_subscription` is the only door, and it stops the Razorpay autopay
+first (`stop_razorpay_autopay`, the only copy of that call); a refusal alerts super-admins
+(`payment.autopay_stop_failed`). Never mark a plan cancelled anywhere else.
+
+The word is **Authorized Partner (AP)** in anything a person reads (Hindi: अधिकृत पार्टनर); `branch`
+stays in routes, columns and event keys. Never tell a subscriber how much of their plan they have
+used.
+
 ### The document splitter
 
 Jobs belong to a staff member (`biz_nidaan_doc_store`), three open at a time, and the fourth ASKS

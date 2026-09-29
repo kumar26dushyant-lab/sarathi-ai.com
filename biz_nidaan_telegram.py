@@ -3061,8 +3061,12 @@ async def notify_staff(staff_id: int, text: str, url: Optional[str] = None,
     if not await is_enabled():
         return (False, "telegram_disabled")
     async with aiosqlite.connect(db.DB_PATH) as conn:
+        # Only while they are still active: an inactive staffer keeps the link until archived,
+        # and not every caller filters first (policy: zero connection once they are out).
         chats = [r[0] for r in await (await conn.execute(
-            "SELECT chat_id FROM nidaan_staff_telegram WHERE staff_id=?", (staff_id,))).fetchall()]
+            "SELECT t.chat_id FROM nidaan_staff_telegram t JOIN nidaan_staff s "
+            "ON s.staff_id=t.staff_id WHERE t.staff_id=? AND s.status='active' "
+            "AND s.deleted_at IS NULL", (staff_id,))).fetchall()]
     if not chats:
         return (False, "not_linked")
     buttons = []

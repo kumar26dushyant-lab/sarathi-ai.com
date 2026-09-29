@@ -1,7 +1,64 @@
 # Taking claims on WhatsApp — design for discussion
 
-_Draft 2 · 29 Sep 2026 · nothing here is built yet. The page version (flows + fallbacks) is at
+_Draft 3 · 30 Sep 2026 · nothing here is built yet. The page version (flows + fallbacks) is at
 https://claude.ai/artifact/AvFK6bxXWtmRGPr8XH9FQC._
+
+## Draft 3 — founder's decisions and findings, 30 Sep 2026
+
+**Decided:** OTP from the registered number once per 30-day session (any other number: every
+time). All other recommendations accepted: insurer top-12 list, CP owned by the staff member who
+registered them (backup: on-duty intake), a small local model allowed for message sorting.
+
+**Never mention plan or quota usage.** No "Silver plan, 1 of 3 claims used". The bot greets and
+asks what they need; limits are checked silently at the end with the same server rules as the
+website, and if one is hit the bot offers upgrade / Rs 499 + GST single review / "our team will
+call you" — without counting anything.
+
+**Same intake as the website.** Every door writes through `submit_claim`, but the six web doors
+check different things around it (review of 30 Sep):
+
+| Door | Complainant mobile/email checked | Checklist made | Rejection letter ticked | Who is told |
+|---|---|---|---|---|
+| Subscriber dashboard | insured only | yes | no (untyped upload) | staff + admin email |
+| Start page (lead) | same route | yes | yes | lead alert |
+| AP portal | yes | no | no | staff |
+| Staff for a subscriber | **none** | only with a typed upload | yes | staff; **subscriber not told** |
+| Staff My Business | yes | no | no | staff |
+| Rs 499 review | purchaser email by code | no | — | only on the page-verify path |
+
+Plan: one `intake` module (checks + the "after" step: checklist, timeline, event, notifications)
+called by every door; WhatsApp is the seventh door on the same two calls. Fix first: Rs 499
+review documents stay on the purchase and never reach the claim; Rs 499 payments confirmed by
+webhook/recovery do not write the ledger (verify against live first); the raw
+`quota_exceeded_<plan>` code shown to subscribers; the plan's amount cap is page-only.
+
+**Documents:** complainant page should show every file on their claim (today only files uploaded
+on that page — WhatsApp files are missing); staff document access should follow the per-claim
+rule; referrers see received/missing, not files (proposed).
+
+**People who have left (done 30 Sep):** subscriber and AP tokens re-checked per request
+(`biz_nidaan_access`, fails closed); staff check fails closed; inactive staff get no Telegram or
+push; WhatsApp does not recognise suspended accounts or disabled APs; Cancel stops the Razorpay
+autopay (it did not — the next charge re-activated the plan), so does ops' erase. **Proposed:**
+plan ended + 3-day grace → dashboard shows only welcome-back/renew; registered claims keep being
+worked for the complainant; past subscribers on WhatsApp get a warm welcome and a renew link,
+nothing private; former staff are first-time visitors. **Open:** staff logins never expire
+(recommend a "logins before this moment are void" stamp); archived claims' portal links; 48 h
+signed document links; legacy shared admin key.
+
+**Follow-up restart (proposed):** automatic reminders are off globally on live; after two
+reminders a claim is handed to staff and cannot be restarted. Buttons: *Start reminders again*
+(fresh cycle on this claim, even with the global switch off), *I'll follow up myself* (no
+automatic messages; the staffer is reminded on Telegram on a date they pick), *Book the
+customer's time* (built).
+
+**"Your day" (for agreement, not built):** one Telegram message ~9:30 IST, at most 5 items —
+overdue tasks, claims not moved for 5+ days, new documents to check, a customer waiting 4+ working
+hours, calls due, unconfirmed contacts (folded in), dates within 3 days; nothing on a quiet day or
+on leave; super-admins get the team view. Each item: Done / Later today / Not my focus → someone
+else (suggested reassignment, nothing moves on its own) / waiting on customer (aside until reply
+or 3 days) / already done (listed weekly as a recording gap) / other (aside 3 days, reason on the
+timeline). Rules only, no AI.
 
 ## Founder's decisions, 29 Sep 2026
 
@@ -99,7 +156,7 @@ Every step: buttons first, typing only where needed; **"Change"**, **"Talk to a 
 
 | Step | Bot asks | Checks |
 |---|---|---|
-| S0 | *"Namaste Uttam ji — Silver plan, 1 of 3 claims used this month. Raise a new claim?"* `[Yes]` `[Something else]` | Plan **active**? Quota left? (§4a) |
+| S0 | *"Namaste Uttam ji 🙏 Raise a new claim?"* `[Yes]` `[Something else]` — **never** the plan name or claims used (30 Sep) | Plan active and limits are checked silently at S9 (§4a) |
 | S1 | *Whose claim is it? Write the insured person's full name.* | 2–80 letters |
 | S2 | *Their mobile number* (the complainant — we will send them updates) | 10 digits; not the subscriber's own unless they say so |
 | S3 | *Type of claim* `[Health]` `[Life]` `[Motor]` `[Other]` | — |
@@ -114,8 +171,8 @@ Every step: buttons first, typing only where needed; **"Change"**, **"Talk to a 
 **4a. Plan limits, said plainly — never a dead end:**
 - Plan **not active / expired** → *"Your plan has ended. Renew here: (link). Your answers are saved
   — once you renew, reply here and we continue."* Draft kept.
-- **Quota used up** this month → *"You have used all 3 claims this month. Options:"*
-  `[Upgrade plan]` `[₹499 single review]` `[Talk to us]` — **DECIDE** which options to offer.
+- **Quota used up** → *"This claim is not covered by your current plan. Two easy ways forward:"*
+  `[Upgrade plan]` `[₹499 + GST review of this claim]` `[Talk to us]` — no counts, ever (30 Sep).
 - **Amount above the plan cap** (Silver ≤ ₹5 L, Gold ≤ ₹10 L, Platinum ≤ ₹50 L) → same three
   options, with the reason.
 

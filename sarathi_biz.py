@@ -691,11 +691,21 @@ def _nidaan_ops_page_with_role(role: str) -> HTMLResponse:
 
 
 def _nidaan_bearer(request: Request) -> Optional[dict]:
-    """Extract and verify Nidaan JWT from Authorization header."""
+    """Extract and verify Nidaan JWT from Authorization header - and confirm the account is
+    still open. A signature alone kept a suspended or erased account working for 30 days."""
     h = request.headers.get("Authorization", "")
     if h.startswith("Bearer "):
-        return nidaan.verify_nidaan_token(h[7:])
+        p = nidaan.verify_nidaan_token(h[7:])
+        if p and _row_still_open("acct", p.get("sub")):
+            return p
     return None
+
+
+def _row_still_open(kind: str, key) -> bool:
+    """Is this account / Authorized Partner / staff member still allowed in? One answer, in
+    biz_nidaan_access (per request, 30 s cache, fails closed)."""
+    import biz_nidaan_access as _acc
+    return _acc.still_open(kind, key)
 
 
 # ── Nidaan Razorpay credentials (SEPARATE account from Sarathi) ──────────────
@@ -872,10 +882,13 @@ async def nidaan_branch_page(request: Request):
 
 # ── Branch portal API (affiliate self-service; email-OTP auth, scoped to one branch) ──
 def _branch_bearer(request: Request) -> Optional[str]:
-    """Extract + verify a branch-portal token → branch_code, or None."""
+    """Extract + verify a branch-portal token → branch_code, or None. A disabled Authorized
+    Partner is out on its next request, not when its 7-day token runs out."""
     h = request.headers.get("Authorization", "")
     if h.startswith("Bearer "):
-        return nidaan.verify_branch_token(h[7:])
+        code = nidaan.verify_branch_token(h[7:])
+        if code and _row_still_open("branch", code):
+            return code
     return None
 
 
@@ -10005,30 +10018,12 @@ async def nidaan_api_admin_update_claim(
 # Staff JWTs carry no expiry, and the token alone can't tell us if the staffer was
 # later archived/deactivated. Re-check the DB (cached ~30s) so a removed staffer's live
 # session stops working promptly instead of lingering forever. {staff_id: (active, ts)}
-_staff_active_cache: dict = {}
-_STAFF_ACTIVE_TTL = 30.0  # seconds
 
 
 def _staff_still_active(staff_id: int) -> bool:
-    import time as _t, sqlite3 as _sq
-    now = _t.monotonic()
-    hit = _staff_active_cache.get(staff_id)
-    if hit and (now - hit[1]) < _STAFF_ACTIVE_TTL:
-        return hit[0]
-    active = True
-    try:
-        conn = _sq.connect(nidaan.DB_PATH, timeout=3)
-        try:
-            row = conn.execute(
-                "SELECT status, deleted_at FROM nidaan_staff WHERE staff_id=?",
-                (staff_id,)).fetchone()
-        finally:
-            conn.close()
-        active = bool(row) and (row[1] is None) and (row[0] == "active")
-    except Exception:
-        active = True   # fail-open on a DB blip — don't lock out all staff at once
-    _staff_active_cache[staff_id] = (active, now)
-    return active
+    # The same per-request check as subscribers and Authorized Partners (biz_nidaan_access):
+    # 30 s cache, and it fails CLOSED - it used to let every token in on a database read error.
+    return _row_still_open("staff", staff_id)
 
 
 def _get_staff_from_request(request: Request) -> Optional[dict]:

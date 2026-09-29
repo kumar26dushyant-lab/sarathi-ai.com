@@ -8124,3 +8124,24 @@ real ask: RECORD what each person did so the next one knows whether to nudge, tu
 reminders or book a time - built as "Follow-up so far" on every claim, which also exposed that
 automatic reminders are off for everyone. SOP now opens with the team's action items; a short
 five-point announcement replaces the long one.
+
+## 30 Sep 2026 (night) — access ends when the account ends; "branch" is "Authorized Partner"
+
+**Founder, 30 Sep:** rename branch to Authorized Partner everywhere, on priority; revoke access for
+unpaid/cancelled subscribers and disabled/deleted users everywhere (the WhatsApp bot recognises
+them but shares nothing; ex-subscribers get a warm welcome back and can re-subscribe on WhatsApp;
+former staff are strangers); never remind a subscriber of plan or quota usage; WhatsApp intake must
+follow the web intake exactly; staff can restart document follow-up and choose automatic or by
+hand; "Your day" agreed in principle - scenarios first, then build.
+
+**Shipped:** the rename (user-facing EN/HI/Hinglish; routes, schema, event keys unchanged);
+`biz_nidaan_access` (per-request re-check for subscriber, AP and staff tokens, allowlist, fails
+closed); Cancel and ops' erase stop the Razorpay autopay (they did not - a cancelled plan was
+charged and re-activated on the next cycle); inactive staff receive no Telegram or push; WhatsApp
+no longer recognises suspended accounts or disabled APs.
+
+**Found and written up, not built** (draft 3, https://claude.ai/artifact/AvFK6bxXWtmRGPr8XH9FQC and
+`docs/WHATSAPP_CLAIMS_DESIGN.md`): the six web intake doors check different things around the one
+`submit_claim` (Phase 0 = one intake module for all doors, WhatsApp the seventh); Rs 499 review
+documents never reach the claim; complainant page hides WhatsApp files; staff logins never expire.
+Five decisions are with the founder (see TODO "Waiting on the founder" 3f).

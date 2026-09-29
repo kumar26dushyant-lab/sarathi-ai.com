@@ -1,5 +1,27 @@
 # Staff Announcement Drafts
 
+## 2026-09-30 (short) — "Branch" is now "Authorized Partner (AP)"
+
+_For: all staff. Not yet sent._
+
+**EN**
+
+🏢 **"Branch" is now "Authorized Partner (AP)"**
+
+From today our partner offices are called **Authorized Partners (AP)** everywhere — the ops screens, their portal, emails and WhatsApp. Please use the same words with customers and partners.
+
+Nothing else changes: the same partners, the same codes (e.g. PUNEICD-01), the same login page (**nidaanpartner.com/nidaan/branch**). A **Channel Partner (CP)** is still a CP.
+
+**HI**
+
+🏢 **"ब्रांच" अब "अधिकृत पार्टनर (AP)" है**
+
+आज से हमारे पार्टनर ऑफ़िस हर जगह **अधिकृत पार्टनर (Authorized Partner, AP)** कहलाएँगे — ops स्क्रीन, उनका पोर्टल, ईमेल और WhatsApp पर। ग्राहकों और पार्टनरों से बात करते समय भी यही शब्द इस्तेमाल कीजिये।
+
+बाक़ी कुछ नहीं बदला: वही पार्टनर, वही कोड (जैसे PUNEICD-01), वही लॉगिन पेज (**nidaanpartner.com/nidaan/branch**)। **चैनल पार्टनर (CP)** अब भी CP ही है।
+
+---
+
 ## 2026-09-29 (short) — Documents: what changes from today  ← SEND THIS ONE
 
 _For: everyone who collects or files claim documents. Replaces the long draft below._

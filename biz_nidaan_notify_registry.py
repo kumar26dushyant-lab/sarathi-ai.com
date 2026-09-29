@@ -57,6 +57,8 @@ EVENTS = [
        "हर सुबह: कल के Razorpay भुगतान बनाम हमारे खाते", "Super admins", locked=True),
     _e("payment.price_guard", "money", "A payment was stopped before it started - wrong amount",
        "गलत राशि - भुगतान शुरू होने से पहले रोका गया", "Super admins", locked=True),
+    _e("payment.autopay_stop_failed", "money", "A cancelled plan's autopay could not be stopped",
+       "रद्द प्लान का ऑटो-पे रुक नहीं पाया", "Super admins", locked=True),
     _e("payment.failed", "money", "A payment failed",
        "भुगतान विफल हुआ", "Super admins + whoever tried to pay", locked=True),
     _e("payment.failed.ref", "money", "A failed payment was chased again",

@@ -95,7 +95,7 @@ async def resolve(msisdn: str) -> dict:
             # 2) Subscriber (account holder).
             a = await (await c.execute(
                 "SELECT account_id, owner_name FROM nidaan_accounts "
-                "WHERE deleted_at IS NULL AND REPLACE(REPLACE(COALESCE(phone,''),' ',''),'-','') LIKE ? "
+                "WHERE deleted_at IS NULL AND COALESCE(status,'active')='active' AND REPLACE(REPLACE(COALESCE(phone,''),' ',''),'-','') LIKE ? "
                 "LIMIT 1", (like,))).fetchone()
             if a:
                 a = dict(a)
@@ -105,7 +105,7 @@ async def resolve(msisdn: str) -> dict:
             # 3) Branch / My-Business partner.
             b = await (await c.execute(
                 "SELECT branch_code, name FROM nidaan_branches "
-                "WHERE REPLACE(REPLACE(COALESCE(contact_phone,''),' ',''),'-','') LIKE ? LIMIT 1",
+                "WHERE status='active' AND REPLACE(REPLACE(COALESCE(contact_phone,''),' ',''),'-','') LIKE ? LIMIT 1",
                 (like,))).fetchone()
             if b:
                 b = dict(b)

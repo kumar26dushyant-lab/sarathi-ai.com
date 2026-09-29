@@ -140,12 +140,13 @@ async def _registered_email(identity: dict) -> str:
                     return ((dict(r).get("complainant_email") if r else "") or "").strip()
             if role == "subscriber" and aid:
                 r = await (await c.execute(
-                    "SELECT email FROM nidaan_accounts WHERE account_id=? AND deleted_at IS NULL",
+                    "SELECT email FROM nidaan_accounts WHERE account_id=? AND deleted_at IS NULL "
+                    "AND COALESCE(status,'active')='active'",
                     (aid,))).fetchone()
                 return ((dict(r).get("email") if r else "") or "").strip()
             if role == "branch":
                 r = await (await c.execute(
-                    "SELECT contact_email FROM nidaan_branches WHERE branch_code=?",
+                    "SELECT contact_email FROM nidaan_branches WHERE branch_code=? AND status='active'",
                     ((identity.get("branch_code") or "").upper(),))).fetchone()
                 return ((dict(r).get("contact_email") if r else "") or "").strip()
             if role == "staff":

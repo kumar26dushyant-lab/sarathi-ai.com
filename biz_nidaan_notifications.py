@@ -1196,8 +1196,10 @@ async def push_to_staff(staff_ids: list[int], title: str, body: str,
     async with aiosqlite.connect(db.DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         rows = [dict(r) for r in await (await conn.execute(
-            f"SELECT sub_id, endpoint, p256dh, auth FROM nidaan_push_subscriptions "
-            f"WHERE staff_id IN ({ph})", ids)).fetchall()]
+            f"SELECT p.sub_id, p.endpoint, p.p256dh, p.auth FROM nidaan_push_subscriptions p "
+            f"JOIN nidaan_staff s ON s.staff_id=p.staff_id "
+            f"WHERE p.staff_id IN ({ph}) AND s.status='active' AND s.deleted_at IS NULL",
+            ids)).fetchall()]
     if not rows:
         return 0
     payload = json.dumps({"title": title, "body": (body or "")[:300],

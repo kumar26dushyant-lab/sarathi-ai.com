@@ -17,8 +17,8 @@ it. Newest first within each group._
 | 3 | **Send the 29 Sep announcement** | The SHORT one at the top of `ANNOUNCEMENTS.md` (five points, EN + HI) |
 | 3b | **Deploy `1329aaa` after 6pm IST** (or on his go) | Referrers' "still missing" shown only when the claim really collects documents. Committed and pushed, NOT deployed - it was working hours |
 | 3e | **Historic ledger rows with an odd GST split** (Aug - mid Sep: Rs 588.00 / 589.00 / 590, a few with no GST) | Not touched - needs his and the accountant's say before any correction |
-| 3f | **WhatsApp claims: 4 open points** | OTP on every claim or once per 30 days; responsible staff for a CP; insurer list; a small local AI model |
-| 3c | **WhatsApp claim intake - 7 decisions** | `docs/WHATSAPP_CLAIMS_DESIGN.md` (verification, minimum to register, quota/cap options, CP rules, staff on Telegram, nudge count, Gemini) |
+| 3f | **Draft 3 of the WhatsApp/intake page - 5 decisions** (30 Sep) | https://claude.ai/artifact/AvFK6bxXWtmRGPr8XH9FQC "For you to decide": plan ended -> keep working registered claims + 3-day grace; referrers see received/missing not files; the three follow-up buttons; "Your day" scenarios; rename the existing "Branch XYZ - house account" names (display only) |
+| 3c | **WhatsApp claim intake** - all 29 Sep points decided 30 Sep (OTP once per 30-day session; rest as recommended; never mention plan/quota usage) | Build order in the page: Phase 0 = one intake for the six web doors first |
 | 3d | **1 claim raised on behalf of a subscriber whose plan is not active** | Found checking L2 exemptions (origin `ops_on_behalf`, 22 claims, 21 on an active plan). Not wrong by itself - worth a look |
 | 3a | **Automatic document reminders are OFF for everyone** (`wa_doc_collection_enabled` never set) | Staff now SEE this in "Follow-up so far". Turning it on is his decision |
 | 4 | **Test the radar** with authority-sounding wording once forwarding lands | He said he will; the code is ready for direct and forwarded mail |
@@ -27,7 +27,10 @@ it. Newest first within each group._
 ### Nidaan — built, not finished
 | # | What | State |
 |---|---|---|
-| 1 | **Branch → Authorized Partner (AP) rename** | Agreed long ago, never done. My recommendation stands: user-facing strings EN+HI only; leave the route `/nidaan/branch` (already in sent emails) and the schema alone |
+| 1 | **One intake for every door (Phase 0)** | Review 30 Sep: six web doors check different things around `submit_claim`. Build one `intake` module (checks + after-step) all doors call; then WhatsApp. Fix first: Rs 499 review docs never reach the claim; raw `quota_exceeded_<plan>` shown to subscribers; plan amount cap page-only |
+| 1b | **Rs 499 payments confirmed by webhook/recovery write no ledger row** (agent finding, 30 Sep) | Verify on live before changing - the daily Razorpay check may already be reconciling these |
+| 1c | **Access, still open** | Staff logins never expire and a re-created login ID can revive an old token (add a "void before" stamp on archive / role change / password reset); archived claims' portal links; 48 h signed doc links; legacy `NIDAAN_ADMIN_TOKEN` API - check whether it is set on the server |
+| 1d | **Subscriber profile says "Claims used"** (all-time count) | Founder, 30 Sep: never remind subscribers of usage. Ask whether to relabel or drop it |
 | 2 | **Correction Support** — fixing a claim's chain (My Business / subscriber / direct / branch / CP / staff) | Discussed, not designed. Must handle commission and revenue impact |
 | 3 | **DPDP 10-day advance reminder** to super-admin Telegram | Raised 27 Sep, not built |
 | 4 | **Splitter: rules do not yet re-run on an open job** | Teaching a rule improves the NEXT file. Re-reading the open one is a small addition |
@@ -94,6 +97,32 @@ complainant-picks-the-time built and deployed **OFF**; page linter hole closed.
 **Earlier on 29 Sep:** 📂 **Claim-level sets LIVE**: the three bundles build
 themselves from the documents already on a claim, with a per-claim arrange switch. 📘 SOP
 updated and fixed (it never opened for a signed-in staff member). 📢 Announcement drafted.
+
+### 🔐 30 Sep — ACCESS ENDS WHEN THE ACCOUNT ENDS; "BRANCH" IS "AUTHORIZED PARTNER"
+
+Founder: *"if anyone not paid or cancelled their subscription, their access should be revoked...
+once access changed or any user of nidaanpartner.com deleted or disabled they should not have
+access for anything"* and *"we have not converted 'branch' word to 'Authorized Partner'... fix
+this on priority everywhere"*.
+
+- **Rename** (`a7e1771`, `d90d920`): every word a person reads - EN, HI (अधिकृत पार्टनर), Hinglish.
+  Routes, columns, event keys unchanged. App Health check names renamed in all five places at
+  once (their stored state is keyed by name: a renamed check starts fresh). First pass also
+  rewrote `API('/branches')` and `?ctx=branch` - caught in review and repaired before commit.
+- **`biz_nidaan_access.still_open(kind, key)`** - one per-request answer for subscriber accounts
+  (allowlist: active, deletion_pending), Authorized Partners (active) and staff (active, not
+  archived); 30 s cache; FAILS CLOSED and does not cache the failure. `_nidaan_bearer`,
+  `_branch_bearer` and `_staff_still_active` all call it. Before: subscriber tokens were
+  signature-only for 30 days, AP tokens for 7, and the staff check let everyone in on a DB error.
+- **Cancel stops the autopay.** `cancel_nidaan_subscription` now asks Razorpay first
+  (`stop_razorpay_autopay`, the only copy of that call); if Razorpay will not confirm, super-admins
+  get `payment.autopay_stop_failed`. Before: dashboard Cancel stopped nothing at Razorpay and the
+  next `subscription.charged` flipped the row back to active. Ops' erase now cancels too.
+- **Inactive staff hear nothing:** `tg.notify_staff` and `push_to_staff` join `nidaan_staff`
+  on active status - the single doors every staff Telegram message and push goes through.
+- **WhatsApp:** identity and code lookups skip suspended accounts and disabled APs.
+- Test: `_tools/test_access_revoke.py` (44 checks; sabotage of the allowlist and the WA filter
+  fails it). `test_pricing` scan now 18 s (was a 5-min timeout).
 
 ### 📂 29 Sep — THE SETS ARE ON THE CLAIM
 

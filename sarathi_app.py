@@ -663,6 +663,13 @@ def _nidaan_ops_page_with_role(role: str) -> HTMLResponse:
                                        "Pragma": "no-cache", "Expires": "0"})
 
 
+def _row_still_open(kind: str, key) -> bool:
+    """Is this account / Authorized Partner / staff member still allowed in? One answer, in
+    biz_nidaan_access (per request, 30 s cache, fails closed)."""
+    import biz_nidaan_access as _acc
+    return _acc.still_open(kind, key)
+
+
 # ── Page routes ───────────────────────────────────────────────────────────────
 
 @app.get("/google3df0c6b7c9115ee9.html", response_class=PlainTextResponse, include_in_schema=False)
@@ -958,30 +965,12 @@ _register_doc_routes()
 # Staff JWTs carry no expiry, and the token alone can't tell us if the staffer was
 # later archived/deactivated. Re-check the DB (cached ~30s) so a removed staffer's live
 # session stops working promptly instead of lingering forever. {staff_id: (active, ts)}
-_staff_active_cache: dict = {}
-_STAFF_ACTIVE_TTL = 30.0  # seconds
 
 
 def _staff_still_active(staff_id: int) -> bool:
-    import time as _t, sqlite3 as _sq
-    now = _t.monotonic()
-    hit = _staff_active_cache.get(staff_id)
-    if hit and (now - hit[1]) < _STAFF_ACTIVE_TTL:
-        return hit[0]
-    active = True
-    try:
-        conn = _sq.connect(nidaan.DB_PATH, timeout=3)
-        try:
-            row = conn.execute(
-                "SELECT status, deleted_at FROM nidaan_staff WHERE staff_id=?",
-                (staff_id,)).fetchone()
-        finally:
-            conn.close()
-        active = bool(row) and (row[1] is None) and (row[0] == "active")
-    except Exception:
-        active = True   # fail-open on a DB blip — don't lock out all staff at once
-    _staff_active_cache[staff_id] = (active, now)
-    return active
+    # The same per-request check as subscribers and Authorized Partners (biz_nidaan_access):
+    # 30 s cache, and it fails CLOSED - it used to let every token in on a database read error.
+    return _row_still_open("staff", staff_id)
 
 
 def _get_staff_from_request(request: Request) -> Optional[dict]:
