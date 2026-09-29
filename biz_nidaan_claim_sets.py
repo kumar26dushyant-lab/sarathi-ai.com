@@ -70,7 +70,7 @@ async def claim_documents(claim_id: int) -> list:
 
 # Bump when the way a document is identified changes (new file names, new page signals), so
 # every claim re-reads once instead of keeping the old answer until somebody presses the button.
-READER_VERSION = 4
+READER_VERSION = 5
 
 
 def _fingerprint(docs: list, rules: list = ()) -> str:
