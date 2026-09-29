@@ -1,6 +1,25 @@
 # Taking claims on WhatsApp — design for discussion
 
-_Draft 1 · 29 Sep 2026 · nothing here is built yet. Decisions needed are marked **DECIDE**._
+_Draft 2 · 29 Sep 2026 · nothing here is built yet. The page version (flows + fallbacks) is at
+https://claude.ai/artifact/AvFK6bxXWtmRGPr8XH9FQC._
+
+## Founder's decisions, 29 Sep 2026
+
+1. **Verification: WhatsApp OTP** to the registered WhatsApp number (approved template
+   `np_login_code`). Note: from the registered number itself it is a deliberate confirmation;
+   from any other number it is mandatory. 3 wrong codes -> 30-min lock + super-admins told.
+2. **Minimum to register:** insured/patient name, complainant mobile (who talks to us), claim
+   type, insurer (pick from a numbered list), what happened, other required details, and the
+   **rejection letter**. Everything else is a named pending item.
+3. **Quota / cap exceeded:** offer upgrade or Rs 499 + GST single review in conversation; no
+   interest -> "talk to us" and the team is notified.
+4. **CP:** staff take responsibility. The bot drafts; the responsible staff member is told on
+   Telegram; their replies (Telegram or dashboard) go to the CP over the official WhatsApp.
+5. **Staff:** Telegram bot, web dashboard, mobile web app - never WhatsApp.
+6. **Nudges:** two automatic, then a staff task.
+7. **AI:** review the whole bot; intake uses no AI; rules first, a small local model next, an
+   outside model only for wording with placeholders - never real PII or documents.
+
 
 Founder, 29 Sep: *"can we start taking claims on whatsapp from paid subscribers? guiding them step
 by step … identify the right person raising claims for whom … if it's subscriber we can take claims
