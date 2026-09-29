@@ -24,7 +24,7 @@ try { if (localStorage.getItem('nidaan_ops_token')) document.documentElement.cla
 <link rel="apple-touch-icon" href="/static/nidaan_logo.png">
 <script src="/static/_err.js?v=1"></script>
 <script src="/static/nidaan_insurers.js?v=1"></script>
-<script src="/static/nidaan_partner_claims.js?v=4"></script>
+<script src="/static/nidaan_partner_claims.js?v=5"></script>
 <script src="/static/nidaan_theme.js?v=2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -6570,7 +6570,7 @@ async function openClaimDrawer(claimId) {
       }</span></div>
       <div class="kv"><span class="kv-label">Level-2</span><span class="kv-val">${
         c.l2_payment_status==='paid'
-          ? '<span style="background:#065f46;color:#6ee7b7;padding:.12rem .5rem;border-radius:10px;font-size:.74rem;font-weight:700">Queued for legal ✓</span> <span style="color:var(--nd-text-muted);font-size:.72rem">'+(c.l2_fee_paid?('₹'+fmt(c.l2_fee_paid)+' paid'):'no charge')+'</span>'
+          ? '<span style="background:#065f46;color:#6ee7b7;padding:.12rem .5rem;border-radius:10px;font-size:.74rem;font-weight:700">Queued for legal ✓</span> <span style="color:var(--nd-text-muted);font-size:.72rem">'+(c.l2_fee_paid?('₹'+fmt(c.l2_fee_paid)+' + GST paid'):'no charge')+'</span>'
           : (c.review_outcome==='can_fight'?'<span style="background:#78350f;color:#fcd34d;padding:.12rem .5rem;border-radius:10px;font-size:.74rem;font-weight:700">Awaiting branch payment</span>':'—')
       }</span></div>
       ${c.l2_paid_at?`<div class="kv"><span class="kv-label">L2 paid</span><span class="kv-val">${fmtDate(c.l2_paid_at)}</span></div>`:''}
@@ -12525,7 +12525,7 @@ async function loadPaymentLinks(){
     const rows = links.map(l=>`<tr>
       <td style="padding:.4rem .5rem">${esc(l.customer_name||'—')}<br><span style="font-size:.72rem;color:var(--nd-text-faint)">${esc(l.customer_phone||'')}</span></td>
       <td style="padding:.4rem .5rem">${esc(l.purpose)}${l.plan?(' · '+esc(l.plan)):''}</td>
-      <td style="padding:.4rem .5rem">₹${Math.round((l.amount_paise||0)/100)}</td>
+      <td style="padding:.4rem .5rem">₹${Math.round((l.amount_paise||0)/100)} + GST</td>
       <td style="padding:.4rem .5rem">${badge(l.status||'created')}</td>
       <td style="padding:.4rem .5rem;font-size:.72rem;color:var(--nd-text-faint)">${l.created_at?fmtDate(l.created_at):''}</td>
       <td style="padding:.4rem .5rem">${l.short_url&&l.status!=='paid'?('<button class="nd-btn nd-btn-sm nd-btn-ghost" onclick="navigator.clipboard.writeText(\''+esc(l.short_url)+'\');this.textContent=\'✓\'">📋</button>'):''}</td>

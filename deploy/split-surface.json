@@ -217,6 +217,7 @@
   "_handler_ids",
   "_latency_stats",
   "_login_checks",
+  "_money_words",
   "_nidaan_account_from_payload",
   "_nidaan_admin_auth",
   "_nidaan_bearer",
@@ -235,6 +236,7 @@
   "_ops_audit",
   "_plan_label",
   "_prefs_safe",
+  "_price_ok",
   "_reconcile_admin_payment_link",
   "_req_source",
   "_require_owner",
@@ -1029,6 +1031,7 @@
     "_is_nidaan_host",
     "_nidaan_rzp_id",
     "_nidaan_rzp_secret",
+    "_price_ok",
     "app",
     "limiter"
    ],
@@ -1038,6 +1041,7 @@
     "_is_nidaan_host",
     "_nidaan_rzp_id",
     "_nidaan_rzp_secret",
+    "_price_ok",
     "app",
     "limiter"
    ]
@@ -1101,6 +1105,7 @@
     "_is_nidaan_host",
     "_nidaan_rzp_id",
     "_nidaan_rzp_secret",
+    "_price_ok",
     "app",
     "limiter"
    ],
@@ -1109,6 +1114,7 @@
     "_branch_claim_row",
     "_create_rzp_payment_link",
     "_is_nidaan_host",
+    "_price_ok",
     "app",
     "limiter"
    ]
@@ -1603,6 +1609,7 @@
     "_is_nidaan_host",
     "_nidaan_rzp_id",
     "_nidaan_rzp_secret",
+    "_price_ok",
     "_require_staff",
     "_staff_active_cache",
     "_staff_still_active",
@@ -1613,6 +1620,7 @@
     "_AdminPayLinkReq",
     "_create_rzp_payment_link",
     "_is_nidaan_host",
+    "_price_ok",
     "_require_staff",
     "app",
     "limiter"
@@ -2388,6 +2396,7 @@
     "_nidaan_bearer",
     "_nidaan_rzp_id",
     "_nidaan_rzp_secret",
+    "_price_ok",
     "app",
     "limiter"
    ],
@@ -2396,6 +2405,7 @@
     "_nidaan_bearer",
     "_nidaan_rzp_id",
     "_nidaan_rzp_secret",
+    "_price_ok",
     "app",
     "limiter"
    ]
@@ -2528,6 +2538,7 @@
     "_nidaan_bearer",
     "_nidaan_rzp_id",
     "_nidaan_rzp_secret",
+    "_price_ok",
     "app",
     "limiter"
    ],
@@ -2536,6 +2547,7 @@
     "_nidaan_bearer",
     "_nidaan_rzp_id",
     "_nidaan_rzp_secret",
+    "_price_ok",
     "app",
     "limiter"
    ]
@@ -3239,6 +3251,7 @@
     "_is_nidaan_host",
     "_nidaan_rzp_id",
     "_nidaan_rzp_secret",
+    "_price_ok",
     "app",
     "limiter"
    ],
@@ -3247,6 +3260,7 @@
     "_is_nidaan_host",
     "_nidaan_rzp_id",
     "_nidaan_rzp_secret",
+    "_price_ok",
     "app",
     "limiter"
    ]
@@ -3486,6 +3500,7 @@
    "reaches": [
     "_create_rzp_payment_link",
     "_finalize_paid_claim",
+    "_money_words",
     "_nidaan_retry_email_html",
     "_nidaan_rzp_id",
     "_nidaan_rzp_secret",
@@ -7578,6 +7593,7 @@
     "_is_nidaan_host",
     "_nidaan_rzp_id",
     "_nidaan_rzp_secret",
+    "_price_ok",
     "_require_staff",
     "_staff_active_cache",
     "_staff_claim_code",
@@ -7590,6 +7606,7 @@
     "_is_nidaan_host",
     "_nidaan_rzp_id",
     "_nidaan_rzp_secret",
+    "_price_ok",
     "_staff_claim_code",
     "app",
     "limiter"
@@ -7669,6 +7686,7 @@
     "_nidaan_rzp_id",
     "_nidaan_rzp_secret",
     "_ops_audit",
+    "_price_ok",
     "_require_staff",
     "_staff_active_cache",
     "_staff_claim_code",
@@ -7682,6 +7700,7 @@
     "_create_rzp_payment_link",
     "_is_nidaan_host",
     "_ops_audit",
+    "_price_ok",
     "_staff_claim_code",
     "app",
     "limiter",

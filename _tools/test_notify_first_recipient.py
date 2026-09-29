@@ -129,7 +129,9 @@ async def main():
     body = src[src.index("async def on_branch_l2_paid"):]
     body = body[:body.index("\nasync def ", 10)]
     check("its title starts with Payment RECEIVED when a fee was paid",
-          'f"🟢 Payment RECEIVED — Level-2 fee Rs.{fee}' in body, body[:200])
+          'f"🟢 Payment RECEIVED — Level-2 fee {_money}' in body, body[:200])
+    check("...and the amount is what the LEDGER says was charged, GST included",
+          "FROM nidaan_payments WHERE claim_id=?" in body and "+ GST" in body, body[:400])
 
     print("\n%s\n" % ("ALL GOOD" if not FAILED else "%d FAILED" % FAILED))
     return 1 if FAILED else 0

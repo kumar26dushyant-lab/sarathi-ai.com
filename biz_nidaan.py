@@ -2082,6 +2082,9 @@ async def mark_l2_paid(claim_id: int, branch_code: str, fee: int, payment_id: st
 
 
 # ── Razorpay Payment Links (branch L2 share-links + super-admin generated) ────
+# nidaan_payment_links.amount_paise is the BASE fee in paise - GST is charged on top by
+# charge_with_gst when the link is created. One meaning for every writer (the staff Level-2 route
+# used to store the GST-inclusive total, so the same column meant two things).
 async def record_payment_link(plink_id: str, short_url: str, purpose: str, amount_paise: int, *,
                               claim_id: Optional[int] = None, plan: Optional[str] = None,
                               account_id: Optional[int] = None, branch_code: Optional[str] = None,
@@ -2131,8 +2134,13 @@ async def mark_payment_link_paid(plink_id: str, razorpay_payment_id: str = "",
     # links materialise a sub/purchase/claim and are recorded via those funnels (no double-count).
     if flipped and row and (row["purpose"] or "") == "custom":
         try:
+            # The link stored the BASE; the customer paid base + GST. Book what was charged,
+            # with the split - booked at the base, revenue would silently lose the GST.
+            _base = int(row["amount_paise"] or 0)
+            _tot = int((await charge_with_gst(_base / 100))["total_paise"])
             await record_payment(
-                source="payment_link", total_paise=int(row["amount_paise"] or 0),
+                source="payment_link", total_paise=_tot, base_paise=_base,
+                gst_paise=_tot - _base,
                 dedup_key=(razorpay_payment_id or plink_id), razorpay_payment_id=(razorpay_payment_id or ""),
                 account_id=row["account_id"], claim_id=row["claim_id"],
                 branch_code=(row["branch_code"] or ""), verified=bool(razorpay_payment_id),
@@ -5360,6 +5368,14 @@ async def create_nidaan_razorpay_order(
     _base_paise = amount_paise
     _g = await charge_with_gst(amount_paise / 100)
     amount_paise = _g["total_paise"]
+    # The price guard (biz_nidaan_pricing): refuse, and tell the super admins, if this is not what
+    # the plan costs. Never charge an amount nobody can account for.
+    import biz_nidaan_pricing as _pr
+    try:
+        await _pr.guard(_pr.SUBSCRIPTION, amount_paise, plan=plan)
+    except _pr.PriceMismatch:
+        return {"error": "The price was updated a moment ago. Please refresh and try again - "
+                         "you have not been charged."}
     try:
         import time
         receipt = f"nidaan_{account_id}_{plan}_{int(time.time())}"
@@ -5550,6 +5566,12 @@ async def create_nidaan_recurring_subscription(
     # amount so existing non-GST autopay mandates are grandfathered.
     _gcfg = await gst_config()
     _amt_paise = (await charge_with_gst(_base_paise / 100))["total_paise"]
+    import biz_nidaan_pricing as _pr
+    try:
+        await _pr.guard(_pr.SUBSCRIPTION, _amt_paise, plan=plan)
+    except _pr.PriceMismatch:
+        return {"error": "The price was updated a moment ago. Please refresh and try again - "
+                         "you have not been charged."}
     _gsuf = ("_gst" + str(int(_gcfg["rate"]))) if _gcfg["enabled"] else ""
     # Version the Razorpay plan by the ACTUAL charged amount (…_a<paise>) so a price change
     # spins up a NEW Razorpay plan; existing subscribers stay on their old plan_id and keep

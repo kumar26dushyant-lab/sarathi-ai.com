@@ -37,7 +37,8 @@ Consultancy.
    the route, authorisation on the record id, validation at the boundary, a rate limit if public.
    Fail closed. Never log a credential.
 5. **No live deploys while the IST team is working.** Build, test, commit — deploy after 6pm IST
-   or when he says go.
+   or when he says go. If he says **"hotfix"**, deploy it between 10 am and 6 pm IST. Check
+   `TZ=Asia/Kolkata date` on the server before every deploy.
 6. **Mobile first. Both themes. Three languages** (English, Hindi, Hinglish — total conversion,
    no leftover strings). **Confirm before anything destructive.**
 7. **Tests never reach real people** — `NIDAAN_NO_OUTBOUND=1` on any run against live data.

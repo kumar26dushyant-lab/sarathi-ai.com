@@ -73,6 +73,9 @@ Habits that have caught real faults in this codebase:
 
 - **No live deploys while the IST team is working.** Build, test, commit — deploy after 6pm IST
   or when he says go.
+- **"Hotfix" is the exception** (founder, 29 Sep): when he calls a change a hotfix, deploy it
+  between 10 am and 6 pm IST. **Check the server clock (`TZ=Asia/Kolkata date`) before every
+  deploy** — on 29 Sep one went out at 12:48 IST because nobody looked.
 - Verify from **outside**, and verify the OUTCOME: both sites answering, the new code actually
   served, no tracebacks, the specific thing fixed behaving on real data.
 - `git push` → `sudo systemctl start sarathi-deploy.service` on `161.118.186.201`.

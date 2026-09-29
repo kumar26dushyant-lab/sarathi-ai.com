@@ -1310,6 +1310,7 @@ async def nidaan_branch_l2_pay(claim_id: int, request: Request):
     if not rzp_key_id or not rzp_key_secret:
         raise HTTPException(503, "Payments not configured")
     _l2_paise = (await nidaan.charge_with_gst(fee))["total_paise"]   # + GST when enabled
+    await _price_ok("l2_fee", _l2_paise, claim_id=claim_id)
     import httpx as _httpx3, time as _time3
     receipt = f"l2_{claim_id}_{int(_time3.time())}"[:40]
     async with _httpx3.AsyncClient() as _cl:
@@ -1388,6 +1389,31 @@ async def nidaan_branch_l2_advance(claim_id: int, request: Request):
 
 
 # ── Razorpay Payment Links (shareable link + QR; branch L2 + super-admin) ─────
+async def _money_words(base_paise: int) -> str:
+    """'Rs 588.82 (Rs 499 + GST Rs 89.82)' - what was charged, from a stored base fee."""
+    base = int(base_paise or 0)
+    tot = int((await nidaan.charge_with_gst(base / 100))["total_paise"])
+    if tot == base:
+        return "Rs %s" % ("%.2f" % (base / 100)).rstrip("0").rstrip(".")
+    return "Rs %.2f (Rs %s + GST Rs %.2f)" % (tot / 100, ("%.2f" % (base / 100)).rstrip("0").rstrip("."),
+                                              (tot - base) / 100)
+
+
+async def _price_ok(purpose: str, amount_paise: int, **ctx) -> None:
+    """Immediately before Razorpay is asked for money: is this what the purpose costs?
+
+    One check, at every charging endpoint (biz_nidaan_pricing). A wrong amount is REFUSED - the
+    customer is asked to refresh, nobody is charged - and the super admins are told. 409, and a
+    message a customer can act on; the detail goes to the log and the alert, never to them.
+    """
+    import biz_nidaan_pricing as _pr
+    try:
+        await _pr.guard(purpose, int(amount_paise), **ctx)
+    except _pr.PriceMismatch:
+        raise HTTPException(409, "The price was updated a moment ago. Please refresh the page and "
+                                 "try again - you have not been charged.")
+
+
 async def _create_rzp_payment_link(amount_paise: int, description: str, *,
                                    customer_name: str = "", customer_phone: str = "",
                                    customer_email: str = "", notes: dict = None,
@@ -1576,15 +1602,18 @@ async def nidaan_branch_l2_payment_link(claim_id: int, request: Request):
         raise HTTPException(400, "Level-2 fee already paid for this claim")
     import time as _t
     expire_by = int(_t.time()) + 3 * 24 * 3600   # 3-day validity
+    _l2p = (await nidaan.charge_with_gst(fee))["total_paise"]
+    await _price_ok("l2_fee", _l2p, claim_id=claim_id)
     data = await _create_rzp_payment_link(
-        (await nidaan.charge_with_gst(fee))["total_paise"], f"Nidaan Level-2 fee — Claim #{claim_id}",
+        _l2p, f"Nidaan Level-2 fee — Claim #{claim_id}",
         notes={"product": "nidaan_plink", "purpose": "l2", "claim_id": str(claim_id), "branch": code},
         expire_by=expire_by)
     await nidaan.record_payment_link(
         data["id"], data.get("short_url", ""), "l2", fee * 100,
         claim_id=claim_id, branch_code=code, created_by_type="branch", created_by_id=code,
         description=f"L2 fee claim #{claim_id}", expire_by=expire_by)
-    return {"short_url": data.get("short_url", ""), "plink_id": data["id"], "fee": fee}
+    return {"short_url": data.get("short_url", ""), "plink_id": data["id"], "fee": fee,
+            "total": round(_l2p / 100, 2)}
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -2293,7 +2322,8 @@ async def _reconcile_admin_payment_link(rec: dict, pay_id: str) -> None:
                 "AND status='active' AND deleted_at IS NULL")).fetchall()]
         if ids:
             await _n.notify_staff_inapp(
-                ids, f"💰 Payment link paid — {purpose} ₹{amount_paise // 100}",
+                ids, f"💰 Payment link paid — {purpose} "
+                     + (await _money_words(amount_paise)),
                 f"{name} ({phone or '—'}) paid a {purpose} payment link. Account #{acct_id or '—'}; "
                 f"granted: {granted}. Shows in revenue.\n\nOpen: /nidaan/ops",
                 event_key="payment.link_paid", email=True)
@@ -2323,15 +2353,20 @@ async def nidaan_ops_create_payment_link(body: _AdminPayLinkReq, request: Reques
     if len(phone) != 10:
         raise HTTPException(400, "Enter a valid 10-digit customer mobile")
     purpose = body.purpose
+    # The price of a review or a plan comes from the configuration - the same number every other
+    # payment path charges. It used to be typed by hand for a subscription and fixed at 499 for a
+    # review, which is how one endpoint drifts from the rest. "custom" is the only typed amount.
+    import biz_nidaan_pricing as _pr
     if purpose == "review499":
-        amount = 499
-        desc = "Nidaan — ₹499 claim review"
+        amount = int(await nidaan.review_fee_for(None))
+        desc = "Nidaan — ₹%s claim review" % amount
     elif purpose == "subscription":
         if body.plan not in ("silver", "gold", "platinum", "silver_annual", "gold_annual", "platinum_annual"):
             raise HTTPException(400, "Select a valid subscription plan")
-        amount = int(body.amount)
-        if amount <= 0:
-            raise HTTPException(400, "Enter the subscription amount")
+        try:
+            amount = (await _pr.expected(_pr.SUBSCRIPTION, plan=body.plan))["base_rupees"]
+        except _pr.PriceMismatch:
+            raise HTTPException(400, "That plan has no price set - set it in Plans first")
         desc = f"Nidaan — {body.plan} subscription"
     else:  # custom
         amount = int(body.amount)
@@ -2343,8 +2378,15 @@ async def nidaan_ops_create_payment_link(body: _AdminPayLinkReq, request: Reques
     notes = {"product": "nidaan_plink", "purpose": purpose, "phone": phone}
     if purpose == "subscription":
         notes["plan"] = body.plan
+    _plp = (await nidaan.charge_with_gst(amount))["total_paise"]
+    if purpose == "review499":
+        await _price_ok("review_fee", _plp, disputed_amount=None)
+    elif purpose == "subscription":
+        await _price_ok("subscription", _plp, plan=body.plan)
+    else:
+        await _price_ok("custom", _plp, base_rupees=amount)
     data = await _create_rzp_payment_link(
-        (await nidaan.charge_with_gst(amount))["total_paise"], desc, customer_name=body.customer_name, customer_phone=phone,
+        _plp, desc, customer_name=body.customer_name, customer_phone=phone,
         customer_email=body.customer_email, notes=notes, expire_by=expire_by)
     await nidaan.record_payment_link(
         data["id"], data.get("short_url", ""), purpose, amount * 100,
@@ -3775,6 +3817,7 @@ async def nidaan_claim_pay(claim_id: int, request: Request):
     _fee = await nidaan.review_fee_for(claim["disputed_amount"])
     _g = await nidaan.charge_with_gst(_fee)   # GST: adds tax on top when enabled (else base)
     _amt_paise = _g["total_paise"]
+    await _price_ok("review_fee", _amt_paise, disputed_amount=claim["disputed_amount"])
     import httpx as _httpx2, time as _time2
     rzp_key_id = _nidaan_rzp_id()
     rzp_key_secret = _nidaan_rzp_secret()
@@ -4264,6 +4307,7 @@ async def nidaan_review_pay_by_id(purchase_id: int, request: Request):
     # Item #4: tiered review fee — the purchase already stores the correct amount_paid.
     _base_fee = int(purchase["amount_paid"] or 499)
     _amt_paise = (await nidaan.charge_with_gst(_base_fee))["total_paise"]   # + GST when enabled
+    await _price_ok("review_purchase", _amt_paise, base_rupees=_base_fee)
     receipt = f"nr_{purchase_id}_{int(_time2.time())}"[:40]
     async with _httpx2.AsyncClient() as _client2:
         _r = await _client2.post(
@@ -5382,6 +5426,7 @@ async def nidaan_review_pay(body: NidaanReviewPayReq, request: Request):
         raise HTTPException(status_code=503, detail="Payments not configured")
     _fee = await nidaan.review_fee_for(body.disputed_amount)   # Item #4: tiered review fee
     _amt_paise = (await nidaan.charge_with_gst(_fee))["total_paise"]   # + GST when enabled
+    await _price_ok("review_fee", _amt_paise, disputed_amount=body.disputed_amount)
     receipt = f"nidaan_review_{int(_time.time())}"[:40]
     async with _httpx.AsyncClient() as client:
         r = await client.post(
@@ -10866,6 +10911,7 @@ async def ops_my_l2_pay(claim_id: int, request: Request):
     if not rzp_key_id or not rzp_key_secret:
         raise HTTPException(503, "Payments not configured")
     _l2_paise = (await nidaan.charge_with_gst(fee))["total_paise"]
+    await _price_ok("l2_fee", _l2_paise, claim_id=claim_id)
     import httpx as _httpx4, time as _time4
     receipt = f"sl2_{claim_id}_{int(_time4.time())}"[:40]
     async with _httpx4.AsyncClient() as _cl:
@@ -10964,6 +11010,7 @@ async def ops_my_l2_payment_link(claim_id: int, request: Request):
     if row["l2_payment_status"] == "paid":
         raise HTTPException(400, "Level-2 fee already paid for this claim")
     _l2_paise = (await nidaan.charge_with_gst(fee))["total_paise"]
+    await _price_ok("l2_fee", _l2_paise, claim_id=claim_id)
     import time as _tt
     _exp = int(_tt.time()) + 3 * 24 * 3600
     link = await _create_rzp_payment_link(
@@ -10975,7 +11022,7 @@ async def ops_my_l2_payment_link(claim_id: int, request: Request):
     # question being asked when a claim still reads "Fee not paid yet".
     try:
         await nidaan.record_payment_link(
-            link["id"], link.get("short_url", ""), "l2", _l2_paise,
+            link["id"], link.get("short_url", ""), "l2", fee * 100,
             claim_id=claim_id, branch_code=code, created_by_type="staff",
             created_by_id=str(_staff.get("staff_id") or ""),
             description=f"L2 fee claim #{claim_id} — shared by {_staff.get('name') or 'staff'}",
@@ -10983,7 +11030,8 @@ async def ops_my_l2_payment_link(claim_id: int, request: Request):
     except Exception as _re:  # noqa: BLE001 — a missing audit row must not cost the link
         logger.warning("could not record the L2 payment link for claim %s: %s", claim_id, _re)
     await _ops_audit(request, "l2.pay_link", "claim", str(claim_id), f"₹{fee} link shared")
-    return {"short_url": link.get("short_url"), "fee": fee, "claim_id": claim_id}
+    return {"short_url": link.get("short_url"), "fee": fee, "claim_id": claim_id,
+            "total": round(_l2_paise / 100, 2)}
 
 
 @app.get("/nidaan/ops/api/claims/{claim_id}/payment-attempts")

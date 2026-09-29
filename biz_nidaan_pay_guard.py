@@ -40,6 +40,7 @@ THE CHECKS (each one caught, or would have caught, a real bug)
   10 gateway_unreachable Razorpay keys missing/rejected, or the API unreachable twice in a row.
   11 plan_config         An active plan with no price, or a price that cannot make a valid charge.
   12 guardian_silent     (checked from the web processes) this guardian has not run for 15 minutes.
+  13 price               A payment's base fee or GST split is not what its purpose costs.
 
 ALERTS
   Telegram to every super admin, plus the dashboard bell, with two buttons - and they mean
@@ -960,6 +961,68 @@ async def _check_effects_and_duplicates(findings: list, ran: set) -> None:
 
 
 # ── the run ──────────────────────────────────────────────────────────────────
+async def _check_prices(findings: list, ran: set) -> None:
+    """13 - price: what was taken is what this purpose costs, and the GST split is right.
+
+    The price guard (biz_nidaan_pricing) stops a wrong amount before a charge starts. This looks
+    again AFTER the money moved, at every recorded payment in the window: a review or Level-2 fee
+    must have the configured base fee, a new subscription its plan's configured price, and every
+    one of them GST at the configured rate on top - total = base + GST. Between August and mid-
+    September the same Silver plan was charged Rs 588.00, 589.00, 588.82 and 590 as GST rounding
+    changed in one path and not another; this would have said so the first day.
+
+    Renewals are not price-checked: an autopay mandate keeps the amount it was authorised at
+    (grandfathered by design). Custom links are an amount an admin chose.
+    """
+    ran.add("price")
+    gst = await _n.gst_config()
+    since = await _since()
+    async with aiosqlite.connect(DB_PATH) as c:
+        c.row_factory = aiosqlite.Row
+        rows = [dict(r) for r in await (await c.execute(
+            "SELECT pay_id, source, claim_id, account_id, plan, base_paise, gst_paise, total_paise "
+            "FROM nidaan_payments WHERE created_at >= ? AND status NOT IN ('refunded','duplicate') "
+            "AND source IN ('branch_l2','per_claim_review','subscription')", (since,))).fetchall()]
+    rcfg = await _n.review_fee_config()
+    for r in rows:
+        base, g, total = int(r["base_paise"] or 0), int(r["gst_paise"] or 0), int(r["total_paise"] or 0)
+        problems = []
+        if total != base + g:
+            problems.append("total Rs %.2f is not base Rs %.2f + GST Rs %.2f"
+                            % (total / 100, base / 100, g / 100))
+        if gst["enabled"]:
+            want_g = int(round(round(base / 100 * float(gst["rate"]) / 100, 2) * 100))
+            if abs(g - want_g) > 1:
+                problems.append("GST Rs %.2f, expected Rs %.2f at %s%%"
+                                % (g / 100, want_g / 100, gst["rate"]))
+        elif g:
+            problems.append("GST Rs %.2f taken while GST is switched off" % (g / 100))
+        want_base = None
+        try:
+            if r["source"] == "branch_l2" and r.get("claim_id"):
+                want_base = [int((await _n.branch_l2_fee_for_claim(int(r["claim_id"])))["fee"]) * 100]
+            elif r["source"] == "per_claim_review":
+                want_base = [int(rcfg["low"]) * 100, int(rcfg["high"]) * 100]
+            elif r["source"] == "subscription" and r.get("plan"):
+                cfg = await _n.get_plan_cfg(r["plan"]) or {}
+                if cfg.get("price_paise"):
+                    want_base = [int(cfg["price_paise"])]
+        except Exception as e:  # noqa: BLE001 - an unreadable rule is not evidence of a wrong charge
+            logger.info("price check: rule unreadable for payment %s: %s", r["pay_id"], e)
+        if want_base and base not in want_base:
+            problems.append("base fee Rs %.2f, configured Rs %s" % (
+                base / 100, " or ".join("%.2f" % (w / 100) for w in want_base)))
+        if problems:
+            findings.append({
+                "key": "price:%s" % r["pay_id"], "check": "price", "severity": "warn",
+                "title": "Payment #%s charged differently from the price (%s)"
+                         % (r["pay_id"], r["source"]),
+                "claim_id": r.get("claim_id"), "account_id": r.get("account_id"),
+                "amount_paise": total,
+                "detail": "; ".join(problems) + ". Either the price changed after this payment, "
+                          "or a payment path charged the wrong amount."})
+
+
 async def run_guardian(*, alert: bool = True) -> dict:
     """One pass. Never raises: a guardian that crashes is worse than one that says nothing."""
     findings: list = []
@@ -972,6 +1035,10 @@ async def run_guardian(*, alert: bool = True) -> dict:
         await _check_effects_and_duplicates(findings, ran)
     except Exception as e:  # noqa: BLE001
         logger.error("effects check failed: %s", e)
+    try:
+        await _check_prices(findings, ran)
+    except Exception as e:  # noqa: BLE001
+        logger.error("price check failed: %s", e)
     res = await _sync(findings, ran)
     try:
         await _n.set_ops_setting(HEARTBEAT_KEY, await _now())

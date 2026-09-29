@@ -148,12 +148,15 @@
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d.detail || 'Could not create payment link');
       const url = d.short_url;
-      const wa = 'https://wa.me/?text=' + encodeURIComponent((h ? ('Namaste! Apne insurance claim ka Level-2 legal process shuru karne ke liye ₹' + d.fee + ' yahan pay karein (Nidaan Partner): ') : ('Namaste! Apne insurance claim ka Level-2 legal process shuru karne ke liye ₹' + d.fee + ' yahan pay karein (Nidaan Partner): ')) + url);
+      // The EXACT amount the link charges (fee + GST) - the share text used to say "Rs 499"
+      // for a link that charges Rs 588.82, so the customer was told one amount and charged another.
+      const amt = (d.total != null) ? (String(d.total) + (d.total != d.fee ? (' (' + d.fee + ' + GST)') : '')) : (d.fee + ' + GST');
+      const wa = 'https://wa.me/?text=' + encodeURIComponent((h ? ('Namaste! Apne insurance claim ka Level-2 legal process shuru karne ke liye ₹' + amt + ' yahan pay karein (Nidaan Partner): ') : ('Namaste! To start the Level-2 legal process on your insurance claim, please pay ₹' + amt + ' here (Nidaan Partner): ')) + url);
       const ov = document.createElement('div');
       ov.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(2,12,27,.9);display:flex;align-items:center;justify-content:center;padding:1.2rem';
       ov.innerHTML = '<div style="max-width:420px;width:100%;background:#0f2038;border:1px solid rgba(6,182,212,.4);border-radius:14px;padding:1.4rem">'
         + '<div style="font-weight:800;color:#fff;font-size:1.05rem;margin-bottom:.5rem">🔗 ' + (h ? 'भुगतान लिंक तैयार — क्लेम #' : 'Payment link ready — Claim #') + claimId + '</div>'
-        + '<div style="font-size:.82rem;color:rgba(255,255,255,.6);margin-bottom:.8rem">' + (h ? ('ग्राहक को यह भेजें ताकि वे ₹' + d.fee + ' Level-2 शुल्क दें। 3 दिन मान्य। भुगतान होते ही क्लेम अपने-आप Level-2 पर चला जाएगा।') : ('Share this with your customer to pay the ₹' + d.fee + ' Level-2 fee. Valid 3 days. The claim moves to Level-2 automatically once paid.')) + '</div>'
+        + '<div style="font-size:.82rem;color:rgba(255,255,255,.6);margin-bottom:.8rem">' + (h ? ('ग्राहक को यह भेजें ताकि वे ₹' + amt + ' Level-2 शुल्क दें। 3 दिन मान्य। भुगतान होते ही क्लेम अपने-आप Level-2 पर चला जाएगा।') : ('Share this with your customer to pay the ₹' + amt + ' Level-2 fee. Valid 3 days. The claim moves to Level-2 automatically once paid.')) + '</div>'
         + '<input readonly value="' + esc(url) + '" onclick="this.select()" style="width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);color:#fff;padding:.55rem .7rem;border-radius:8px;font-size:.8rem;margin-bottom:.7rem">'
         + '<div style="display:flex;gap:.5rem;flex-wrap:wrap">'
         + '<button id="npcPlCopy" class="btn btn-primary btn-cyan" style="flex:1">📋 ' + (h ? 'कॉपी' : 'Copy') + '</button>'

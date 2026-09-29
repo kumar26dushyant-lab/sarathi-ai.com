@@ -1809,7 +1809,7 @@ async def on_claim_filed(claim_id: int, account_id: int):
                   f"Case: #{_cn(claim_id)} {claim.get('insured_name','')} ({claim.get('claim_type','')})\n"
                   f"Subscriber: {claim.get('owner_name','')} ({claim.get('account_email','')})\n\n"
                   f"Open: /admin?account={account_id}"),
-            claim_id=claim_id, account_id=account_id)
+            claim_id=claim_id)   # dispatch() takes no account_id - passing one broke every subscriber-filed claim alert from 21 Sep (deploy/verify-call-keywords.py)
     # The Telegram copy goes out with each bell above (dispatch writes a staff bell, and every
     # staff bell mirrors) - a loop here sent the team a second, shorter one.
     # Subscriber: friendly confirmation (slower — sends email/WhatsApp).
@@ -2286,15 +2286,33 @@ async def on_branch_l2_paid(claim_id: int, branch_code: str):
     if not ids:
         return
     fee = int(c.get("l2_fee_paid") or 0)
+    # What was actually CHARGED, from the ledger - not the base fee stored on the claim. The
+    # notice said "Rs.499" for a payment of Rs 588.82 (Khushbu Patel, #236, 29 Sep), which read
+    # as though GST had not been collected.
+    _money = ""
+    try:
+        async with aiosqlite.connect(db.DB_PATH) as conn:
+            _p = await (await conn.execute(
+                "SELECT total_paise, base_paise, gst_paise FROM nidaan_payments WHERE claim_id=? "
+                "AND source='branch_l2' AND status NOT IN ('refunded','duplicate') "
+                "ORDER BY pay_id DESC LIMIT 1", (claim_id,))).fetchone()
+        if _p and int(_p[0] or 0):
+            _t, _b, _g = int(_p[0]), int(_p[1] or 0), int(_p[2] or 0)
+            _money = ("Rs %.2f (Rs %s + GST Rs %.2f)" % (_t / 100, ("%.2f" % (_b / 100)).rstrip("0").rstrip("."), _g / 100)
+                      if _g else "Rs %.2f" % (_t / 100))
+    except Exception as e:  # noqa: BLE001
+        logger.info("could not read the Level-2 payment for claim %s: %s", claim_id, e)
+    if fee and not _money:
+        _money = "Rs %s + GST" % fee
     # This IS the payment notice for a branch Level-2 fee (on_ledger_payment stays quiet for
     # it), so it says PAYMENT first. Titled "Level-2 queued", nobody scanning Telegram read it as
     # the payment alert they were waiting for.
-    subj = (f"🟢 Payment RECEIVED — Level-2 fee Rs.{fee} · #{_cn(claim_id)} "
+    subj = (f"🟢 Payment RECEIVED — Level-2 fee {_money} · #{_cn(claim_id)} "
             f"{c.get('insured_name','')} queued for legal" if fee else
             f"⚖️ Level-2 queued — #{_cn(claim_id)} {c.get('insured_name','')} (no fee)")
     body = (f"Branch {branch_code} moved a claim to Level-2 — queued for the legal team.\n\n"
             f"Case: #{_cn(claim_id)} {c.get('insured_name','')} ({c.get('claim_type','')})\n"
-            f"Level-2 fee: {('Rs.'+str(fee)) if fee else 'no charge (free policy)'}\n\n"
+            f"Level-2 fee: {_money if fee else 'no charge (free policy)'}\n\n"
             f"Open: /nidaan/ops")
     try:
         await notify_staff_inapp(ids, subj, body, event_key="claim.l2_queued", email=True)
