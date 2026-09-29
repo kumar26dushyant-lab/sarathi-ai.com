@@ -229,6 +229,28 @@ Each set downloads as ONE PDF or as **one PDF per document type** in a zip (`bui
 `_render`, which runs in a worker thread. **DC is a discharge card and is filed as the Discharge
 summary (DS)** - founder, 29 Sep; the type label carries "(DS)".
 
+### Money: one price, checked before and after
+
+`biz_nidaan_pricing.expected(purpose, ...)` is the ONE answer to what a payment must cost (Level-2
+fee, review fee, plan, custom), from the shared rules plus `charge_with_gst`. `guard()` runs at
+every place we ask Razorpay for money (`_price_ok` in sarathi_biz); a wrong or unpriceable amount
+is refused and the super admins are told. `_tools/test_pricing.py` scans the code and fails the
+build if a function asks Razorpay for money without it - a new payment path cannot skip it. The
+guardian's check 13 "price" re-checks every recorded payment's base and GST split.
+`nidaan_payment_links.amount_paise` is the BASE fee for every writer. Money shown to a person is
+what was CHARGED (ledger), e.g. "Rs 588.82 (Rs 499 + GST Rs 89.82)". A 09:00 IST message checks
+yesterday's Razorpay captures against the ledger by payment id (`biz_nidaan_pay_daily`).
+
+### The splitter: every format, background reading
+
+Files go one per request into a batch; reading happens in the background (`_docsplit_read_batch`,
+one per process) and the screen polls `/docsplit/{job}/status`. Never read inside a request that
+a person waits on: Cloudflare cuts at 100 s, nginx at 50 MB. Every file becomes pages through
+`biz_doc_convert.to_pdf` - type from the BYTES; Office via a contained LibreOffice. The claim
+screen and the splitter share `brain.read_files`. A filename is a hint: a multi-page file whose
+pages confidently disagree is MIXED and read page by page. "Other" pages stay out of the CIO and
+Claim sets. 40 files per upload (super-admin, up to 100), 30 MB each, every file virus-scanned.
+
 ### The complainant's WhatsApp - reminders and the 24-hour rule
 
 Inside 24 hours of the complainant's last message we may send free text; outside it, only an
@@ -288,6 +310,9 @@ bot becomes a way to enumerate claim numbers).
   per person. Every one-person notice was lost; the founder (staff #1) missed 85, payment alerts
   included. `deploy/verify-use-before-assign.py` is in `check:py` now. A caught exception in a
   send loop is silent success in disguise - count those log lines, do not trust "sent".
+- **A keyword the function does not take** (29 Sep): `dispatch(..., account_id=)` broke every
+  subscriber-filed claim alert from 21 Sep; the self-heal loop delivered them ~13 min late.
+  `deploy/verify-call-keywords.py` (in `check:py`) now fails the build on this shape.
 - **Hindi text in these files mixes two encodings of ज़/फ़/ड़** (one character vs letter + dot).
   They look identical and do not match byte for byte - an exact-match patch anchor fails.
 
