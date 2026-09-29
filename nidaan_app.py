@@ -1150,6 +1150,52 @@ class _BranchClaimReq(BaseModel):
     channel_partner_id: Optional[int] = None   # approved CP credited on a My Business claim
 
 
+class _ReferrerNoteReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    text: str = Field(..., min_length=2, max_length=1000)
+
+
+@app.get("/nidaan/branch/api/referred-claims")
+async def nidaan_branch_referred_claims(request: Request):
+    """Claims filed by customers this AP referred - the ones NOT already in its own raised list."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    code = _branch_bearer(request)
+    if not code:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    import biz_nidaan_referrals as _ref
+    return {"claims": await _ref.referred_claims(code, exclude_raised_by_branch=True)}
+
+
+@app.post("/nidaan/branch/api/referred-claims/{claim_id}/note")
+@limiter.limit("20/minute")
+async def nidaan_branch_referred_claim_note(claim_id: int, body: _ReferrerNoteReq,
+                                            request: Request):
+    """The AP sends information to the team on a claim from a customer it referred."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    code = _branch_bearer(request)
+    if not code:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    import biz_nidaan_referrals as _ref
+    who = "AP %s" % code
+    try:
+        async with aiosqlite.connect(db.DB_PATH) as _c:
+            _r = await (await _c.execute(
+                "SELECT name FROM nidaan_branches WHERE UPPER(branch_code)=?",
+                (code.upper(),))).fetchone()
+        if _r and _r[0]:
+            who = "AP %s" % _r[0]
+    except Exception:  # noqa: BLE001 - the code is name enough
+        pass
+    res = await _ref.add_referrer_note(code, claim_id, body.text, who=who)
+    if res.get("not_found"):
+        raise HTTPException(status_code=404, detail="Claim not found")
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "Could not send that")
+    return {"ok": True}
+
+
 @app.post("/nidaan/branch/api/claims")
 async def nidaan_branch_raise_claim(body: _BranchClaimReq, request: Request):
     """A branch raises a claim FOR a customer. Attaches to the branch's house account,
@@ -10324,6 +10370,40 @@ async def ops_my_business_account(account_id: int, request: Request):
     return {"account": account, "claims": claims, "reviews": reviews}
 
 
+@app.get("/nidaan/ops/api/my-business/claims")
+async def ops_my_business_claims(request: Request):
+    """Claims from customers THIS staffer referred - stage, what is missing, who handles it.
+
+    A subscriber's claim carries no referral code of its own (the code is on their account), so
+    a team member could not see the claims of people they brought in. See biz_nidaan_referrals.
+    """
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request)
+    import biz_nidaan_referrals as _ref
+    code = await _ref.staff_code(staff["staff_id"])
+    return {"claims": await _ref.referred_claims(code) if code else []}
+
+
+@app.post("/nidaan/ops/api/my-business/claims/{claim_id}/note")
+@limiter.limit("20/minute")
+async def ops_my_business_claim_note(claim_id: int, body: _ReferrerNoteReq, request: Request):
+    """The referrer sends information to the team on one of THEIR referrals' claims. 404 for any
+    other claim - never 403, which would confirm the claim exists."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request)
+    import biz_nidaan_referrals as _ref
+    code = await _ref.staff_code(staff["staff_id"])
+    res = await _ref.add_referrer_note(code, claim_id, body.text, who=_actor_label(staff))
+    if res.get("not_found"):
+        raise HTTPException(status_code=404, detail="Claim not found")
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "Could not send that")
+    await _ops_audit(request, "claim.referrer_note", "claim", str(claim_id), "note from referrer")
+    return {"ok": True}
+
+
 # ══════════ EMAIL UPDATE RADAR — P1: mailbox vault + Test-Connection ══════════
 class _RadarMailboxReq(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -17834,6 +17914,32 @@ async def main():
                     logger.error("Daily ops summary error: %s", e)
                     await asyncio.sleep(3600)
         asyncio.create_task(daily_ops_summary_loop())
+
+        # Step 6h-b: every morning at 09:00 IST, yesterday's payments at Razorpay against our books,
+        # said out loud to the super admins (founder, 29 Sep: "confirm payment from razorpay ledger
+        # and update everyday"). The guardian alerts on problems; this says when there are none.
+        # run_daily stamps the day it reported, so a restart never sends it twice.
+        async def daily_payment_check_loop():
+            import biz_nidaan_pay_daily as _pd
+            from datetime import datetime as _dtm, timedelta as _td
+            while True:
+                try:
+                    now = _dtm.now(_pd.IST)
+                    nxt = now.replace(hour=_pd.SEND_HOUR_IST, minute=0, second=0, microsecond=0)
+                    if nxt <= now:
+                        # Past 9 already (a deploy, a restart): send today's if it has not gone.
+                        res = await _pd.run_daily()
+                        logger.info("💰 daily payment check: %s", res)
+                        nxt = nxt + _td(days=1)
+                    await asyncio.sleep(max(60, (nxt - _dtm.now(_pd.IST)).total_seconds()))
+                    res = await _pd.run_daily()
+                    logger.info("💰 daily payment check: %s", res)
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error("daily payment check error: %s", e)
+                    await asyncio.sleep(3600)
+        asyncio.create_task(daily_payment_check_loop())
 
         # Step 6i: Payment watchdog — deterministic self-healing guard. Every ~15 min it scans for
         # amount↔plan mismatches, stuck (captured-but-unrecorded) payments, and failure spikes;

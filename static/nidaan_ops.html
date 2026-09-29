@@ -4957,6 +4957,62 @@ You'll see your referrals, subscribers, earnings, and can raise claims.`;
 // staffer's OWN saved language preference (telegram_lang) — cached in _mbLang.
 let _mbLang = 'en';
 function _mbHi(){ return _mbLang === 'hi'; }
+// CLAIMS FROM CUSTOMERS YOU REFERRED. A subscriber's claim carries no referral code (the code is
+// on their account), so the staffer who brought them could not see it anywhere useful. Enough to
+// follow up - stage, what is missing, who handles it - and one action: tell the team.
+function _mbRefClaims(list, hi){
+  const head = `<div class="section-hdr" style="margin-top:.4rem"><div>
+      <div class="section-title" style="font-size:1rem">📂 ${hi?'आपके रेफ़र किए ग्राहकों के क्लेम':'Claims from customers you referred'}</div>
+      <div class="section-sub">${hi?'फ़ॉलो-अप के लिए: क्लेम कहाँ है, क्या बाकी है, और कौन देख रहा है।':'For your follow-up: where each claim is, what is still missing, and who is handling it.'}</div>
+    </div></div>`;
+  if (!list.length) return head + `<div class="bdsub" style="margin-bottom:1.2rem">${hi?'अभी कोई क्लेम नहीं।':'No claims yet.'}</div>`;
+  return head + '<div style="display:grid;gap:.6rem;margin-bottom:1.3rem">' + list.map(function(c){
+    const miss = (c.missing || []).map(function(m){ return esc(hi && m.hi ? m.hi : m.en); }).join(', ');
+    return `<div style="background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:12px;padding:.75rem .85rem">
+      <div style="display:flex;justify-content:space-between;gap:.5rem;flex-wrap:wrap">
+        <b>#NP-${c.claim_id} · ${esc(c.customer || '—')}</b>
+        <span style="font-size:.78rem;color:var(--nd-text-faint)">${hi?'अपडेट':'Updated'} ${fmtDate(c.updated_at)}</span>
+      </div>
+      <div style="font-size:.82rem;color:var(--nd-text-muted);margin-top:.15rem">${esc(c.claim_type || '')}${c.insurer?' · '+esc(c.insurer):''}</div>
+      <div style="font-size:.85rem;margin-top:.35rem"><b>${hi?'स्थिति':'Stage'}:</b> ${esc(c.stage)}${c.legal?(hi?' · लीगल टीम के पास':' · with the legal team'):''}</div>
+      <div style="font-size:.85rem;margin-top:.2rem"><b>${hi?'देख रहे हैं':'Handled by'}:</b> ${c.handler?esc(c.handler):(hi?'अभी किसी को नहीं सौंपा':'not assigned yet')}</div>
+      ${miss?`<div style="font-size:.85rem;margin-top:.2rem;color:var(--nd-warning-text)"><b>${hi?'अभी चाहिए':'Still missing'}:</b> ${miss}</div>`:''}
+      <div id="mbRefNote${c.claim_id}" style="margin-top:.45rem">
+        <button class="btn-sm btn-ghost" onclick="mbRefNoteOpen(${c.claim_id})">💬 ${hi?'टीम को जानकारी भेजें':'Send information to the team'}</button>
+      </div>
+    </div>`;
+  }).join('') + '</div>';
+}
+
+function mbRefNoteOpen(id){
+  const hi = _mbHi();
+  const box = document.getElementById('mbRefNote' + id);
+  if (!box) return;
+  box.innerHTML = `<textarea id="mbRefNoteT${id}" rows="3" maxlength="1000" style="width:100%;box-sizing:border-box" placeholder="${hi?'जैसे: ग्राहक कल डिस्चार्ज समरी भेज देंगे':'e.g. The customer will send the discharge summary tomorrow'}"></textarea>
+    <div style="display:flex;gap:.4rem;margin-top:.3rem;flex-wrap:wrap">
+      <button class="btn btn-primary" onclick="mbRefNoteSend(${id},this)">${hi?'भेजें':'Send'}</button>
+      <span id="mbRefNoteM${id}" class="bdsub"></span>
+    </div>`;
+}
+
+async function mbRefNoteSend(id, btn){
+  const hi = _mbHi();
+  const t = (document.getElementById('mbRefNoteT' + id) || {}).value || '';
+  const m = document.getElementById('mbRefNoteM' + id);
+  if (t.trim().length < 2){ if (m) m.textContent = hi ? 'पहले कुछ लिखिए।' : 'Write something first.'; return; }
+  if (btn) btn.disabled = true;
+  try{
+    const r = await API('/my-business/claims/' + id + '/note', {method:'POST', body: JSON.stringify({text: t})});
+    if (r.ok){
+      const box = document.getElementById('mbRefNote' + id);
+      if (box) box.innerHTML = '<span style="color:var(--nd-success-text);font-size:.85rem">✓ ' + (hi ? 'भेज दिया — क्लेम पर दर्ज है और टीम को बता दिया गया।' : 'Sent — it is on the claim and the team has been told.') + '</span>';
+      return;
+    }
+    if (m) m.textContent = hi ? 'नहीं भेज पाए, फिर कोशिश करें।' : 'Could not send. Please try again.';
+  }catch(e){ if (m) m.textContent = hi ? 'नहीं भेज पाए, फिर कोशिश करें।' : 'Could not send. Please try again.'; }
+  if (btn) btn.disabled = false;
+}
+
 async function loadMyBusiness() {
   const el = document.getElementById('panel-mybiz');
   const prof = await _loadMyProfile();
@@ -4966,6 +5022,10 @@ async function loadMyBusiness() {
   const r = await API('/my-business');
   if (!r.ok) { el.innerHTML = `<div class="empty"><div class="ei">🚀</div><p>${hi?'आपका बिज़नेस डैशबोर्ड अभी उपलब्ध नहीं है।':'Your business dashboard is not available yet.'}</p></div>`; return; }
   const b = await r.json();
+  // Claims from the customers this staffer referred (founder, 29 Sep). Loaded beside the rest;
+  // a failure here must not cost the page.
+  let _refClaims = [];
+  try { const rc = await API('/my-business/claims'); if (rc.ok) _refClaims = (await rc.json()).claims || []; } catch(e){}
   const code = b.referral_code || '';
   const link = b.referral_link || '';
   const signups = b.signups||0, paid = b.paid||0, revenue = b.revenue||0,
@@ -5066,6 +5126,8 @@ async function loadMyBusiness() {
     <div style="font-size:.74rem;color:var(--nd-text-faint);margin-bottom:1.4rem">
       ${hi?`<b>आपका कमीशन कैसे बनता है:</b> आपके कोड से जुड़े लोगों की सब्सक्रिप्शन राशि का ${pct}%। यह हिसाब का आंकड़ा है — अपने-आप भुगतान नहीं होता। कमीशन % सुपर-एडमिन तय करते हैं।`:`<b>How your commission works:</b> ${pct}% of the subscription revenue from people who joined using your code. This is a reconciliation figure — not auto-paid. Commission % is set by the super-admin.`}
     </div>
+
+    ${_mbRefClaims(_refClaims, hi)}
 
     ${refList}
 
@@ -6296,7 +6358,7 @@ window.dsLoadPages=dsLoadPages; window.dsPick=dsPick; window.dsCancelPick=dsCanc
 window.dsRetype=dsRetype; window.dsGetSet=dsGetSet;
 window.dsBigPage=dsBigPage;
 window.dcSetsLoad=dcSetsLoad; window.dcSetGet=dcSetGet; window.dcAutoSet=dcAutoSet;
-window.dcPageHold=dcPageHold; window.dcPagePick=dcPagePick; window.dcPageCancel=dcPageCancel; window.dcPageSet=dcPageSet;
+window.mbRefNoteOpen=mbRefNoteOpen; window.mbRefNoteSend=mbRefNoteSend; window.dcPageHold=dcPageHold; window.dcPagePick=dcPagePick; window.dcPageCancel=dcPageCancel; window.dcPageSet=dcPageSet;
 window.dsToggleRules=dsToggleRules; window.dsLoadRules=dsLoadRules;
 window.dsUndoRule=dsUndoRule;
 window.loadDocSplit=loadDocSplit; window.dsUpload=dsUpload; window.dsAddDoc=dsAddDoc; window.dsExport=dsExport; window.dsCollate=dsCollate;

@@ -217,6 +217,13 @@
     <div id="bcClaimsWrap"><div class="empty">Loading…</div></div>
   </div>
 
+  <!-- Claims filed by customers this AP referred (founder, 29 Sep) -->
+  <div class="card">
+    <div style="font-weight:700;color:var(--nd-text-primary)">Claims from customers you referred · आपके रेफ़र किए ग्राहकों के क्लेम</div>
+    <div style="font-size:.8rem;color:var(--nd-text-muted);margin:.2rem 0 .8rem">Where each claim is, what is still missing, and who is handling it. · क्लेम कहाँ है, क्या बाकी है, कौन देख रहा है।</div>
+    <div id="refClaimsWrap"><div class="empty">Loading…</div></div>
+  </div>
+
   <div class="card">
     <div style="font-weight:700;margin-bottom:.8rem;color:var(--nd-text-primary)">Your referrals</div>
     <div id="acctWrap"><div class="empty">Loading…</div></div>
@@ -511,7 +518,48 @@ async function showDashboard(){
       reload: loadBranchClaims
     });
     loadBranchClaims();
+    loadRefClaims();
   }catch(e){ $('acctWrap').innerHTML = '<div class="empty">Could not load. Please refresh.</div>'; }
+}
+
+// Claims from customers this AP referred - not the ones it raised (those are listed above).
+async function loadRefClaims(){
+  const w = $('refClaimsWrap');
+  try{
+    const r = await fetch('/nidaan/branch/api/referred-claims',{headers:authHeaders()});
+    if(r.status===401){ logout(); return; }
+    const list = (await r.json()).claims || [];
+    if(!list.length){ w.innerHTML = '<div class="empty">No claims yet. · अभी कोई क्लेम नहीं।</div>'; return; }
+    w.innerHTML = list.map(c => {
+      const miss = (c.missing||[]).map(m => esc(m.en) + (m.hi ? ' ('+esc(m.hi)+')' : '')).join(', ');
+      return `<div style="border:1px solid var(--nd-border);border-radius:10px;padding:.7rem .8rem;margin-bottom:.55rem">
+        <div style="display:flex;justify-content:space-between;gap:.5rem;flex-wrap:wrap"><b>#NP-${c.claim_id} · ${esc(c.customer||'—')}</b>
+          <span style="font-size:.78rem;color:var(--nd-text-faint)">Updated · अपडेट ${fmtDate(c.updated_at)}</span></div>
+        <div style="font-size:.82rem;color:var(--nd-text-muted);margin-top:.15rem">${esc(c.claim_type||'')}${c.insurer?' · '+esc(c.insurer):''}</div>
+        <div style="font-size:.85rem;margin-top:.35rem"><b>Stage · स्थिति:</b> ${esc(c.stage)}${c.legal?' · with the legal team · लीगल टीम के पास':''}</div>
+        <div style="font-size:.85rem;margin-top:.2rem"><b>Handled by · देख रहे हैं:</b> ${c.handler?esc(c.handler):'not assigned yet · अभी किसी को नहीं सौंपा'}</div>
+        ${miss?`<div style="font-size:.85rem;margin-top:.2rem;color:var(--nd-warning-text)"><b>Still missing · अभी चाहिए:</b> ${miss}</div>`:''}
+        <div id="rcNote${c.claim_id}" style="margin-top:.45rem"><button class="btn btn-ghost" style="font-size:.85rem;padding:.45rem .8rem" onclick="rcNoteOpen(${c.claim_id})">💬 Send information to the team · टीम को जानकारी भेजें</button></div>
+      </div>`;
+    }).join('');
+  }catch(e){ w.innerHTML = '<div class="empty">Could not load claims.</div>'; }
+}
+function rcNoteOpen(id){
+  const box = $('rcNote'+id); if(!box) return;
+  box.innerHTML = `<textarea id="rcNoteT${id}" rows="3" maxlength="1000" style="width:100%;box-sizing:border-box" placeholder="e.g. The customer will send the discharge summary tomorrow"></textarea>
+    <div style="display:flex;gap:.4rem;margin-top:.3rem;flex-wrap:wrap;align-items:center"><button class="btn btn-cyan" style="font-size:.85rem;padding:.45rem .8rem" onclick="rcNoteSend(${id},this)">Send · भेजें</button><span id="rcNoteM${id}" style="font-size:.8rem;color:var(--nd-text-muted)"></span></div>`;
+}
+async function rcNoteSend(id, btn){
+  const t = ($('rcNoteT'+id)||{}).value || '';
+  const m = $('rcNoteM'+id);
+  if(t.trim().length < 2){ if(m) m.textContent = 'Write something first. · पहले कुछ लिखिए।'; return; }
+  if(btn) btn.disabled = true;
+  try{
+    const r = await fetch('/nidaan/branch/api/referred-claims/'+id+'/note',{method:'POST',headers:{...authHeaders(),'Content-Type':'application/json'},body:JSON.stringify({text:t})});
+    if(r.ok){ $('rcNote'+id).innerHTML = '<span style="color:var(--nd-success-text);font-size:.85rem">✓ Sent — it is on the claim and the team has been told. · भेज दिया।</span>'; return; }
+    if(m) m.textContent = 'Could not send. Please try again. · नहीं भेज पाए।';
+  }catch(e){ if(m) m.textContent = 'Could not send. Please try again. · नहीं भेज पाए।'; }
+  if(btn) btn.disabled = false;
 }
 
 async function loadBranchClaims(){

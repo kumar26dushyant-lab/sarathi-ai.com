@@ -15010,6 +15010,32 @@ async def main():
                     await asyncio.sleep(3600)
         asyncio.create_task(daily_ops_summary_loop())
 
+        # Step 6h-b: every morning at 09:00 IST, yesterday's payments at Razorpay against our books,
+        # said out loud to the super admins (founder, 29 Sep: "confirm payment from razorpay ledger
+        # and update everyday"). The guardian alerts on problems; this says when there are none.
+        # run_daily stamps the day it reported, so a restart never sends it twice.
+        async def daily_payment_check_loop():
+            import biz_nidaan_pay_daily as _pd
+            from datetime import datetime as _dtm, timedelta as _td
+            while True:
+                try:
+                    now = _dtm.now(_pd.IST)
+                    nxt = now.replace(hour=_pd.SEND_HOUR_IST, minute=0, second=0, microsecond=0)
+                    if nxt <= now:
+                        # Past 9 already (a deploy, a restart): send today's if it has not gone.
+                        res = await _pd.run_daily()
+                        logger.info("💰 daily payment check: %s", res)
+                        nxt = nxt + _td(days=1)
+                    await asyncio.sleep(max(60, (nxt - _dtm.now(_pd.IST)).total_seconds()))
+                    res = await _pd.run_daily()
+                    logger.info("💰 daily payment check: %s", res)
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error("daily payment check error: %s", e)
+                    await asyncio.sleep(3600)
+        asyncio.create_task(daily_payment_check_loop())
+
         # Step 6i: Payment watchdog — deterministic self-healing guard. Every ~15 min it scans for
         # amount↔plan mismatches, stuck (captured-but-unrecorded) payments, and failure spikes;
         # alerts super-admins ONLY on anomalies. Worker-only singleton.

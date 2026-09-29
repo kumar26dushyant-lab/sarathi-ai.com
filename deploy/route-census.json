@@ -1239,6 +1239,26 @@
   "func": "nidaan_branch_account_detail",
   "guard": "nidaan-host"
  },
+ "GET /nidaan/branch/api/referred-claims": {
+  "file": "sarathi_biz.py",
+  "func": "nidaan_branch_referred_claims",
+  "guard": "nidaan-host"
+ },
+ "POST /nidaan/branch/api/referred-claims/{claim_id}/note": {
+  "file": "sarathi_biz.py",
+  "func": "nidaan_branch_referred_claim_note",
+  "guard": "nidaan-host,rate-limited"
+ },
+ "GET /nidaan/ops/api/my-business/claims": {
+  "file": "sarathi_biz.py",
+  "func": "ops_my_business_claims",
+  "guard": "nidaan-host,staff:any"
+ },
+ "POST /nidaan/ops/api/my-business/claims/{claim_id}/note": {
+  "file": "sarathi_biz.py",
+  "func": "ops_my_business_claim_note",
+  "guard": "nidaan-host,staff:any,rate-limited"
+ },
  "GET /nidaan/branch/api/accounts": {
   "file": "sarathi_biz.py",
   "func": "nidaan_branch_accounts",

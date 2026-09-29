@@ -53,6 +53,8 @@ EVENTS = [
     # ── money ────────────────────────────────────────────────────────────────
     _e("payment.success", "money", "A payment went through",
        "भुगतान सफल हुआ", "Super admins + whoever the payment belongs to", locked=True),
+    _e("payment.daily_check", "money", "Every morning: yesterday's payments at Razorpay against our books",
+       "हर सुबह: कल के Razorpay भुगतान बनाम हमारे खाते", "Super admins", locked=True),
     _e("payment.failed", "money", "A payment failed",
        "भुगतान विफल हुआ", "Super admins + whoever tried to pay", locked=True),
     _e("payment.failed.ref", "money", "A failed payment was chased again",
@@ -109,6 +111,8 @@ EVENTS = [
        "Everyone on the claim"),
     _e("doc.call_due", "claims", "Time to call about missing documents",
        "छूटे दस्तावेज़ के लिए कॉल करने का समय", "The person handling the claim"),
+    _e("claim.referrer_note", "claims", "The staff member or AP who referred the customer sent information",
+       "ग्राहक को रेफ़र करने वाले स्टाफ़ या AP ने जानकारी भेजी", "The person handling the claim"),
     _e("doc.schedule_due", "claims", "Your scheduled document reminder went out (or did not)",
        "आपका तय किया दस्तावेज़ रिमाइंडर गया (या नहीं गया)", "The person who set the reminder"),
 

@@ -154,6 +154,7 @@
   "_RadarTestReq",
   "_RaiseForSubReq",
   "_ReactReq",
+  "_ReferrerNoteReq",
   "_ReviewFeeReq",
   "_RouteSaveReq",
   "_STAFF_ACTIVE_TTL",
@@ -898,6 +899,44 @@
     "_branch_bearer",
     "_is_nidaan_host",
     "app"
+   ]
+  },
+  {
+   "func": "nidaan_branch_referred_claims",
+   "paths": [
+    "/nidaan/branch/api/referred-claims"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_branch_bearer",
+    "_is_nidaan_host",
+    "app"
+   ],
+   "uses": [
+    "_branch_bearer",
+    "_is_nidaan_host",
+    "app"
+   ]
+  },
+  {
+   "func": "nidaan_branch_referred_claim_note",
+   "paths": [
+    "/nidaan/branch/api/referred-claims/{claim_id}/note"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_ReferrerNoteReq",
+    "_branch_bearer",
+    "_is_nidaan_host",
+    "app",
+    "limiter"
+   ],
+   "uses": [
+    "_ReferrerNoteReq",
+    "_branch_bearer",
+    "_is_nidaan_host",
+    "app",
+    "limiter"
    ]
   },
   {
@@ -6860,6 +6899,56 @@
     "_is_nidaan_host",
     "_require_staff",
     "app"
+   ]
+  },
+  {
+   "func": "ops_my_business_claims",
+   "paths": [
+    "/nidaan/ops/api/my-business/claims"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_STAFF_ACTIVE_TTL",
+    "_get_staff_from_request",
+    "_is_nidaan_host",
+    "_require_staff",
+    "_staff_active_cache",
+    "_staff_still_active",
+    "app"
+   ],
+   "uses": [
+    "_is_nidaan_host",
+    "_require_staff",
+    "app"
+   ]
+  },
+  {
+   "func": "ops_my_business_claim_note",
+   "paths": [
+    "/nidaan/ops/api/my-business/claims/{claim_id}/note"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_ReferrerNoteReq",
+    "_STAFF_ACTIVE_TTL",
+    "_actor_label",
+    "_get_staff_from_request",
+    "_is_nidaan_host",
+    "_ops_audit",
+    "_require_staff",
+    "_staff_active_cache",
+    "_staff_still_active",
+    "app",
+    "limiter"
+   ],
+   "uses": [
+    "_ReferrerNoteReq",
+    "_actor_label",
+    "_is_nidaan_host",
+    "_ops_audit",
+    "_require_staff",
+    "app",
+    "limiter"
    ]
   },
   {
@@ -18326,6 +18415,8 @@
   "nidaan_branch_me",
   "nidaan_branch_page",
   "nidaan_branch_raise_claim",
+  "nidaan_branch_referred_claim_note",
+  "nidaan_branch_referred_claims",
   "nidaan_branch_request_otp",
   "nidaan_branch_upload_claim_doc",
   "nidaan_branch_verify_otp",
@@ -18616,6 +18707,8 @@
   "ops_me_saved_numbers",
   "ops_my_business",
   "ops_my_business_account",
+  "ops_my_business_claim_note",
+  "ops_my_business_claims",
   "ops_my_claim_doc_delete",
   "ops_my_claim_docs",
   "ops_my_followups",
