@@ -3531,9 +3531,24 @@ async def init_db():
                 page_count   INTEGER NOT NULL DEFAULT 0,
                 created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 opened_at    TIMESTAMP,
-                archived_at  TIMESTAMP
+                archived_at  TIMESTAMP,
+                state        TEXT NOT NULL DEFAULT 'ready',   -- uploading | reading | ready | failed
+                files_total  INTEGER NOT NULL DEFAULT 0,
+                files_done   INTEGER NOT NULL DEFAULT 0,
+                message      TEXT NOT NULL DEFAULT '',
+                updated_at   TIMESTAMP
             )
         """)
+        # A job has a STATE since 29 Sep: files arrive one at a time and are read in the
+        # background, because reading in the upload request took up to 247 s and Cloudflare cuts
+        # every request at 100 s - the staffer saw "Could not process" for a job that finished.
+        for _col in ("state TEXT NOT NULL DEFAULT 'ready'", "files_total INTEGER NOT NULL DEFAULT 0",
+                     "files_done INTEGER NOT NULL DEFAULT 0", "message TEXT NOT NULL DEFAULT ''",
+                     "updated_at TIMESTAMP"):
+            try:
+                await conn.execute("ALTER TABLE nidaan_doc_jobs ADD COLUMN " + _col)
+            except Exception:
+                pass
         await conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_nidaan_doc_jobs_staff "
             "ON nidaan_doc_jobs(staff_id, archived_at)")

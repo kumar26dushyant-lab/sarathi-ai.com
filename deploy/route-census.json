@@ -1664,6 +1664,36 @@
   "func": "ops_doc_content",
   "guard": "nidaan-host,staff:any"
  },
+ "GET /nidaan/ops/api/docsplit/settings": {
+  "file": "sarathi_biz.py",
+  "func": "ops_docsplit_settings",
+  "guard": "nidaan-host,staff:any"
+ },
+ "GET /nidaan/ops/api/docsplit/{job}/status": {
+  "file": "sarathi_biz.py",
+  "func": "ops_docsplit_status",
+  "guard": "nidaan-host,staff:any"
+ },
+ "POST /nidaan/ops/api/docsplit/batch": {
+  "file": "sarathi_biz.py",
+  "func": "ops_docsplit_batch",
+  "guard": "nidaan-host,staff:any,rate-limited"
+ },
+ "POST /nidaan/ops/api/docsplit/batch/{job}/file": {
+  "file": "sarathi_biz.py",
+  "func": "ops_docsplit_batch_file",
+  "guard": "nidaan-host,staff:any,rate-limited"
+ },
+ "POST /nidaan/ops/api/docsplit/batch/{job}/start": {
+  "file": "sarathi_biz.py",
+  "func": "ops_docsplit_batch_start",
+  "guard": "nidaan-host,staff:any,rate-limited"
+ },
+ "POST /nidaan/ops/api/docsplit/settings": {
+  "file": "sarathi_biz.py",
+  "func": "ops_docsplit_settings_save",
+  "guard": "nidaan-host,staff:super_admin,rate-limited"
+ },
  "GET /nidaan/ops/api/docsplit/jobs": {
   "file": "sarathi_biz.py",
   "func": "ops_docsplit_jobs",

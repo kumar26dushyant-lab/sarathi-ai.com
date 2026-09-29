@@ -57,10 +57,12 @@ check('...and calls the close route, not a delete',
 // ── the fourth upload ───────────────────────────────────────────────────────
 console.log('\nThe fourth upload\n');
 
-const up = html.slice(html.indexOf('async function dsUpload('),
+// Since 29 Sep the upload is a batch (files one at a time, read in the background), and the
+// inbox-full answer lives in dsInboxFull - the whole flow is checked, not one function.
+const up = html.slice(html.indexOf('function dsWaitBox('),
                       html.indexOf('function dsRenderReview('));
 
-check('a 409 inbox_full is handled on its own', /r\.status===409/.test(up)
+check('a 409 inbox_full is handled on its own', /r\.status\s*===\s*409/.test(up)
       && /inbox_full/.test(up), 'otherwise the object prints as [object Object]');
 check('...and names the file that is in the way', /d\.oldest|o\.title/.test(up));
 check('...and offers to open or close THAT one', /dsOpen\(/.test(up) && /dsClose\(/.test(up));
@@ -70,7 +72,7 @@ check('...and closes nothing by itself',
 
 // A non-409 error must still read as a sentence, not an object.
 check('any other error still prints a sentence, never an object',
-      /typeof d==='string'/.test(up), up.slice(-400));
+      /typeof [\w.]+\s*===\s*'string'/.test(up), up.slice(-400));
 
 // ── nothing here deletes ────────────────────────────────────────────────────
 console.log('\nNothing on this screen deletes a file\n');

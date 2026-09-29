@@ -95,6 +95,9 @@
   "_DEFAULT_CLAIM_HANDLERS",
   "_DOC_KEYS",
   "_DOC_URL_TTL",
+  "_DS_READ_LOCK",
+  "_DS_STALE_MIN",
+  "_DS_TASKS",
   "_DocAddReq",
   "_DocCallReq",
   "_DocDraftReq",
@@ -111,6 +114,8 @@
   "_DocTickReq",
   "_DocTypeReq",
   "_DocsCompleteReq",
+  "_DsBatchReq",
+  "_DsSettingsReq",
   "_ERROR_RING",
   "_EXPORT_TABLES",
   "_EscReplyReq",
@@ -204,7 +209,9 @@
   "_doc_magic_ok",
   "_doc_share_key",
   "_docsplit_job",
+  "_docsplit_limit",
   "_docsplit_pages",
+  "_docsplit_read_batch",
   "_enrich_note_attachments",
   "_esc_html",
   "_file_consent_pdf",
@@ -9234,6 +9241,174 @@
     "app",
     "limiter",
     "logger"
+   ]
+  },
+  {
+   "func": "ops_docsplit_batch",
+   "paths": [
+    "/nidaan/ops/api/docsplit/batch"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_DsBatchReq",
+    "_STAFF_ACTIVE_TTL",
+    "_docsplit_limit",
+    "_get_staff_from_request",
+    "_is_nidaan_host",
+    "_require_staff",
+    "_staff_active_cache",
+    "_staff_still_active",
+    "app",
+    "limiter"
+   ],
+   "uses": [
+    "_DsBatchReq",
+    "_docsplit_limit",
+    "_is_nidaan_host",
+    "_require_staff",
+    "app",
+    "limiter"
+   ]
+  },
+  {
+   "func": "ops_docsplit_batch_file",
+   "paths": [
+    "/nidaan/ops/api/docsplit/batch/{job}/file"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_STAFF_ACTIVE_TTL",
+    "_docsplit_job",
+    "_docsplit_limit",
+    "_get_staff_from_request",
+    "_is_nidaan_host",
+    "_require_staff",
+    "_sniff_file",
+    "_staff_active_cache",
+    "_staff_still_active",
+    "_upload_refusal",
+    "app",
+    "limiter",
+    "logger"
+   ],
+   "uses": [
+    "_docsplit_job",
+    "_docsplit_limit",
+    "_is_nidaan_host",
+    "_require_staff",
+    "_upload_refusal",
+    "app",
+    "limiter",
+    "logger"
+   ]
+  },
+  {
+   "func": "ops_docsplit_batch_start",
+   "paths": [
+    "/nidaan/ops/api/docsplit/batch/{job}/start"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_DS_READ_LOCK",
+    "_DS_TASKS",
+    "_STAFF_ACTIVE_TTL",
+    "_docsplit_job",
+    "_docsplit_read_batch",
+    "_get_staff_from_request",
+    "_is_nidaan_host",
+    "_require_staff",
+    "_staff_active_cache",
+    "_staff_still_active",
+    "app",
+    "limiter",
+    "logger"
+   ],
+   "uses": [
+    "_DS_TASKS",
+    "_docsplit_job",
+    "_docsplit_read_batch",
+    "_is_nidaan_host",
+    "_require_staff",
+    "app",
+    "limiter"
+   ]
+  },
+  {
+   "func": "ops_docsplit_status",
+   "paths": [
+    "/nidaan/ops/api/docsplit/{job}/status"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_DS_STALE_MIN",
+    "_STAFF_ACTIVE_TTL",
+    "_docsplit_job",
+    "_get_staff_from_request",
+    "_is_nidaan_host",
+    "_require_staff",
+    "_staff_active_cache",
+    "_staff_still_active",
+    "app"
+   ],
+   "uses": [
+    "_DS_STALE_MIN",
+    "_docsplit_job",
+    "_is_nidaan_host",
+    "_require_staff",
+    "app"
+   ]
+  },
+  {
+   "func": "ops_docsplit_settings",
+   "paths": [
+    "/nidaan/ops/api/docsplit/settings"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_STAFF_ACTIVE_TTL",
+    "_docsplit_limit",
+    "_get_staff_from_request",
+    "_is_nidaan_host",
+    "_require_staff",
+    "_staff_active_cache",
+    "_staff_still_active",
+    "app"
+   ],
+   "uses": [
+    "_docsplit_limit",
+    "_is_nidaan_host",
+    "_require_staff",
+    "app"
+   ]
+  },
+  {
+   "func": "ops_docsplit_settings_save",
+   "paths": [
+    "/nidaan/ops/api/docsplit/settings"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_DsSettingsReq",
+    "_STAFF_ACTIVE_TTL",
+    "_actor_label",
+    "_docsplit_limit",
+    "_get_staff_from_request",
+    "_is_nidaan_host",
+    "_ops_audit",
+    "_require_staff",
+    "_staff_active_cache",
+    "_staff_still_active",
+    "app",
+    "limiter"
+   ],
+   "uses": [
+    "_DsSettingsReq",
+    "_docsplit_limit",
+    "_is_nidaan_host",
+    "_ops_audit",
+    "_require_staff",
+    "app",
+    "limiter"
    ]
   },
   {
@@ -18674,6 +18849,9 @@
   "ops_doc_window_tick",
   "ops_doc_window_type",
   "ops_docs_complete",
+  "ops_docsplit_batch",
+  "ops_docsplit_batch_file",
+  "ops_docsplit_batch_start",
   "ops_docsplit_close",
   "ops_docsplit_collate",
   "ops_docsplit_export",
@@ -18683,6 +18861,9 @@
   "ops_docsplit_rule_undo",
   "ops_docsplit_rules",
   "ops_docsplit_set",
+  "ops_docsplit_settings",
+  "ops_docsplit_settings_save",
+  "ops_docsplit_status",
   "ops_docsplit_thumb",
   "ops_docsplit_upload",
   "ops_errors",

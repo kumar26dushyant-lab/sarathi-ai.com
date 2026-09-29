@@ -590,8 +590,8 @@ CAPABILITIES: list[dict] = [
     {
         "id": "doc_splitter",
         "en": {"t": "Document Splitter",
-               "d": "Upload a customer's mixed file; the pages are read on our own server (no AI, nothing leaves) and sorted into separate documents for you to check before sending to authorities.",
-               "u": "Got one big PDF of discharge + bills + reports? Upload it, check each page, and export separate PDFs."},
+               "d": "Upload up to 40 files at once (30 MB each) - PDFs, photos including iPhone HEIC, Word and Excel. They are read on our own server (no AI, nothing leaves) in the background while you get on with other work; a file holding several documents is read page by page. You check each page before sending to authorities.",
+               "u": "Choose the files; watch the count; leave the page if you like - you get a notice when it is ready. Check each page, then download the set."},
         "hi": {"t": "डॉक्यूमेंट स्प्लिटर",
                "d": "ग्राहक की मिली-जुली फ़ाइल अपलोड करें; पेज हमारे अपने सर्वर पर पढ़े जाते हैं (कोई AI नहीं, कुछ बाहर नहीं जाता) और अलग-अलग दस्तावेज़ों में बाँटे जाते हैं — भेजने से पहले आप जाँचते हैं।",
                "u": "एक बड़ी PDF में डिस्चार्ज + बिल + रिपोर्ट? अपलोड करें, हर पेज जाँचें, और अलग PDF एक्सपोर्ट करें।"},

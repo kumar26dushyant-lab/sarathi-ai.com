@@ -115,6 +115,8 @@ EVENTS = [
        "छूटे दस्तावेज़ के लिए कॉल करने का समय", "The person handling the claim"),
     _e("claim.referrer_note", "claims", "The staff member or AP who referred the customer sent information",
        "ग्राहक को रेफ़र करने वाले स्टाफ़ या AP ने जानकारी भेजी", "The person handling the claim"),
+    _e("docsplit.ready", "claims", "Your document splitter upload has been read",
+       "डॉक्यूमेंट स्प्लिटर ने आपकी फ़ाइलें पढ़ लीं", "The person who uploaded"),
     _e("doc.schedule_due", "claims", "Your scheduled document reminder went out (or did not)",
        "आपका तय किया दस्तावेज़ रिमाइंडर गया (या नहीं गया)", "The person who set the reminder"),
 

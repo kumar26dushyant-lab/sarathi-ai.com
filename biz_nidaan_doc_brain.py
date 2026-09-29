@@ -93,12 +93,28 @@ async def identify_document(pdf_bytes: bytes, rules: list | None = None,
     # THE NAME FIRST. On claim 204, 33 of 39 documents already said what they were in their
     # filename, and the page reader - which never looked - called 28 of them "not sure". A name
     # a person gave a document costs nothing to read and is correct when they renamed it.
+    #
+    # BUT A NAME IS A HINT, NOT A VERDICT (founder, 29 Sep: a file called "KYC" may hold hospital
+    # bills, an Aadhaar card, a driving licence and lab reports). A one-page file is what its name
+    # says. A longer one is still sampled: if its pages confidently read as something else, it is
+    # MIXED - every page is then read on its own (read_files) and a person is asked to check it.
     named = local.type_from_filename(filename)
+    named_result = None
     if named:
-        return {"doc_type": named["doc_type"], "confidence": 0.9, "why": named["why"],
-                "taught_by": "", "rule_id": None, "pages": 0, "sampled": 0,
-                "mixed": False, "kinds": [named["doc_type"]], "words": [],
-                "from_name": True}
+        named_result = {"doc_type": named["doc_type"], "confidence": 0.9, "why": named["why"],
+                        "taught_by": "", "rule_id": None, "pages": 0, "sampled": 0,
+                        "mixed": False, "kinds": [named["doc_type"]], "words": [],
+                        "from_name": True}
+        try:
+            import fitz
+            _d = fitz.open(stream=pdf_bytes, filetype="pdf")
+            _n = _d.page_count
+            _d.close()
+        except Exception:  # noqa: BLE001
+            _n = 1
+        if _n <= 1:
+            named_result["pages"] = _n
+            return named_result
 
     def _look() -> dict:
         import fitz
@@ -132,6 +148,19 @@ async def identify_document(pdf_bytes: bytes, rules: list | None = None,
                 "pages": 0, "sampled": 0, "mixed": False, "words": []}
 
     seen, total = got["seen"], got["total"]
+    if named_result is not None:
+        # The name stands unless the pages confidently say something else.
+        named_result["pages"] = total
+        named_result["sampled"] = len(seen)
+        named_result["words"] = got["words"]
+        other = {r.get("doc_type") for r in seen
+                 if float(r.get("confidence") or 0) >= 0.6
+                 and (r.get("doc_type") or "other") not in ("other", named_result["doc_type"])}
+        if other:
+            named_result["mixed"] = True
+            named_result["kinds"] = sorted(other | {named_result["doc_type"]})
+            named_result["why"] += " - but some pages read as something else"
+        return named_result
     if not seen:
         return {"doc_type": "other", "confidence": 0.0,
                 "why": "nothing could be read on it", "pages": total,
@@ -222,3 +251,80 @@ def _human(dtype: str) -> str:
     if dtype in sets.DOC_TYPES:
         return sets.type_label(dtype).lower()
     return re.sub(r"_", " ", dtype)
+
+
+# ── ONE reader, for the claim screen and the standalone splitter ─────────────
+async def read_files(files: list, rules: list | None = None, *, budget_s: float = 90.0,
+                     progress=None) -> tuple:
+    """Read a set of files the way a person would. Returns (pages, per_file).
+
+    files: [(name, bytes)] in order. Each file is turned into PDF pages on its own (any format -
+    biz_doc_convert), identified ONCE (its name first, checked against its pages), and every page
+    takes that answer - unless the file is MIXED, in which case every page is read on its own so
+    each lands in the right set, and the file is flagged for a person.
+
+    The claim screen and the standalone splitter both call this. Two readers is how the same file
+    came out two different ways on two screens (founder, 28 Sep: "both will conflict").
+
+    budget_s caps the OCR time across all files: past it, names and text layers still count and
+    only photographed pages stop being rendered - those go to a person. `progress(done, total)`
+    is awaited after each file, for the waiting screen.
+    """
+    import asyncio
+    import time
+    import biz_doc_splitter as split
+
+    pages, per_file = [], []
+    spent, page_no = 0.0, 0
+    for idx, (name, blob) in enumerate(files):
+        entry = {"index": idx, "name": name, "pages": 0, "unreadable": False, "pdf": None}
+        try:
+            one, n, _sk = await asyncio.to_thread(split.normalize_to_pdf, [(name, blob)])
+        except Exception as e:  # noqa: BLE001
+            logger.info("could not open %s: %s", name, e)
+            one, n = None, 0
+        if not one or not n:
+            entry["unreadable"] = True
+            per_file.append(entry)
+            if progress:
+                await progress(idx + 1, len(files))
+            continue
+        t0 = time.monotonic()
+        try:
+            got = await identify_document(one, rules, filename=name, ocr_allowed=(spent < budget_s))
+        except Exception as e:  # noqa: BLE001
+            logger.warning("could not identify %s: %s", name, e)
+            got = {"doc_type": "other", "confidence": 0.0, "why": "could not be read",
+                   "mixed": False, "words": []}
+        per_page = None
+        if got.get("mixed") and spent < budget_s:
+            try:
+                per_page = await classify_pages(one, rules)
+            except Exception as e:  # noqa: BLE001
+                logger.info("page-by-page read failed for %s: %s", name, e)
+        spent += time.monotonic() - t0
+        entry.update(pages=n, pdf=one, doc_type=got.get("doc_type") or "other",
+                     confidence=float(got.get("confidence") or 0), why=got.get("why") or "",
+                     mixed=bool(got.get("mixed")), kinds=got.get("kinds") or [],
+                     taught_by=got.get("taught_by") or "")
+        per_file.append(entry)
+        for i in range(n):
+            page_no += 1
+            pp = per_page[i] if per_page and i < len(per_page) else None
+            src = pp or got
+            pages.append({
+                "page": page_no,
+                "doc_type": src.get("doc_type") or "other",
+                "confidence": float(src.get("confidence") or 0),
+                "why": src.get("why") or "",
+                "source": "page" if pp else "doc",
+                "words": src.get("words") or got.get("words") or [],
+                "taught_by": src.get("taught_by") or "",
+                "file_index": idx,
+                "doc_name": name,
+                "page_in_doc": i + 1,
+                "mixed": bool(got.get("mixed")),
+            })
+        if progress:
+            await progress(idx + 1, len(files))
+    return pages, per_file

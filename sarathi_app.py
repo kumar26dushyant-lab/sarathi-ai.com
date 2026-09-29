@@ -1031,6 +1031,17 @@ async def _ops_audit(request: Request, action: str, target_type: str = "",
         pass
 
 
+# ── The splitter, one file at a time, read in the background (29 Sep) ─────────
+# The single-request upload read every page before answering: 45 to 247 seconds on 29 Sep.
+# Cloudflare cuts every request at 100 s and nginx refuses a body over 50 MB, so the staffer saw
+# "Could not process the file(s)" for jobs that had in fact finished, and 40 files of up to 30 MB
+# could never be sent at all. Now: a batch is opened, files arrive one per request (each well
+# inside every limit), and reading happens in the background with progress the screen shows.
+_DS_TASKS: set = set()
+_DS_READ_LOCK = asyncio.Semaphore(1)     # one batch read per process - OCR is heavy on 2 CPUs
+_DS_STALE_MIN = 15                       # "reading" with no progress this long = interrupted
+
+
 # ── Revenue + Refunds: gated to the platform owner only ──────────────────────
 # Other super_admins do NOT see revenue or refund admin. Owner is matched by
 # email (case-insensitive). Configurable later via system flag if needed.

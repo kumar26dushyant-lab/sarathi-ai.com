@@ -12654,6 +12654,9 @@ async def ops_docsplit_upload(request: Request, files: list[UploadFile] = File(.
     # is full and names the one it would put away, and the screen asks. (Founder, 28 Sep.)
     import biz_nidaan_doc_store as _store
     room = await _store.room_for_a_job(staff.get("staff_id"))
+    if not room.get("ok") and room.get("reason") == "unavailable":
+        raise HTTPException(status_code=503, detail="Your open files could not be checked just "
+                                                    "now. Please try again in a minute.")
     if not room.get("ok"):
         raise HTTPException(status_code=409, detail={
             "reason": "inbox_full", "limit": room.get("limit"),
@@ -12677,6 +12680,240 @@ async def ops_docsplit_upload(request: Request, files: list[UploadFile] = File(.
     # staffer sees WHY something didn't make it in rather than silently losing a page.
     return {"job_id": job, "page_count": n, "documents": documents,
             "skipped": list(skipped or []) + skipped_bad}
+
+
+# ── The splitter, one file at a time, read in the background (29 Sep) ─────────
+# The single-request upload read every page before answering: 45 to 247 seconds on 29 Sep.
+# Cloudflare cuts every request at 100 s and nginx refuses a body over 50 MB, so the staffer saw
+# "Could not process the file(s)" for jobs that had in fact finished, and 40 files of up to 30 MB
+# could never be sent at all. Now: a batch is opened, files arrive one per request (each well
+# inside every limit), and reading happens in the background with progress the screen shows.
+_DS_TASKS: set = set()
+_DS_READ_LOCK = asyncio.Semaphore(1)     # one batch read per process - OCR is heavy on 2 CPUs
+_DS_STALE_MIN = 15                       # "reading" with no progress this long = interrupted
+
+
+async def _docsplit_limit() -> int:
+    """Files per upload: 40 unless a super-admin set otherwise; never above 100."""
+    try:
+        v = int(await nidaan.get_ops_setting("docsplit_max_files", str(docsplit.FILES_DEFAULT))
+                or docsplit.FILES_DEFAULT)
+    except (TypeError, ValueError):
+        v = docsplit.FILES_DEFAULT
+    return max(1, min(docsplit.FILES_CEILING, v))
+
+
+class _DsBatchReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    files: int = Field(..., ge=1, le=100)
+    title: str = Field("", max_length=120)
+
+
+@app.post("/nidaan/ops/api/docsplit/batch")
+@limiter.limit("20/minute")
+async def ops_docsplit_batch(body: _DsBatchReq, request: Request):
+    """Open a batch for N files. The inbox limit (3 open) is checked here, before anything is sent."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request)
+    limit = await _docsplit_limit()
+    if body.files > limit:
+        raise HTTPException(status_code=400,
+                            detail="You can send up to %d files at once. Please send the rest "
+                                   "as a second upload." % limit)
+    import biz_nidaan_doc_store as _store
+    room = await _store.room_for_a_job(staff.get("staff_id"))
+    if not room.get("ok") and room.get("reason") == "unavailable":
+        raise HTTPException(status_code=503, detail="Your open files could not be checked just "
+                                                    "now. Please try again in a minute.")
+    if not room.get("ok"):
+        raise HTTPException(status_code=409, detail={
+            "reason": "inbox_full", "limit": room.get("limit"),
+            "oldest": room.get("oldest") or {},
+            "message": "You already have %d files open. Close one to start another."
+                       % room.get("limit", 3)})
+    job = docsplit.new_job_dir()
+    if not await _store.create_job(job, staff.get("staff_id"), body.title or "Upload", 0):
+        raise HTTPException(status_code=500, detail="Could not start the upload. Please try again.")
+    await _store.set_state(job, "uploading", files_total=body.files, files_done=0, message="")
+    return {"job_id": job, "max_files": limit, "max_mb": docsplit.MAX_FILE_MB}
+
+
+@app.post("/nidaan/ops/api/docsplit/batch/{job}/file")
+@limiter.limit("240/minute")
+async def ops_docsplit_batch_file(job: str, request: Request, file: UploadFile = File(...)):
+    """One file into an open batch: size, type-by-bytes and a virus scan, then kept in order."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request)
+    row = await _docsplit_job(job, staff)
+    if (row.get("state") or "ready") != "uploading":
+        raise HTTPException(status_code=409, detail="This upload has already started reading.")
+    have = docsplit.staged_count(job)
+    if have >= int(row.get("files_total") or 0) or have >= await _docsplit_limit():
+        raise HTTPException(status_code=400, detail="That is more files than this upload expects.")
+    cap = docsplit.MAX_FILE_MB * 1024 * 1024
+    data = await file.read(cap + 1)
+    name = (file.filename or "file")[:200]
+    if not data:
+        raise HTTPException(status_code=400, detail="%s is empty." % name)
+    if len(data) > cap:
+        raise HTTPException(status_code=400, detail="%s is larger than %d MB. Please send a smaller "
+                                                    "copy or a PDF." % (name, docsplit.MAX_FILE_MB))
+    import biz_doc_convert as _conv
+    kind, _ext = _conv.kind_of(data)
+    if not kind:
+        raise HTTPException(status_code=400, detail=_upload_refusal(name, data))
+    # Every file is scanned before it is kept - fail CLOSED, as for every other stored upload.
+    import biz_av_scan as _av
+    ok, why = await _av.scan_bytes(data)
+    if not ok:
+        logger.warning("docsplit: %s refused by the virus scan (%s) - staff %s",
+                       name, why, staff.get("staff_id"))
+        raise HTTPException(status_code=400, detail="%s could not be accepted: it did not pass "
+                                                    "the safety check." % name)
+    await asyncio.to_thread(docsplit.stage_file, job, have, name, data)
+    return {"received": have + 1, "expected": int(row.get("files_total") or 0)}
+
+
+@app.post("/nidaan/ops/api/docsplit/batch/{job}/start")
+@limiter.limit("20/minute")
+async def ops_docsplit_batch_start(job: str, request: Request):
+    """Every file is in: read them in the background. Also 'Read again' after an interruption."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request)
+    row = await _docsplit_job(job, staff)
+    if (row.get("state") or "ready") not in ("uploading", "failed"):
+        raise HTTPException(status_code=409, detail="This upload is already being read.")
+    n = docsplit.staged_count(job)
+    if not n:
+        raise HTTPException(status_code=400, detail="No files arrived. Please choose them again.")
+    import biz_nidaan_doc_store as _store
+    await _store.set_state(job, "reading", files_total=n, files_done=0,
+                           message="Waiting to start")
+    t = asyncio.create_task(_docsplit_read_batch(job, int(staff.get("staff_id") or 0)))
+    _DS_TASKS.add(t)
+    t.add_done_callback(_DS_TASKS.discard)
+    return {"state": "reading", "files": n}
+
+
+@app.get("/nidaan/ops/api/docsplit/{job}/status")
+async def ops_docsplit_status(job: str, request: Request):
+    """Where the reading is, for the waiting screen."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request)
+    row = await _docsplit_job(job, staff)
+    state = row.get("state") or "ready"
+    if state == "reading" and row.get("updated_at"):
+        # A read that stopped moving was interrupted - a restart or a deploy. Say so, and let the
+        # person start it again: the files are kept.
+        try:
+            from datetime import datetime as _dt
+            age = (_dt.utcnow() - _dt.strptime(str(row["updated_at"])[:19],
+                                               "%Y-%m-%d %H:%M:%S")).total_seconds() / 60
+            if age > _DS_STALE_MIN:
+                import biz_nidaan_doc_store as _store
+                msg = "Reading was interrupted. Press Read again - your files are kept."
+                await _store.set_state(job, "failed", message=msg)
+                state, row["message"] = "failed", msg
+        except (TypeError, ValueError):
+            pass
+    return {"state": state, "files_total": int(row.get("files_total") or 0),
+            "files_done": int(row.get("files_done") or 0),
+            "page_count": int(row.get("page_count") or 0),
+            "message": row.get("message") or "", "title": row.get("title") or ""}
+
+
+async def _docsplit_read_batch(job: str, staff_id: int) -> None:
+    """Read a batch in the background - the same reader as the claim screen - then say it is ready."""
+    import biz_nidaan_doc_store as _store
+    import biz_nidaan_doc_brain as _brain
+    try:
+        async with _DS_READ_LOCK:
+            files = await asyncio.to_thread(docsplit.staged_files, job)
+
+            async def _prog(done, total):
+                await _store.set_state(job, "reading", files_done=done,
+                                       message="Reading file %d of %d" % (done, total))
+            await _prog(0, len(files))
+            pages, per_file = await _brain.read_files(
+                files, await _store.load_rules(),
+                budget_s=float(os.getenv("NIDAAN_SPLIT_OCR_BUDGET_S", "240")), progress=_prog)
+            pdfs = [f["pdf"] for f in per_file if f.get("pdf")]
+            skipped = [f["name"] for f in per_file if f.get("unreadable")]
+            if not pdfs:
+                await _store.set_state(job, "failed", message=(
+                    "None of these files could be read. Photos, PDFs and Word/Excel files work; "
+                    "please check the files and try again."))
+                return
+            if len(pages) > docsplit.MAX_PAGES:
+                await _store.set_state(job, "failed", message=(
+                    "That is %d pages - more than %d at once. Please send it in two uploads."
+                    % (len(pages), docsplit.MAX_PAGES)))
+                return
+
+            def _merge(parts):
+                import fitz
+                out = fitz.open()
+                try:
+                    for b in parts:
+                        src = fitz.open(stream=b, filetype="pdf")
+                        out.insert_pdf(src)
+                        src.close()
+                    return out.tobytes()
+                finally:
+                    out.close()
+            merged = await asyncio.to_thread(_merge, pdfs)
+            await asyncio.to_thread(docsplit.save_job_as, job, merged)
+            docsplit.save_pages(job, [{k: v for k, v in pg.items() if k != "file_index"}
+                                      for pg in pages])
+            await _store.set_state(
+                job, "ready", page_count=len(pages), files_done=len(files),
+                message=("Could not read: " + ", ".join(skipped)) if skipped else "")
+        try:
+            import biz_nidaan_notifications as _nn
+            await _nn.notify_staff_inapp(
+                [staff_id], "📄 Your file is ready — %d page(s)" % len(pages),
+                "The document splitter has finished reading your upload. Open Document Splitter "
+                "to check the pages." + (("\n\nCould not read: " + ", ".join(skipped))
+                                         if skipped else ""),
+                event_key="docsplit.ready", email=False)
+        except Exception as e:  # noqa: BLE001 - the job is ready either way
+            logger.info("docsplit ready notice failed for %s: %s", job, e)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("docsplit background read failed for %s: %s", job, e)
+        await _store.set_state(job, "failed", message=(
+            "Something went wrong while reading. Press Read again - your files are kept."))
+
+
+class _DsSettingsReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    max_files: int = Field(..., ge=1, le=100)
+
+
+@app.get("/nidaan/ops/api/docsplit/settings")
+async def ops_docsplit_settings(request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request)
+    return {"max_files": await _docsplit_limit(), "ceiling": docsplit.FILES_CEILING,
+            "max_mb": docsplit.MAX_FILE_MB}
+
+
+@app.post("/nidaan/ops/api/docsplit/settings")
+@limiter.limit("10/minute")
+async def ops_docsplit_settings_save(body: _DsSettingsReq, request: Request):
+    """Super-admin: how many files one upload may hold (1-100; 40 by default)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "super_admin")
+    await nidaan.set_ops_setting("docsplit_max_files", str(int(body.max_files)),
+                                 updated_by=staff.get("staff_id"))
+    await _ops_audit(request, "docsplit.settings", "settings", "docsplit",
+                     "max files per upload = %d" % body.max_files)
+    return {"ok": True, "max_files": await _docsplit_limit()}
 
 
 async def _docsplit_pages(job: str) -> list:

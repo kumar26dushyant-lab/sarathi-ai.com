@@ -31,7 +31,10 @@ logger = logging.getLogger("sarathi.docsplit")
 # the app dir instead (shared; covered by ReadWritePaths=/opt/sarathi; not isolated by PrivateTmp).
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TMP_ROOT = os.getenv("DOCSPLIT_TMP") or os.path.join(_BASE_DIR, "var", "docsplit")
-MAX_PAGES = 80          # safety cap for a single job
+MAX_PAGES = 400         # safety cap for a single job (up to 100 files arrive in one)
+MAX_FILE_MB = 30        # per file
+FILES_DEFAULT = 40      # per job, unless a super-admin sets otherwise (founder, 29 Sep)
+FILES_CEILING = 100     # the most a super-admin may set
 IMAGE_EXTS = ("jpg", "jpeg", "png", "webp", "gif", "bmp", "tif", "tiff")
 
 def _safe_job(job: str) -> str:
@@ -63,6 +66,12 @@ def normalize_with_spans(files: list) -> tuple[bytes, int, list, list]:
     that contributed no pages is absent from it and present in `skipped`, which is the honest
     place for "we could not read this at all".
     """
+    # Every file becomes PDF pages through biz_doc_convert, which decides the type from the
+    # file's own BYTES (PDF, photos incl. iPhone HEIC, Word/Excel/OpenDocument/RTF/CSV). This used
+    # to go by the filename and understood PDF and a few image types; everything else - a Word
+    # letter, an Excel bill, an iPhone photo - was dropped as "skipped". The same door serves the
+    # claim sets, the Telegram bot, WhatsApp / portal intake and the email radar.
+    import biz_doc_convert as _conv
     out = fitz.open()
     skipped = []
     spans = []
@@ -71,27 +80,15 @@ def normalize_with_spans(files: list) -> tuple[bytes, int, list, list]:
             skipped.append(fname)
             continue
         before = out.page_count
-        ext = fname.lower().rsplit(".", 1)[-1] if "." in fname else ""
         try:
-            if ext == "pdf" or data[:5] == b"%PDF-":
-                src = fitz.open(stream=data, filetype="pdf")
-                out.insert_pdf(src)
-                src.close()
-            elif ext in IMAGE_EXTS or data[:3] == b"\xff\xd8\xff" or data[:8] == b"\x89PNG\r\n\x1a\n":
-                img = fitz.open(stream=data, filetype="image")
-                pdfbytes = img.convert_to_pdf()
-                img.close()
+            pdfbytes, _kind, why = _conv.to_pdf(data, fname)
+            if pdfbytes:
                 src = fitz.open(stream=pdfbytes, filetype="pdf")
                 out.insert_pdf(src)
                 src.close()
             else:
-                # last try: maybe a pdf with an odd name
-                try:
-                    src = fitz.open(stream=data, filetype="pdf")
-                    out.insert_pdf(src)
-                    src.close()
-                except Exception:
-                    skipped.append(fname)
+                logger.info("docsplit: %s skipped - %s", fname, why)
+                skipped.append(fname)
         except Exception as e:
             logger.info("docsplit normalize %s failed: %s", fname, e)
             skipped.append(fname)
@@ -121,6 +118,56 @@ def save_job(pdf_bytes: bytes) -> str:
     with open(os.path.join(d, "working.pdf"), "wb") as f:
         f.write(pdf_bytes)
     return job
+
+
+def new_job_dir() -> str:
+    """A job id and its directory, before there is a PDF - files arrive one at a time."""
+    os.makedirs(TMP_ROOT, exist_ok=True)
+    job = uuid.uuid4().hex[:16]
+    os.makedirs(os.path.join(TMP_ROOT, job, "in"), exist_ok=True)
+    return job
+
+
+def stage_file(job: str, index: int, name: str, data: bytes) -> None:
+    """One uploaded file, kept in arrival order until the job is read. Stored under a number,
+    never under the sender's filename (which is attacker-controlled); the name goes in a side
+    file as text."""
+    d = os.path.join(TMP_ROOT, _safe_job(job), "in")
+    os.makedirs(d, exist_ok=True)
+    with open(os.path.join(d, "%03d.bin" % int(index)), "wb") as f:
+        f.write(data)
+    with open(os.path.join(d, "%03d.name" % int(index)), "w", encoding="utf-8") as f:
+        f.write((name or "file")[:200])
+
+
+def staged_count(job: str) -> int:
+    d = os.path.join(TMP_ROOT, _safe_job(job), "in")
+    return len([x for x in os.listdir(d) if x.endswith(".bin")]) if os.path.isdir(d) else 0
+
+
+def staged_files(job: str) -> list:
+    """[(name, bytes)] in the order they arrived."""
+    d = os.path.join(TMP_ROOT, _safe_job(job), "in")
+    out = []
+    if not os.path.isdir(d):
+        return out
+    for fn in sorted(x for x in os.listdir(d) if x.endswith(".bin")):
+        base = fn[:-4]
+        try:
+            with open(os.path.join(d, base + ".name"), encoding="utf-8") as f:
+                name = f.read().strip() or "file"
+        except OSError:
+            name = "file"
+        with open(os.path.join(d, fn), "rb") as f:
+            out.append((name, f.read()))
+    return out
+
+
+def save_job_as(job: str, pdf_bytes: bytes) -> None:
+    d = os.path.join(TMP_ROOT, _safe_job(job))
+    os.makedirs(d, exist_ok=True)
+    with open(os.path.join(d, "working.pdf"), "wb") as f:
+        f.write(pdf_bytes)
 
 
 def load_job(job: str) -> Optional[bytes]:

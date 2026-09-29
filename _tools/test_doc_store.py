@@ -57,7 +57,9 @@ SCHEMA = """
 CREATE TABLE nidaan_doc_jobs (
     job_id TEXT PRIMARY KEY, staff_id INTEGER NOT NULL, title TEXT NOT NULL DEFAULT '',
     page_count INTEGER NOT NULL DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    opened_at TIMESTAMP, archived_at TIMESTAMP);
+    opened_at TIMESTAMP, archived_at TIMESTAMP, state TEXT NOT NULL DEFAULT 'ready',
+    files_total INTEGER NOT NULL DEFAULT 0, files_done INTEGER NOT NULL DEFAULT 0,
+    message TEXT NOT NULL DEFAULT '', updated_at TIMESTAMP);
 CREATE TABLE nidaan_doc_rules (
     rule_id INTEGER PRIMARY KEY AUTOINCREMENT, doc_type TEXT NOT NULL,
     words TEXT NOT NULL DEFAULT '[]', taught_by TEXT NOT NULL DEFAULT '',
@@ -183,6 +185,17 @@ async def main():
     check("...and refuses to open a job rather than allowing one",
           (await store.job_for("j2", ASHA)) is None)
     db.DB_PATH = _dbfile
+
+    print("\nThe limit fails closed\n")
+
+    async def _broken(_sid):
+        return None
+    _real = store._list_jobs_or_none
+    store._list_jobs_or_none = _broken
+    r = await store.room_for_a_job(999)
+    store._list_jobs_or_none = _real
+    check("an unreadable job list is NOT room for another",
+          r.get("ok") is False and r.get("reason") == "unavailable", r)
 
     print("\n%s\n" % ("ALL GOOD" if not FAILED else "%d FAILED" % FAILED))
     return 1 if FAILED else 0

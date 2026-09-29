@@ -150,11 +150,15 @@ runs = [t for i, t in enumerate(got) if i == 0 or got[i - 1] != t]
 check("each type appears as ONE run of pages", len(runs) == len(set(runs)), got)
 check("...named types first, in the set's order", got[0] == "discharge", got)
 check("...the others in the order they first arrived",
-      runs[1:] == ["prescription", "claim_form", "kyc", "other"], runs)
+      runs[1:] == ["prescription", "claim_form", "kyc"], runs)
+check("'Other' is kept aside from the claim set (founder, 29 Sep)", "other" not in got, got)
+check("...but is still in 'All documents merged'",
+      9 in [p["page"] for p in ds.compose(mixed, "all_merged")["pages"]])
 rx = [p["page"] for p in ds.compose(mixed, "claim_set")["pages"] if p["doc_type"] == "prescription"]
 check("...and a document's own pages keep their order", rx == sorted(rx), rx)
-check("nothing lost, nothing doubled", sorted(p["page"] for p in ds.compose(mixed, "claim_set")
-                                              ["pages"]) == list(range(1, 11)))
+check("nothing lost, nothing doubled - apart from the 'Other' page kept aside",
+      sorted(p["page"] for p in ds.compose(mixed, "claim_set")["pages"])
+      == [n for n in range(1, 11) if n != 9])
 
 print("\n" + ("%d failed" % FAILED if FAILED
               else "one page, many sets - nothing lost, nothing invented"))

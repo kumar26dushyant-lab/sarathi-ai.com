@@ -5974,8 +5974,9 @@ function loadDocSplit(){
     </div></div>
     <div style="background:var(--nd-bg-surface);border:2px dashed var(--nd-border-strong);border-radius:12px;padding:1.6rem;text-align:center">
       <div style="font-size:2rem;margin-bottom:.5rem">📤</div>
-      <label class="btn btn-primary" style="cursor:pointer">Choose file(s)<input id="dsFiles" type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.webp" style="display:none" onchange="dsUpload()"></label>
-      <div style="font-size:.78rem;color:var(--nd-text-muted);margin-top:.7rem">PDF · JPG · PNG · WebP &nbsp;·&nbsp; up to 12 files &nbsp;·&nbsp; 30 MB each &nbsp;·&nbsp; <i>(DOC/DOCX support coming)</i></div>
+      <label class="btn btn-primary" style="cursor:pointer">Choose file(s)<input id="dsFiles" type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.gif,.bmp,.tif,.tiff,.heic,.heif,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp,.rtf,.csv" style="display:none" onchange="dsUpload()"></label>
+      <div style="font-size:.78rem;color:var(--nd-text-muted);margin-top:.7rem">PDF · photos (JPG, PNG, iPhone HEIC…) · Word · Excel · other office files &nbsp;·&nbsp; up to <b id="dsLimitTxt">40</b> files at once &nbsp;·&nbsp; 30 MB each</div>
+      <div id="dsLimitAdmin" style="margin-top:.5rem"></div>
     </div>
     <div id="dsInbox" style="margin-top:1rem"></div>
     <div style="margin-top:.9rem">
@@ -5984,6 +5985,38 @@ function loadDocSplit(){
     <div id="dsRules" style="margin-top:.7rem"></div>
     <div id="dsResult" style="margin-top:1rem"></div>`;
   dsLoadInbox();
+  dsLoadLimit();
+}
+
+// Files per upload: 40 unless a super-admin sets otherwise, never above 100 (founder, 29 Sep).
+let _dsLimit = 40;
+async function dsLoadLimit(){
+  try{
+    const r = await API('/docsplit/settings');
+    if (!r.ok) return;
+    const d = await r.json();
+    _dsLimit = d.max_files || 40;
+    const t = document.getElementById('dsLimitTxt'); if (t) t.textContent = _dsLimit;
+    const a = document.getElementById('dsLimitAdmin');
+    if (a && _role === 'super_admin'){
+      a.innerHTML = '<span style="font-size:.78rem;color:var(--nd-text-muted)">Files per upload (super-admin): </span>'
+        + '<input id="dsLimitIn" type="number" min="1" max="' + (d.ceiling || 100) + '" value="' + _dsLimit
+        + '" style="width:5rem"> <button class="btn-sm btn-ghost" onclick="dsSaveLimit(this)">Save</button>'
+        + ' <span id="dsLimitMsg" style="font-size:.78rem"></span>';
+    }
+  }catch(e){}
+}
+async function dsSaveLimit(btn){
+  const v = parseInt((document.getElementById('dsLimitIn') || {}).value, 10);
+  const m = document.getElementById('dsLimitMsg');
+  if (!(v >= 1 && v <= 100)){ if (m) m.textContent = 'Choose 1 to 100.'; return; }
+  if (btn) btn.disabled = true;
+  try{
+    const r = await API('/docsplit/settings', {method:'POST', body: JSON.stringify({max_files: v})});
+    if (m) m.textContent = r.ok ? 'Saved.' : 'Could not save.';
+    if (r.ok) dsLoadLimit();
+  }catch(e){ if (m) m.textContent = 'Could not save.'; }
+  if (btn) btn.disabled = false;
 }
 
 // ── the inbox: three files open at a time, per person ────────────────────────
@@ -6007,9 +6040,16 @@ async function dsLoadInbox(){
         <div style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;padding:.45rem 0;border-top:1px solid var(--nd-border)">
           <div style="flex:1;min-width:150px">
             <div style="font-weight:600;font-size:.88rem">${esc(j.title||'Upload')}</div>
-            <div style="font-size:.72rem;color:var(--nd-text-muted)">${j.page_count||0} page(s) · started ${esc(String(j.created_at||'').slice(0,16))}</div>
+            <div style="font-size:.72rem;color:var(--nd-text-muted)">${
+              (j.state==='reading') ? ('⏳ Reading — '+(j.files_done||0)+' of '+(j.files_total||0)+' files')
+              : (j.state==='failed') ? ('⚠️ '+esc(j.message||'Reading stopped'))
+              : (j.state==='uploading') ? 'Upload not finished'
+              : ((j.page_count||0)+' page(s)')} · started ${esc(String(j.created_at||'').slice(0,16))}</div>
           </div>
-          <button class="btn-sm btn-ghost" onclick="dsOpen('${esc(j.job_id)}',${j.page_count||0})">Open</button>
+          ${ (j.state==='reading') ? `<button class="btn-sm btn-ghost" onclick="dsWatch('${esc(j.job_id)}')">Show progress</button>`
+            : (j.state==='failed') ? `<button class="btn-sm btn-ghost" onclick="dsReadAgain('${esc(j.job_id)}')">Read again</button>`
+            : (j.state==='uploading') ? ''
+            : `<button class="btn-sm btn-ghost" onclick="dsOpen('${esc(j.job_id)}',${j.page_count||0})">Open</button>` }
           <button class="btn-sm btn-ghost" style="color:var(--nd-danger-text)" onclick="dsClose('${esc(j.job_id)}','${esc((j.title||'this file').replace(/'/g,''))}')">Close</button>
         </div>`).join('')}
     </div>`;
@@ -6036,45 +6076,132 @@ async function dsClose(job,label){
   if(_dsJob===job){ _dsJob=null; document.getElementById('dsResult').innerHTML=''; }
   dsLoadInbox();
 }
+// FILES ONE AT A TIME, READ IN THE BACKGROUND (29 Sep). Sending everything in one request and
+// reading before answering took up to 247 s; Cloudflare cuts a request at 100 s and nginx refuses
+// more than 50 MB, so the screen said "Could not process" for jobs that had finished. Now each
+// file is its own small request, reading happens on the server afterwards, and this screen
+// shows where it is - and the person may leave; the job waits in their open files.
+function dsWaitBox(title, line, done, total, note){
+  const pct = total ? Math.round(100 * done / total) : 0;
+  return '<div class="nd-card" style="padding:1rem">'
+    + '<div style="font-weight:700;margin-bottom:.3rem">' + esc(title) + '</div>'
+    + '<div style="font-size:.86rem;color:var(--nd-text-muted)">' + esc(line) + '</div>'
+    + '<div style="height:8px;background:var(--nd-bg-surface-2);border-radius:99px;margin:.6rem 0;overflow:hidden">'
+    +   '<div style="height:100%;width:' + pct + '%;background:var(--nd-cyan-text);transition:width .4s"></div></div>'
+    + '<div style="font-size:.78rem;color:var(--nd-text-muted);line-height:1.5">' + (note || '') + '</div>'
+    + '</div>';
+}
+function dsInboxFull(d){
+  const res = document.getElementById('dsResult');
+  const o = d.oldest || {};
+  res.innerHTML = `
+    <div class="nd-card" style="padding:1rem">
+      <div style="font-weight:700;margin-bottom:.3rem">You already have ${d.limit||3} files open</div>
+      <div style="font-size:.85rem;color:var(--nd-text-muted);line-height:1.6">
+        Finish or close one before starting another. The one you started first is
+        <b>${esc(o.title||'an earlier upload')}</b>${o.page_count?` (${o.page_count} pages)`:''}.
+      </div>
+      <div style="display:flex;gap:.6rem;margin-top:.8rem;flex-wrap:wrap">
+        ${o.job_id?`<button class="btn-sm btn-ghost" onclick="dsOpen('${esc(o.job_id)}',${o.page_count||0})">Open it</button>
+        <button class="btn-sm btn-ghost" style="color:var(--nd-danger-text)" onclick="dsClose('${esc(o.job_id)}','${esc((o.title||'that file').replace(/'/g,''))}')">Close it</button>`:''}
+      </div>
+    </div>`;
+  dsLoadInbox();
+}
 async function dsUpload(){
-  const inp=document.getElementById('dsFiles'); if(!inp||!inp.files.length) return;
-  const res=document.getElementById('dsResult');
-  res.innerHTML='<div class="empty"><div class="ei">⏳</div><p>Uploading &amp; reading the documents… this can take a few seconds.</p></div>';
-  const fd=new FormData(); for(const f of inp.files) fd.append('files', f);
-  let r; try{ r=await fetch('/nidaan/ops/api/docsplit/upload',{method:'POST',headers:{'Authorization':'Bearer '+_token},body:fd}); }
-  catch(e){ res.innerHTML='<div class="empty"><p>Upload failed. Please try again.</p></div>'; return; }
-  if(!r.ok){
-    const e=await r.json().catch(()=>({}));
-    const d=e.detail;
-    // The server refuses a fourth file and says which one is in the way. This branch exists
-    // because the line below prints detail through esc(), and a staffer would have read
-    // "[object Object]" at the exact moment they needed to know what to do.
-    if(r.status===409 && d && d.reason==='inbox_full'){
-      const o=d.oldest||{};
-      res.innerHTML=`
-        <div class="nd-card" style="padding:1rem">
-          <div style="font-weight:700;margin-bottom:.3rem">You already have ${d.limit||3} files open</div>
-          <div style="font-size:.85rem;color:var(--nd-text-muted);line-height:1.6">
-            Finish or close one before starting another. The one you started first is
-            <b>${esc(o.title||'an earlier upload')}</b>${o.page_count?` (${o.page_count} pages)`:''}.
-          </div>
-          <div style="display:flex;gap:.6rem;margin-top:.8rem;flex-wrap:wrap">
-            ${o.job_id?`<button class="btn-sm btn-ghost" onclick="dsOpen('${esc(o.job_id)}',${o.page_count||0})">Open it</button>
-            <button class="btn-sm btn-ghost" style="color:var(--nd-danger-text)" onclick="dsClose('${esc(o.job_id)}','${esc((o.title||'that file').replace(/'/g,''))}')">Close it</button>`:''}
-          </div>
-        </div>`;
+  const inp = document.getElementById('dsFiles'); if (!inp || !inp.files.length) return;
+  const res = document.getElementById('dsResult');
+  const files = Array.from(inp.files);
+  inp.value = '';
+  if (files.length > _dsLimit){
+    res.innerHTML = '<div class="empty"><div class="ei">⚠️</div><p>You chose ' + files.length + ' files. Up to '
+      + _dsLimit + ' can go at once — please send the rest as a second upload.</p></div>';
+    return;
+  }
+  const big = files.filter(f => f.size > 30 * 1024 * 1024);
+  if (big.length){
+    res.innerHTML = '<div class="empty"><div class="ei">⚠️</div><p>Larger than 30 MB: '
+      + big.map(f => esc(f.name)).join(', ') + '. Please send smaller copies (a PDF is usually smaller than a photo).</p></div>';
+    return;
+  }
+  res.innerHTML = dsWaitBox('Starting your upload…', files.length + ' file(s)', 0, files.length, '');
+  let r;
+  try{
+    r = await API('/docsplit/batch', {method:'POST', body: JSON.stringify({files: files.length, title: files[0].name})});
+  }catch(e){ res.innerHTML = '<div class="empty"><p>Could not start the upload. Please check your connection and try again.</p></div>'; return; }
+  if (!r.ok){
+    const e = await r.json().catch(() => ({}));
+    if (r.status === 409 && e.detail && e.detail.reason === 'inbox_full'){ dsInboxFull(e.detail); return; }
+    res.innerHTML = '<div class="empty"><div class="ei">⚠️</div><p>' + esc((typeof e.detail === 'string' && e.detail) || 'Could not start the upload.') + '</p></div>';
+    return;
+  }
+  const job = (await r.json()).job_id;
+  const refused = [];
+  for (let i = 0; i < files.length; i++){
+    res.innerHTML = dsWaitBox('Sending your files', 'File ' + (i + 1) + ' of ' + files.length + ' — ' + files[i].name,
+      i, files.length, 'Please keep this page open until every file is sent.');
+    const fd = new FormData(); fd.append('file', files[i]);
+    try{
+      const fr = await fetch('/nidaan/ops/api/docsplit/batch/' + job + '/file',
+        {method:'POST', headers:{'Authorization':'Bearer ' + _token}, body: fd});
+      if (!fr.ok){
+        const fe = await fr.json().catch(() => ({}));
+        refused.push((typeof fe.detail === 'string' && fe.detail) || (files[i].name + ' could not be sent.'));
+      }
+    }catch(e){ refused.push(files[i].name + ' could not be sent (connection).'); }
+  }
+  if (refused.length === files.length){
+    res.innerHTML = '<div class="empty"><div class="ei">⚠️</div><p>None of the files could be sent:<br>'
+      + refused.map(esc).join('<br>') + '</p></div>';
+    dsLoadInbox();
+    return;
+  }
+  try{ await API('/docsplit/batch/' + job + '/start', {method:'POST'}); }catch(e){}
+  _dsRefused = refused;
+  dsLoadInbox();
+  dsWatch(job);
+}
+let _dsRefused = [], _dsWatching = null;
+async function dsWatch(job){
+  _dsWatching = job;
+  const res = document.getElementById('dsResult');
+  const note = 'Scanned pages take about 10–15 seconds each. <b>You can leave this page</b> — the file stays in your open files and you will get a notice when it is ready.'
+    + (_dsRefused.length ? '<br><br>Not sent: ' + _dsRefused.map(esc).join('<br>') : '');
+  for (;;){
+    if (_dsWatching !== job || !document.getElementById('dsResult')) return;
+    let d = null;
+    try{ const r = await API('/docsplit/' + job + '/status'); if (r.ok) d = await r.json(); }catch(e){}
+    if (d && d.state === 'ready'){
+      _dsRefused = [];
+      dsLoadInbox();
+      await dsOpen(job, d.page_count || 0);
+      if (d.message){
+        const box = document.getElementById('dsResult');
+        if (box) box.insertAdjacentHTML('afterbegin', '<div class="nd-card" style="padding:.7rem 1rem;margin-bottom:.6rem;font-size:.85rem;color:var(--nd-warning-text)">' + esc(d.message) + '</div>');
+      }
+      return;
+    }
+    if (d && d.state === 'failed'){
+      res.innerHTML = '<div class="nd-card" style="padding:1rem"><div style="font-weight:700;margin-bottom:.3rem">Reading stopped</div>'
+        + '<div style="font-size:.86rem;color:var(--nd-text-muted)">' + esc(d.message || '') + '</div>'
+        + '<button class="btn-sm btn-ghost" style="margin-top:.6rem" onclick="dsReadAgain(\'' + esc(job) + '\')">Read again</button></div>';
       dsLoadInbox();
       return;
     }
-    const msg=(typeof d==='string'&&d)?d:'Could not process the file(s).';
-    res.innerHTML=`<div class="empty"><div class="ei">⚠️</div><p>${esc(msg)}</p></div>`;
-    return;
+    if (d){
+      res.innerHTML = dsWaitBox('Reading your documents', d.message || 'Reading…',
+        d.files_done || 0, d.files_total || 1, note);
+    }
+    await new Promise(ok => setTimeout(ok, 3000));
   }
-  const d=await r.json();
-  _dsJob=d.job_id; _dsPages=d.page_count;
-  _dsDocs=(d.documents||[]).map(x=>({name:x.name,start:x.start,end:x.end,summary:x.summary||''}));
-  dsRenderReview(d.skipped||[]);
+}
+async function dsReadAgain(job){
+  try{
+    const r = await API('/docsplit/batch/' + job + '/start', {method:'POST'});
+    if (!r.ok){ const e = await r.json().catch(() => ({})); alert((typeof e.detail === 'string' && e.detail) || 'Could not start reading.'); return; }
+  }catch(e){ alert('Could not start reading.'); return; }
   dsLoadInbox();
+  dsWatch(job);
 }
 function dsRenderReview(skipped){
   const res=document.getElementById('dsResult');
@@ -6353,7 +6480,7 @@ async function dsCollate(btn){
   }catch(e){ alert('Merge failed.'); }
   finally{ btn.disabled=false; btn.textContent=orig; }
 }
-window.dsLoadInbox=dsLoadInbox; window.dsOpen=dsOpen; window.dsClose=dsClose;
+window.dsLoadInbox=dsLoadInbox; window.dsOpen=dsOpen; window.dsClose=dsClose; window.dsWatch=dsWatch; window.dsReadAgain=dsReadAgain; window.dsSaveLimit=dsSaveLimit;
 window.dsLoadPages=dsLoadPages; window.dsPick=dsPick; window.dsCancelPick=dsCancelPick;
 window.dsRetype=dsRetype; window.dsGetSet=dsGetSet;
 window.dsBigPage=dsBigPage;

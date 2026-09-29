@@ -70,7 +70,7 @@ async def claim_documents(claim_id: int) -> list:
 
 # Bump when the way a document is identified changes (new file names, new page signals), so
 # every claim re-reads once instead of keeping the old answer until somebody presses the button.
-READER_VERSION = 3
+READER_VERSION = 4
 
 
 def _fingerprint(docs: list, rules: list = ()) -> str:
@@ -165,55 +165,27 @@ async def read_claim(claim_id: int, *, force: bool = False) -> dict:
     # 151 before this changed.
     import biz_nidaan_doc_brain as brain
 
-    pages = []
-    page_no = 0
-    # A TIME BUDGET FOR OCR ACROSS THE WHOLE CLAIM. Identifying per document without one took
-    # 7m30s on claim 151. Past the budget, documents are still identified from their names and
-    # from any page that carries its own text - only RENDERING a photographed page stops. What
-    # could not be read is flagged for a person, which is the honest result.
-    import time as _time
-    spent = 0.0
+    # ONE READER for this screen and the standalone splitter (brain.read_files): each file
+    # identified once - its name first, checked against its pages - and a file holding several
+    # documents read page by page. A time budget for OCR across the whole claim: identifying per
+    # document without one took 7m30s on claim 151; past it, names and text layers still count and
+    # only photographed pages stop being rendered - those go to a person.
     budget = float(os.getenv("NIDAAN_CLAIM_OCR_BUDGET_S", "90"))
-    for d, (name, blob) in zip(readable, files):
-        try:
-            one, n_pages, _sk = split.normalize_to_pdf([(name, blob)])
-        except Exception as e:  # noqa: BLE001
-            logger.info("claim %s: could not open %s: %s", claim_id, name, e)
+    got_pages, per_file = await brain.read_files(files, rules, budget_s=budget)
+    for f in per_file:
+        d = readable[f["index"]]
+        if f.get("unreadable"):
             d["unreadable"] = True
             continue
-        if not one or not n_pages:
-            d["unreadable"] = True
-            continue
-        try:
-            _t0 = _time.monotonic()
-            got = await brain.identify_document(one, rules, filename=name,
-                                                ocr_allowed=(spent < budget))
-            spent += _time.monotonic() - _t0
-        except Exception as e:  # noqa: BLE001
-            logger.warning("claim %s: could not identify %s: %s", claim_id, name, e)
-            got = {"doc_type": "other", "confidence": 0.0, "why": "could not be read",
-                   "mixed": False, "words": []}
-        d["doc_type"] = got["doc_type"]
-        d["confidence"] = got["confidence"]
-        d["why"] = got.get("why") or ""
-        d["mixed"] = bool(got.get("mixed"))
-        d["kinds"] = got.get("kinds") or []
-        d["taught_by"] = got.get("taught_by") or ""
-        for i in range(n_pages):
-            page_no += 1
-            pages.append({
-                "page": page_no,
-                "doc_type": got["doc_type"],
-                "confidence": got["confidence"],
-                "why": got.get("why") or "",
-                "source": "doc",
-                "words": got.get("words") or [],
-                "taught_by": got.get("taught_by") or "",
-                "doc_id": d.get("doc_id"),
-                "doc_name": d.get("original_name") or name,
-                "page_in_doc": i + 1,
-                "mixed": bool(got.get("mixed")),
-            })
+        for k in ("doc_type", "confidence", "why", "mixed", "kinds", "taught_by"):
+            d[k] = f.get(k)
+    pages = []
+    for pg in got_pages:
+        d = readable[pg.pop("file_index")]
+        pg["doc_id"] = d.get("doc_id")
+        pg["doc_name"] = d.get("original_name") or pg.get("doc_name") or "document"
+        pages.append(pg)
+    page_no = len(pages)
 
     pages_n = page_no
     if not pages:

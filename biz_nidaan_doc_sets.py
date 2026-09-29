@@ -113,6 +113,9 @@ SETS: dict[str, dict] = {
         "order": ["discharge", "policy", "final_bill", "receipt", "pharmacy_bill", "other_bill",
                   "investigation"],
         "catch_all": True,
+        # "Other" pages are kept aside from this set (founder, 29 Sep): still on the claim, still
+        # listed, still in "All documents merged" - and one tap moves a page to a real type.
+        "leave_out": ["other"],
         "size_cap_mb": None,
     },
 }
@@ -166,7 +169,8 @@ def compose(pages: list, set_key: str) -> dict:
         # appears, its pages in order. Sorted by page alone they interleaved: on claim 204 the
         # claim set held prescriptions in three places, so "one PDF per document" gave three
         # Prescription PDFs and the single PDF scattered one document across it.
-        leftovers = [p for p in (pages or []) if int(p.get("page") or 0) not in used]
+        leftovers = [p for p in (pages or []) if int(p.get("page") or 0) not in used
+                     and (p.get("doc_type") or "other") not in spec.get("leave_out", ())]
         leftovers.sort(key=lambda x: int(x.get("page") or 0))
         first: dict = {}
         for p in leftovers:

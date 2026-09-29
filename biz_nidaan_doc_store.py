@@ -59,6 +59,12 @@ def _db() -> str:
 # ── jobs ─────────────────────────────────────────────────────────────────────
 async def list_jobs(staff_id: int) -> list:
     """This person's open jobs, newest first. Never anybody else's."""
+    got = await _list_jobs_or_none(staff_id)
+    return got if got is not None else []
+
+
+async def _list_jobs_or_none(staff_id: int):
+    """As list_jobs, but None when the list could not be read - so a check can fail CLOSED."""
     try:
         async with aiosqlite.connect(_db()) as c:
             c.row_factory = aiosqlite.Row
@@ -66,13 +72,13 @@ async def list_jobs(staff_id: int) -> list:
                 # rowid breaks the tie. created_at has one-second resolution, so three uploads
                 # in the same second sort arbitrarily - and the caller takes the LAST row as the
                 # oldest, so an arbitrary order meant offering to put away the newest job.
-                "SELECT job_id, title, page_count, created_at, opened_at "
-                "FROM nidaan_doc_jobs WHERE staff_id=? AND archived_at IS NULL "
+                "SELECT job_id, title, page_count, created_at, opened_at, state, files_total, "
+                "files_done, message FROM nidaan_doc_jobs WHERE staff_id=? AND archived_at IS NULL "
                 "ORDER BY created_at DESC, rowid DESC", (int(staff_id),))).fetchall()
         return [dict(r) for r in rows]
     except Exception as e:  # noqa: BLE001
         logger.warning("could not list jobs for staff %s: %s", staff_id, e)
-        return []
+        return None
 
 
 async def room_for_a_job(staff_id: int) -> dict:
@@ -84,7 +90,11 @@ async def room_for_a_job(staff_id: int) -> dict:
     permission, so the decision belongs to a screen where somebody presses a button, not to the
     function that noticed the list was full.
     """
-    jobs = await list_jobs(staff_id)
+    jobs = await _list_jobs_or_none(staff_id)
+    if jobs is None:
+        # Unreadable is NOT "empty": treating it as room would let the limit be passed whenever
+        # the table cannot be read. Refuse, and say why.
+        return {"ok": False, "reason": "unavailable", "limit": MAX_JOBS, "open": 0, "oldest": {}}
     if len(jobs) < MAX_JOBS:
         return {"ok": True, "open": len(jobs), "limit": MAX_JOBS}
     return {"ok": False, "reason": "full", "limit": MAX_JOBS,
@@ -108,6 +118,28 @@ async def create_job(job_id: str, staff_id: int, title: str, page_count: int) ->
         return True
     except Exception as e:  # noqa: BLE001
         logger.warning("could not record job %s: %s", job_id, e)
+        return False
+
+
+async def set_state(job_id: str, state: str, *, files_total=None, files_done=None,
+                    message=None, page_count=None, title=None) -> bool:
+    """Move a job along: uploading -> reading -> ready | failed. Never deletes anything."""
+    if state not in ("uploading", "reading", "ready", "failed"):
+        return False
+    sets, args = ["state=?", "updated_at=CURRENT_TIMESTAMP"], [state]
+    for col, val in (("files_total", files_total), ("files_done", files_done),
+                     ("message", message), ("page_count", page_count), ("title", title)):
+        if val is not None:
+            sets.append("%s=?" % col)
+            args.append(val if not isinstance(val, str) else val[:300])
+    try:
+        async with aiosqlite.connect(_db()) as c:
+            await c.execute("UPDATE nidaan_doc_jobs SET %s WHERE job_id=?" % ", ".join(sets),
+                            args + [str(job_id)])
+            await c.commit()
+        return True
+    except Exception as e:  # noqa: BLE001
+        logger.warning("could not move job %s to %s: %s", job_id, state, e)
         return False
 
 
