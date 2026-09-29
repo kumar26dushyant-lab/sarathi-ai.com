@@ -15,6 +15,9 @@ it. Newest first within each group._
 | 1 | **Turn on "Complainant picks reminder time"** after the 29 Sep run-through | He said yes (29 Sep). Deployed OFF; flip it when he says the run-through is done (WhatsApp → Doc-collection defaults) |
 | 2 | **Rotate the doc share key** | It was printed into a task log on 28 Sep. Rotating breaks existing shared SOP links, so it is his call |
 | 3 | **Send the 29 Sep announcement** | The SHORT one at the top of `ANNOUNCEMENTS.md` (five points, EN + HI) |
+| 3b | **Deploy `1329aaa` after 6pm IST** (or on his go) | Referrers' "still missing" shown only when the claim really collects documents. Committed and pushed, NOT deployed - it was working hours |
+| 3c | **WhatsApp claim intake - 7 decisions** | `docs/WHATSAPP_CLAIMS_DESIGN.md` (verification, minimum to register, quota/cap options, CP rules, staff on Telegram, nudge count, Gemini) |
+| 3d | **1 claim raised on behalf of a subscriber whose plan is not active** | Found checking L2 exemptions (origin `ops_on_behalf`, 22 claims, 21 on an active plan). Not wrong by itself - worth a look |
 | 3a | **Automatic document reminders are OFF for everyone** (`wa_doc_collection_enabled` never set) | Staff now SEE this in "Follow-up so far". Turning it on is his decision |
 | 4 | **Test the radar** with authority-sounding wording once forwarding lands | He said he will; the code is ready for direct and forwarded mail |
 | 3 | **Sarathi-AI in its own VS Code session** | Needs the source split first - see below. Today both products are generated from one `sarathi_biz.py`, so two sessions would collide |
@@ -59,7 +62,12 @@ needed before starting.
 
 ---
 
-**Last updated:** 2026-09-29 04:05 IST — 🔔 **notifications fixed**: from 25 Sep the first
+**Last updated:** 2026-09-29 13:00 IST — 👥 **referrers see their customers' claims** (staff My
+Business + AP dashboard; Trivesh now sees 16 incl. #233); 💰 **daily 9am payment check** against
+Razorpay (first run: 28 Sep, 3 payments, all match); WhatsApp claim intake **design** for discussion.
+⚠️ Deployed 866e63b at 12:48 IST - inside working hours, against the rule; check the clock first.
+
+**Before that:** 2026-09-29 04:05 IST — 🔔 **notifications fixed**: from 25 Sep the first
 person on every list (staff #1, the founder) and every one-person notice were silently dropped;
 payment notices now also reach the claim's handler and the referring staff; a branch Level-2
 fee's notice says "Payment RECEIVED" first. Test notice to the founder recorded and sent.
