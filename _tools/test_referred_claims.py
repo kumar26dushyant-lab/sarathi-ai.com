@@ -63,7 +63,10 @@ CREATE TABLE nidaan_accounts (account_id INTEGER PRIMARY KEY, owner_name TEXT,
 CREATE TABLE nidaan_claims (claim_id INTEGER PRIMARY KEY, account_id INTEGER, claim_type TEXT,
     insurer_name TEXT, policy_no TEXT, insured_phone TEXT, status TEXT, pipeline_stage TEXT,
     origin TEXT DEFAULT '', created_at TEXT DEFAULT CURRENT_TIMESTAMP, last_status_at TEXT,
-    assigned_to_staff_id INTEGER, branch_code TEXT DEFAULT '', archived INTEGER DEFAULT 0);
+    assigned_to_staff_id INTEGER, branch_code TEXT DEFAULT '', archived INTEGER DEFAULT 0,
+    docs_complete_at TEXT);
+CREATE TABLE nidaan_claim_doc_checklist (claim_id INTEGER, doc_key TEXT, received INTEGER DEFAULT 0);
+INSERT INTO nidaan_claim_doc_checklist VALUES (233, 'discharge', 0);
 CREATE TABLE nidaan_claim_activity (act_id INTEGER PRIMARY KEY AUTOINCREMENT,
     claim_id INTEGER NOT NULL, kind TEXT NOT NULL, channel TEXT DEFAULT '',
     direction TEXT DEFAULT '', actor TEXT DEFAULT '', summary TEXT DEFAULT '',
@@ -94,8 +97,9 @@ TOLD = []
 
 
 async def f_pending(claim_id, ctype):
-    return [{"key": "discharge", "en": "Discharge summary", "hi": "डिस्चार्ज समरी"}] \
-        if claim_id == 233 else []
+    # The real function falls back to the full template when a claim has no checklist - so it
+    # answers for EVERY claim here, and only the has-a-checklist rule can keep it off the screen.
+    return [{"key": "discharge", "en": "Discharge summary", "hi": "डिस्चार्ज समरी"}]
 
 
 async def f_notify(ids, subject, body, event_key="", email=True, **kw):
@@ -136,6 +140,9 @@ async def main():
           c233["missing"] == [{"en": "Discharge summary", "hi": "डिस्चार्ज समरी"}], c233)
     check("the customer's name, the claim type, the insurer",
           c233["customer"] == "UTTAM SINGH" and c233["insurer"] == "Star Health", c233)
+    c236 = next(c for c in got if c["claim_id"] == 236)
+    check("a claim with no checklist of its own shows nothing missing (not the full template)",
+          c236["missing"] == [], c236)
     flat = repr(got)
     check("no policy number and no phone number", "POL-SECRET" not in flat
           and "9999999999" not in flat and "7354053177" not in flat)

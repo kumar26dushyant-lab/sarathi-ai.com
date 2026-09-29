@@ -81,7 +81,9 @@ async def referred_claims(code: str, *, exclude_raised_by_branch: bool = False,
         c.row_factory = aiosqlite.Row
         rows = [dict(r) for r in await (await c.execute(
             "SELECT c.claim_id, c.account_id, c.claim_type, c.insurer_name, c.status, "
-            "c.pipeline_stage, c.origin, c.created_at, "
+            "c.pipeline_stage, c.origin, c.created_at, c.docs_complete_at, "
+            "EXISTS(SELECT 1 FROM nidaan_claim_doc_checklist k WHERE k.claim_id=c.claim_id) "
+            "AS has_checklist, "
             "COALESCE(c.last_status_at, c.created_at) AS updated_at, "
             "a.owner_name, s.name AS handler "
             "FROM nidaan_claims c "
@@ -92,13 +94,19 @@ async def referred_claims(code: str, *, exclude_raised_by_branch: bool = False,
             (code, code, int(limit)))).fetchall()]
     out = []
     for r in rows:
+        # "Still missing" only where the claim is really collecting documents: it has its OWN
+        # checklist and nobody has marked it complete. Without a checklist, pending_required_docs
+        # falls back to the claim type's full template - on a review-stage claim that read
+        # "7 missing" for papers nobody has asked for (checked live, 29 Sep: #207, #128), and a
+        # referrer would have chased the customer for them.
         missing = []
-        try:
-            missing = [{"en": d.get("en") or d.get("key"), "hi": d.get("hi") or ""}
-                       for d in await _ck.pending_required_docs(r["claim_id"],
-                                                                r.get("claim_type") or "")]
-        except Exception as e:  # noqa: BLE001
-            logger.info("pending docs unreadable for claim %s: %s", r["claim_id"], e)
+        if r.get("has_checklist") and not r.get("docs_complete_at"):
+            try:
+                missing = [{"en": d.get("en") or d.get("key"), "hi": d.get("hi") or ""}
+                           for d in await _ck.pending_required_docs(r["claim_id"],
+                                                                    r.get("claim_type") or "")]
+            except Exception as e:  # noqa: BLE001
+                logger.info("pending docs unreadable for claim %s: %s", r["claim_id"], e)
         out.append({
             "claim_id": r["claim_id"],
             "customer": r.get("owner_name") or "",
