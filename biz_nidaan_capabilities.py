@@ -815,6 +815,26 @@ CAPABILITIES: list[dict] = [
         "telegram": False, "web": True, "min_role": "team_member",
     },
     {
+        "id": "evening_summary",
+        "en": {"t": "Every evening, your day on Telegram - text and a voice note",
+               "d": "At 8 pm each person gets their own summary: the claims they worked on and which bucket each sits in, the claims they moved (from where to where), what they did and their tasks - in their own language, with a voice note. Super-admins also get the team's day: bucket by bucket, every move and who made it, who worked on what, who recorded nothing, who is on leave. Money is always read out as rupees. A day with nothing recorded sends nothing.",
+               "u": "Nothing to do - it comes by itself. Choose your language in the Telegram bot. It only shows what you recorded on the claims, so record your work there."},
+        "hi": {"t": "हर शाम आपका दिन टेलीग्राम पर - लिखकर और आवाज़ में",
+               "d": "रात 8 बजे हर व्यक्ति को अपना सार मिलता है: किन क्लेम पर काम किया और वे किस बकेट में हैं, कौन-से क्लेम कहाँ से कहाँ भेजे, क्या काम किया और टास्क - अपनी भाषा में, आवाज़ के साथ। सुपर-एडमिन को पूरी टीम का दिन भी मिलता है: हर बकेट, हर मूव और किसने किया, किसने किस पर काम किया, किसका कुछ दर्ज नहीं, कौन छुट्टी पर है। रकम हमेशा रुपये में बोली जाती है। जिस दिन कुछ दर्ज न हो, कुछ नहीं आता।",
+               "u": "कुछ करना नहीं है - यह अपने आप आता है। भाषा टेलीग्राम बॉट में चुनें। इसमें वही दिखता है जो आपने क्लेम पर दर्ज किया, इसलिए अपना काम वहीं दर्ज करें।"},
+        "telegram": True, "web": False, "min_role": "team_member",
+    },
+    {
+        "id": "claim_cp_change",
+        "en": {"t": "Add or remove a Channel Partner on an existing claim - with approval",
+               "d": "Forgot to choose the Channel Partner when you raised a My Business claim? Ask for it on the claim, with a reason; a super-admin approves or rejects, and only then does the claim change. Removing one works the same way. Every step is on the claim's timeline and you are told the answer.",
+               "u": "Open the claim - Where this claim came from - Channel Partner - Ask to add (or Ask to remove). Super-admins approve or reject in the same place."},
+        "hi": {"t": "मौजूदा क्लेम पर चैनल पार्टनर जोड़ें या हटाएँ - मंज़ूरी के साथ",
+               "d": "My Business क्लेम दर्ज करते समय चैनल पार्टनर चुनना भूल गए? क्लेम पर कारण के साथ अनुरोध करें; सुपर-एडमिन मंज़ूर या अस्वीकार करते हैं, तभी क्लेम बदलता है। हटाना भी ऐसे ही होता है। हर कदम क्लेम की टाइमलाइन पर दर्ज होता है और आपको जवाब बताया जाता है।",
+               "u": "क्लेम खोलें - Where this claim came from - Channel Partner - Ask to add (या Ask to remove)। सुपर-एडमिन वहीं मंज़ूर या अस्वीकार करते हैं।"},
+        "telegram": False, "web": True, "min_role": "team_member",
+    },
+    {
         "id": "payment_daily_check",
         "en": {"t": "Every morning: yesterday's payments checked against Razorpay",
                "d": "At 9 am the super admins get one message: what Razorpay captured yesterday, what is in our books, and \u201call match\u201d \u2014 or exactly which payment is missing or differs. It reads only; the Payment Guardian still recovers a missing payment on its own.",
@@ -944,7 +964,8 @@ def speech_text_for(audience: str, lang: str = "en", plan: str = "") -> str:
         parts = ["Hello. Here is what you can do on your dashboard."]
         parts += [f"{i}. {c['title']}. {c['detail']} {c.get('use','')}".strip() for i, c in enumerate(feats, 1)]
         parts.append("If you have any question, contact our team.")
-    return " ".join(parts)
+    import biz_speakable   # the browser's own voice reads this too - rupees, never dollars
+    return biz_speakable.speakable(" ".join(parts))
 
 
 def build_guide(role: str, lang: str = "en") -> dict:
@@ -988,7 +1009,8 @@ def speech_text(role: str, lang: str = "en") -> str:
         parts.append("Now, the things that can only be done in the web portal or the installed app.")
         parts += [f"{i}. {c['title']}. {c['detail']} {c.get('use','')}".strip() for i, c in enumerate(g["web_only"], 1)]
         parts.append("That's everything. If you have a question, just ask the bot on Telegram.")
-    return " ".join(parts)
+    import biz_speakable   # the browser's own voice reads this too - rupees, never dollars
+    return biz_speakable.speakable(" ".join(parts))
 
 
 def telegram_help_text(role: str, lang: str = "en") -> str:

@@ -99,11 +99,11 @@ async def stance(claim_id: int | None, *, verified: bool) -> dict:
     # and phones are shared, and what sits behind a match is somebody else's medical claim.
     if not verified:
         return dict(base, stance=STANCE_QUIET, may_send_docs=False,
-                    reason="not verified — a matching number is a candidate, not a person")
+                    reason="we have not yet confirmed who is writing from this number, so nothing about the claim was shared")
 
     if not claim_id:
         return dict(base, stance=STANCE_QUIET, may_send_docs=False,
-                    reason="verified, but this number is not on a claim")
+                    reason="this number is confirmed but is not on any claim")
 
     try:
         async with aiosqlite.connect(DB_PATH) as c:

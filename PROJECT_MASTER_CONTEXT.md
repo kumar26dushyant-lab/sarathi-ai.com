@@ -8145,3 +8145,27 @@ no longer recognises suspended accounts or disabled APs.
 `submit_claim` (Phase 0 = one intake module for all doors, WhatsApp the seventh); Rs 499 review
 documents never reach the claim; complainant page hides WhatsApp files; staff logins never expire.
 Five decisions are with the founder (see TODO "Waiting on the founder" 3f).
+
+## 30 Sep 2026 (late night) — evening summaries, CP on existing claims, claim #245
+
+Founder, 30 Sep evening: clearer L2 header numbers; an end-of-day Telegram summary bucket-wise
+with every move and who made it, to super-admins and to each staff member individually, with a
+voice note in their language - and never "dollar" for rupees; duty that works without bombarding;
+add/remove a Channel Partner on an existing claim with super-admin approval (#226); investigate
+#245's "WhatsApp verified"; never send claude.ai pages to anyone.
+
+**Shipped:** `biz_speakable` (every voice reads money as rupees, crore/lakh, no Markdown/emoji -
+wired into `biz_tts.cached_wav` and the Listen narration); `biz_nidaan_moves` +
+`nidaan_bucket_move_log` (from/to/staff for every move, written in move, start_l2,
+undo_handover, move_stage; NOTE `nidaan_bucket_moves` is the ROUTES table - a first attempt
+collided with it); `biz_nidaan_daily_summary` rewritten (no AI, fixed EN/HI/Hinglish wording,
+team + own, once-a-day stamp); L2 header; duty: leave/cover in `on_duty_rep_ids`, roster
+filtering, rostered staff told, max_length 40; `biz_nidaan_claim_cp` (request/decide/withdraw,
+re-checked at approval); `biz_nidaan_wa_autoreply` (#245: away messages and business greetings)
+and `_reserve_reply` (atomic one-reply slot); My Business claims record who raised them;
+fresh-install pass for five columns created by ALTER before their table.
+
+**#245 findings:** raised by Tamanna from My Business on the web, not WhatsApp. The "verified"
+came from an automatic away message (fixed); the number was later proven properly by a code on
+the claim page. The complainant mobile may belong to an insurance agency ("New India Insurance,
+Badwani") - staff should check who the complainant really is.

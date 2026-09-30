@@ -71,7 +71,9 @@ async def _gemini_wav(text: str, voice: str, model: str) -> Optional[bytes]:
 
 async def cached_wav(text: str, voice: str = "Kore", model: str = "") -> Optional[bytes]:
     """WAV bytes for `text` in `voice`, generated once then served from disk cache. None on failure."""
-    text = (text or "").strip()[:MAX_CHARS]
+    # Every voice reads Indian money as rupees, never dollars, and skips Markdown and emoji.
+    import biz_speakable
+    text = biz_speakable.speakable(text or "")[:MAX_CHARS]
     if not text:
         return None
     model = model or os.getenv("TTS_MODEL", "gemini-2.5-flash-preview-tts")

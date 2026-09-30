@@ -49,11 +49,15 @@ async def l2_claims() -> dict:
         conn.row_factory = aiosqlite.Row
         waiting_where = (
             "FROM nidaan_claims c WHERE %s AND c.review_outcome='can_fight' "
+            "AND COALESCE(c.status,'') NOT IN ('resolved_won','resolved_lost') "
             "AND c.l2_handover_at IS NULL AND COALESCE(c.pipeline_stage,'')=''" % _OPEN)
+        # Measured from the review that said GO - the moment the claim joined this queue - not
+        # from when it was first registered, which blamed the queue for the review's time.
+        since = "julianday(COALESCE(c.review_delivered_at, c.created_at))"
 
         waiting = int(await _one(conn, "SELECT COUNT(*) " + waiting_where))
         oldest = int(await _one(conn,
-            "SELECT MAX(CAST(julianday('now') - julianday(c.created_at) AS INT)) " + waiting_where))
+            "SELECT MAX(CAST(julianday('now') - " + since + " AS INT)) " + waiting_where))
         docs_done = int(await _one(conn,
             "SELECT COUNT(*) " + waiting_where + " AND c.docs_complete_at IS NOT NULL"))
 
@@ -65,7 +69,7 @@ async def l2_claims() -> dict:
             "WHERE action='l2.handover_undo' AND created_at >= datetime('now', ?)", (WEEK,)))
         # How long a claim waits before it is handed over, over the last 90 days of handovers.
         avg_days = await _one(conn,
-            "SELECT AVG(julianday(c.l2_handover_at) - julianday(c.created_at)) "
+            "SELECT AVG(julianday(c.l2_handover_at) - " + since + ") "
             "FROM nidaan_claims c WHERE c.l2_handover_at IS NOT NULL "
             "AND c.l2_handover_at >= datetime('now','-90 days')")
 

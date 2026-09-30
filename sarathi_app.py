@@ -991,6 +991,17 @@ def _get_staff_from_request(request: Request) -> Optional[dict]:
     return payload
 
 
+def _require_staff(request: Request, min_role: str = "team_member") -> dict:
+    """Dependency-style helper: returns staff payload or raises 401/403."""
+    role_rank = {"team_member": 0, "sub_super_admin": 1, "super_admin": 2}
+    staff = _get_staff_from_request(request)
+    if not staff:
+        raise HTTPException(status_code=401, detail="Staff authentication required")
+    if role_rank.get(staff.get("role"), -1) < role_rank.get(min_role, 99):
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+    return staff
+
+
 def _actor_label(staff: dict) -> str:
     """The REAL person behind an action, for accountability. If this is a staff-
     impersonation session, surface the real super-admin — never let the impersonated
@@ -1018,6 +1029,92 @@ async def _ops_audit(request: Request, action: str, target_type: str = "",
             target_id=target_id, detail=detail, ip=ip)
     except Exception:
         pass
+
+
+# ── Channel Partner on an existing claim: ask, then a super-admin decides ────────────
+# (founder, 30 Sep, claim #226). biz_nidaan_claim_cp holds the rules; every route here checks the
+# caller may see the claim, and the claim changes only when a super-admin approves.
+class _ClaimCPReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    action: str = Field(..., pattern=r"^(add|remove)$")
+    cp_id: int = Field(0, ge=0)
+    reason: str = Field(..., min_length=5, max_length=400)
+
+
+class _ClaimCPDecision(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    approve: bool
+    note: str = Field("", max_length=400)
+
+
+async def _cp_claim_gate(staff: dict, claim_id: int) -> dict:
+    """The caller may see this claim, or it does not exist (404, never 403)."""
+    import biz_nidaan_claim_authz as _authz
+    if not (await _authz.assert_claim_access(staff, claim_id)).get("allowed"):
+        raise HTTPException(status_code=404, detail="Claim not found")
+    return staff
+
+
+@app.get("/nidaan/ops/api/claims/{claim_id}/cp")
+async def ops_claim_cp_state(claim_id: int, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    await _cp_claim_gate(_require_staff(request, "team_member"), claim_id)
+    import biz_nidaan_claim_cp as _ccp
+    return await _ccp.state(claim_id)
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/cp/request")
+@limiter.limit("20/minute")
+async def ops_claim_cp_request(claim_id: int, body: _ClaimCPReq, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = await _cp_claim_gate(_require_staff(request, "team_member"), claim_id)
+    import biz_nidaan_claim_cp as _ccp
+    try:
+        res = await _ccp.request_change(claim_id, body.action, cp_id=body.cp_id,
+                                        reason=body.reason, staff={**staff, "name": _actor_label(staff)})
+    except _ccp.CPError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    await _ops_audit(request, "claim.cp_request", "claim", claim_id,
+                     f"{body.action} cp={body.cp_id} {body.reason}"[:160])
+    return res
+
+
+@app.post("/nidaan/ops/api/cp-requests/{req_id}/decide")
+@limiter.limit("30/minute")
+async def ops_claim_cp_decide(req_id: int, body: _ClaimCPDecision, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "super_admin")
+    import biz_nidaan_claim_cp as _ccp
+    try:
+        res = await _ccp.decide(req_id, body.approve, note=body.note,
+                                staff={**staff, "name": _actor_label(staff)})
+    except _ccp.CPError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    await _ops_audit(request, "claim.cp_decide", "claim", await _ccp.claim_of(req_id),
+                     f"req={req_id} {'approved' if body.approve else 'rejected'} {body.note}"[:160])
+    return res
+
+
+@app.post("/nidaan/ops/api/cp-requests/{req_id}/withdraw")
+@limiter.limit("30/minute")
+async def ops_claim_cp_withdraw(req_id: int, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "team_member")
+    import biz_nidaan_claim_cp as _ccp
+    claim_id = await _ccp.claim_of(req_id)
+    if not claim_id:
+        raise HTTPException(status_code=404, detail="Not found")
+    await _cp_claim_gate(staff, claim_id)
+    try:
+        res = await _ccp.withdraw(req_id, staff={**staff, "name": _actor_label(staff)})
+    except _ccp.CPError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    await _ops_audit(request, "claim.cp_withdraw", "claim", claim_id, f"req={req_id}")
+    return res
 
 
 # ── The splitter, one file at a time, read in the background (29 Sep) ─────────

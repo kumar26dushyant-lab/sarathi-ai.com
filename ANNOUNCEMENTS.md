@@ -1,5 +1,27 @@
 # Staff Announcement Drafts
 
+## 2026-09-30 (late, short) — Evening summary, Channel Partner requests, duty
+
+_For: all staff. Not yet sent._
+
+**EN**
+
+🌙 **Every evening at 8 pm you get your day on Telegram** — the claims you worked on, which bucket each is in, the claims you moved, and your tasks — in your language, with a voice note. It shows only what you recorded on the claims, so please record your work there.
+
+🤝 **Forgot the Channel Partner on a My Business claim?** Open the claim → *Where this claim came from* → *Ask to add*. A super-admin approves it. Removing one works the same way.
+
+🛡️ **Duty:** you now get a message when you are put on duty for a bucket. On a day of approved leave, your alerts go to your cover.
+
+**HI**
+
+🌙 **हर शाम 8 बजे आपका दिन टेलीग्राम पर आएगा** — आपने किन क्लेम पर काम किया, वे किस बकेट में हैं, कौन-से क्लेम आगे बढ़ाए, और आपके टास्क — आपकी भाषा में, आवाज़ के साथ। इसमें वही दिखता है जो आपने क्लेम पर दर्ज किया, इसलिए अपना काम वहीं दर्ज कीजिये।
+
+🤝 **My Business क्लेम पर चैनल पार्टनर जोड़ना भूल गए?** क्लेम खोलें → *Where this claim came from* → *Ask to add*। सुपर-एडमिन मंज़ूरी देंगे। हटाना भी ऐसे ही होता है।
+
+🛡️ **ड्यूटी:** किसी बकेट की ड्यूटी मिलने पर अब आपको संदेश आएगा। मंज़ूर छुट्टी वाले दिन आपके अलर्ट आपकी जगह काम करने वाले साथी को जाएँगे।
+
+---
+
 ## 2026-09-30 (short) — "Branch" is now "Authorized Partner (AP)"
 
 _For: all staff. Not yet sent._

@@ -782,7 +782,8 @@ async def enter_pipeline(claim_id: int, *, actor: str = "") -> dict:
             "next_stage": next_stage(first)}
 
 
-async def move_stage(claim_id: int, *, to: str = "", note: str = "", actor: str = "") -> dict:
+async def move_stage(claim_id: int, *, to: str = "", note: str = "", actor: str = "",
+                     actor_id: int = 0) -> dict:
     """Move a case to the next bucket, or to a named one.
 
     Backwards is allowed on purpose. Work comes back — a draft gets returned, a document turns
@@ -829,6 +830,9 @@ async def move_stage(claim_id: int, *, to: str = "", note: str = "", actor: str 
     if (note or "").strip():
         summary += f" — {note.strip()}"
     await _log(claim_id, "case_stage", summary, actor)
+    import biz_nidaan_moves as _mv
+    await _mv.record(claim_id, cur, to, kind=("back" if back else "auto"), staff_id=actor_id,
+                     actor=actor)
     return {"ok": True, "stage": to, "stage_label": STAGE_LABEL[to],
             "from": cur, "back": back, "next_stage": next_stage(to)}
 

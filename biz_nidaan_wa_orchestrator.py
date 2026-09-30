@@ -201,6 +201,25 @@ async def _recent_outbound(msisdn: str, minutes: int = 120) -> bool:
         return False
 
 
+async def _reserve_reply(msisdn: str, minutes: int = 120) -> bool:
+    """Take the one reply this number may get in `minutes` - atomically. True means send it.
+
+    Checking "did we message them recently?" and then sending let two messages arriving in the
+    same second both pass the check: claim #245 got the same reply twice. One UPDATE decides, so
+    only one arrival - in any web worker - wins the slot. The contact row exists by now (every
+    inbound message upserts it first)."""
+    try:
+        async with aiosqlite.connect(DB_PATH) as c:
+            cur = await c.execute(
+                "UPDATE nidaan_wa_contacts SET last_outbound_at=CURRENT_TIMESTAMP WHERE msisdn=? "
+                "AND (last_outbound_at IS NULL OR last_outbound_at <= datetime('now', ?))",
+                (msisdn, f"-{int(minutes)} minutes"))
+            await c.commit()
+            return cur.rowcount == 1
+    except Exception:  # noqa: BLE001 - unsure means do not send a second copy
+        return False
+
+
 async def _mark_asked(claim_id: int) -> None:
     try:
         async with aiosqlite.connect(DB_PATH) as c:
@@ -766,9 +785,8 @@ async def handle_inbound_text(msisdn: str, text: str) -> dict:
     # either; that is exactly what dead-ended the last conversation. Acknowledge, at most once
     # every 2 hours, without touching the pending-document state.
     if await _human_holds(msisdn, claim_id):
-        if not await _recent_outbound(msisdn, 120):
+        if await _reserve_reply(msisdn, 120):
             await _wa.send_text(msisdn, _msg.compose("human_followup", lang, {}))
-            await _touch_outbound(msisdn)
             await _activity(claim_id, "wa_ack", "Acknowledged (case is with a human).")
         return {"ok": True, "action": "human_takeover_ack"}
 
@@ -842,12 +860,11 @@ async def handle_inbound_text(msisdn: str, text: str) -> dict:
         # dead-ended the conversation the founder complained about on 23 Sep.
         await _activity(claim_id, "wa_inbound", f"Customer: {(text or '')[:120]}", direction="in")
         await _tell_staff_inbound(claim_id, msisdn, text)
-        if not await _recent_outbound(msisdn, 120):
+        if await _reserve_reply(msisdn, 120):
             await _wa.send_text(msisdn, _msg.compose("human_followup", lang, {}))
-            await _touch_outbound(msisdn)
         await _handoff_to_support(claim, msisdn, text, lang,
-                                  reason="charter: %s" % _st["reason"], identity=ident)
-        await _activity(claim_id, "wa_charter", "Bot held back — %s" % _st["reason"])
+                                  reason=_st["reason"], identity=ident)
+        await _activity(claim_id, "wa_charter", "The bot did not discuss the claim — %s" % _st["reason"])
         return {"ok": True, "action": "charter_quiet", "reason": _st["reason"]}
 
     # WHAT WAS ALREADY SAID. `decide()` has always accepted history and this call never passed
@@ -1002,7 +1019,7 @@ async def _handoff_to_support(claim, msisdn: str, text: str, lang: str, reason: 
         await pause_bot(msisdn, by="support")
         if claim_id:
             await _set_takeover(claim_id, by="support")
-        await _activity(claim_id, "wa_handoff", f"Handed to Support (thread #{tid}) — {reason or 'needs a human'}")
+        await _activity(claim_id, "wa_handoff", f"Passed to the support team (chat #{tid}) for a person to answer — {reason or 'needs a person'}")
         try:
             import biz_nidaan_notifications as _nnot
             await _nnot.on_support_escalated(tid)

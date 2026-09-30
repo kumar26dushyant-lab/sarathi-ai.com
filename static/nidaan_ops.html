@@ -3975,12 +3975,99 @@ function _originBlock(c){
     ? ' <button class="btn-sm btn-ghost" style="font-size:.7rem;padding:.15rem .5rem;color:var(--nd-cyan-text)"'
       + ' onclick="openClaimReattributeModal(' + c.claim_id + ')"'
       + ' title="Correct who referred this claim">\ud83c\udff7\ufe0f Fix</button>' : '';
+  // The Channel Partner box - only a My Business claim can carry one (founder, 30 Sep).
+  const _mb = String(c.branch_code||'').toUpperCase().indexOf('SP-')===0;
+  if (_mb) setTimeout(function(){ loadClaimCP(c.claim_id); }, 0);
   return '<div style="font-weight:700;margin-bottom:.35rem">' + esc(how.icon||'') + ' '
        +   esc(how.label) + fix + '</div>'
        + (when ? '<div class="kv"><span class="kv-label">When</span><span class="kv-val">'
                  + esc(when) + '</span></div>' : '')
-       + rows + gaps;
+       + rows + gaps
+       + (_mb ? '<div id="cpBox_' + c.claim_id + '" style="margin-top:.6rem;padding-top:.55rem;border-top:1px dashed var(--nd-border)"></div>' : '');
 }
+
+// ── Channel Partner on this claim: ask, and a super-admin decides ───────────────
+async function loadClaimCP(cid){
+  const box = document.getElementById('cpBox_'+cid); if(!box) return;
+  let d;
+  try{ const r = await API('/claims/'+cid+'/cp'); if(!r.ok) return; d = await r.json(); }catch(e){ return; }
+  if(!d.ok || !d.eligible){ box.innerHTML=''; return; }
+  const btn = (label, fn, tone) => '<button class="btn-sm btn-ghost" style="font-size:.74rem;color:'+(tone||'var(--nd-cyan-text)')+'" onclick="'+fn+'">'+label+'</button>';
+  let h = '<div style="font-size:.72rem;font-weight:700;color:var(--nd-text-muted);letter-spacing:.04em">CHANNEL PARTNER</div>'
+        + '<div style="margin:.2rem 0 .35rem;font-weight:600">' + (d.cp ? esc(d.cp.name||'') : '<span style="color:var(--nd-text-faint);font-weight:400">None on this claim</span>') + '</div>';
+  const p = d.pending;
+  if(p){
+    h += '<div style="font-size:.78rem;color:var(--nd-warning-text);margin-bottom:.35rem">⏳ Waiting for a super-admin: '
+       + (p.action==='add'?'add ':'remove ') + '<b>' + esc(p.cp_name||'') + '</b> — asked by '
+       + esc(p.requested_name||'') + '<br><span style="color:var(--nd-text-muted)">Reason: ' + esc(p.reason||'') + '</span></div>'
+       + '<div style="display:flex;gap:.4rem;flex-wrap:wrap">';
+    if(_role==='super_admin'){
+      h += btn('✅ Approve', 'cpDecide('+cid+','+p.req_id+',true,\''+p.action+'\')', 'var(--nd-success-text)')
+         + btn('✕ Reject', 'cpDecide('+cid+','+p.req_id+',false)', 'var(--nd-danger-text)');
+    }
+    h += btn('Withdraw request', 'cpWithdraw('+cid+','+p.req_id+')', 'var(--nd-text-secondary)') + '</div>';
+  } else if(d.cp){
+    h += btn('Ask to remove this Channel Partner', 'cpAskRemove('+cid+')', 'var(--nd-warning-text)');
+  } else {
+    h += '<div id="cpAdd_'+cid+'">' + btn('+ Ask to add a Channel Partner', 'cpAskAdd('+cid+')') + '</div>';
+  }
+  const past = (d.history||[]).filter(x=>x.status!=='pending').slice(0,3);
+  if(past.length){
+    h += '<div style="margin-top:.45rem;font-size:.72rem;color:var(--nd-text-faint)">'
+       + past.map(x => esc((x.action==='add'?'Add ':'Remove ')+(x.cp_name||'')+' — '+x.status
+                          +(x.decided_name?' by '+x.decided_name:'')+(x.decision_note?' ('+x.decision_note+')':''))).join('<br>')
+       + '</div>';
+  }
+  box.innerHTML = h;
+}
+async function cpAskAdd(cid){
+  const slot = document.getElementById('cpAdd_'+cid); if(!slot) return;
+  let list = [];
+  try{ const r = await API('/channel-partners?approved_only=true'); if(r.ok) list = ((await r.json()).partners||[]); }catch(e){}
+  if(!list.length){ slot.innerHTML = '<div style="font-size:.76rem;color:var(--nd-text-muted)">No approved Channel Partners yet. Propose one in 🤝 Channel Partners first.</div>'; return; }
+  slot.innerHTML = '<select id="cpSel_'+cid+'" style="width:100%;margin:.2rem 0">'
+    + '<option value="">Choose a Channel Partner…</option>'
+    + list.map(p=>'<option value="'+p.cp_id+'">'+esc(p.name)+(p.company?' · '+esc(p.company):'')+'</option>').join('')
+    + '</select><input id="cpWhy_'+cid+'" maxlength="400" placeholder="Why? e.g. forgot to add at intake" style="width:100%;margin:.2rem 0">'
+    + '<button class="btn-sm btn-primary" style="font-size:.76rem" onclick="cpSendAdd('+cid+')">Send for approval</button>'
+    + '<div style="font-size:.7rem;color:var(--nd-text-faint);margin-top:.2rem">A super-admin approves it; nothing changes until then.</div>';
+}
+async function cpSendAdd(cid){
+  const cp = parseInt((document.getElementById('cpSel_'+cid)||{}).value||'0',10);
+  const why = ((document.getElementById('cpWhy_'+cid)||{}).value||'').trim();
+  if(!cp){ ndUI.toast('Choose a Channel Partner','warning'); return; }
+  if(why.length<5){ ndUI.toast('Please say why (one line)','warning'); return; }
+  await _cpPost('/claims/'+cid+'/cp/request', {action:'add', cp_id:cp, reason:why}, cid, 'Sent for approval');
+}
+async function cpAskRemove(cid){
+  const why = (prompt('Why should this Channel Partner be removed from the claim?\nA super-admin will decide.')||'').trim();
+  if(!why) return;
+  if(why.length<5){ ndUI.toast('Please say a little more','warning'); return; }
+  await _cpPost('/claims/'+cid+'/cp/request', {action:'remove', reason:why}, cid, 'Sent for approval');
+}
+async function cpDecide(cid, rid, approve, action){
+  let note = '';
+  if(approve){
+    if(!confirm(action==='remove' ? 'Remove this Channel Partner from the claim?' : 'Add this Channel Partner to the claim?')) return;
+  } else {
+    note = (prompt('Why is it rejected? The person who asked will read this.')||'').trim();
+    if(!note) return;
+  }
+  await _cpPost('/cp-requests/'+rid+'/decide', {approve:!!approve, note:note}, cid, approve?'Approved':'Rejected');
+}
+async function cpWithdraw(cid, rid){
+  if(!confirm('Withdraw this request?')) return;
+  await _cpPost('/cp-requests/'+rid+'/withdraw', null, cid, 'Withdrawn');
+}
+async function _cpPost(path, body, cid, ok){
+  try{
+    const r = await API(path, body ? {method:'POST', body: JSON.stringify(body)} : {method:'POST'});
+    if(!r.ok){ const d = await r.json().catch(()=>({})); ndUI.toast((typeof d.detail==='string'&&d.detail)||'Could not do that','error'); return; }
+    ndUI.toast(ok,'success'); loadClaimCP(cid);
+  }catch(e){ ndUI.toast('Could not do that','error'); }
+}
+window.loadClaimCP=loadClaimCP; window.cpAskAdd=cpAskAdd; window.cpSendAdd=cpSendAdd;
+window.cpAskRemove=cpAskRemove; window.cpDecide=cpDecide; window.cpWithdraw=cpWithdraw;
 
 function _l2CsBadge(c){
   if(c.claimshield_case_id) return `<span style="color:var(--nd-cyan-text);font-weight:700">CS #${esc(c.claimshield_case_id)}</span>${c.claimshield_status_raw?` · <span style="color:var(--nd-text-secondary)">${esc(c.claimshield_status_raw)}</span>`:''}`;
@@ -4297,12 +4384,10 @@ async function _l2QueueStats(){
     const d = await r.json(), l = d.l2 || {};
     const bits = [];
     if (l.oldest_days) bits.push('<b style="color:' + ((l.oldest_days > 30)
-      ? 'var(--nd-danger-text)' : 'var(--nd-warning-text)') + '">oldest waiting ' + l.oldest_days + ' days</b>');
-    if (l.waiting) bits.push('<b>' + (l.docs_complete || 0) + ' of ' + l.waiting
-      + '</b> have all their documents');
-    if (l.avg_days_to_hand_over != null) bits.push('average <b>' + l.avg_days_to_hand_over
-      + ' days</b> to hand over');
-    bits.push((l.handed_this_week || 0) + ' handed over this week'
+      ? 'var(--nd-danger-text)' : 'var(--nd-warning-text)') + '">oldest waiting ' + l.oldest_days + ' days since the GO review</b>');
+    if (l.avg_days_to_hand_over != null) bits.push('on average <b>' + l.avg_days_to_hand_over
+      + ' days</b> from GO review to handover');
+    bits.push((l.handed_this_week || 0) + ' handed over in the last 7 days'
       + (l.sent_back_this_week ? ', ' + l.sent_back_this_week + ' sent back' : ''));
     box.innerHTML = '<div style="font-size:.78rem;color:var(--nd-text-muted)">'
       + bits.join(' &nbsp;·&nbsp; ') + '</div>';
@@ -4329,22 +4414,30 @@ function _renderOutcome(key){
   if(isL2){
     const m = document.getElementById('oc_l2claims_metrics');
     if(m){
-      const paid = all.filter(_l2Eligible).length;   // paid = L2 fee OR ₹499 review OR subscription
+      // Every card counts the SAME claims: reviewed GO, not yet handed over - the list below.
+      // "Fee settled" used to be labelled "L2 fee paid" while counting plan-covered claims that
+      // never pay a Level-2 fee; it now says which is which (founder, 30 Sep: "more clarity").
+      const feePaid = all.filter(c=>c.l2_payment_status==='paid').length;
+      const covered = all.filter(_l2Eligible).length;
+      const byPlan = covered - feePaid;
       const sent = all.filter(c=>c.claimshield_case_id).length;
+      const docsIn = all.filter(c=>c.docs_complete_at).length;
       const disputed = all.reduce((s,c)=>s+(c.disputed_amount||0),0);
-      const card=(label,val,col)=>`<div style="flex:1 1 118px;min-width:108px;background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:12px;padding:.55rem .7rem"><div style="font-size:1.3rem;font-weight:800;color:${col||'var(--nd-text-primary)'};line-height:1.1">${val}</div><div style="font-size:.7rem;color:var(--nd-text-muted);margin-top:.15rem">${label}</div></div>`;
-      m.innerHTML=`<div style="display:flex;flex-wrap:wrap;gap:.5rem">
-        ${card('Total L2', all.length)}
-        ${card('L2 fee paid', paid, 'var(--nd-success-text)')}
-        ${card('L2 fee due', all.length-paid, 'var(--nd-warning-text)')}
-        ${card('Disputed', '₹'+fmt(disputed))}
-        ${card('Sent to ClaimShield', sent, 'var(--nd-cyan-text)')}
-        ${card('Not sent', all.length-sent, 'var(--nd-text-secondary)')}
+      const card=(label,val,col,note)=>`<div style="flex:1 1 140px;min-width:128px;background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:12px;padding:.55rem .7rem"><div style="font-size:1.3rem;font-weight:800;color:${col||'var(--nd-text-primary)'};line-height:1.1">${val}</div><div style="font-size:.74rem;font-weight:700;color:var(--nd-text-secondary);margin-top:.15rem">${label}</div>${note?`<div style="font-size:.68rem;color:var(--nd-text-muted);margin-top:.1rem;line-height:1.3">${note}</div>`:''}</div>`;
+      const mine = (typeof _role!=='undefined' && _role==='team_member');
+      m.innerHTML=`${mine?'<div style="font-size:.74rem;color:var(--nd-text-muted);margin-bottom:.35rem">Showing only the claims assigned to you.</div>':''}
+      <div style="display:flex;flex-wrap:wrap;gap:.5rem">
+        ${card('Waiting for handover', all.length, '', 'Review said GO; not yet in Consolidation')}
+        ${card('Fee settled', covered, 'var(--nd-success-text)', feePaid+' Level-2 fee paid · '+byPlan+' covered by plan or review')}
+        ${card('Fee pending', all.length-covered, 'var(--nd-warning-text)', 'Authorized Partner / My Business fee not paid yet')}
+        ${card('All documents in', docsIn+' of '+all.length, docsIn?'var(--nd-success-text)':'var(--nd-text-secondary)', 'Ready to hand over')}
+        ${card('ClaimShield case opened', sent, 'var(--nd-cyan-text)', (all.length-sent)+' not opened yet')}
+        ${card('Amount in dispute', '₹'+fmt(disputed), '', 'Across these '+all.length+' claims')}
       </div>
+      ${everything.length>=300 ? '<div style="font-size:.74rem;color:var(--nd-warning-text);margin-top:.35rem">Showing the first 300 claims only - the counts above may be higher.</div>' : ''}
       ${movedOn ? `<div style="font-size:.76rem;color:var(--nd-text-muted);margin-top:.4rem">
-        ${movedOn} more ${movedOn===1?'claim has':'claims have'} already been handed over and
-        ${movedOn===1?'is':'are'} being worked in
-        <a href="#l2" onclick="showPanel('l2');return false" style="color:var(--nd-cyan-text)">⚖️ Consolidation</a>.</div>` : ''}
+        Already handed over: <b>${movedOn}</b> ${movedOn===1?'claim is':'claims are'} being worked in
+        <a href="#l2" onclick="showPanel('l2');return false" style="color:var(--nd-cyan-text)">⚖️ Consolidation</a> (not counted above).</div>` : ''}
       <div id="l2QueueStats" style="margin-top:.45rem"></div>`;
       _l2QueueStats();
     }

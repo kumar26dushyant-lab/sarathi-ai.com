@@ -1339,6 +1339,42 @@ async def init_db():
             CREATE INDEX IF NOT EXISTS idx_claimact_claim ON nidaan_claim_activity(claim_id);
             CREATE INDEX IF NOT EXISTS idx_claimact_created ON nidaan_claim_activity(created_at);
 
+            -- One row per bucket move: from, to, who (biz_nidaan_moves). The end-of-day summary
+            -- reads it; the claim's own bucket columns only ever hold where it is NOW.
+            CREATE TABLE IF NOT EXISTS nidaan_bucket_move_log (
+                move_id   INTEGER PRIMARY KEY AUTOINCREMENT,
+                claim_id  INTEGER NOT NULL,
+                from_key  TEXT NOT NULL DEFAULT '',
+                to_key    TEXT NOT NULL DEFAULT '',
+                kind      TEXT NOT NULL DEFAULT 'forward',
+                staff_id  INTEGER,
+                actor     TEXT NOT NULL DEFAULT '',
+                moved_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_bmovelog_at ON nidaan_bucket_move_log(moved_at);
+            CREATE INDEX IF NOT EXISTS idx_bmovelog_claim ON nidaan_bucket_move_log(claim_id, move_id);
+
+            -- Channel Partner added to / removed from an existing claim: asked, then decided by a
+            -- super-admin (biz_nidaan_claim_cp). The claim changes only on approval.
+            CREATE TABLE IF NOT EXISTS nidaan_claim_cp_requests (
+                req_id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                claim_id        INTEGER NOT NULL,
+                action          TEXT NOT NULL,
+                cp_id           INTEGER NOT NULL,
+                cp_name         TEXT NOT NULL DEFAULT '',
+                reason          TEXT NOT NULL DEFAULT '',
+                requested_by    INTEGER,
+                requested_name  TEXT NOT NULL DEFAULT '',
+                requested_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                status          TEXT NOT NULL DEFAULT 'pending',
+                decided_by      INTEGER,
+                decided_name    TEXT NOT NULL DEFAULT '',
+                decided_at      TIMESTAMP,
+                decision_note   TEXT NOT NULL DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_cpreq_claim ON nidaan_claim_cp_requests(claim_id, req_id);
+            CREATE INDEX IF NOT EXISTS idx_cpreq_status ON nidaan_claim_cp_requests(status);
+
             -- Per-claim doc-collection schedule/state. Claim-level values OVERRIDE the dashboard
             -- defaults (ops_settings wa_* keys). Precedence: claim-level when set, else global.
             CREATE TABLE IF NOT EXISTS nidaan_wa_claim_settings (
@@ -3865,6 +3901,21 @@ async def init_db():
                 FOREIGN KEY (content_id) REFERENCES marketing_content(content_id)
             )
         """)
+
+        # FRESH-INSTALL PASS. Some ALTERs above name a table that is only created further down
+        # (nidaan_support_reps.duty, the support-thread columns, nidaan_quick_task_log.source):
+        # on a new database they failed silently and the table was then created without the
+        # column - production was fine, a restore would not have been. Running every migration
+        # once more, now that every table exists, adds what was missed; on an existing database
+        # each one is already there and is skipped. _tools/test_fresh_install.py holds this.
+        for m in (*migrations, *wa_migrations, *nidaan_migrations,
+                  "ALTER TABLE nidaan_support_messages ADD COLUMN attachment_doc_id INTEGER",
+                  "ALTER TABLE nidaan_support_threads ADD COLUMN staff_last_seen_msg_id INTEGER",
+                  "ALTER TABLE nidaan_quick_task_log ADD COLUMN source TEXT"):
+            try:
+                await conn.execute(m)
+            except Exception:
+                pass
 
         await conn.commit()
     logger.info("Database initialized: %s", DB_PATH)

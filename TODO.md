@@ -9,6 +9,23 @@ _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned ·
 _Anything raised and not finished lives here until it is done, so an interruption does not lose
 it. Newest first within each group._
 
+### ▶ 30 Sep (late night) — built and deployed; what is left for discussion
+Done: evening summary per person + team (text + voice, EN/HI/Hinglish, rupees never dollars) with
+a bucket-move record (`nidaan_bucket_move_log`); L2 header says what each number counts; duty
+follows leave and cover, archived staff never "on duty", people told when rostered; CP add/remove
+on an existing My Business claim with super-admin approval; claim #245 - automatic WhatsApp
+replies are not answered and do not confirm a mobile, the double reply race is closed, timeline
+in plain words; incoming WhatsApp files keep their media id; fresh-install columns fixed.
+
+| # | Open | Notes |
+|---|---|---|
+| D1 | **Forwarded / unmatched WhatsApp documents** - discuss | Today a file from a subscriber, staff member, partner or unknown number is DROPPED (media id now kept on the row, ~30 days at Meta). Proposal: keep every file in a "to sort" inbox; staff attach it to a claim (one tap); a staff member forwarding a customer's papers writes the claim number in the caption and it files itself after a check |
+| D2 | **Claim-level WhatsApp conversation window** - discuss | Possible. Needs inbound rows tagged with claim_id (today NULL) and a thread view inside the claim; the inbox stays for unmatched numbers |
+| D3 | **WhatsApp automation for existing claims** | Confirmed: off by default; a staff member starts it per claim. Restart-follow-up buttons (N3) still to build |
+| D4 | **"Your day" (N4)** - the morning focus message; the evening summary is its twin | Build next, with the no-bombarding rules: at most one morning message, bucket-move alerts folded in |
+| D5 | Telegram quiet hours for staff (non-urgent alerts held 21:00-08:00) | Part of D4 |
+| D6 | The L2 row note says "Rs 499 + GST" even when the fee is the Rs 2000 tier | Small |
+
 ### ▶ NEXT SESSION (30 Sep, founder's answers - all decided, build in this order)
 | # | What | Founder's answer |
 |---|---|---|

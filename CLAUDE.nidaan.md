@@ -196,6 +196,15 @@ regulator). The ops config box is for what changes, and is **additive only**: a 
 sender can set red, never green. Unrecognised is amber; only our own mail and service notices are
 cleared.
 
+### Evening summary, bucket moves, voice (30 Sep)
+
+`biz_nidaan_daily_summary` sends at 20:00 IST, once a day (`daily_summary_last`): super-admins the
+team's day, every other active staff member with Telegram their own - nothing on a day with
+nothing recorded, nothing on leave. Fixed wording in EN/HI/Hinglish, no AI. Bucket moves are
+read from `nidaan_bucket_move_log` (`biz_nidaan_moves.record`) - any new code that changes
+`pipeline_stage` must call it. Every voice goes through `biz_speakable.speakable` inside
+`biz_tts.cached_wav`: money is always said as rupees.
+
 ### Who is still allowed in (30 Sep)
 
 A token proves who someone WAS at login. `biz_nidaan_access.still_open(kind, key)` is the one

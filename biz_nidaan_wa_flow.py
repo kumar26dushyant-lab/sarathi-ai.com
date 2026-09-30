@@ -332,9 +332,16 @@ async def handle_inbound_payload(payload: dict) -> dict:
                     msisdn = wa.normalize_msisdn(m.get("from", ""))
                     wamid = m.get("id", "")
                     mtype = m.get("type", "")
+                    # A file's media id is kept on its row: an unmatched file used to be dropped
+                    # with no way back to it. With the id, staff can still fetch it from Meta
+                    # (media stays there about 30 days) while it is sorted to the right claim.
+                    _media = (m.get(mtype) or {}) if mtype in ("image", "document", "audio", "video") else {}
+                    _mbody = (m.get("text", {}) or {}).get("body", "") or " ".join(
+                        x for x in ((_media.get("filename") or ""), (_media.get("caption") or "")) if x)
                     if not await log_message(direction="in", msisdn=msisdn, wa_message_id=wamid,
                                              msg_type=mtype, status="received",
-                                             body=(m.get("text", {}) or {}).get("body", "")):
+                                             media_id=str(_media.get("id") or "")[:120],
+                                             body=_mbody[:1000]):
                         continue  # duplicate wamid — already processed
                     await upsert_contact(msisdn, mark_inbound=True)
                     handled += 1
@@ -345,6 +352,18 @@ async def handle_inbound_payload(payload: dict) -> dict:
                         await wa.mark_read(wamid)
                     except Exception:  # noqa: BLE001
                         pass
+                    # THE PHONE ANSWERING, NOT A PERSON (claim #245, 30 Sep): an away message or a
+                    # business greeting is kept on the claim, plainly labelled - and it is not a
+                    # reply to a query, not proof of the mobile, and not answered by the bot.
+                    if mtype == "text":
+                        try:
+                            import biz_nidaan_wa_autoreply as _auto
+                            _body = (m.get("text") or {}).get("body", "")
+                            if await _auto.looks_automatic(msisdn, _body):
+                                await _auto.note(msisdn, _body)
+                                continue
+                        except Exception as _ae:  # noqa: BLE001 - unsure: treat as a person
+                            logger.info("auto-reply hook failed: %s", _ae)
                     # A reply to a query we sent this complainant: tell the super admins and the
                     # person who asked, with what they said. Never allowed to break the inbox.
                     try:

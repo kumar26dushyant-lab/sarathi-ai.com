@@ -7752,10 +7752,11 @@ async def nidaan_ops_pipeline_start(claim_id: int, request: Request):
     # Intake duty, not admins: starting a case is everyday work for whoever is rostered.
     caller = _require_staff(request, "team_member")
     import biz_nidaan_buckets as _bk
-    res = await _bk.start_l2(claim_id, actor=_actor_label(caller))
+    res = await _bk.start_l2(claim_id, actor=_actor_label(caller),
+                             actor_id=int(caller.get("staff_id") or 0))
     if not res.get("ok"):
         raise HTTPException(status_code=400, detail=res.get("error") or "Could not start that")
-    await _ops_audit(request, "case.pipeline_start", "claim", claim_id, res.get("stage") or "")
+    await _ops_audit(request, "case.pipeline_start", "claim", claim_id, res.get("bucket") or "")
     return res
 
 
@@ -7768,11 +7769,12 @@ async def nidaan_ops_pipeline_move(claim_id: int, body: _PipelineMoveReq, reques
     caller = _require_staff(request, "team_member")
     import biz_nidaan_buckets as _bk
     res = await _bk.move(claim_id, body.to, reason=body.note, actor=_actor_label(caller),
-                         actor_role=caller.get("role") or "")
+                         actor_role=caller.get("role") or "",
+                         actor_id=int(caller.get("staff_id") or 0))
     if not res.get("ok"):
         raise HTTPException(status_code=400, detail=res.get("error") or "Could not move that")
     await _ops_audit(request, "case.pipeline_move", "claim", claim_id,
-                     f"{res.get('from')} -> {res.get('stage')} {body.note}"[:160])
+                     f"-> {res.get('bucket')} {body.note}"[:160])
     return res
 
 
@@ -8403,7 +8405,8 @@ async def ops_case_handover(claim_id: int, body: _HandoverReq, request: Request)
     _force = ((request.query_params.get("force") or "") == "1"
               and (caller or {}).get("role") == "super_admin")
     res = await _bk.hand_over(claim_id, note=body.note, checks=body.checks,
-                              actor=_actor_label(caller), force=_force)
+                              actor=_actor_label(caller), force=_force,
+                              actor_id=int(caller.get("staff_id") or 0))
     if not res.get("ok"):
         # Send back WHAT is outstanding, not only that something is - the dialog lists it, so
         # nobody has to go looking across three screens for what we already knew.
@@ -8423,7 +8426,8 @@ async def ops_case_handover_undo(claim_id: int, body: _UndoHandoverReq, request:
         raise HTTPException(status_code=404)
     caller = _require_staff(request, "super_admin")
     import biz_nidaan_buckets as _bk
-    res = await _bk.undo_handover(claim_id, reason=body.reason, actor=_actor_label(caller))
+    res = await _bk.undo_handover(claim_id, reason=body.reason, actor=_actor_label(caller),
+                                  actor_id=int(caller.get("staff_id") or 0))
     if not res.get("ok"):
         raise HTTPException(status_code=400, detail=res.get("error") or "Could not undo that")
     await _ops_audit(request, "l2.handover_undo", "claim", claim_id, body.reason[:160])
@@ -8460,7 +8464,8 @@ async def ops_case_bucket_move(claim_id: int, body: _BucketMoveReq, request: Req
     import biz_nidaan_buckets as _bk
     res = await _bk.move(claim_id, body.to, sub=body.sub, reason=body.reason,
                          hold_until=body.hold_until, actor=_actor_label(caller),
-                         actor_role=caller.get("role") or "")
+                         actor_role=caller.get("role") or "",
+                         actor_id=int(caller.get("staff_id") or 0))
     if not res.get("ok"):
         raise HTTPException(status_code=400, detail=res.get("error") or "Could not move that")
     await _ops_audit(request, "bucket.move", "claim", claim_id,
@@ -10926,7 +10931,10 @@ async def ops_my_raise_claim(body: _BranchClaimReq, request: Request):
         payment_status="unpaid_lead", skip_eligibility=True, origin="branch",
         associate_referrer=_cp_name, channel_partner_id=_cp_id,
         complainant_name=_cname, complainant_phone=cphone, complainant_email=cemail,
-        complainant_role="staff")
+        complainant_role="staff",
+        # Who raised it, so the claim's first line says so (claim #245 read "submitted by advisor").
+        raised_by_staff_id=(_staff or {}).get("staff_id"), raised_by_name=_actor_label(_staff or {}),
+        raised_via="my_business")
     if not claim_id:
         raise HTTPException(400, msg or "Could not raise claim")
     try:
@@ -11273,6 +11281,92 @@ class _CpReq(BaseModel):
 class _CpStatusReq(BaseModel):
     model_config = ConfigDict(extra="forbid")
     status: str = Field(..., pattern=r"^(approved|rejected|disabled|pending)$")
+
+
+# ── Channel Partner on an existing claim: ask, then a super-admin decides ────────────
+# (founder, 30 Sep, claim #226). biz_nidaan_claim_cp holds the rules; every route here checks the
+# caller may see the claim, and the claim changes only when a super-admin approves.
+class _ClaimCPReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    action: str = Field(..., pattern=r"^(add|remove)$")
+    cp_id: int = Field(0, ge=0)
+    reason: str = Field(..., min_length=5, max_length=400)
+
+
+class _ClaimCPDecision(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    approve: bool
+    note: str = Field("", max_length=400)
+
+
+async def _cp_claim_gate(staff: dict, claim_id: int) -> dict:
+    """The caller may see this claim, or it does not exist (404, never 403)."""
+    import biz_nidaan_claim_authz as _authz
+    if not (await _authz.assert_claim_access(staff, claim_id)).get("allowed"):
+        raise HTTPException(status_code=404, detail="Claim not found")
+    return staff
+
+
+@app.get("/nidaan/ops/api/claims/{claim_id}/cp")
+async def ops_claim_cp_state(claim_id: int, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    await _cp_claim_gate(_require_staff(request, "team_member"), claim_id)
+    import biz_nidaan_claim_cp as _ccp
+    return await _ccp.state(claim_id)
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/cp/request")
+@limiter.limit("20/minute")
+async def ops_claim_cp_request(claim_id: int, body: _ClaimCPReq, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = await _cp_claim_gate(_require_staff(request, "team_member"), claim_id)
+    import biz_nidaan_claim_cp as _ccp
+    try:
+        res = await _ccp.request_change(claim_id, body.action, cp_id=body.cp_id,
+                                        reason=body.reason, staff={**staff, "name": _actor_label(staff)})
+    except _ccp.CPError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    await _ops_audit(request, "claim.cp_request", "claim", claim_id,
+                     f"{body.action} cp={body.cp_id} {body.reason}"[:160])
+    return res
+
+
+@app.post("/nidaan/ops/api/cp-requests/{req_id}/decide")
+@limiter.limit("30/minute")
+async def ops_claim_cp_decide(req_id: int, body: _ClaimCPDecision, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "super_admin")
+    import biz_nidaan_claim_cp as _ccp
+    try:
+        res = await _ccp.decide(req_id, body.approve, note=body.note,
+                                staff={**staff, "name": _actor_label(staff)})
+    except _ccp.CPError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    await _ops_audit(request, "claim.cp_decide", "claim", await _ccp.claim_of(req_id),
+                     f"req={req_id} {'approved' if body.approve else 'rejected'} {body.note}"[:160])
+    return res
+
+
+@app.post("/nidaan/ops/api/cp-requests/{req_id}/withdraw")
+@limiter.limit("30/minute")
+async def ops_claim_cp_withdraw(req_id: int, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "team_member")
+    import biz_nidaan_claim_cp as _ccp
+    claim_id = await _ccp.claim_of(req_id)
+    if not claim_id:
+        raise HTTPException(status_code=404, detail="Not found")
+    await _cp_claim_gate(staff, claim_id)
+    try:
+        res = await _ccp.withdraw(req_id, staff={**staff, "name": _actor_label(staff)})
+    except _ccp.CPError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    await _ops_audit(request, "claim.cp_withdraw", "claim", claim_id, f"req={req_id}")
+    return res
 
 
 @app.get("/nidaan/ops/api/channel-partners")
@@ -11650,7 +11744,7 @@ class OpsSupportRepReq(BaseModel):
     staff_id: int
     start_date: str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}$")
     end_date: str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}$")
-    duty: str = Field("support", max_length=20)
+    duty: str = Field("support", max_length=40)   # bucket keys may be up to 39 characters
 
 
 @app.post("/nidaan/ops/api/support/reps")
@@ -11664,10 +11758,22 @@ async def ops_support_reps_add(body: OpsSupportRepReq, request: Request):
     except ValueError as ve:
         _m = {"bad_date_format": "Use dates in the form YYYY-MM-DD.",
               "end_before_start": "The end date is before the start date.",
-              "bad_duty": "That is not a duty someone can be rostered onto."}
-        raise HTTPException(status_code=400, detail=_m.get(str(ve), str(ve)))
+              "bad_duty": "That is not a duty someone can be rostered onto.",
+              "bad_staff": "That staff member is not active, so they cannot be put on duty."}
+        raise HTTPException(status_code=400, detail=_m.get(str(ve), "Could not add that."))
     await _ops_audit(request, "support.rep_add", "support",
                      str(body.staff_id), f"{body.duty} {body.start_date}..{body.end_date}")
+    # Tell the person. A duty nobody knows they have is a bucket nobody watches.
+    try:
+        import biz_nidaan_notifications as _nnd
+        _lbl = next((c["label"] for c in await nidaan.duty_choices() if c["key"] == body.duty), body.duty)
+        await _nnd.notify_staff_inapp(
+            [body.staff_id], "🛡️ You are on duty: %s" % _lbl,
+            "From %s to %s. Claims arriving in %s, and anything waiting there, will come to you. "
+            "आप इस दौरान %s की ड्यूटी पर हैं।" % (body.start_date, body.end_date, _lbl, _lbl),
+            event_key="duty.assigned", email=False)
+    except Exception as _de:  # noqa: BLE001 - the roster stands whether or not the note went
+        logger.info("duty note failed: %s", _de)
     return {"ok": True, "rep_id": rep_id}
 
 

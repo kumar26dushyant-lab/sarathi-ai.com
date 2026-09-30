@@ -1043,7 +1043,8 @@ async def _log(claim_id: int, summary: str, actor: str) -> None:
         logger.warning("bucket log failed for %s: %s", claim_id, e)
 
 
-async def start_l2(claim_id: int, *, actor: str = "", force: bool = False) -> dict:
+async def start_l2(claim_id: int, *, actor: str = "", force: bool = False,
+                   actor_id: int = 0) -> dict:
     """Put a paid, winnable claim into the entry bucket. The act that begins Level-2 work."""
     row = await _claim_row(claim_id)
     if not row or row.get("archived") or (row.get("status") or "") in ("closed", "withdrawn"):
@@ -1085,6 +1086,9 @@ async def start_l2(claim_id: int, *, actor: str = "", force: bool = False) -> di
     if concerns:
         note += " | STARTED WITH THESE STILL OPEN: " + "; ".join(concerns[:4])
     await _log(claim_id, note, actor)
+    import biz_nidaan_moves as _mv
+    await _mv.record(claim_id, _mv.L2_WAITING, entry["bucket_key"], kind="start",
+                     staff_id=actor_id, actor=actor)
     await _notify_move(claim_id, to_key=entry["bucket_key"], to_name=entry["name_en"],
                        from_name="To start", kind="forward",
                        reason=(row.get("l2_handover_note") or ""), actor=actor,
@@ -1095,7 +1099,7 @@ async def start_l2(claim_id: int, *, actor: str = "", force: bool = False) -> di
 
 async def move(claim_id: int, to_key: str, *, sub: str = "", reason: str = "",
                hold_until: str = "", actor: str = "", force: bool = False,
-               actor_role: str = "", quiet: bool = False) -> dict:
+               actor_role: str = "", quiet: bool = False, actor_id: int = 0) -> dict:
     """Move a claim to any other bucket.
 
     NO MOVE IS EVER REFUSED FOR BEING UNTIDY. A route that is not in the configuration is allowed
@@ -1289,6 +1293,8 @@ async def move(claim_id: int, to_key: str, *, sub: str = "", reason: str = "",
     if (reason or "").strip():
         summary += " - %s" % reason.strip()
     await _log(claim_id, summary, actor)
+    import biz_nidaan_moves as _mv
+    await _mv.record(claim_id, cur_key, to_key, kind=kind, staff_id=actor_id, actor=actor)
 
     who = (row.get("complainant_name") or row.get("insured_name") or "").strip()
     if not quiet:          # the draft query sends its own, more specific alert
@@ -1948,10 +1954,13 @@ def _origin_of(r: dict) -> str:
     branch = (r.get("branch_code") or "").strip()
     if via == "on_behalf" and who:
         return "Raised for subscriber by %s" % who
+    if via == "my_business" and who:
+        return "Raised by %s (My Business)" % who
+    # A staff code is not an Authorized Partner, whatever the origin column says.
+    if branch.upper().startswith("SP-"):
+        return "Raised by staff %s (My Business)" % branch
     if (r.get("origin") or "") == "branch" and branch:
         return "Raised by Authorized Partner %s" % branch
-    if branch.startswith("SP-"):
-        return "Raised by staff %s" % branch
     if branch:
         return "Raised by Authorized Partner %s" % branch
     if r.get("account_id"):
@@ -2675,7 +2684,7 @@ async def probing_questions(claim_id: int) -> dict:
 
 
 async def hand_over(claim_id: int, *, note: str = "", checks: Optional[dict] = None,
-                    actor: str = "", force: bool = False) -> dict:
+                    actor: str = "", force: bool = False, actor_id: int = 0) -> dict:
     """Intake hands the claim to Level-2, with their name on it."""
     row = await _handover_row(claim_id)
     if not row or row.get("archived") or (row.get("status") or "") in ("closed", "withdrawn"):
@@ -2756,7 +2765,7 @@ async def hand_over(claim_id: int, *, note: str = "", checks: Optional[dict] = N
     # If this fails the handover still stands - the claim is exactly where it used to sit before
     # somebody pressed Start, and the workspace still shows that list when it is not empty. A
     # half-done handover must never be a silent one.
-    started = await start_l2(claim_id, actor=actor)
+    started = await start_l2(claim_id, actor=actor, actor_id=actor_id)
     if not started.get("ok"):
         logger.warning("handover started but start_l2 refused for %s: %s",
                        claim_id, started.get("error"))
@@ -2766,7 +2775,8 @@ async def hand_over(claim_id: int, *, note: str = "", checks: Optional[dict] = N
             "start_error": "" if started.get("ok") else (started.get("error") or "")}
 
 
-async def undo_handover(claim_id: int, *, reason: str = "", actor: str = "") -> dict:
+async def undo_handover(claim_id: int, *, reason: str = "", actor: str = "",
+                        actor_id: int = 0) -> dict:
     """Pull a claim back out of the Level-2 waiting list. Super-admin only, and recorded."""
     row = await _handover_row(claim_id)
     if not row:
@@ -2809,6 +2819,9 @@ async def undo_handover(claim_id: int, *, reason: str = "", actor: str = "") -> 
             "WHERE claim_id=?", (int(claim_id),))
         await c.commit()
     await _log(claim_id, "Pulled back out of the Level-2 waiting list - %s" % reason.strip(), actor)
+    if stage:
+        import biz_nidaan_moves as _mv
+        await _mv.record(claim_id, stage, _mv.L2_WAITING, kind="undo", staff_id=actor_id, actor=actor)
     return {"ok": True}
 
 

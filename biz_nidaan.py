@@ -2267,8 +2267,17 @@ async def submit_claim(
         # The first line of the case history should say who actually raised it. "submitted by
         # advisor" on a claim an admin keyed in for a subscriber who never logs in is misleading
         # later, when somebody is trying to work out where a case came from.
-        _first_note = ("Claim submitted by advisor" if not raised_by_name
-                       else f"Raised by {raised_by_name} on the subscriber's behalf")
+        _code = (branch_code or "").strip().upper()
+        if raised_by_name and (raised_via or "") == "my_business":
+            _first_note = f"Raised by {raised_by_name} from My Business"
+        elif raised_by_name:
+            _first_note = f"Raised by {raised_by_name} on the subscriber's behalf"
+        elif (origin or "") == "branch" and _code:
+            _first_note = f"Raised by Authorized Partner {_code}"
+        elif (origin or "") == "d2c_review":
+            _first_note = "Registered after the review fee was paid"
+        else:
+            _first_note = "Claim submitted by the subscriber"
         await conn.execute(
             """INSERT INTO nidaan_claim_status_log
                (claim_id, to_status, note, changed_by_type, changed_by_id)
@@ -2632,6 +2641,9 @@ async def claim_origin(claim_id: int, lang: str = "en") -> dict:
     elif ref_branch:
         add("Referred by", "रेफ़र किया", "🏢 " + (ref_branch.get("name") or ""),
             " · ".join(x for x in (ref_branch.get("city"), ref_code) if x))
+    elif c.get("associate_referrer") and cp and \
+            (c["associate_referrer"] or "").strip().upper() == (cp.get("name") or "").strip().upper():
+        pass    # it is the Channel Partner's name, already shown on its own row above
     elif c.get("associate_referrer"):
         add("Referred by", "रेफ़र किया", c["associate_referrer"])
         gaps.append("the referral code %s matches nobody" % c["associate_referrer"] if not hi
@@ -3454,6 +3466,11 @@ async def add_support_rep(staff_id: int, start_date: str, end_date: str,
     if duty not in await duty_keys():
         raise ValueError("bad_duty")
     async with aiosqlite.connect(DB_PATH) as conn:
+        ok = await (await conn.execute(
+            "SELECT 1 FROM nidaan_staff WHERE staff_id=? AND status='active' AND deleted_at IS NULL",
+            (int(staff_id),))).fetchone()
+        if not ok:
+            raise ValueError("bad_staff")     # nobody who cannot log in is put on duty
         cur = await conn.execute(
             "INSERT INTO nidaan_support_reps (staff_id, start_date, end_date, created_by, duty) "
             "VALUES (?,?,?,?,?)",
@@ -3484,14 +3501,42 @@ async def list_support_reps(duty: Optional[str] = None) -> list[dict]:
         rows = [dict(r) for r in await (await conn.execute(
             f"""SELECT r.rep_id, r.staff_id, r.start_date, r.end_date, r.created_at,
                        COALESCE(r.duty,'support') AS duty,
-                       s.name AS staff_name, s.role AS staff_role
+                       s.name AS staff_name, s.role AS staff_role,
+                       (s.status='active' AND s.deleted_at IS NULL) AS staff_active
                 FROM nidaan_support_reps r
                 LEFT JOIN nidaan_staff s ON s.staff_id = r.staff_id
                 {where}
                 ORDER BY r.end_date DESC, r.start_date DESC""", args)).fetchall()]
+    away = await _on_leave_today([r["staff_id"] for r in rows])
     for r in rows:
-        r["on_duty"] = (r["start_date"] <= today <= r["end_date"])
+        # "On duty" only for someone who can actually be reached: in range, still active, and
+        # not on a full day's leave. The screen used to show archived staff as on duty.
+        r["staff_active"] = bool(r.get("staff_active"))
+        r["on_leave"] = r["staff_id"] in away
+        r["on_duty"] = (r["start_date"] <= today <= r["end_date"] and r["staff_active"]
+                        and not r["on_leave"])
     return rows
+
+
+async def _on_leave_today(staff_ids) -> dict:
+    """{staff_id: cover_staff_id or None} for staff on a FULL day of approved leave today.
+    Working from home and half days are not absence - they stay on duty."""
+    ids = sorted({int(s) for s in staff_ids if s})
+    if not ids:
+        return {}
+    today = _now_ist().strftime("%Y-%m-%d")
+    ph = ",".join("?" * len(ids))
+    try:
+        async with aiosqlite.connect(DB_PATH) as conn:
+            rows = await (await conn.execute(
+                "SELECT staff_id, cover_staff_id FROM nidaan_leave_requests WHERE status='approved' "
+                "AND COALESCE(request_kind,'leave')='leave' AND COALESCE(half_period,'')='' "
+                "AND start_date<=? AND end_date>=? AND staff_id IN (%s)" % ph,
+                (today, today, *ids))).fetchall()
+        return {int(r[0]): (int(r[1]) if r[1] else None) for r in rows}
+    except Exception as e:  # noqa: BLE001 - unreadable leave must not silence a bucket
+        logger.warning("leave lookup failed: %s", e)
+        return {}
 
 
 async def on_duty_rep_ids(duty: str = "support") -> list[int]:
@@ -3518,7 +3563,21 @@ async def on_duty_rep_ids(duty: str = "support") -> list[int]:
                  AND COALESCE(r.duty,'support') IN ({ph})
                  AND s.status='active' AND s.deleted_at IS NULL""",
             (today, today, *sorted(names)))).fetchall()
-        return [r["staff_id"] for r in rows]
+        ids = [r["staff_id"] for r in rows]
+        # Someone on a full day's leave is not watching the bucket (the alert used to go to them
+        # and, because the list was not empty, the admins never heard either). Their cover, if
+        # they named one and that person can log in, takes the alert; if nobody is left, the
+        # caller's usual fallback to the admins applies.
+        away = await _on_leave_today(ids)
+        out = [i for i in ids if i not in away]
+        for cover in {c for c in away.values() if c}:
+            if cover not in out:
+                ok = await (await conn.execute(
+                    "SELECT 1 FROM nidaan_staff WHERE staff_id=? AND status='active' "
+                    "AND deleted_at IS NULL", (cover,))).fetchone()
+                if ok:
+                    out.append(cover)
+        return out
 
 
 def create_pay_link_token(claim_id: int, account_id: int, hours: int = 72) -> str:
