@@ -210,7 +210,8 @@ async def _reply_unlinked(msisdn: str) -> None:
         logger.info("unlinked WhatsApp reply failed for %s: %s", msisdn, e)
 
 
-async def _on_inbound_media(msisdn: str, media_id: str, mime: str, wamid: str) -> None:
+async def _on_inbound_media(msisdn: str, media_id: str, mime: str, wamid: str,
+                            filename: str = "") -> None:
     """A complainant sent a FILE (a document). PHASE 1 HANDOFF — the intelligent pipeline goes here:
       1. download_media → 2. right-doc + quality check (Gemini vision, against the doc we asked for)
       3. normalize_to_pdf + segment → 4. name per convention → 5. mark_doc_received / nudge if wrong
@@ -219,7 +220,7 @@ async def _on_inbound_media(msisdn: str, media_id: str, mime: str, wamid: str) -
     mark checklist → ask next. Falls back to an ops alert only if no claim matches the number."""
     try:
         import biz_nidaan_wa_orchestrator as _orch
-        res = await _orch.handle_inbound_document(msisdn, media_id, mime)
+        res = await _orch.handle_inbound_document(msisdn, media_id, mime, filename=filename)
         if res.get("ok") or res.get("error") not in ("no_claim", None):
             return   # handled (accepted, nudged, or human-takeover)
     except Exception as e:  # noqa: BLE001
@@ -393,7 +394,8 @@ async def handle_inbound_payload(payload: dict) -> dict:
                         await _on_inbound_text(msisdn, (m.get("text") or {}).get("body", ""))
                     elif mtype in ("image", "document", "audio", "video"):
                         media = m.get(mtype) or {}
-                        await _on_inbound_media(msisdn, media.get("id", ""), media.get("mime_type", ""), wamid)
+                        await _on_inbound_media(msisdn, media.get("id", ""), media.get("mime_type", ""), wamid,
+                                                filename=media.get("filename", ""))
                     elif mtype == "button":
                         await _on_inbound_text(msisdn, (m.get("button") or {}).get("text", ""))
                     elif mtype == "interactive":

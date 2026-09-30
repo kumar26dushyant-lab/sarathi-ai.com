@@ -576,7 +576,11 @@ async def start_for_claim(claim_id: int, *, by: str = "system") -> dict:
             "pending": len(pending), "error": (res or {}).get("error")}
 
 
-async def handle_inbound_document(msisdn: str, media_id: str, mime: str) -> dict:
+_FILE_NOTICE: dict = {}      # claim_id -> when staff were last told a file arrived during takeover
+
+
+async def handle_inbound_document(msisdn: str, media_id: str, mime: str,
+                                  filename: str = "") -> dict:
     """A complainant sent a file. Take it, split it, match what we can, say one thing.
 
     This used to judge every inbound file as ONE document against ONE expected line: a 40-page PDF
@@ -591,10 +595,18 @@ async def handle_inbound_document(msisdn: str, media_id: str, mime: str) -> dict
     claim_id = claim["claim_id"]
     lang = await _lang(msisdn)
     ctype = claim.get("claim_type") or ""
-    if await _awaiting(claim_id) == "__human__" or await _contact_paused(msisdn):
-        return {"ok": False, "error": "human_takeover"}
+    # A PERSON HOLDS THIS CHAT: the bot keeps quiet - but the file is still the customer's
+    # document and is saved to the claim. It used to be dropped: on 30 Sep Brajesh Gupta (NP-123)
+    # sent eight files - discharge summary, claim form, bills - after his chat was handed to a
+    # person, and none of them reached the claim. Now they are stored, and the person handling
+    # the chat is told what arrived so they can answer him.
+    human = (await _awaiting(claim_id) == "__human__") or await _contact_paused(msisdn)
 
     dl = await _wa.download_media(media_id)
+    if not dl.get("ok") and human:
+        await _tell_staff_inbound(claim_id, msisdn, "[a file that could not be downloaded - "
+                                  "please ask them to send it again]")
+        return {"ok": False, "error": "download_failed"}
     if not dl.get("ok"):
         # Our end could not fetch it. That is ours to own, not theirs to fix.
         await _wa.send_text(msisdn, _msg.compose("doc_quality", lang, _send_ctx(
@@ -609,10 +621,26 @@ async def handle_inbound_document(msisdn: str, media_id: str, mime: str) -> dict
     elif "pdf" not in m:
         name = "upload.jpg" if ("jpe" in m or "jpg" in m) else (
             "upload.png" if "png" in m else "upload.bin")
+    # The sender's own file name is the best clue to what it is - keep it (safe characters only).
+    _fn = _re.sub(r"[^A-Za-z0-9 ._()-]", "", (filename or "").strip())[:90].strip(" .")
+    if _fn and "." in _fn and _fn.rsplit(".", 1)[1].lower() == name.rsplit(".", 1)[1]:
+        name = _fn
 
     import biz_nidaan_doc_intake as _intake
     res = await _intake.accept(claim_id, claim.get("account_id"), [(name, dl["content"])],
                               claim_type=ctype, source="whatsapp")
+    if human:
+        # Saved (or refused by the checks) - either way the person on the chat decides what to say.
+        # One notice per claim per few minutes: eight files in a row are one event, not eight pings.
+        import time as _time
+        _now = _time.monotonic()
+        if not res.get("ok") or _now - _FILE_NOTICE.get(claim_id, 0) > 300:
+            _FILE_NOTICE[claim_id] = _now
+            await _tell_staff_inbound(claim_id, msisdn, "[sent files on WhatsApp - saved to the claim's "
+                                      "documents; latest: %s%s]" % (
+                                          name, "" if res.get("ok") else " (could not be opened - ask again)"))
+        return {"ok": bool(res.get("ok")), "stored": res.get("stored") or 0, "held_by_person": True,
+                "error": "" if res.get("ok") else (res.get("error") or "unreadable")}
     if not res.get("ok"):
         await _wa.send_text(msisdn, _msg.compose("doc_quality", lang, _send_ctx(
             claim, 0, 0, doc={"en": "that file"}, lang=lang,
