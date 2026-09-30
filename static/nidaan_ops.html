@@ -6842,7 +6842,7 @@ async function openClaimDrawer(claimId) {
     </div>`:''}
     <!-- Where this claim came from: who, when and how, in names rather than codes -->
     <div data-ord="20" class="drawer-section">
-      <h4 style="display:flex;justify-content:space-between;align-items:center;gap:.5rem">Where this claim came from${(_role==='super_admin'||_role==='sub_super_admin')?`<button class="btn-sm btn-ghost" style="font-size:.72rem;padding:.2rem .55rem;color:var(--nd-cyan-text)" onclick="editAdvisorModal(${c.claim_id})">✏️ Edit</button>`:''}</h4>
+      <h4 style="display:flex;justify-content:space-between;align-items:center;gap:.5rem">Where this claim came from${((_role==='super_admin'||_role==='sub_super_admin')&&!String(c.email||'').includes('@house.nidaanpartner.internal'))?`<button class="btn-sm btn-ghost" style="font-size:.72rem;padding:.2rem .55rem;color:var(--nd-cyan-text)" onclick="editAdvisorModal(${c.claim_id})">✏️ Edit</button>`:''}</h4>
       ${_originBlock(c)}
     </div>
     ${canAssign?`<div data-ord="30" class="drawer-section">
