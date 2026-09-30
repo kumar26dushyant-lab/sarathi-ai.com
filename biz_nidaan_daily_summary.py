@@ -465,7 +465,7 @@ async def build(now_ist: datetime | None = None) -> dict:
     date_label = now_ist.strftime("%d %b %Y")
     people = per_person(day)
     names = {s["staff_id"]: s["name"] for s in day["staff"]}
-    admins = ("super_admin", "sub_super_admin")
+    admins = ("super_admin",)   # the team view is for super-admins; everyone else gets their own day
     out = []
     for s in day["staff"]:
         sid, lang = s["staff_id"], _lang(s["lang"])

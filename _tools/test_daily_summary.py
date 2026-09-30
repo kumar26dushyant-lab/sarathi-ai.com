@@ -60,7 +60,7 @@ async def main():
     await bk.ensure_seeded()
     today = datetime.now(IST).strftime("%Y-%m-%d")
     async with aiosqlite.connect(DBP) as c:
-        staff = ((1, "Founder Admin", "super_admin", "en"), (2, "Dr Ashish", "team_member", "hi"),
+        staff = ((1, "Founder Admin", "super_admin", "en"), (2, "Dr Ashish", "sub_super_admin", "hi"),
                  (3, "Quiet Person", "team_member", "en"), (4, "Away Person", "team_member", "en"),
                  (5, "Chanchal", "team_member", "hinglish"))
         for sid, name, role, lang in staff:
@@ -124,7 +124,7 @@ async def main():
     check("...money exact, Indian format", "₹588.82" in team, team)
 
     ash = msgs.get(2)
-    check("Dr Ashish gets his own day", ash and ash["kind"] == "own", msgs.keys())
+    check("Dr Ashish (a sub-super-admin) gets his own day, not the team view", ash and ash["kind"] == "own", msgs.keys())
     check("...in Hindi, his language", ash and "आपने" in ash["text"] and "आपका दिन" in ash["text"], ash and ash["text"])
     check("...naming his claims and where they sit", ash and "NP-201" in ash["text"] and "NP-202" in ash["text"],
           ash and ash["text"])
