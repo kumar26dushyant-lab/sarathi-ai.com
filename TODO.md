@@ -9,6 +9,23 @@ _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned ·
 _Anything raised and not finished lives here until it is done, so an interruption does not lose
 it. Newest first within each group._
 
+### ▶ 1 Oct MORNING — the founder's list (01:55 IST message), in order
+Done overnight: NP-123 - Brajesh Gupta's 8 WhatsApp files (sent after his chat went to a person) were being DROPPED; fixed (`39bd4f9`, files during a takeover are saved, bot silent, staff told once) and all 8 recovered onto the claim (11 -> 19 documents). Edit Advisor hidden on house accounts (`089edb9`).
+
+| # | What | Founder's words / notes |
+|---|---|---|
+| M0 | **Someone must reply to Brajesh Gupta (NP-123)** - his chat is with a person (bot paused) since 30 Sep 18:12 IST; he asked "Apko kya chahiye clear kare" | The Telegram nudges were right |
+| M0b | One WhatsApp file lost on 18 Sep from the number on claims #114/#169 - ask them to send it again | Unrecoverable (sent before media ids were kept) |
+| M1 | **Evening summary must say WHAT was done on each claim**, not counts: moves from->to, documents received/checked, follow-ups made (messages, calls, reminders), queries raised/answered, handovers, notes - and not count trivial edits as achievement | "we need to capture actual work, movement, progress, followup" |
+| M2 | **Ops revamp - an office model**: left navigation as foldable groups with sub-items; Consolidation's buckets inside its own fold; find unused/redundant tabs (from real usage) and retire them | "a lot of garbage tabs... proper office model" |
+| M3 | **One definition per number**: queues and buckets each with their own counts, SLA, statuses, filters; "Before Level-2 139" = open claims not yet at Level-2 (intake + review + L2 waiting) - rename/explain; All Claims = the whole journey view | "multiple numbers at multiple places not giving correct visibility" |
+| M4 | **App Health**: list every check that shows red, tie each to a real outcome, remove the ones that measure nothing | "not sure how well app health is connected with real features" |
+| M5 | **Duty, explained and simplified**: ONE roster table - channel duties (Support chat, WhatsApp inbox, Intake, Review, Conversion) and bucket duties (Live Cases, Pending Draft...) are rows of the same roster; show them as two clear groups | Support screen roster = same data as bucket duty |
+| M6 | **Support vs WhatsApp**: a WhatsApp chat handed to a person also opens a Support thread - that is why the nudge says "WhatsApp Automation / Customer Support". Make one place to answer it | |
+| M7 | **Split Nidaan and Sarathi into two folders** (SPLIT_PLAN.md: worker, then databases, then folder move) so Sarathi can be revamped in its own session | "can we move completely on nidaanpartner.com independently" |
+| M8 | **Lean codebase**: inventory unused code (routes nobody calls, modules nothing imports, dead functions like `_save_wa_doc`), check 2-3 times, ARCHIVE (never delete), list for his yes | "archive not delete" |
+| M9 | **WhatsApp "to sort" inbox** - unmatched files kept and attached with one tap; staff forwarding from ANY staff number allowed (decided 1 Oct) | |
+
 ### ▶ 30 Sep (late night) — built and deployed; what is left for discussion
 Done: evening summary per person + team (text + voice, EN/HI/Hinglish, rupees never dollars) with
 a bucket-move record (`nidaan_bucket_move_log`); L2 header says what each number counts; duty
