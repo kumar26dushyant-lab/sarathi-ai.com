@@ -207,6 +207,13 @@ async def _post(payload: dict) -> dict:
                 else ((payload.get("template") or {}).get("name") or "")
             await _guard.note_held(_to, _g.get("claim_id"), _g.get("reason") or "held", _body)
             return {"ok": False, "error": _g.get("reason") or "held", "held": True}
+        if payload.get("type") == "text":
+            # The Authorized Partner's name on messages about their claims - before the STOP line,
+            # so that stays last. Never raises (biz_nidaan_ap_sign).
+            import biz_nidaan_ap_sign as _aps
+            payload["text"]["body"] = (await _aps.for_whatsapp(
+                (payload.get("text") or {}).get("body") or "", msisdn=_to,
+                claim_id=_g.get("claim_id"), lang=_g.get("lang") or "", cls=_cls))[:4000]
         if _g.get("footer") and payload.get("type") == "text":
             _b = (payload.get("text") or {}).get("body") or ""
             payload["text"]["body"] = (_b + _g["footer"])[:4000]

@@ -437,6 +437,14 @@ def _strip_money(ctx: dict) -> dict:
 
 async def wa_journey(claim_id: int, event: str, extra: dict | None = None,
                      skip_phones: list | None = None) -> dict:
+    """The lifecycle message, signed by the claim's Authorized Partner if it came through one."""
+    import biz_nidaan_ap_sign as _aps
+    with _aps.about(claim_id=claim_id):
+        return await _wa_journey(claim_id, event, extra, skip_phones)
+
+
+async def _wa_journey(claim_id: int, event: str, extra: dict | None = None,
+                      skip_phones: list | None = None) -> dict:
     """Send a lifecycle WhatsApp message to the claim's COMPLAINANT (welcome / intro_value /
     claim_registered / thank_you_payment / payment_failed). In-session → free-form text; cold →
     approved template (logs 'needs template' until they exist). Records on the claim timeline. Safe.

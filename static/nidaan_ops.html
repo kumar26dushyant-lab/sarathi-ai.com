@@ -5038,16 +5038,23 @@ async function loadBranches() {
     </div>
     <div style="background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:12px;padding:1rem;margin-bottom:1rem;display:flex;gap:.6rem;flex-wrap:wrap;align-items:flex-end">
       <div><label style="font-size:.72rem;color:var(--nd-text-muted);display:block;margin-bottom:.2rem">Authorized Partner code *</label><input id="brCode" placeholder="e.g. PUN-02" style="text-transform:uppercase;max-width:130px"></div>
-      <div><label style="font-size:.72rem;color:var(--nd-text-muted);display:block;margin-bottom:.2rem">City *</label><input id="brCity" placeholder="Pune" style="max-width:140px"></div>
+      <div><label style="font-size:.72rem;color:var(--nd-text-muted);display:block;margin-bottom:.2rem">City *</label><input id="brCity" placeholder="Pune" maxlength="60" style="max-width:140px"></div>
+      <div><label style="font-size:.72rem;color:var(--nd-text-muted);display:block;margin-bottom:.2rem">State *</label><select id="brState" style="max-width:170px"><option value="">Choose…</option></select></div>
+      <div><label style="font-size:.72rem;color:var(--nd-text-muted);display:block;margin-bottom:.2rem">Person's name *</label><input id="brPerson" placeholder="e.g. Rakesh Sharma" maxlength="80" style="max-width:170px"></div>
       <div><label style="font-size:.72rem;color:var(--nd-text-muted);display:block;margin-bottom:.2rem">Name</label><input id="brName" placeholder="e.g. Pune office" style="max-width:160px"></div>
       <div style="flex:1;min-width:180px"><label style="font-size:.72rem;color:var(--nd-text-muted);display:block;margin-bottom:.2rem">Login &amp; alert email</label><input id="brEmail" type="email" placeholder="partner@example.com" style="width:100%"></div>
       <button class="btn btn-primary" onclick="createBranch()">+ Create code</button>
     </div>
+    <div style="font-size:.74rem;color:var(--nd-text-muted);margin:-.5rem 0 1rem">The person's name, city and state sign every message we send about this partner's claims, e.g. <i>"Rakesh Sharma, Authorized Partner of NidaanPartner.com, Pune (MH)"</i> - never on login codes.</div>
     <div id="branchTableWrap"><div class="empty"><div class="ei">⏳</div><p>Loading…</p></div></div>
     <div id="branchLeadsWrap" style="margin-top:1rem"></div>`;
   const r = await API('/branches');
   if (!r.ok) { document.getElementById('branchTableWrap').innerHTML='<div class="empty"><p>Failed to load Authorized Partners</p></div>'; return; }
   const d = await r.json();
+  _apStates = d.states || [];
+  _apList = d.branches || [];
+  const _sel = document.getElementById('brState');
+  if (_sel) _sel.innerHTML = '<option value="">Choose…</option>' + _apStates.map(s=>`<option value="${esc(s.code)}">${esc(s.en)} (${esc(s.code)})</option>`).join('');
   if (!d.branches || !d.branches.length) { document.getElementById('branchTableWrap').innerHTML='<div class="empty"><div class="ei">🏢</div><p>No Authorized Partners yet — create one above.</p></div>'; return; }
   const rows = d.branches.map(b=>{
     const active = b.status==='active';
@@ -5056,8 +5063,8 @@ async function loadBranches() {
     const phone = b.contact_phone||'';
     return `<tr>
       <td><strong style="color:var(--nd-purple-text)">${esc(b.branch_code)}</strong></td>
-      <td>${esc(b.city)}</td>
-      <td>${esc(b.name||'—')}</td>
+      <td>${esc(b.city)}${b.state?' <span style="color:var(--nd-text-muted)">('+esc(b.state)+')</span>':''}</td>
+      <td>${esc(b.name||'—')}<div style="font-size:.72rem">${b.contact_person?'Person: '+esc(b.contact_person):'<span style="color:var(--nd-warning-text)" title="Messages about this partner\'s claims keep the team sign-off until a person\'s name is added">⚠ no person name</span>'}${b.state?'':' <span style="color:var(--nd-warning-text)">· ⚠ no state</span>'} <a href="#" onclick="editBranchIdentity('${esc(b.branch_code)}');return false" style="color:var(--nd-cyan-text)">edit details</a></div></td>
       <td style="font-size:.74rem">${email?esc(email):'<span style="color:var(--nd-danger-text)" title="This Authorized Partner cannot log in until you add an email">⚠ no login email</span>'} <a href="#" onclick="editBranchEmail('${esc(b.branch_code)}','${esc(email)}');return false" style="color:var(--nd-cyan-text);font-size:.7rem">${email?'edit':'add'}</a>${email?` · <a href="#" onclick="branchLoginInfo('${esc(b.branch_code)}','${esc(email)}');return false" style="color:var(--nd-cyan-text);font-size:.7rem">🔗 login link</a>`:''}</td>
       <td style="font-size:.74rem">${phone?esc(phone):'<span style="color:var(--nd-warning-text)" title="Without a number this Authorized Partner gets claim updates by email only">⚠ no WhatsApp</span>'} <a href="#" onclick="editBranchPhone('${esc(b.branch_code)}','${esc(phone)}');return false" style="color:var(--nd-cyan-text);font-size:.7rem">${phone?'edit':'add'}</a></td>
       <td style="text-align:center">${b.signups||0}</td>
@@ -5092,13 +5099,52 @@ async function setBranchShare(code, current){
   if (!r.ok){ const d=await r.json().catch(()=>({})); alert(d.detail||'Failed to update share %.'); return; }
   loadBranches();
 }
+let _apStates = [], _apList = [];
+// "Rakesh Sharma, Authorized Partner of NidaanPartner.com, Pune (MH)" - the same words the server
+// signs messages with (biz_nidaan_ap_sign.line), shown before saving.
+function _apSigPreview(person, city, state){
+  if (!person) return 'No person name - messages keep the team sign-off.';
+  const place = (city||'') + (state ? ' ('+state+')' : '');
+  return person + ', Authorized Partner of NidaanPartner.com' + (place.trim() ? ', '+place.trim() : '');
+}
+function editBranchIdentity(code){
+  const b = _apList.find(x=>x.branch_code===code); if (!b) return;
+  const opts = '<option value="">Choose…</option>' + _apStates.map(s=>`<option value="${esc(s.code)}"${s.code===b.state?' selected':''}>${esc(s.en)} (${esc(s.code)})</option>`).join('');
+  const lbl = 'font-size:.75rem;color:var(--nd-text-muted);display:block;margin:.6rem 0 .2rem';
+  openModal('Authorized Partner '+code+' - details', `
+    <label style="${lbl}">Person's name (signs the messages)</label><input id="apiPerson" maxlength="80" value="${esc(b.contact_person||'')}" style="width:100%">
+    <label style="${lbl}">City</label><input id="apiCity" maxlength="60" value="${esc(b.city||'')}" style="width:100%">
+    <label style="${lbl}">State</label><select id="apiState" style="width:100%">${opts}</select>
+    <label style="${lbl}">Office name (shown to staff)</label><input id="apiName" maxlength="80" value="${esc(b.name||'')}" style="width:100%">
+    <div style="${lbl}">Messages about this partner's claims will end with:</div>
+    <div id="apiPreview" style="background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:8px;padding:.6rem .75rem;font-size:.85rem"></div>`,
+    [{label:'Save', cls:'btn-primary', fn: saveBranchIdentity.bind(null, code)}, {label:'Cancel', cls:'btn-ghost', fn: closeModal}]);
+  const upd = ()=>{ const el=document.getElementById('apiPreview'); if (el) el.textContent = _apSigPreview(
+    (document.getElementById('apiPerson').value||'').trim(), (document.getElementById('apiCity').value||'').trim(),
+    document.getElementById('apiState').value||''); };
+  ['apiPerson','apiCity','apiState'].forEach(id=>{ const el=document.getElementById(id); if (el){ el.oninput=upd; el.onchange=upd; } });
+  upd();
+}
+async function saveBranchIdentity(code){
+  const body = {contact_person:(document.getElementById('apiPerson').value||'').trim(),
+                city:(document.getElementById('apiCity').value||'').trim(),
+                state:document.getElementById('apiState').value||'',
+                name:(document.getElementById('apiName').value||'').trim()};
+  if (!body.city){ alert('City is required.'); return; }
+  const r = await API('/branches/'+encodeURIComponent(code), {method:'PATCH', body: JSON.stringify(body)});
+  if (!r.ok){ const d=await r.json().catch(()=>({})); alert(d.detail||'Could not save the details.'); return; }
+  closeModal();
+  loadBranches();
+}
 async function createBranch() {
   const code = (document.getElementById('brCode').value||'').trim().toUpperCase();
   const city = (document.getElementById('brCity').value||'').trim();
   const name = (document.getElementById('brName').value||'').trim();
   const contact_email = (document.getElementById('brEmail').value||'').trim();
-  if (!code || !city) { alert('Authorized Partner code and city are required.'); return; }
-  const r = await API('/branches', {method:'POST', body: JSON.stringify({branch_code:code, city, name, contact_email})});
+  const contact_person = (document.getElementById('brPerson').value||'').trim();
+  const state = document.getElementById('brState').value||'';
+  if (!code || !city || !state || !contact_person) { alert("Authorized Partner code, city, state and the person's name are required."); return; }
+  const r = await API('/branches', {method:'POST', body: JSON.stringify({branch_code:code, city, name, contact_email, contact_person, state})});
   const d = await r.json().catch(()=>({}));
   if (!r.ok) { alert(d.detail || 'Could not create Authorized Partner.'); return; }
   loadBranches();

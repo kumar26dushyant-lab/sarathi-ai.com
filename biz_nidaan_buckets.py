@@ -1517,6 +1517,15 @@ async def contact_recipients(claim_id: int) -> dict:
 
 async def send_query_to_complainant(claim_id: int, text: str, *, whatsapp: bool, email: bool,
                                     cc: bool, actor: str, actor_id=None) -> dict:
+    """The query, signed by the claim's Authorized Partner if it came through one."""
+    import biz_nidaan_ap_sign as _aps
+    with _aps.about(claim_id=claim_id):
+        return await _send_query_to_complainant(claim_id, text, whatsapp=whatsapp, email=email,
+                                                cc=cc, actor=actor, actor_id=actor_id)
+
+
+async def _send_query_to_complainant(claim_id: int, text: str, *, whatsapp: bool, email: bool,
+                                     cc: bool, actor: str, actor_id=None) -> dict:
     """ONE query message to the complainant - the exact words, not a stream. A second is refused
     while the first is unanswered for 24 hours; the answer is to call them."""
     text = " ".join((text or "").split())

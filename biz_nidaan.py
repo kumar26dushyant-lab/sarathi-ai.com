@@ -628,6 +628,7 @@ async def list_branches(include_disabled: bool = True) -> list[dict]:
         where = "" if include_disabled else "WHERE b.status='active'"
         cur = await conn.execute(
             f"""SELECT b.branch_code, b.city, b.name, b.contact_email, b.contact_phone, b.status, b.created_at,
+                       COALESCE(b.contact_person,'') AS contact_person, COALESCE(b.state,'') AS state,
                        COALESCE(b.share_pct, 0) AS share_pct,
                        (SELECT COUNT(*) FROM nidaan_accounts a
                         WHERE UPPER(a.branch_code)=b.branch_code) AS ref_signups,
@@ -1259,13 +1260,19 @@ async def get_activity_log(limit: int = 100, offset: int = 0, action: str = None
         return [dict(r) for r in await cur.fetchall()]
 
 
-async def create_branch(code: str, city: str, name: str = "", contact_email: str = "") -> dict:
+async def create_branch(code: str, city: str, name: str = "", contact_email: str = "",
+                        contact_person: str = "", state: str = "") -> dict:
     """Create a branch code. Returns {ok} or {error}."""
+    import biz_nidaan_ap_sign as _aps
     code = (code or "").strip().upper()
-    city = (city or "").strip()
+    city = (city or "").strip()[:60]
     email = (contact_email or "").strip().lower()
+    person = _aps.clean_person(contact_person)
+    st = _aps.clean_state(state)
     if not code or not city:
         return {"error": "Authorized Partner code and city are required."}
+    if (state or "").strip() and not st:
+        return {"error": "Choose the state from the list."}
     if not re.match(r"^[A-Z0-9][A-Z0-9\-]{1,19}$", code):
         return {"error": "Code must be 2–20 chars: letters, digits, hyphens."}
     if email and "@" not in email:
@@ -1273,8 +1280,9 @@ async def create_branch(code: str, city: str, name: str = "", contact_email: str
     try:
         async with aiosqlite.connect(DB_PATH) as conn:
             await conn.execute(
-                "INSERT INTO nidaan_branches (branch_code, city, name, contact_email) VALUES (?,?,?,?)",
-                (code, city, (name or "").strip(), email))
+                "INSERT INTO nidaan_branches (branch_code, city, name, contact_email, contact_person, state) "
+                "VALUES (?,?,?,?,?,?)",
+                (code, city, (name or "").strip()[:80], email, person, st))
             await conn.commit()
         return {"ok": True, "branch_code": code}
     except aiosqlite.IntegrityError:
@@ -1284,10 +1292,31 @@ async def create_branch(code: str, city: str, name: str = "", contact_email: str
 async def update_branch(code: str, status: Optional[str] = None,
                         contact_email: Optional[str] = None,
                         share_pct: Optional[float] = None,
-                        contact_phone: Optional[str] = None) -> bool:
-    """Update a branch's status, contact email, WhatsApp number, and/or profit-share %."""
+                        contact_phone: Optional[str] = None,
+                        name: Optional[str] = None, city: Optional[str] = None,
+                        contact_person: Optional[str] = None, state: Optional[str] = None) -> bool:
+    """Update a branch's status, contact email, WhatsApp number, profit-share %, or identity
+    (office name, city, the person's name, state)."""
+    import biz_nidaan_ap_sign as _aps
     code = (code or "").strip().upper()
     sets, params = [], []
+    if name is not None:
+        sets.append("name=?")
+        params.append((name or "").strip()[:80])
+    if city is not None:
+        if not (city or "").strip():
+            return False                       # city is required - it is half of the signature
+        sets.append("city=?")
+        params.append(city.strip()[:60])
+    if contact_person is not None:
+        sets.append("contact_person=?")
+        params.append(_aps.clean_person(contact_person))
+    if state is not None:
+        st = _aps.clean_state(state)
+        if (state or "").strip() and not st:
+            return False
+        sets.append("state=?")
+        params.append(st)
     if status is not None:
         sets.append("status=?")
         params.append(status if status in ("active", "disabled") else "active")
@@ -1320,7 +1349,8 @@ async def update_branch(code: str, status: Optional[str] = None,
         cur = await conn.execute(
             f"UPDATE nidaan_branches SET {', '.join(sets)} WHERE branch_code=?", params)
         await conn.commit()
-        return cur.rowcount > 0
+    _aps._forget()                             # the next message uses the new name at once
+    return cur.rowcount > 0
 
 
 # Back-compat shim for the existing status-only endpoint.

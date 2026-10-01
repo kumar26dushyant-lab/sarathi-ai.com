@@ -1766,9 +1766,13 @@ async def dispatch(*, event_key: str, priority: str = PRIORITY_P1,
                 logger.warning("notify policy failed for %s (%s) - sending", event_key, _pe)
         if should_email:
             subj = subject if subject.startswith("[Nidaan]") else f"[Nidaan] {subject}"
-            ok, err = await _send_email(
-                to_email=recipient_email, subject=subj,
-                html_body=body, text_body=re.sub(r"<[^>]+>", "", body))
+            import biz_nidaan_ap_sign as _aps
+            _cust = recipient_type == RECIPIENT_SUBSCRIBER
+            with _aps.about(claim_id=(claim_id if _cust else None),
+                            account_id=(recipient_id if _cust and not claim_id else None)):
+                ok, err = await _send_email(
+                    to_email=recipient_email, subject=subj,
+                    html_body=body, text_body=re.sub(r"<[^>]+>", "", body))
             email_status = "sent" if ok else "failed"
             email_err = err
             await _record_notification(

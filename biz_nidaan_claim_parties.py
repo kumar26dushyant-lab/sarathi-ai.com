@@ -281,6 +281,16 @@ def _missing_ask(party: dict, lang_en: bool = True) -> str:
 async def notify_claim_parties(claim_id: int, *, event_key: str, subject: str, body: str,
                                roles: Optional[list] = None,
                                skip_phones: Optional[list] = None) -> dict:
+    """Every party's message about this claim carries its Authorized Partner's name, if any."""
+    import biz_nidaan_ap_sign as _aps
+    with _aps.about(claim_id=claim_id):
+        return await _notify_claim_parties(claim_id, event_key=event_key, subject=subject, body=body,
+                                           roles=roles, skip_phones=skip_phones)
+
+
+async def _notify_claim_parties(claim_id: int, *, event_key: str, subject: str, body: str,
+                                roles: Optional[list] = None,
+                                skip_phones: Optional[list] = None) -> dict:
     """Fan ONE claim update out to every involved party on the channels we have for them.
 
     email + dashboard go through the existing notification engine; WhatsApp goes through the

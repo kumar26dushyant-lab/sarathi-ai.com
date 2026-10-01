@@ -74,6 +74,7 @@ import biz_sms as sms
 import biz_whatsapp_evolution as wa_evo
 import biz_whatsapp_safety as wa_safety
 import biz_nidaan as nidaan
+import biz_nidaan_ap_sign as _ap_sign
 import biz_nidaan_radar as radar
 import biz_doc_splitter as docsplit
 import biz_nidaan_claimant as claimant

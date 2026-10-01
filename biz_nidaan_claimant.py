@@ -329,6 +329,13 @@ async def _claim_contact(claim_id: int) -> Optional[dict]:
 
 
 async def send_greeting_email(claim_id: int, force: bool = False) -> dict:
+    """The greeting, signed by the claim's Authorized Partner if it came through one."""
+    import biz_nidaan_ap_sign as _aps
+    with _aps.about(claim_id=claim_id):
+        return await _send_greeting_email(claim_id, force)
+
+
+async def _send_greeting_email(claim_id: int, force: bool = False) -> dict:
     """Open the complainant portal + email the policyholder their link (bilingual, no calc). Auto path
     is gated by `claimant_autosend_enabled`; `force=True` (manual staff action) bypasses the gate.
     Best-effort: never raises. Also pings involved staff on all channels (mediator stays in loop)."""

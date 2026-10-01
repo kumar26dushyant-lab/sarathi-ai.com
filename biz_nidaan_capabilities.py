@@ -835,6 +835,16 @@ CAPABILITIES: list[dict] = [
         "telegram": False, "web": True, "min_role": "team_member",
     },
     {
+        "id": "ap_signature",
+        "en": {"t": "Messages about an Authorized Partner's claims carry their name",
+               "d": "Every email and WhatsApp we send about a claim that came through an Authorized Partner - raised by them, or by someone who joined with their code or link - ends with that person's name, e.g. \u201cRakesh Sharma, Authorized Partner of NidaanPartner.com, Pune (MH)\u201d. People in smaller towns trust the local person they know. Login codes never carry a name, and staff My Business claims are never signed by a partner.",
+               "u": "Authorized Partners - edit details: add the person's name, city and state. Until then their messages keep the team sign-off. App Health lists any partner still missing them."},
+        "hi": {"t": "अधिकृत पार्टनर के क्लेम के संदेशों में उनका नाम",
+               "d": "किसी अधिकृत पार्टनर के ज़रिये आए क्लेम - उन्होंने खुद दर्ज किया हो, या किसी ने उनके कोड या लिंक से जुड़कर - के बारे में हर ईमेल और WhatsApp उस व्यक्ति के नाम से ख़त्म होता है, जैसे \u201cराकेश शर्मा, NidaanPartner.com के अधिकृत पार्टनर, Pune (MH)\u201d। छोटे शहरों में लोग अपने जाने-पहचाने व्यक्ति पर भरोसा करते हैं। लॉगिन कोड में कभी किसी का नाम नहीं होता, और स्टाफ़ के My Business क्लेम पर कभी पार्टनर का नाम नहीं जाता।",
+               "u": "Authorized Partners - edit details: व्यक्ति का नाम, शहर और राज्य जोड़ें। तब तक उनके संदेशों में टीम का नाम रहता है। App Health में दिखता है कि किस पार्टनर का नाम अभी बाकी है।"},
+        "telegram": False, "web": True, "min_role": "sub_super_admin",
+    },
+    {
         "id": "evening_summary",
         "en": {"t": "Every evening, your day on Telegram - text and a voice note",
                "d": "At 8 pm each person gets their own summary: the claims they worked on and which bucket each sits in, the claims they moved (from where to where), what they did and their tasks - in their own language, with a voice note. Super-admins also get the team's day: bucket by bucket, every move and who made it, who worked on what, who recorded nothing, who is on leave. Money is always read out as rupees. A day with nothing recorded sends nothing.",

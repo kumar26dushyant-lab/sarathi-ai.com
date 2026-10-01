@@ -44,6 +44,13 @@ async def _claim(claim_id: int) -> Optional[dict]:
 
 
 async def send_email_reminder(claim_id: int, *, by: str = "system") -> dict:
+    """The reminder, signed by the claim's Authorized Partner if it came through one."""
+    import biz_nidaan_ap_sign as _aps
+    with _aps.about(claim_id=claim_id):
+        return await _send_email_reminder(claim_id, by=by)
+
+
+async def _send_email_reminder(claim_id: int, *, by: str = "system") -> dict:
     """Email the complainant the still-pending documents + the secure upload link. Gated on a valid
     complainant email; no-ops (returns a reason) when nothing is pending. Records the nudge."""
     claim = await _claim(claim_id)

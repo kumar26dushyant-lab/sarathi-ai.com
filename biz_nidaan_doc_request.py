@@ -447,6 +447,18 @@ async def send(claim_id: int, *, doc_keys: list[str], message: str, confirm: str
                extras=None, exclude=None, channels=None, actor: str = "",
                actor_staff_id: Optional[int] = None, kind: str = "request",
                again_reason: str = "") -> dict:
+    """The document ask, signed by the claim's Authorized Partner if it came through one."""
+    import biz_nidaan_ap_sign as _aps
+    with _aps.about(claim_id=claim_id):
+        return await _send(claim_id, doc_keys=doc_keys, message=message, confirm=confirm,
+                           extras=extras, exclude=exclude, channels=channels, actor=actor,
+                           actor_staff_id=actor_staff_id, kind=kind, again_reason=again_reason)
+
+
+async def _send(claim_id: int, *, doc_keys: list[str], message: str, confirm: str,
+                extras=None, exclude=None, channels=None, actor: str = "",
+                actor_staff_id: Optional[int] = None, kind: str = "request",
+                again_reason: str = "") -> dict:
     """Push the ask. Refuses unless `confirm` matches what preview() showed, so nothing reaches a
     customer that a member of staff has not actually read back.
 

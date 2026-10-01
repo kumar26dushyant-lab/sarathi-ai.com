@@ -2054,6 +2054,13 @@ async def init_db():
             await conn.execute("ALTER TABLE nidaan_branches ADD COLUMN contact_phone TEXT DEFAULT ''")
         except Exception:
             pass
+        # The AP's identity (founder, 1 Oct): the PERSON people know, and their state - both go in
+        # the signature on every message about the AP's claims (biz_nidaan_ap_sign).
+        for _col in ("contact_person TEXT DEFAULT ''", "state TEXT DEFAULT ''"):
+            try:
+                await conn.execute("ALTER TABLE nidaan_branches ADD COLUMN " + _col)
+            except Exception:
+                pass
         # Seed the initial branches (idempotent — INSERT OR IGNORE on the PK).
         for _code, _city, _name in [
             ("IND-HO", "Indore", "Indore Head Office"),

@@ -158,6 +158,7 @@ async def decide(msisdn: str, msg_type: str, sender: str) -> dict:
     cls = classify(sender, in_session=_in_session(ct), role=ct.get("verified_role") or "")
     out["cls"] = cls
     out["claim_id"] = ct.get("claim_id")
+    out["lang"] = ct.get("language") or ""
 
     # Someone who said STOP hears from us only about the stopping itself.
     if _s(ct.get("status")) == "stopped" and cls not in ("consent",):

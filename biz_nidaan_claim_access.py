@@ -308,6 +308,13 @@ _SMS = {
 
 
 async def _send(kind: str, dest: str, code: str, claim: dict, lang: str) -> dict:
+    # A one-time code carries nobody's name - not even an Authorized Partner's (biz_nidaan_ap_sign).
+    import biz_nidaan_ap_sign as _aps
+    with _aps.unsigned():
+        return await _send_code(kind, dest, code, claim, lang)
+
+
+async def _send_code(kind: str, dest: str, code: str, claim: dict, lang: str) -> dict:
     name = (claim.get("complainant_name") or claim.get("insured_name") or "").split(" ")[0]
     if kind == "whatsapp":
         try:

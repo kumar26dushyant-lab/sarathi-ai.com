@@ -144,9 +144,20 @@ async def send_email(to_email: str, subject: str, html_body: str,
             transport_out["via"] = name
             transport_out["error"] = err
 
+    if (to_email or "").strip().lower().endswith("@house.nidaanpartner.internal"):
+        # An Authorized Partner's house account has a made-up address that no inbox owns.
+        _via("", "synthetic house-account address - not a real inbox")
+        return False
     if os.getenv("NIDAAN_NO_OUTBOUND") == "1":
         _via("", "outbound suppressed (test run)")
         return False
+    try:
+        import biz_nidaan_ap_sign as _aps
+        if _aps.current():
+            # A customer message about an Authorized Partner's claim ends with that person's name.
+            html_body, text_body = await _aps.for_email(to_email, html_body, text_body)
+    except Exception as _se:  # noqa: BLE001 - a signature never stops an email
+        logger.warning("AP signature skipped: %s", _se)
     if not _initialized:
         logger.warning("Email not sent (not configured): %s → %s", subject, to_email)
         _via("", "email not configured — SMTP_USER/SMTP_PASSWORD missing in biz.env")
@@ -881,6 +892,21 @@ async def send_nidaan_claim_status_email(
     note: str = "",
 ) -> bool:
     """Notify a Nidaan advisor that their claim status has been updated."""
+    import biz_nidaan_ap_sign as _aps
+    with _aps.about(claim_id=claim_id):
+        return await _send_nidaan_claim_status_email(to_email, owner_name, claim_id, insured_name,
+                                                     claim_type, new_status, note)
+
+
+async def _send_nidaan_claim_status_email(
+    to_email: str,
+    owner_name: str,
+    claim_id: int,
+    insured_name: str,
+    claim_type: str,
+    new_status: str,
+    note: str = "",
+) -> bool:
     STATUS_LABELS = {
         "intimated": "Intimated",
         "assigned": "Assigned to Legal Team",

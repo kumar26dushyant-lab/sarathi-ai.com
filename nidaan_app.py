@@ -74,6 +74,7 @@ import biz_sms as sms
 import biz_whatsapp_evolution as wa_evo
 import biz_whatsapp_safety as wa_safety
 import biz_nidaan as nidaan
+import biz_nidaan_ap_sign as _ap_sign
 import biz_nidaan_radar as radar
 import biz_doc_splitter as docsplit
 import biz_nidaan_claimant as claimant
@@ -962,7 +963,7 @@ async def nidaan_branch_request_otp(body: BranchOtpReq, request: Request):
                            "office to add your number."}, status_code=400)
         import biz_nidaan_whatsapp as _wa
         msisdn = _wa.normalize_msisdn(phone)
-        with _wa.sending_as("critical"):
+        with _wa.sending_as("critical"), _ap_sign.unsigned():
             sent = await _wa.send_auth_code(msisdn, result["otp"])
             _via = "WhatsApp authentication template"
             if not sent.get("ok"):
@@ -2211,6 +2212,12 @@ async def nidaan_claim_consent(request: Request):
 
 
 async def _claimant_accept_thankyou(claim_id: int) -> None:
+    # Signed by the claim's Authorized Partner, if it came through one (biz_nidaan_ap_sign).
+    with _ap_sign.about(claim_id=claim_id):
+        await _claimant_accept_thankyou_impl(claim_id)
+
+
+async def _claimant_accept_thankyou_impl(claim_id: int) -> None:
     """Thank the complainant right after they accept the authorization — email (reliable) + WhatsApp
     (best-effort, in-session), and record it on the claim timeline. No ClaimShield/L2 wording."""
     async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
@@ -3275,7 +3282,7 @@ async def nidaan_api_signup(body: NidaanSignupReq, request: Request):
     if branch_code and await nidaan.is_valid_branch(branch_code):
         _asyncio.create_task(_notify_branch_signup(
             branch_code, body.owner_name.strip(), email, body.phone.strip()))
-    _asyncio.create_task(email_svc.send_email(
+    _ap_sign.task_for_account(account_id, email_svc.send_email(
         to_email=body.email.strip(),
         subject="Welcome to Nidaan Partner! 🛡️",
         html_body=(
@@ -3348,7 +3355,7 @@ async def nidaan_api_signup_mobile(body: NidaanMobileSignupReq, request: Request
     if branch_code and await nidaan.is_valid_branch(branch_code):
         _asyncio.create_task(_notify_branch_signup(branch_code, name, email, ph))
     if email:  # welcome email only when we actually have one
-        _asyncio.create_task(email_svc.send_email(
+        _ap_sign.task_for_account(account_id, email_svc.send_email(
             to_email=email,
             subject="Welcome to Nidaan Partner! 🛡️",
             html_body=(
@@ -3669,7 +3676,7 @@ async def nidaan_api_google_signup(req: NidaanGoogleReq, request: Request):
         _asyncio.create_task(_nnot.on_subscriber_signup(account_id))  # alert SA/Admin
     except Exception:
         pass
-    _asyncio.create_task(email_svc.send_email(
+    _ap_sign.task_for_account(account_id, email_svc.send_email(
         to_email=email,
         subject="Welcome to Nidaan Partner! 🛡️",
         html_body=(
@@ -10521,15 +10528,18 @@ async def ops_list_branches(request: Request):
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     _require_staff(request, "sub_super_admin")
-    return {"branches": await nidaan.list_branches()}
+    return {"branches": await nidaan.list_branches(),
+            "states": [{"code": k, "en": v[0], "hi": v[1]} for k, v in _ap_sign.STATES.items()]}
 
 
 class OpsBranchCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    branch_code: str
-    city: str
-    name: str = ""
-    contact_email: str = ""   # where 'attributed lead unpaid' alerts are sent
+    branch_code: str = Field(..., max_length=20)
+    city: str = Field(..., max_length=60)
+    name: str = Field("", max_length=80)
+    contact_email: str = Field("", max_length=120)   # where 'attributed lead unpaid' alerts are sent
+    contact_person: str = Field("", max_length=80)   # the person's name - signs their claims' messages
+    state: str = Field("", max_length=4)             # state code, e.g. MH
 
 
 @app.post("/nidaan/ops/api/branches")
@@ -10537,7 +10547,8 @@ async def ops_create_branch(body: OpsBranchCreate, request: Request):
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     _require_staff(request, "sub_super_admin")
-    res = await nidaan.create_branch(body.branch_code, body.city, body.name, body.contact_email)
+    res = await nidaan.create_branch(body.branch_code, body.city, body.name, body.contact_email,
+                                     contact_person=body.contact_person, state=body.state)
     if "error" in res:
         raise HTTPException(status_code=400, detail=res["error"])
     # Welcome the branch with a one-click login email (magic link valid 72h for first login).
@@ -10562,6 +10573,10 @@ class OpsBranchUpdate(BaseModel):
     contact_email: Optional[str] = None
     contact_phone: Optional[str] = Field(None, max_length=20)  # WhatsApp number for claim updates
     share_pct: Optional[float] = Field(None, ge=0, le=100)   # profit-share % (super-admin only)
+    name: Optional[str] = Field(None, max_length=80)
+    city: Optional[str] = Field(None, max_length=60)
+    contact_person: Optional[str] = Field(None, max_length=80)
+    state: Optional[str] = Field(None, max_length=4)
 
 
 @app.patch("/nidaan/ops/api/branches/{branch_code}")
@@ -10572,11 +10587,14 @@ async def ops_update_branch(branch_code: str, body: OpsBranchUpdate, request: Re
     _require_staff(request, "super_admin" if body.share_pct is not None else "sub_super_admin")
     if not await nidaan.update_branch(branch_code, status=body.status,
                                       contact_email=body.contact_email, share_pct=body.share_pct,
-                                      contact_phone=body.contact_phone):
+                                      contact_phone=body.contact_phone, name=body.name, city=body.city,
+                                      contact_person=body.contact_person, state=body.state):
         raise HTTPException(status_code=404, detail="Authorized Partner not found, invalid number, or nothing to update")
     _bb = [x for x in ((f"status={body.status}" if body.status else ""),
                        ("email updated" if body.contact_email is not None else ""),
                        ("WhatsApp updated" if body.contact_phone is not None else ""),
+                       ("identity updated" if any(v is not None for v in (body.name, body.city,
+                                                                         body.contact_person, body.state)) else ""),
                        (f"share_pct={body.share_pct}" if body.share_pct is not None else "")) if x]
     await _ops_audit(request, "branch.update", "branch", branch_code.strip().upper(), "; ".join(_bb) or "updated")
     return {"ok": True}
@@ -14388,7 +14406,8 @@ async def _login_checks() -> list:
             _c.row_factory = aiosqlite.Row
             rows = [dict(r) for r in await (await _c.execute(
                 "SELECT branch_code, COALESCE(contact_email,'') AS email, "
-                "COALESCE(contact_phone,'') AS phone FROM nidaan_branches "
+                "COALESCE(contact_phone,'') AS phone, COALESCE(contact_person,'') AS person, "
+                "COALESCE(state,'') AS state FROM nidaan_branches "
                 "WHERE status='active'")).fetchall()]
         total = len(rows)
         stranded = [r["branch_code"] for r in rows if not r["email"] and not r["phone"]]
@@ -14403,6 +14422,15 @@ async def _login_checks() -> list:
              level=("attention" if stranded else "ok"), where="Authorized Partners")
         # Email is the only channel most branches have today; the founder's plan is to make
         # WhatsApp primary once every branch has a mobile on file, so track the gap.
+        # Their messages are signed by the person (biz_nidaan_ap_sign) - without a name the team
+        # sign-off stays, which is safe but loses the trust the signature is for.
+        unsigned_aps = [r["branch_code"] for r in rows if not r["person"].strip() or not r["state"]]
+        _chk("Authorized Partner signature on messages", True,
+             "all %d active Authorized Partners sign their claims' messages" % total if not unsigned_aps
+             else "%d of %d have no person's name or state yet, so their claims' messages carry the "
+                  "team sign-off: %s - add them under Authorized Partners, edit details"
+                  % (len(unsigned_aps), total, ", ".join(unsigned_aps[:8])),
+             level=("attention" if unsigned_aps else "ok"), where="Authorized Partners")
         _chk("Authorized Partner login — WhatsApp fallback", bool(with_phone),
              "%d of %d Authorized Partners have a mobile, so the rest have email as their only way in"
              % (len(with_phone), total) if total else "no active Authorized Partners")
