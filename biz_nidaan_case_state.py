@@ -769,7 +769,7 @@ async def enter_pipeline(claim_id: int, *, actor: str = "") -> dict:
         async with aiosqlite.connect(DB_PATH) as c:
             await c.execute(
                 "UPDATE nidaan_claims SET pipeline_stage=?, pipeline_entered_at=CURRENT_TIMESTAMP, "
-                "pipeline_stage_at=CURRENT_TIMESTAMP, pipeline_by=? WHERE claim_id=?",
+                "pipeline_stage_at=CURRENT_TIMESTAMP, pipeline_bucket_at=CURRENT_TIMESTAMP, pipeline_by=? WHERE claim_id=?",
                 (first, (actor or "")[:80], int(claim_id)))
             await c.commit()
     except Exception as e:  # noqa: BLE001
@@ -817,7 +817,7 @@ async def move_stage(claim_id: int, *, to: str = "", note: str = "", actor: str 
     try:
         async with aiosqlite.connect(DB_PATH) as c:
             await c.execute(
-                "UPDATE nidaan_claims SET pipeline_stage=?, pipeline_stage_at=CURRENT_TIMESTAMP, "
+                "UPDATE nidaan_claims SET pipeline_stage=?, pipeline_stage_at=CURRENT_TIMESTAMP, pipeline_bucket_at=CURRENT_TIMESTAMP, "
                 "pipeline_by=? WHERE claim_id=?",
                 (to, (actor or "")[:80], int(claim_id)))
             await c.commit()

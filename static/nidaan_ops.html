@@ -15391,9 +15391,8 @@ function l2RenderBucket(){
   //     one claim, then moving that claim, makes the tab you are on vanish underneath you.
   //   - if only one tab would remain, show none. A lone "All" tab beside a lone sub-tab is two
   //     buttons that do the same thing.
-  const _liveSubs = subs.filter(function(s){
-    return (sc[s.sub_key] || 0) > 0 || _l2Sub === s.sub_key;
-  });
+  // Every step is a filter, even at zero (founder, 2 Oct: "...and in filters too").
+  const _liveSubs = subs;
   const tabs = _liveSubs.length
     ? '<div class="l2tabs">'
       + '<button class="l2tab" aria-pressed="' + (!_l2Sub) + '" onclick="l2Sub(\'\')">All '
@@ -17027,6 +17026,12 @@ function _l2SaveFailed(key, el, why, id){
 async function l2SetSub(sub, el){
   const id = _l2Case && _l2Case.claim_id;
   if (!id) return;
+  // A query step needs the words: the box asks for them, and the dropdown goes back until saved.
+  if (_l2Case.st && _l2Case.st.bucket === 'escalation' && (sub === 'query' || sub === 'query_answered')){
+    if (el && _l2Case.st.sub) el.value = _l2Case.st.sub;
+    if (sub === 'query') escQuery(id); else escAnswered(id);
+    return;
+  }
   const msg = document.getElementById('l2cMsg');
   try{
     const r = await API('/cases/' + id + '/bucket/substate',
@@ -18429,7 +18434,7 @@ window._csrDateBound = _csrDateBound;
 // Complete, Lokpal, or a query that keeps it here because from then on they are waiting on us.
 function _escPanel(st, id){
   const sub = st.sub || '';
-  const escalated = (sub === 'escalated' || sub === 'query');
+  const escalated = (sub === 'escalated' || sub === 'query' || sub === 'query_answered');
   return '<div class="l2fld" style="margin-top:.2rem">'
     + '<div class="l2sec">Where this stands</div>'
     + (sub === 'pending'
@@ -18439,8 +18444,11 @@ function _escPanel(st, id){
           ? '<div class="l2ban amber">Marked <b>Escalation Query</b> — the insurer is waiting on '
             + 'us, so the day count below is not a silence from them. Answer them, then record '
             + 'what they said.</div>'
-          : '<div class="l2ban ok">Escalated. The days below are simply how long it has been '
-            + 'since we wrote to the insurer.</div>')
+          : sub === 'query_answered'
+            ? '<div class="l2ban ok">Marked <b>Escalation Query Responded</b> — we answered the '
+              + 'insurer\'s query; the wait is theirs again. If they come back with another, record it.</div>'
+            : '<div class="l2ban ok">Escalated. The days below are simply how long it has been '
+              + 'since we wrote to the insurer.</div>')
     // The case email used to live here. It is on the claim itself now, in every bucket, because
     // it arrives at any point - from the complainant on WhatsApp, or from a staffer on the phone
     // to them - and the person holding it should not have to be in Escalation to write it down.

@@ -129,7 +129,10 @@ _SUBSTATES = {
     "escalation": [
         ("pending", "Escalation Pending", "एस्केलेट करना बाकी", 1, 5, 10, "internal"),
         ("query", "Escalation Query", "सवाल आया", 0, 3, 7, "internal"),
-        ("escalated", "Escalated", "एस्केलेट हो गया", 0, None, None, "insurer")],
+        ("escalated", "Escalated", "एस्केलेट हो गया", 0, None, None, "insurer"),
+        # founder, 2 Oct: the query is answered by another staff member and the claim waits on
+        # the insurer again - a step of its own, so it can be filtered and counted.
+        ("query_answered", "Escalation Query Responded", "सवाल का जवाब भेजा", 0, None, None, "insurer")],
     "lokpal": [
         ("pending", "Lokpal Pending", "दाखिल करना बाकी", 1, 7, 14, "internal"),
         ("registered", "Lokpal Registered", "दर्ज हो गया", 0, None, None, "lokpal"),
@@ -477,6 +480,15 @@ _CONFIG_FIXES = (
      "AND COALESCE(pipeline_sub,'') IN ('','pending') AND claim_id IN "
      "(SELECT claim_id FROM nidaan_claim_fields WHERE field_key='escalation_date' "
      " AND TRIM(COALESCE(value,'')) != '')", ()),
+    # Days in a bucket: claims already in one get their entry time from the move log (since
+    # 30 Sep), else the step clock - the best that was kept before then.
+    ("UPDATE nidaan_claims SET pipeline_bucket_at = COALESCE((SELECT MAX(l.moved_at) FROM "
+     "nidaan_bucket_move_log l WHERE l.claim_id=nidaan_claims.claim_id AND l.to_key=nidaan_claims.pipeline_stage), "
+     "pipeline_stage_at, pipeline_entered_at) WHERE pipeline_bucket_at IS NULL "
+     "AND COALESCE(pipeline_stage,'')<>''", ()),
+    # Escalation Query Responded sits between Query and Escalated in the step order.
+    ("UPDATE nidaan_bucket_substates SET sort_order=15 WHERE bucket_key='escalation' "
+     "AND sub_key='query_answered' AND sort_order<>15", ()),
 )
 
 
@@ -505,6 +517,14 @@ async def ensure_seeded() -> dict:
     made = {"buckets": 0, "substates": 0, "fields": 0, "moves": 0}
     try:
         async with aiosqlite.connect(DB_PATH) as c:
+            await c.execute(
+                "CREATE TABLE IF NOT EXISTS nidaan_bucket_queries ("
+                " query_id INTEGER PRIMARY KEY AUTOINCREMENT, claim_id INTEGER NOT NULL,"
+                " bucket_key TEXT NOT NULL, text TEXT NOT NULL, raised_by TEXT DEFAULT '',"
+                " raised_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, answer TEXT DEFAULT '',"
+                " answered_by TEXT DEFAULT '', answered_at TIMESTAMP)")
+            await c.execute("CREATE INDEX IF NOT EXISTS idx_bucket_queries_claim "
+                            "ON nidaan_bucket_queries(claim_id, bucket_key)")
             for i, (key, en, hi, icon, colour, amber, red, waits, flags) in enumerate(_BUCKETS):
                 g = _GUIDE.get(key, ("", "", "", ""))
                 cur = await c.execute(
@@ -633,6 +653,59 @@ async def config() -> dict:
 
 
 # ── ageing ───────────────────────────────────────────────────────────────────
+def _ts(ts):
+    raw = str(ts or "")[:19].replace("T", " ").strip()
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(raw if fmt != "%Y-%m-%d" else raw[:10], fmt)
+        except Exception:  # noqa: BLE001
+            continue
+    return None
+
+
+async def _has_table(name: str) -> bool:
+    async with aiosqlite.connect(DB_PATH) as c:
+        return bool(await (await c.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,))).fetchone())
+
+
+async def bucket_days(rows: list) -> dict:
+    """{claim_id: whole days inside its CURRENT bucket, every stay added up} (founder, 2 Oct:
+    "it should count the full days and time inside a bucket as adding full").
+
+    The current stay runs from pipeline_bucket_at (set only by a bucket change - a step change
+    never restarts it). Earlier stays in the same bucket come from nidaan_bucket_move_log: an
+    entry (to_key) to the next exit (from_key), ending before the current stay began."""
+    ids = [int(r["claim_id"]) for r in rows if r.get("pipeline_stage")]
+    log: dict = {}
+    if ids:
+        async with aiosqlite.connect(DB_PATH) as c:
+            ph = ",".join("?" * len(ids))
+            for cid, fk, tk, at in await (await c.execute(
+                    "SELECT claim_id, from_key, to_key, moved_at FROM nidaan_bucket_move_log "
+                    "WHERE claim_id IN (%s) ORDER BY move_id" % ph, ids)).fetchall():
+                log.setdefault(cid, []).append((fk or "", tk or "", _ts(at)))
+    now = datetime.utcnow()
+    out = {}
+    for r in rows:
+        bk = r.get("pipeline_stage") or ""
+        if not bk:
+            continue
+        cur = _ts(r.get("pipeline_bucket_at")) or _ts(r.get("pipeline_stage_at"))
+        secs = max(0.0, (now - cur).total_seconds()) if cur else 0.0
+        entry = None
+        for fk, tk, at in log.get(int(r["claim_id"]), []):
+            if not at or (cur and at >= cur):
+                break                                   # the current stay is counted above
+            if tk == bk and entry is None:
+                entry = at
+            elif fk == bk and entry is not None:
+                secs += max(0.0, (at - entry).total_seconds())
+                entry = None
+        out[int(r["claim_id"])] = int(secs // 86400)
+    return out
+
+
 def _days_since(ts) -> Optional[int]:
     """Whole days since a timestamp OR a bare date.
 
@@ -672,7 +745,7 @@ async def _claim_row(claim_id: int) -> Optional[dict]:
             "SELECT claim_id, status, archived, review_outcome, l2_payment_status, "
             # payment_status too: a subscription IS a paid Level-2, and l2_fee_covered() reads it.
             "payment_status, "
-            "pipeline_stage, pipeline_sub, pipeline_stage_at, pipeline_from, pipeline_by, "
+            "pipeline_stage, pipeline_sub, pipeline_stage_at, pipeline_bucket_at, pipeline_from, pipeline_by, "
             "hold_until, complainant_name, insured_name, l2_handover_at, l2_handover_by, "
             "l2_handover_note, back_at, back_by, back_by_role, back_from, back_reason, "
             "query_state, query_text, query_by, query_by_id, query_at, query_round, "
@@ -1097,7 +1170,7 @@ async def start_l2(claim_id: int, *, actor: str = "", force: bool = False,
         await c.execute(
             "UPDATE nidaan_claims SET pipeline_stage=?, pipeline_sub=?, "
             "pipeline_entered_at=CURRENT_TIMESTAMP, pipeline_stage_at=CURRENT_TIMESTAMP, "
-            "pipeline_by=?, pipeline_from='' WHERE claim_id=?",
+            "pipeline_bucket_at=CURRENT_TIMESTAMP, pipeline_by=?, pipeline_from='' WHERE claim_id=?",
             (entry["bucket_key"], default_sub, (actor or "")[:80], int(claim_id)))
         await c.commit()
     note = "Level-2 processing started - now in %s" % entry["name_en"]
@@ -1256,8 +1329,8 @@ async def move(claim_id: int, to_key: str, *, sub: str = "", reason: str = "",
         async with aiosqlite.connect(DB_PATH) as c:
             await c.execute(
                 "UPDATE nidaan_claims SET pipeline_stage=?, pipeline_sub=?, "
-                "pipeline_stage_at=CURRENT_TIMESTAMP, pipeline_by=?, pipeline_from=?, "
-                "hold_until=? WHERE claim_id=?",
+                "pipeline_stage_at=CURRENT_TIMESTAMP, pipeline_bucket_at=CURRENT_TIMESTAMP, "
+                "pipeline_by=?, pipeline_from=?, hold_until=? WHERE claim_id=?",
                 (to_key, sub, (actor or "")[:80], came_from, (day or None), int(claim_id)))
             # The flag the next person sees: set on a backward move, cleared once the claim goes
             # forward again. A park and its return leave it as it was.
@@ -1787,7 +1860,7 @@ async def escalation_reply(claim_id: int, outcome: str, *, note: str = "", actor
     if (row.get("pipeline_stage") or "") != "escalation":
         return {"ok": False, "error": "This case is not in Escalation."}
     sub = (row.get("pipeline_sub") or "")
-    if sub not in ("escalated", "query"):
+    if sub not in ("escalated", "query", "query_answered"):
         return {"ok": False,
                 "error": "Record the escalation date first \u2014 there is nothing for them to "
                          "have replied to yet."}
@@ -1796,10 +1869,15 @@ async def escalation_reply(claim_id: int, outcome: str, *, note: str = "", actor
     if not to_key:
         # A query keeps the case here. A second query is allowed and recorded: insurers do come
         # back more than once, and pretending otherwise would push people to lie to the system.
-        res = await set_substate(claim_id, to_sub, actor=actor)
+        res = await set_substate(claim_id, to_sub, actor=actor, via_flow=True)
         if not res.get("ok"):
             return res
+        async with aiosqlite.connect(DB_PATH) as c:
+            await c.execute("INSERT INTO nidaan_bucket_queries (claim_id, bucket_key, text, raised_by) "
+                            "VALUES (?,?,?,?)", (int(claim_id), "escalation", note[:1000], (actor or "")[:80]))
+            await c.commit()
         await _log(claim_id, "%s: %s" % (label, note[:300]), actor)
+        await _tell_escalation_query(claim_id, row, note, actor, answered=False)
         return {"ok": True, "outcome": outcome, "stayed": True}
 
     res = await move(claim_id, to_key, sub=to_sub,
@@ -1827,11 +1905,63 @@ async def escalation_answered(claim_id: int, *, note: str = "", actor: str = "")
         return {"ok": False, "error": "This case is not in Escalation."}
     if (row.get("pipeline_sub") or "") != "query":
         return {"ok": False, "error": "There is no open query from the insurer on this case."}
-    res = await set_substate(claim_id, "escalated", actor=actor)
+    res = await set_substate(claim_id, "query_answered", actor=actor, via_flow=True)
     if not res.get("ok"):
         return res
+    async with aiosqlite.connect(DB_PATH) as c:
+        await c.execute(
+            "UPDATE nidaan_bucket_queries SET answer=?, answered_by=?, answered_at=CURRENT_TIMESTAMP "
+            "WHERE query_id=(SELECT MAX(query_id) FROM nidaan_bucket_queries WHERE claim_id=? "
+            "AND bucket_key='escalation' AND COALESCE(answered_at,'')='')",
+            (note[:1000], (actor or "")[:80], int(claim_id)))
+        await c.commit()
     await _log(claim_id, "\u2705 Answered the insurer's query \u2014 %s" % note[:300], actor)
-    return {"ok": True, "sub": "escalated"}
+    await _tell_escalation_query(claim_id, row, note, actor, answered=True)
+    return {"ok": True, "sub": "query_answered"}
+
+
+async def _tell_escalation_query(claim_id: int, row: dict, text: str, actor: str, *, answered: bool) -> None:
+    """The escalation team on duty and the claim's own people hear about a query, and about its
+    answer - so the one who raised it knows it was dealt with. Never the person who acted."""
+    import biz_nidaan as _n
+    import biz_nidaan_notifications as _nnot
+    try:
+        ids = list(await _n.on_duty_rep_ids("escalation"))
+    except Exception:  # noqa: BLE001
+        ids = []
+    for sid in await _claim_handlers(claim_id, row):
+        if sid not in ids:
+            ids.append(sid)
+    if answered:
+        async with aiosqlite.connect(DB_PATH) as c:
+            r = await (await c.execute(
+                "SELECT raised_by FROM nidaan_bucket_queries WHERE claim_id=? AND bucket_key='escalation' "
+                "ORDER BY query_id DESC LIMIT 1", (int(claim_id),))).fetchone()
+        raiser = (r[0] if r else "") or ""
+        if raiser:
+            try:
+                for s in await _n.list_staff():
+                    if (s.get("name") or "").strip().lower() == raiser.strip().lower() and s["staff_id"] not in ids:
+                        ids.append(s["staff_id"])
+            except Exception:  # noqa: BLE001
+                pass
+    if not ids:
+        ids = [a["staff_id"] for a in await _nnot._super_admin_staff()]
+    who = (row.get("complainant_name") or row.get("insured_name") or "").strip()
+    if answered:
+        subj = "\u2705 Escalation query answered \u2014 NP-%s %s" % (claim_id, who)
+        body = ("%s answered the insurer's query on NP-%s:\n\n\u201c%s\u201d\n\nThe claim is on "
+                "Escalation Query Responded - waiting for the insurance company." % (actor or "Someone", claim_id, text[:600]))
+        key = "case.escalation_query_answered"
+    else:
+        subj = "\u2753 Escalation query \u2014 NP-%s %s" % (claim_id, who)
+        body = ("%s recorded a query from the insurer on NP-%s:\n\n\u201c%s\u201d\n\nAnswer it, then press "
+                "\u2705 We have answered them on the claim (Escalation)." % (actor or "Someone", claim_id, text[:600]))
+        key = "case.escalation_query"
+    try:
+        await _nnot.notify_staff_inapp(ids, subj, body, event_key=key, email=False, claim_id=claim_id)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("escalation query alert failed for %s: %s", claim_id, e)
 
 
 async def escalation_due() -> dict:
@@ -1909,7 +2039,11 @@ async def escalation_due() -> dict:
     return out
 
 
-async def set_substate(claim_id: int, sub: str, *, actor: str = "") -> dict:
+# Steps that need the words: entered only through the query and answer boxes (founder, 2 Oct).
+WORDED_STEPS = {("escalation", "query"), ("escalation", "query_answered")}
+
+
+async def set_substate(claim_id: int, sub: str, *, actor: str = "", via_flow: bool = False) -> dict:
     """Move a claim between steps INSIDE its bucket.
 
     The clock restarts, because a step with its own deadline - an Annexure awaiting reply - is a
@@ -1926,6 +2060,9 @@ async def set_substate(claim_id: int, sub: str, *, actor: str = "") -> dict:
         return {"ok": False, "error": "That is not a step in this bucket."}
     if (row.get("pipeline_sub") or "") == sub:
         return {"ok": True, "sub": sub, "unchanged": True}
+    if (cur_key, sub) in WORDED_STEPS and not via_flow:
+        return {"ok": False, "needs_words": True, "error":
+                "Write the insurer's query (or your answer) in the box - the next person starts from it."}
     async with aiosqlite.connect(DB_PATH) as c:
         await c.execute(
             "UPDATE nidaan_claims SET pipeline_sub=?, pipeline_stage_at=CURRENT_TIMESTAMP, "
@@ -1974,7 +2111,7 @@ _CLAIM_COLS = (
     "c.insurer_name, c.policy_no, c.disputed_amount, c.branch_code, c.status, "
     "c.review_outcome, c.l2_payment_status, c.payment_status, c.assigned_to_staff_id, "
     "c.created_at, "
-    "c.pipeline_stage, c.pipeline_sub, c.pipeline_stage_at, c.pipeline_entered_at, "
+    "c.pipeline_stage, c.pipeline_sub, c.pipeline_stage_at, c.pipeline_entered_at, c.pipeline_bucket_at, "
     "c.pipeline_by, c.pipeline_from, c.hold_until, c.raised_by_name, c.raised_via, "
     "c.channel_partner_id, c.origin, c.back_at, c.back_by, c.back_by_role, c.back_from, "
     "c.back_reason, c.query_state, c.query_text, c.query_by, c.query_by_id, c.query_at, c.query_round, "
@@ -2076,6 +2213,15 @@ def _why_here(item: dict, note: str, missing: list) -> tuple:
 
     if item.get("hold_until"):
         return ("Paused until %s." % str(item["hold_until"])[:10], "nothing until then")
+
+    eq = item.get("esc_query") or {}
+    if item.get("bucket") == "escalation" and item.get("sub") == "query":
+        return (("The insurer asked: \u201c%s\u201d (recorded by %s)." % (eq.get("text", "")[:160], eq.get("by") or "someone"))
+                if eq else "The insurer asked us something.", "answer the insurer")
+    if item.get("bucket") == "escalation" and item.get("sub") == "query_answered":
+        return (("%s answered the insurer's query%s - waiting for the insurance company."
+                 % (eq.get("answered_by") or "We", (" on %s" % eq["answered_at"][:10]) if eq.get("answered_at") else ""))
+                if eq else "We answered the insurer's query - waiting for them.", "wait for the insurer")
 
     # Documents are gathered in L2 Claims, before the handover. Past that point the checklist is
     # not what a claim is waiting for - except in Pending Docs, where it is the whole job.
@@ -2210,6 +2356,7 @@ async def board(bucket_key: str = "", *, sub: str = "", q: str = "",
                 files[cid_] = n_
 
     items = []
+    in_bucket_days = await bucket_days(rows)
     for r in rows:
         bk = r.get("pipeline_stage") or ""
         b = bmap.get(bk) or {}
@@ -2219,7 +2366,10 @@ async def board(bucket_key: str = "", *, sub: str = "", q: str = "",
         # inside a bucket that is otherwise measured in months.
         amber = sdef.get("amber_days") or b.get("amber_days")
         red = sdef.get("red_days") or b.get("red_days")
-        days = _days_since(r.get("pipeline_stage_at"))
+        # Days IN THE BUCKET, every stay added up (founder, 2 Oct); a step with its own deadline
+        # still colours by the step's own clock.
+        days = in_bucket_days.get(int(r["claim_id"]), _days_since(r.get("pipeline_stage_at")))
+        step_days = _days_since(r.get("pipeline_stage_at"))
         done, total = docs.get(r["claim_id"], (0, 0))
         vals = await claim_fields(r["claim_id"])
         left = await _lokpal_days_left(r, vals)
@@ -2244,7 +2394,9 @@ async def board(bucket_key: str = "", *, sub: str = "", q: str = "",
             "amount": r.get("disputed_amount") or 0,
             "bucket": bk, "bucket_name": b.get("name_en", bk), "bucket_icon": b.get("icon", ""),
             "sub": sk, "sub_name": sdef.get("name_en", ""),
-            "days": days, "age_state": age_state(days, amber, red),
+            "days": days, "step_days": step_days,
+            "age_state": age_state(step_days if (sdef.get("amber_days") or sdef.get("red_days")) else days,
+                                   amber, red),
             "amber_days": amber, "red_days": red,
             "waits_on": sdef.get("waits_on") or b.get("waits_on") or "internal",
             "docs_done": done, "docs_total": total,
@@ -2263,6 +2415,22 @@ async def board(bucket_key: str = "", *, sub: str = "", q: str = "",
 
     # WHY each one is sitting here, and WHAT is outstanding. Computed after the loop so the
     # notes and the missing-field lookups happen once for the page rather than once per row.
+    esc_ids = [i["claim_id"] for i in items if i.get("bucket") == "escalation"]
+    if esc_ids and await _has_table("nidaan_bucket_queries"):
+        async with aiosqlite.connect(DB_PATH) as c:
+            c.row_factory = aiosqlite.Row
+            ph = ",".join("?" * len(esc_ids))
+            latest = {}
+            for q in await (await c.execute(
+                    "SELECT * FROM nidaan_bucket_queries WHERE bucket_key='escalation' AND claim_id IN (%s) "
+                    "ORDER BY query_id" % ph, esc_ids)).fetchall():
+                latest[q["claim_id"]] = dict(q)
+        for i in items:
+            if i["claim_id"] in latest:
+                q = latest[i["claim_id"]]
+                i["esc_query"] = {"text": q["text"], "by": q["raised_by"], "at": str(q["raised_at"] or ""),
+                                  "answer": q["answer"] or "", "answered_by": q["answered_by"] or "",
+                                  "answered_at": str(q["answered_at"] or "")}
     notes = await _last_notes([i["claim_id"] for i in items])
     for i in items:
         miss = await missing_required(i["claim_id"], i["bucket"])
@@ -2324,13 +2492,14 @@ async def counts() -> dict:
     async with aiosqlite.connect(DB_PATH) as c:
         c.row_factory = aiosqlite.Row
         rows = [dict(r) for r in await (await c.execute(
-            "SELECT claim_id, pipeline_stage, pipeline_sub, pipeline_stage_at, disputed_amount "
+            "SELECT claim_id, pipeline_stage, pipeline_sub, pipeline_stage_at, pipeline_bucket_at, disputed_amount "
             "FROM nidaan_claims WHERE COALESCE(archived,0)=0 "
             "AND COALESCE(pipeline_stage,'') <> ''")).fetchall()]
     bmap = {b["bucket_key"]: b for b in await buckets(include_inactive=True)}
     submap: dict = {}
     for bk in bmap:
         submap[bk] = {s["sub_key"]: s for s in await substates(bk)}
+    in_bucket = await bucket_days(rows)
 
     out: dict = {}
     for r in rows:
@@ -2339,7 +2508,9 @@ async def counts() -> dict:
         sdef = (submap.get(bk) or {}).get(r.get("pipeline_sub") or "") or {}
         amber = sdef.get("amber_days") or b.get("amber_days")
         red = sdef.get("red_days") or b.get("red_days")
-        st = age_state(_days_since(r.get("pipeline_stage_at")), amber, red)
+        _bd = in_bucket.get(int(r["claim_id"]), _days_since(r.get("pipeline_stage_at")))
+        st = age_state(_days_since(r.get("pipeline_stage_at")) if (sdef.get("amber_days") or sdef.get("red_days"))
+                       else _bd, amber, red)
         e = out.setdefault(bk, {"total": 0, "amber": 0, "red": 0, "amount": 0})
         e["total"] += 1
         e["amount"] += int(r.get("disputed_amount") or 0)
@@ -2417,7 +2588,8 @@ async def for_claim(claim_id: int, role: str = "") -> dict:
     sdef = next((s for s in subs if s["sub_key"] == (row.get("pipeline_sub") or "")), {})
     amber = sdef.get("amber_days") or b.get("amber_days")
     red = sdef.get("red_days") or b.get("red_days")
-    days = _days_since(row.get("pipeline_stage_at"))
+    step_days = _days_since(row.get("pipeline_stage_at"))
+    days = (await bucket_days([row])).get(int(claim_id), step_days)
     vals = await claim_fields(claim_id)
     return {
         "in_pipeline": True, "l2_ready": True,
@@ -2426,7 +2598,9 @@ async def for_claim(claim_id: int, role: str = "") -> dict:
                   "done": b.get("guide_done", ""), "watch": b.get("guide_watch", "")},
         "sub": row.get("pipeline_sub") or "", "sub_name": sdef.get("name_en", ""),
         "substates": subs,
-        "days": days, "age_state": age_state(days, amber, red),
+        "days": days, "step_days": step_days,
+        "age_state": age_state(step_days if (sdef.get("amber_days") or sdef.get("red_days")) else days,
+                               amber, red),
         "amber_days": amber, "red_days": red,
         # Credentials are masked for anyone whose role does not include them, on the way OUT.
         "fields": await fields(bk),

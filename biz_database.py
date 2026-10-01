@@ -1354,6 +1354,21 @@ async def init_db():
             CREATE INDEX IF NOT EXISTS idx_bmovelog_at ON nidaan_bucket_move_log(moved_at);
             CREATE INDEX IF NOT EXISTS idx_bmovelog_claim ON nidaan_bucket_move_log(claim_id, move_id);
 
+            -- A query inside a bucket and its answer, with who did each (founder, 2 Oct - the
+            -- Escalation Query / Escalation Query Responded steps). Never deleted.
+            CREATE TABLE IF NOT EXISTS nidaan_bucket_queries (
+                query_id    INTEGER PRIMARY KEY AUTOINCREMENT,
+                claim_id    INTEGER NOT NULL,
+                bucket_key  TEXT NOT NULL,
+                text        TEXT NOT NULL,
+                raised_by   TEXT DEFAULT '',
+                raised_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                answer      TEXT DEFAULT '',
+                answered_by TEXT DEFAULT '',
+                answered_at TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_bucket_queries_claim ON nidaan_bucket_queries(claim_id, bucket_key);
+
             -- Channel Partner added to / removed from an existing claim: asked, then decided by a
             -- super-admin (biz_nidaan_claim_cp). The claim changes only on approval.
             CREATE TABLE IF NOT EXISTS nidaan_claim_cp_requests (
@@ -2868,6 +2883,10 @@ async def init_db():
             # Ageing is per-bucket: a case three weeks into drafting is a different problem from
             # one three weeks into the pipeline overall.
             "ALTER TABLE nidaan_claims ADD COLUMN pipeline_stage_at TIMESTAMP",
+            # When the claim entered its CURRENT BUCKET - set only by a bucket change, never by a
+            # step change (pipeline_stage_at restarts with every step). Days in a bucket add up
+            # every stay from here and the move log (founder, 2 Oct).
+            "ALTER TABLE nidaan_claims ADD COLUMN pipeline_bucket_at TIMESTAMP",
             "ALTER TABLE nidaan_claims ADD COLUMN pipeline_by TEXT DEFAULT ''",
             # Who really raised this claim. A claim raised by an admin on a subscriber's behalf
             # still belongs to the subscriber — but the office must be able to see whose hands

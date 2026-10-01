@@ -95,6 +95,60 @@ async def main():
     check("...and the counts do not move with the filter", old["day_counts"] == new["day_counts"] == allb["day_counts"])
     check("an unknown range is ignored (whole bucket)", len((await bk.board("escalation", days="x"))["items"]) == 2)
 
+    # G1 (founder, 2 Oct): Escalation Query -> answered by someone -> Escalation Query Responded
+    async with aiosqlite.connect(DB) as c:
+        await c.execute("UPDATE nidaan_claims SET pipeline_sub='escalated' WHERE claim_id=91")
+        await c.commit()
+    told = []
+    import biz_nidaan_notifications as nn
+    real_tell = nn.notify_staff_inapp
+    async def tell(ids, subj, body, **k):
+        told.append(k.get("event_key"))
+        return 1
+    nn.notify_staff_inapp = tell
+    try:
+        r = await bk.set_substate(91, "query", actor="t")
+        check("the step dropdown cannot jump to Escalation Query without the words", not r.get("ok") and r.get("needs_words"), r)
+        r = await bk.escalation_reply(91, "query", note="Insurer wants the original discharge summary.", actor="Ravi")
+        async with aiosqlite.connect(DB) as c:
+            sub = (await (await c.execute("SELECT pipeline_sub FROM nidaan_claims WHERE claim_id=91")).fetchone())[0]
+            q = await (await c.execute("SELECT text, raised_by FROM nidaan_bucket_queries WHERE claim_id=91")).fetchone()
+        check("raising the query keeps the words and who raised it", r.get("ok") and sub == "query"
+              and q and q[0].startswith("Insurer wants") and q[1] == "Ravi", (r, sub, q))
+        check("...and the escalation team / the claim's people are told", "case.escalation_query" in told, told)
+        r = await bk.escalation_answered(91, note="Sent the original DS by courier.", actor="Sita")
+        async with aiosqlite.connect(DB) as c:
+            sub = (await (await c.execute("SELECT pipeline_sub FROM nidaan_claims WHERE claim_id=91")).fetchone())[0]
+            q = await (await c.execute("SELECT answer, answered_by FROM nidaan_bucket_queries WHERE claim_id=91")).fetchone()
+        check("answering moves it to Escalation Query Responded, with the answer and who gave it",
+              r.get("ok") and sub == "query_answered" and q[1] == "Sita" and q[0].startswith("Sent"), (r, sub, q))
+        check("...and whoever raised it hears it was answered", "case.escalation_query_answered" in told, told)
+        b = await bk.board("escalation", sub="query_answered")
+        check("Escalation Query Responded is a filter of its own", [i["claim_id"] for i in b["items"]] == [91],
+              [i["claim_id"] for i in b["items"]])
+        check("...and the list says who answered", "Sita answered" in (b["items"][0].get("why") or ""), b["items"][0].get("why"))
+        r = await bk.escalation_reply(91, "query", note="They asked again for the bills.", actor="Ravi")
+        check("the insurer can ask again from Responded (a second round)", r.get("ok"), r)
+    finally:
+        nn.notify_staff_inapp = real_tell
+
+    # G5 (founder, 2 Oct): days in a bucket add up every stay; a step change never restarts them
+    async with aiosqlite.connect(DB) as c:
+        await c.execute("INSERT INTO nidaan_claims (claim_id, account_id, claim_type, insured_name, insured_phone, "
+                        "pipeline_stage, pipeline_sub, status, pipeline_bucket_at, pipeline_stage_at) VALUES "
+                        "(93,1,'health','X','9000000001','escalation','escalated','in_review',"
+                        "datetime('now','-5 days'), datetime('now'))")
+        for fk, tk, ago in (("pending_draft", "escalation", 40), ("escalation", "lokpal", 30), ("lokpal", "escalation", 5)):
+            await c.execute("INSERT INTO nidaan_bucket_move_log (claim_id, from_key, to_key, kind, actor, moved_at) "
+                            "VALUES (93,?,?,'forward','t',datetime('now',?))", (fk, tk, "-%d days" % ago))
+        await c.commit()
+    b = await bk.board("escalation")
+    row = next(i for i in b["items"] if i["claim_id"] == 93)
+    check("10 days in Escalation, away, then 5 more = 15 days in the bucket", row["days"] == 15, row["days"])
+    check("...while the step clock (changed today) says 0", row.get("step_days") == 0, row.get("step_days"))
+    fc = await bk.for_claim(93)
+    check("the case sheet says the same 15", fc.get("days") == 15, fc.get("days"))
+
 
 asyncio.run(main())
 print("\n%s" % ("all passed" if not FAILED else "%d failed" % FAILED))
