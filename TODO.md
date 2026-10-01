@@ -9,6 +9,25 @@ _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned ·
 _Anything raised and not finished lives here until it is done, so an interruption does not lose
 it. Newest first within each group._
 
+### ▶ 1 Oct EVENING — the founder's decisions and list (after the 18:00 deploy), in order
+
+| # | What | Founder's words / notes |
+|---|---|---|
+| E1 | **Account deletion is NOT claim deletion.** Deleting / expiring / cancelling an account must never delete its claims, documents or authorizations - claims stay (archived) until HE says delete. Same for the unpaid-lead clean-up | "claims will always be in our archived until I say to delete. Accounts can be deleted or expired or cancelled (on hold)" |
+| E2 | **The AP's name goes on ALL responses on AP claims, staff replies included** (as built) | Decided 1 Oct |
+| E3 | **Super-admins can edit every AP field** in one place (person, city, state, office name, email, WhatsApp, share %, status) | "once an AP created it can only be deleted" - "edit details" went live 18:00; bring every field into one window |
+| E4 | **Re-file the authorization letters for claims 87 and 92** - YES, if no newer acceptance was taken and the stored acceptance checks out (hash) | Decided 1 Oct |
+| E5 | **"Why is this claim waiting?" on every claim, in every bucket**: tick one or more pending reasons (e.g. Pending documents + Pending query - complainant); documents show what we have and what is missing; days in the bucket. Simple, not overbuilt | His idea; wants my advice on the simplest shape |
+| E6 | **Email shows "unverified" after the person verified it** (claim #202 screenshot) | Bug |
+| E7 | **Ops screens flicker** (WhatsApp inbox especially) - refresh silently, keep the screen stable | "I have never experienced this UI UX on any other app" |
+| E8 | **Escalation date cannot be before today** | A staff member picked a past date by mistake |
+| E9 | **Days in the bucket on EVERY bucket**, plus a filter: 0-10, 10-20, 20-30, 30+ days | |
+| E10 | **Escalation bucket: the "Escalation Pending / Escalated" step filter** does not work as expected | Screenshots 1 Oct |
+| E11 | **The bucket list is shown twice** (left menu fold AND the Consolidation page's own column) - show it once, use the space | "very highly unhappy with the UI UX of the nidaan superadmin" |
+| E12 | **Superadmin layout planner ON nidaanpartner.com** (never a claude.ai page): every ops option as a block the team can drag between groups; they finalise, we review, then the menu is rebuilt from it | "sounds like a plan?" - yes |
+| E13 | Folder split: **NidaanPartner keeps `C:\sarathi-business`**; Sarathi moves out | Decided 1 Oct |
+| E14 | Security note: the case sheet shows the complainant's CASE EMAIL PASSWORD behind "Show it" (screenshot) - check it is encrypted at rest, only the right roles can reveal it, and every reveal is logged | Seen in his screenshot, 1 Oct |
+
 ### ▶ 1 Oct AFTERNOON — the founder's list (after the 13:30 deploy), "we'll try to do it all today"
 Deployed 13:30 IST (`14b0f23`): outside checks all as expected, App Health 0 errors. Hotfix `4d233a4` (P1) deployed 14:00 IST. Evening deploy 18:00 IST (`60fa9e1`): outside checks as expected, App Health 0 errors, existing letters verified unchanged (v1), 0 of 15 APs have a person's name yet.
 
