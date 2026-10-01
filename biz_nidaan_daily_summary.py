@@ -50,7 +50,7 @@ _CLOSED = ("closed", "withdrawn", "resolved_won", "resolved_lost")
 ACTIONS = {
     "claim.doc_upload":        ("documents uploaded", "दस्तावेज़ अपलोड किए", "documents upload kiye"),
     "doc.tick":                ("documents checked off", "दस्तावेज़ टिक किए", "documents tick kiye"),
-    "claim.docs_complete":     ("claims marked 'all documents received'", "क्लेम पर 'सभी दस्तावेज़ मिले' लगाया", "claims par 'sab documents mile' lagaya"),
+    "claim.docs_complete":     ("marked 'all documents received'", "'सभी दस्तावेज़ मिले' लगाया", "'sab documents mile' lagaya"),
     "claim.doc_rename":        ("documents renamed", "दस्तावेज़ का नाम बदला", "documents ka naam badla"),
     "claim.doc_delete":        ("documents removed", "दस्तावेज़ हटाए", "documents hataye"),
     "claim.doc_set":           ("document sets prepared", "दस्तावेज़ सेट बनाए", "document sets banaye"),
@@ -60,14 +60,62 @@ ACTIONS = {
     "claimant_portal.link":    ("claim-page links sent", "क्लेम पेज लिंक भेजे", "claim page links bheje"),
     "claimant_portal.email":   ("claim-page emails sent", "क्लेम पेज ईमेल भेजे", "claim page emails bheje"),
     "claim_message":           ("messages to customers", "ग्राहकों को संदेश", "customers ko messages"),
-    "l2.handover":             ("claims handed to Level-2", "क्लेम लेवल-2 को सौंपे", "claims Level-2 ko saunpe"),
+    "l2.handover":             ("handed to Level-2", "लेवल-2 को सौंपा", "Level-2 ko saunpa"),
     "l2.pay_link":             ("payment links sent", "भुगतान लिंक भेजे", "payment links bheje"),
-    "claim.raised_on_behalf":  ("claims raised for subscribers", "सब्सक्राइबर के लिए क्लेम दर्ज किए", "subscribers ke liye claims darj kiye"),
+    "claim.raised_on_behalf":  ("raised for the subscriber", "सब्सक्राइबर के लिए दर्ज किया", "subscriber ke liye darj kiya"),
     "case.draft_query":        ("draft queries raised", "ड्राफ़्ट सवाल उठाए", "draft queries uthaye"),
-    "case.assign":             ("claims assigned", "क्लेम सौंपे", "claims assign kiye"),
-    "claim.assign":            ("claims assigned", "क्लेम सौंपे", "claims assign kiye"),
+    "case.assign":             ("assigned", "सौंपा", "assign kiya"),
+    "claim.assign":            ("assigned", "सौंपा", "assign kiya"),
     "claim.note":              ("notes added", "नोट जोड़े", "notes jode"),
+    "claim.status":            ("status changed", "स्टेटस बदला", "status badla"),
+    "case.draft_query_resolved": ("draft query answered", "ड्राफ़्ट सवाल का जवाब", "draft query ka jawab"),
+    "claim.escalation_answered": ("escalation answered", "एस्केलेशन का जवाब", "escalation ka jawab"),
+    "escalation.reply":        ("insurer's reply recorded", "बीमा कंपनी का जवाब दर्ज", "insurer ka jawab darj"),
+    "claimant_portal.push_auth": ("authorisation requested", "अनुमति माँगी", "authorisation maangi"),
+    "case.query_contact":      ("query sent to the customer", "ग्राहक से सवाल पूछा", "customer se sawal poocha"),
+    "doc.request":             ("documents requested", "दस्तावेज़ माँगे", "documents maange"),
+    "claim.doc_set_parts":     ("document sets prepared", "दस्तावेज़ सेट बनाए", "document sets banaye"),
+    "claim.doc_auto":          ("documents sorted", "दस्तावेज़ छाँटे", "documents chhante"),
+    "claim.involve":           ("colleagues involved", "साथियों को जोड़ा", "saathiyon ko joda"),
+    "note":                    ("notes written", "नोट लिखे", "notes likhe"),
+    "doc_reminder":            ("document reminders sent", "दस्तावेज़ रिमाइंडर भेजे", "document reminders bheje"),
+    "doc_call":                ("calls made about documents", "दस्तावेज़ के लिए कॉल किए", "documents ke liye call kiye"),
+    "contact_confirm_sent":    ("contact confirmations sent", "संपर्क पुष्टि भेजी", "contact confirmation bheje"),
 }
+
+# What counts as what. Progress and follow-ups are the work; document handling is the work's
+# raw material; notes are the record; the rest is housekeeping and is never counted as
+# achievement (founder: "not only claim open closed and edit for no reason ... records high
+# number achieved, that doesnt make any sense").
+PROGRESS = {"l2.handover", "claim.docs_complete", "claim.status", "case.draft_query_resolved",
+            "claim.escalation_answered", "escalation.reply", "claim.raised_on_behalf"}
+FOLLOW = {"claim_message", "claimant_portal.link", "claimant_portal.email", "claimant_portal.push_auth",
+          "claim.contact_confirm", "l2.pay_link", "doc.request", "case.query_contact",
+          "doc_reminder", "doc_call", "contact_confirm_sent"}
+DOCS = {"claim.doc_upload", "doc.tick", "claim.doc_set", "claim.doc_set_parts", "claim.doc_rename",
+        "claim.doc_delete", "claim.doc_auto", "doc.remove", "myclaim.doc_delete"}
+NOTES = {"claim.gist", "case.draft_query", "note"}
+KINDS = ("progress", "follow", "docs", "notes", "other")
+KIND_WORDS = {
+    "en": {"progress": "moved forward", "follow": "followed up", "docs": "documents",
+           "notes": "notes", "other": "only edited"},
+    "hi": {"progress": "आगे बढ़ाए", "follow": "फ़ॉलो-अप", "docs": "दस्तावेज़",
+           "notes": "नोट", "other": "सिर्फ़ बदलाव"},
+    "hinglish": {"progress": "aage badhaye", "follow": "follow-up", "docs": "documents",
+                 "notes": "notes", "other": "sirf edit"},
+}
+
+
+def kind_of(action: str) -> str:
+    if action in PROGRESS:
+        return "progress"
+    if action in FOLLOW:
+        return "follow"
+    if action in DOCS:
+        return "docs"
+    if action in NOTES:
+        return "notes"
+    return "other"
 # Moves are counted from the move record, not twice from the audit log.
 _MOVE_ACTIONS = {"bucket.move", "case.pipeline_move", "case.pipeline_start", "l2.handover_undo"}
 
@@ -170,7 +218,8 @@ def _inr(rupees: float) -> str:
 # ── collecting the day ───────────────────────────────────────────────────────
 async def gather(start_utc: str, end_utc: str, today_ist: str) -> dict:
     import biz_nidaan_moves as _mv
-    out = {"staff": [], "on_leave": set(), "audit": [], "moves": [], "claims": {},
+    out = {"staff": [], "on_leave": set(), "audit": [], "moves": [], "notes": [], "acts": [],
+           "claims": {},
            "buckets": {}, "bucket_order": [], "snapshot": {}, "claims_new": 0,
            "payments_n": 0, "payments_rs": 0.0, "tasks_done": {}, "tasks_over": {},
            "overdue_tasks": 0, "l2_unassigned": 0}
@@ -199,9 +248,17 @@ async def gather(start_utc: str, end_utc: str, today_ist: str) -> dict:
             "SELECT actor_id, action, target_type, target_id FROM nidaan_audit_log "
             "WHERE actor_type='staff' AND created_at>=? AND created_at<?", (start_utc, end_utc))
         out["moves"] = await _mv.between(start_utc, end_utc)
+        # Notes are the record of a call or a conversation; the timeline holds the reminders and
+        # calls a person logged. Both are work the audit log does not see.
+        out["notes"] = await q("SELECT staff_id, claim_id FROM nidaan_claim_notes "
+                               "WHERE created_at>=? AND created_at<?", (start_utc, end_utc))
+        out["acts"] = await q("SELECT actor, claim_id, kind FROM nidaan_claim_activity "
+                              "WHERE created_at>=? AND created_at<? AND kind IN ('doc_reminder','doc_call')", (start_utc, end_utc))
         ids = {int(a["target_id"]) for a in out["audit"]
                if a.get("target_type") == "claim" and str(a.get("target_id") or "").isdigit()}
         ids |= {int(m["claim_id"]) for m in out["moves"]}
+        ids |= {int(n["claim_id"]) for n in out["notes"] if n.get("claim_id")}
+        ids |= {int(a["claim_id"]) for a in out["acts"] if a.get("claim_id")}
         if ids:
             ph = ",".join("?" * len(ids))
             for r in await q("SELECT claim_id, COALESCE(pipeline_stage,'') st, "
@@ -262,29 +319,84 @@ def _bname(day: dict, key: str, lang: str) -> str:
 
 
 def per_person(day: dict) -> dict:
-    """{staff_id: {claims: {place: [claim ids]}, moves: [...], actions: {action: n}, ...}}"""
+    """{staff_id: {claim_ids, claims: {place: [ids]}, moves, per_claim: {id: {...}}, actions}}"""
     people: dict = {}
+    by_name = {(st.get("name") or "").strip().lower(): st["staff_id"] for st in day.get("staff", [])}
 
     def p(sid):
         return people.setdefault(int(sid), {"claims": {}, "claim_ids": set(), "moves": [],
-                                            "actions": {}})
+                                            "actions": {}, "per_claim": {}})
+
+    def on(me, cid, action):
+        pc = me["per_claim"].setdefault(int(cid), {"moves": [], "acts": {}})
+        pc["acts"][action] = pc["acts"].get(action, 0) + 1
+        me["actions"][action] = me["actions"].get(action, 0) + 1
+        me["claim_ids"].add(int(cid))
+
     for a in day["audit"]:
-        if not a.get("actor_id"):
+        if not a.get("actor_id") or a["action"] in _MOVE_ACTIONS:
             continue
         me = p(a["actor_id"])
         if a.get("target_type") == "claim" and str(a.get("target_id") or "").isdigit():
-            me["claim_ids"].add(int(a["target_id"]))
-        if a["action"] not in _MOVE_ACTIONS:
+            on(me, int(a["target_id"]), a["action"])
+        else:
             me["actions"][a["action"]] = me["actions"].get(a["action"], 0) + 1
+    for n in day.get("notes", []):
+        if n.get("staff_id") and n.get("claim_id"):
+            on(p(n["staff_id"]), n["claim_id"], "note")
+    for a in day.get("acts", []):
+        actor = (a.get("actor") or "").split(" (as ")[0].strip().lower()
+        sid = by_name.get(actor)
+        if sid and a.get("claim_id"):
+            on(p(sid), a["claim_id"], a["kind"])
     for m in day["moves"]:
         if m.get("staff_id"):
             me = p(m["staff_id"])
             me["moves"].append(m)
             me["claim_ids"].add(int(m["claim_id"]))
+            me["per_claim"].setdefault(int(m["claim_id"]), {"moves": [], "acts": {}})["moves"].append(m)
     for sid, me in people.items():
         for cid in sorted(me["claim_ids"]):
             me["claims"].setdefault(_place(day, cid), []).append(cid)
     return people
+
+
+def tally(me: dict) -> dict:
+    """How many claims had each kind of work. A claim with only housekeeping is 'other'."""
+    t = {k: 0 for k in KINDS}
+    for cid in me["claim_ids"]:
+        pc = me["per_claim"].get(cid) or {"moves": [], "acts": {}}
+        kinds = {kind_of(a) for a in pc["acts"]}
+        if pc["moves"]:
+            kinds.add("progress")
+        real = kinds - {"other"}
+        for k in real:
+            t[k] += 1
+        if not real:
+            t["other"] += 1
+    return t
+
+
+def tally_text(t: dict, lang: str) -> str:
+    w = KIND_WORDS[lang]
+    return " · ".join("%s %d" % (w[k], t[k]) for k in KINDS if t[k])
+
+
+def claim_line(day: dict, cid: int, pc: dict, lang: str) -> str:
+    """'NP-212: Live Cases → Pending Draft · documents uploaded 3 · claim-page links sent 1'"""
+    li, bits = _LI[lang], []
+    for m in pc.get("moves", []):
+        bits.append("%s → %s" % (_bname(day, m["from_key"], lang), _bname(day, m["to_key"], lang)))
+    acts = pc.get("acts", {})
+    for k in ("progress", "follow", "docs", "notes", "other"):
+        for a, n in sorted(acts.items(), key=lambda x: -x[1]):
+            if kind_of(a) != k or a not in ACTIONS:
+                continue
+            bits.append("%s %d" % (ACTIONS[a][li], n) if n > 1 else ACTIONS[a][li])
+    unknown = sum(n for a, n in acts.items() if a not in ACTIONS)
+    if unknown:
+        bits.append("%s %d" % (T[lang]["other"], unknown))
+    return "NP-%d: %s" % (cid, " · ".join(bits) if bits else "—")
 
 
 def _order(day: dict, keys) -> list:
@@ -331,35 +443,35 @@ def own_text(day: dict, me: dict, staff_id: int, lang: str, date_label: str,
     t = T[lang]
     lines = [t["own_head"].format(d=date_label)] if head else [t["your_part"]]
     if me["claim_ids"]:
-        lines.append(t["you_worked"].format(n=len(me["claim_ids"])))
+        lines.append(t["you_worked"].format(n=len(me["claim_ids"])) + " " + tally_text(tally(me), lang))
+        shown = 0
         for k in _order(day, me["claims"]):
             ids = me["claims"][k]
-            lines.append("• %s: %d (%s%s)" % (_bname(day, k, lang), len(ids),
-                                               ", ".join("NP-%d" % i for i in ids[:8]),
-                                               " …" if len(ids) > 8 else ""))
-    if me["moves"]:
-        lines.append(t["you_moved"].format(n=len({m["claim_id"] for m in me["moves"]})))
-        lines += ["• " + x for x in _move_pairs(day, me["moves"], lang)]
-    if me["actions"]:
-        lines.append(t["you_did"].format(what=_actions_text(me["actions"], lang)))
+            lines.append("")
+            lines.append("*%s* (%d)" % (_bname(day, k, lang), len(ids)))
+            for cid in ids:
+                if shown >= 25:
+                    break
+                lines.append("• " + claim_line(day, cid, me["per_claim"].get(cid) or {}, lang))
+                shown += 1
+        if len(me["claim_ids"]) > shown:
+            lines.append("… +%d" % (len(me["claim_ids"]) - shown))
     done, over = day["tasks_done"].get(staff_id, 0), day["tasks_over"].get(staff_id, 0)
     if done or over:
-        lines.append(t["tasks"].format(done=done, over=over))
+        lines += ["", t["tasks"].format(done=done, over=over)]
     if head:
-        lines.append(t["thanks"])
+        lines += ["", t["thanks"]]
     return "\n".join(lines)
 
 
 def own_voice(day: dict, me: dict, staff_id: int, lang: str) -> str:
-    t = T[lang]
-    where = ""
-    if me["claims"]:
-        top = max(me["claims"].items(), key=lambda kv: len(kv[1]))[0]
-        where = t["v_where"].format(b=_bname(day, top, lang))
-    moved = t["v_moved"].format(n=len({m["claim_id"] for m in me["moves"]})) if me["moves"] else ""
+    t, w = T[lang], KIND_WORDS[lang]
+    tl = tally(me)
+    parts = ", ".join("%s %d" % (w[k], tl[k]) for k in KINDS if tl[k] and k != "other")
     done = day["tasks_done"].get(staff_id, 0)
     tasks = t["v_tasks"].format(n=done) if done else ""
-    return t["v_own"].format(n=len(me["claim_ids"]), where=where, moved=moved, tasks=tasks)
+    return t["v_own"].format(n=len(me["claim_ids"]), where=(": " + parts) if parts else "",
+                             moved="", tasks=tasks)
 
 
 def team_text(day: dict, people: dict, names: dict, lang: str, date_label: str) -> str:
@@ -395,7 +507,8 @@ def team_text(day: dict, people: dict, names: dict, lang: str, date_label: str) 
         lines += ["", t["who_head"]]
         for sid, me in sorted(worked, key=lambda x: -len(x[1]["claim_ids"])):
             lines.append("• " + t["worked"].format(name=names[sid], n=len(me["claim_ids"]),
-                                                   where=_where(day, me["claims"], lang, False)))
+                                                   where=tally_text(tally(me), lang))
+                         + " — " + _where(day, me["claims"], lang, False))
     idle = [names[s["staff_id"]] for s in day["staff"]
             if s["staff_id"] not in people and s["staff_id"] not in day["on_leave"]]
     if idle:
@@ -413,6 +526,7 @@ def team_voice(day: dict, people: dict, names: dict, lang: str) -> str:
     pay = (t["v_pay"].format(n=day["payments_n"], amt=_inr(day["payments_rs"]))
            if day["payments_n"] else "")
     who = "".join(t["v_who"].format(name=names[sid], n=len(me["claim_ids"]))
+                  .rstrip(". ").rstrip("।") + " (" + tally_text(tally(me), lang).replace(" · ", ", ") + "). "
                   for sid, me in sorted(people.items(), key=lambda x: -len(x[1]["claim_ids"]))
                   if me["claim_ids"] and sid in names)
     return t["v_team"].format(new=day["claims_new"], pay=pay, moves=len(day["moves"]), who=who)

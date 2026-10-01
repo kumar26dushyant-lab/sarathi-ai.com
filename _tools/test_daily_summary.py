@@ -83,6 +83,12 @@ async def main():
                          (205, "some.new_action")):
             await c.execute("INSERT INTO nidaan_audit_log (actor_type, actor_id, actor_name, action, "
                             "target_type, target_id) VALUES ('staff',2,'Dr Ashish',?,'claim',?)", (act, str(tgt)))
+        await c.execute("INSERT INTO nidaan_audit_log (actor_type, actor_id, actor_name, action, "
+                        "target_type, target_id) VALUES ('staff',5,'Chanchal','claim.info_edit','claim','206')")
+        await c.execute("INSERT INTO nidaan_claim_notes (claim_id, staff_id, note) VALUES "
+                        "(204, 5, 'Called - will send the discharge summary tomorrow')")
+        await c.execute("INSERT INTO nidaan_claim_activity (claim_id, kind, actor, summary) VALUES "
+                        "(204, 'doc_reminder', 'Chanchal', 'reminder sent')")
         await c.commit()
 
     # moves, through the real functions
@@ -129,11 +135,20 @@ async def main():
     check("...naming his claims and where they sit", ash and "NP-201" in ash["text"] and "NP-202" in ash["text"],
           ash and ash["text"])
     check("...his moves", ash and "→" in ash["text"], ash and ash["text"])
-    check("...what he did, in words - an unknown action is 'other', never a code",
-          ash and "दस्तावेज़ अपलोड किए 2" in ash["text"] and "some.new_action" not in ash["text"],
+    check("...what he did ON EACH CLAIM, in words - an unknown action is 'other', never a code",
+          ash and "NP-202:" in ash["text"] and "दस्तावेज़ अपलोड किए · दस्तावेज़ टिक किए" in ash["text"]
+          and "some.new_action" not in ash["text"], ash and ash["text"])
+    check("...with the moves on the claim's own line",
+          ash and any(l.startswith("• NP-201:") and l.count("→") == 2 for l in ash["text"].split("\n")),
           ash and ash["text"])
+    check("...and a headline of real work, not a raw count",
+          ash and "आगे बढ़ाए 2" in ash["text"] and "दस्तावेज़ 2" in ash["text"], ash and ash["text"])
     ch = msgs.get(5)
     check("Chanchal gets hers in Hinglish", ch and "Aapka din" in ch["text"], ch and ch["text"])
+    check("...her note and reminder count as follow-up on NP-204",
+          ch and "NP-204: document reminders bheje · notes likhe" in ch["text"], ch and ch["text"])
+    check("...and a claim she only edited is 'only edited', never progress",
+          ch and "sirf edit 1" in ch["text"] and "aage badhaye 1" in ch["text"], ch and ch["text"])
     check("a day with nothing recorded sends nothing", 3 not in msgs, list(msgs))
     check("somebody on leave gets nothing", 4 not in msgs, list(msgs))
 
