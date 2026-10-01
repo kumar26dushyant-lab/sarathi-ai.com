@@ -1,5 +1,29 @@
 # Staff Announcement Drafts
 
+## 2026-10-01 (night, short) — Cleaner screens, and help us arrange the menu  ← SEND TOMORROW MORNING
+
+_For: all staff. Not yet sent._
+
+**EN**
+
+1. The buckets are now only in the **left menu** under Consolidation, with live counts. The claims list uses the full screen.
+2. Every bucket has a **"Days in this bucket"** filter: 0-10, 11-20, 21-30, more than 30 days.
+3. The **escalation date** cannot be before today.
+4. The WhatsApp inbox no longer flickers or jumps while you read or type.
+5. A complainant who got our email confirmation can type its code on their claim page with **"I already have a code"**.
+6. **Help us arrange the menu:** open nidaanpartner.com/nidaan/ops/layout-planner, put each option where you would look for it, and save it with your name. The best layout becomes the new menu.
+
+**HI**
+
+1. बकेट अब सिर्फ़ **बाएँ मेन्यू** में Consolidation के नीचे हैं, नई गिनती के साथ। क्लेम की सूची पूरी स्क्रीन लेती है।
+2. हर बकेट में **"Days in this bucket"** फ़िल्टर है: 0-10, 11-20, 21-30, 30 से ज़्यादा दिन।
+3. **एस्केलेशन की तारीख** आज से पहले की नहीं हो सकती।
+4. WhatsApp इनबॉक्स अब पढ़ते या लिखते समय टिमटिमाता या उछलता नहीं।
+5. जिस शिकायतकर्ता को हमारा ईमेल कन्फ़र्मेशन मिला, वह क्लेम पेज पर **"मेरे पास कोड है"** से कोड डाल सकता है।
+6. **मेन्यू सजाने में मदद कीजिये:** nidaanpartner.com/nidaan/ops/layout-planner खोलिये, हर विकल्प वहाँ रखिये जहाँ आप उसे ढूँढेंगे, और अपने नाम से सेव कीजिये। सबसे अच्छा लेआउट नया मेन्यू बनेगा।
+
+---
+
 ## 2026-10-01 (evening, short) — Partner's name on messages, the new authorization letter  ← SEND AFTER THE EVENING UPDATE
 
 _For: all staff. Not yet sent. The SOP has the details (sections 9 and 10)._

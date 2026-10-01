@@ -410,6 +410,36 @@ and stamps `consent_letter_version = 2`. Version 2 renders with the letterhead (
 letters keep their old layout - never change `build_consent_proof_pdf`'s v1 branch. A document
 with `source='authorization'` can never be deleted (`ProtectedDocument`, 409 on every route).
 
+### Accounts end, claims stay (1 Oct)
+
+The founder: "Account deletion doesn't mean claim deletion ... claims will always be in our
+archived until I say to delete." `execute_account_erasure` anonymises the account and stops
+billing; every claim stays, archived ("account closed"), with every document, authorization,
+note and file. The unpaid-lead document purge (`biz_nidaan_retention`) is OFF unless the ops
+setting `lead_document_purge` is "1", and it fails closed. Never write code that deletes a claim or
+its documents as a side effect of something else.
+
+### Credentials on a claim (1 Oct)
+
+The case email password (`SECRET_FIELDS`) is masked for EVERY role in every page load
+(`mask_secrets`). "Show it" (`/cases/{id}/secret/...`, audited) is the only way to see it, and only
+super admins and sub-super admins may change it. A password captured from WhatsApp is removed from
+the chat copy of the message. It is still plain text in the database: encrypting it at rest waits
+on a key the founder backs up (TODO E14).
+
+### Screens refresh silently (1 Oct)
+
+`ndPaint(el, html)` in the ops page does no DOM work when the markup did not change, and keeps the
+scroll, the focus and typed text when it did. A refresh must never show "Loading..." over content
+that is already there. New screens paint through it.
+
+### The Layout Planner (1 Oct)
+
+`/nidaan/ops/layout-planner`: the team arranges the menu block by block and saves it under their
+name; a super admin chooses one. `biz_nidaan_nav.BLOCKS` is the block list, and
+`deploy/verify-nav-blocks.py` (in check:all) fails if it and `buildSidebar` disagree. **Adding a menu
+option means adding it to both.**
+
 ### The ops menu (1 Oct)
 
 The left menu is an office: foldable groups (My work, Consolidation with every bucket inside it,
