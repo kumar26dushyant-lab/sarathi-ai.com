@@ -114,6 +114,16 @@ async def main():
     with aps.about(claim_id=10):
         same = await aps.for_email("pune.ap@example.invalid", html, "")
     check("email: never to the AP's own inbox", same[0] == html)
+    await sql("INSERT INTO nidaan_staff (name, email, password_hash, role, status) VALUES ('Handler','handler@example.invalid','x','team_member','active')")
+    aps._forget()
+    with aps.about(claim_id=10):
+        st = await aps.for_email("Handler@example.invalid", html, "")
+    check("email: a staff member's CC copy is never signed by the partner (review, 1 Oct)", st[0] == html, st[0])
+    # a claim carrying a staff code is never a partner's, even under an AP-referred account
+    await sql("INSERT INTO nidaan_claims (claim_id, account_id, claim_type, insured_name, insured_phone, status, "
+              "branch_code) VALUES (70, 2, 'health','X','9000000001','intimated','SP-ABC123')")
+    check("a staff-coded claim under an AP-referred account is NOT signed (no fall-through)",
+          await aps.for_whatsapp(body, claim_id=70) == body)
     h2, _ = await aps.for_email("x@example.invalid", html, "")
     check("email: nothing is signed unless the sender says which claim it is about", h2 == html)
     wrapped = mail._wrap_nidaan_template("T", "<p>Hi</p>")

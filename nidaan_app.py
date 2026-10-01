@@ -5085,7 +5085,8 @@ async def nidaan_branch_delete_claim_doc(claim_id: int, doc_id: int, request: Re
     if not code: raise HTTPException(401, "Unauthorized")
     if not await _branch_claim_row(claim_id, code):
         raise HTTPException(404, "Claim not found")
-    stored = await nidaan.delete_claim_document(doc_id, claim_id=claim_id, allow_any=True)
+    # The document must belong to THIS claim - owning one claim must not open another's files.
+    stored = await nidaan.delete_claim_document(doc_id, claim_id=claim_id)
     if stored is None: raise HTTPException(404, "Document not found")
     _nidaan_remove_doc_file(stored)
     try:
@@ -11150,7 +11151,8 @@ async def ops_my_claim_doc_delete(claim_id: int, doc_id: int, request: Request):
     _staff, code = await _staff_claim_code(request)
     if not await _branch_claim_row(claim_id, code):
         raise HTTPException(status_code=404, detail="Claim not found")
-    stored = await nidaan.delete_claim_document(doc_id, claim_id=claim_id, allow_any=True)
+    # The document must belong to THIS claim - owning one claim must not open another's files.
+    stored = await nidaan.delete_claim_document(doc_id, claim_id=claim_id)
     if stored is None:
         raise HTTPException(status_code=404, detail="Document not found")
     _nidaan_remove_doc_file(stored)

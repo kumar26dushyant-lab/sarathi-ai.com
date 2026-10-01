@@ -127,12 +127,17 @@ def clean_person(name: str) -> str:
     return " ".join((name or "").split())[:PERSON_MAX]
 
 
+def clean_city(city: str) -> str:
+    return " ".join((city or "").split())[:60]
+
+
 _CACHE: dict = {}
 _TTL_S = 60
 
 
 def _forget() -> None:
     _CACHE.clear()
+    _INTERNAL.clear()
 
 
 async def ap_for(*, claim_id: Optional[int] = None, account_id: Optional[int] = None) -> Optional[dict]:
@@ -165,8 +170,10 @@ async def ap_for(*, claim_id: Optional[int] = None, account_id: Optional[int] = 
                 (int(account_id),))).fetchone()
         for code in (row or ()):
             code = (code or "").strip().upper()
-            if not code or code.startswith("SP-"):      # SP- = a staff member's own business
+            if not code:
                 continue
+            if code.startswith("SP-"):                   # a staff member's own business: never
+                break                                    # an AP's claim, whatever the account says
             b = await (await c.execute(
                 "SELECT branch_code, COALESCE(city,''), COALESCE(contact_person,''), COALESCE(state,''), "
                 "COALESCE(contact_email,''), COALESCE(contact_phone,''), COALESCE(status,'') "
@@ -180,6 +187,31 @@ async def ap_for(*, claim_id: Optional[int] = None, account_id: Optional[int] = 
             break
     _CACHE[key] = (time.monotonic(), ap)
     return ap
+
+
+_INTERNAL: dict = {}
+
+
+async def _internal_email(addr: str) -> bool:
+    """A staff member's or a channel partner's address - copies to them are never signed."""
+    a = (addr or "").strip().lower()
+    if not a:
+        return False
+    hit = _INTERNAL.get(a)
+    if hit and time.monotonic() - hit[0] < _TTL_S:
+        return hit[1]
+    async with aiosqlite.connect(db.DB_PATH) as c:
+        found = False
+        for q in ("SELECT 1 FROM nidaan_staff WHERE LOWER(email)=? LIMIT 1",
+                  "SELECT 1 FROM nidaan_channel_partners WHERE LOWER(email)=? LIMIT 1"):
+            try:
+                if await (await c.execute(q, (a,))).fetchone():
+                    found = True
+                    break
+            except Exception:  # noqa: BLE001 - a missing table is "not internal"
+                pass
+    _INTERNAL[a] = (time.monotonic(), found)
+    return found
 
 
 def line(ap: dict, lang: str = "en") -> str:
@@ -262,6 +294,8 @@ async def for_email(to_email: str, html_body: str, text_body: str = "") -> tuple
         to = (to_email or "").strip().lower()
         if (ap.get("email") and to == ap["email"]) or to.endswith("@house.nidaanpartner.internal"):
             return html_body, text_body
+        if await _internal_email(to):
+            return html_body, text_body              # staff / channel-partner copies (CC)
         sig = line(ap, _lang(ctx.get("lang") or "en"))
         return sign_html(html_body, sig), (sign_text(text_body, sig) if text_body else text_body)
     except Exception as e:  # noqa: BLE001

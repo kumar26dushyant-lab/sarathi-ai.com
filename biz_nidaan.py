@@ -1265,7 +1265,7 @@ async def create_branch(code: str, city: str, name: str = "", contact_email: str
     """Create a branch code. Returns {ok} or {error}."""
     import biz_nidaan_ap_sign as _aps
     code = (code or "").strip().upper()
-    city = (city or "").strip()[:60]
+    city = _aps.clean_city(city)
     email = (contact_email or "").strip().lower()
     person = _aps.clean_person(contact_person)
     st = _aps.clean_state(state)
@@ -1304,10 +1304,10 @@ async def update_branch(code: str, status: Optional[str] = None,
         sets.append("name=?")
         params.append((name or "").strip()[:80])
     if city is not None:
-        if not (city or "").strip():
+        if not _aps.clean_city(city):
             return False                       # city is required - it is half of the signature
         sets.append("city=?")
-        params.append(city.strip()[:60])
+        params.append(_aps.clean_city(city))
     if contact_person is not None:
         sets.append("contact_person=?")
         params.append(_aps.clean_person(contact_person))
@@ -8818,10 +8818,6 @@ async def delete_claim_document(doc_id: int, *, account_id: Optional[int] = None
         if not row:
             return None
         d = dict(row)
-        if (d.get("source") or "") in PROTECTED_DOC_SOURCES:
-            # Checked before ownership, for everyone - staff, subscriber and the complainant alike.
-            raise ProtectedDocument("This is the complainant's signed authorization. It is kept as "
-                                    "a record and cannot be removed.")
         if not allow_any:
             if account_id is not None and int(d.get("account_id") or 0) != int(account_id):
                 return None
@@ -8829,6 +8825,10 @@ async def delete_claim_document(doc_id: int, *, account_id: Optional[int] = None
                 return None
             if purchase_id is not None and int(d.get("purchase_id") or 0) != int(purchase_id):
                 return None
+        if (d.get("source") or "") in PROTECTED_DOC_SOURCES:
+            # After the ownership check (a stranger learns nothing), for everyone who passes it.
+            raise ProtectedDocument("This is the complainant's signed authorization. It is kept as "
+                                    "a record and cannot be removed.")
         await conn.execute("DELETE FROM nidaan_claim_documents WHERE doc_id=?", (doc_id,))
         await conn.commit()
         return d.get("stored_name")

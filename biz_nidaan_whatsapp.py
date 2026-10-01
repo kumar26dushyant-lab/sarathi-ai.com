@@ -211,12 +211,16 @@ async def _post(payload: dict) -> dict:
             # The Authorized Partner's name on messages about their claims - before the STOP line,
             # so that stays last. Never raises (biz_nidaan_ap_sign).
             import biz_nidaan_ap_sign as _aps
-            payload["text"]["body"] = (await _aps.for_whatsapp(
-                (payload.get("text") or {}).get("body") or "", msisdn=_to,
-                claim_id=_g.get("claim_id"), lang=_g.get("lang") or "", cls=_cls))[:4000]
+            _room = 4000 - len(_g.get("footer") or "")
+            _raw = (payload.get("text") or {}).get("body") or ""
+            _kw = dict(msisdn=_to, claim_id=_g.get("claim_id"), lang=_g.get("lang") or "", cls=_cls)
+            _signed = await _aps.for_whatsapp(_raw, **_kw)
+            if len(_signed) > _room:                  # make room for the signature, not over it
+                _signed = await _aps.for_whatsapp(_raw[:max(0, _room - (len(_signed) - len(_raw)))], **_kw)
+            payload["text"]["body"] = _signed[:_room]
         if _g.get("footer") and payload.get("type") == "text":
             _b = (payload.get("text") or {}).get("body") or ""
-            payload["text"]["body"] = (_b + _g["footer"])[:4000]
+            payload["text"]["body"] = _b[:max(0, 4000 - len(_g["footer"]))] + _g["footer"]
     except Exception as _e:  # noqa: BLE001 — a guard failure must never stop a real message
         logger.warning("wa guard skipped (sending anyway): %s", _e)
     url = f"{GRAPH}/{_phone_id()}/messages"

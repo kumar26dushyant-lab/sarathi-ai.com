@@ -50,6 +50,14 @@ async def main():
     async with aiosqlite.connect(DBP) as c:
         left = (await (await c.execute("SELECT COUNT(*) FROM nidaan_claim_documents WHERE doc_id=?", (auth,))).fetchone())[0]
     check("...and the record is still there", left == 1, left)
+    other = await nid.save_claim_document(account_id=1, stored_name="c.pdf", original_name="c.pdf",
+                                          file_size=1, mime_type="application/pdf", claim_id=8)
+    check("a document of ANOTHER claim cannot be removed through a claim you own (AP / My Business routes)",
+          await nid.delete_claim_document(other, claim_id=7) is None)
+    src0 = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "sarathi_biz.py"),
+                encoding="utf-8").read()
+    check("...and only the ops route deletes with allow_any (staff work on every claim)",
+          src0.count("allow_any=True)") == 1, src0.count("allow_any=True)"))
     check("an ordinary document can still be removed (wrong file sent)",
           await nid.delete_claim_document(plain, claim_id=7, allow_any=True) == "b.pdf")
     src = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "sarathi_biz.py"),
