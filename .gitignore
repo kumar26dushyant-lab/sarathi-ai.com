@@ -70,6 +70,9 @@ ENV/
 *.log
 *.log.*
 _*.py
+# ...except the shared test helper every live-copy test imports - it was never committed,
+# so a fresh clone (or the server) could not run those tests at all (found 1 Oct).
+!_tools/_needs_server.py
 _*.txt
 _*.json
 _*.sql

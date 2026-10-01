@@ -78,6 +78,8 @@
   "_CaseBlockerReq",
   "_ChangeReq",
   "_ClaimAutoReq",
+  "_ClaimCPDecision",
+  "_ClaimCPReq",
   "_ClaimEmailChangeReq",
   "_ClaimEmailCodeReq",
   "_ClaimExcludeReq",
@@ -165,7 +167,6 @@
   "_ReferrerNoteReq",
   "_ReviewFeeReq",
   "_RouteSaveReq",
-  "_STAFF_ACTIVE_TTL",
   "_SchedReq",
   "_SchedStatusReq",
   "_StaffSavedNumbersReq",
@@ -188,11 +189,14 @@
   "_TaskUpdateReq",
   "_TelegramToggleReq",
   "_TelegramTokenReq",
+  "_UiOpenedReq",
   "_UndoHandoverReq",
   "_WaCampaignFilters",
   "_WaCampaignReq",
   "_WaOwnerReq",
   "_WaReplyReq",
+  "_WaSortAsideReq",
+  "_WaSortAttachReq",
   "_actor_label",
   "_as_viewable",
   "_attach_message_urls",
@@ -206,7 +210,9 @@
   "_claimant_live_ctx",
   "_claimshield_webhook_secret",
   "_clean_complainant_contact",
+  "_cp_claim_gate",
   "_create_rzp_payment_link",
+  "_crm_lead_for",
   "_crm_notify_assignment",
   "_derive_support_channel",
   "_doc_access_ok",
@@ -256,11 +262,11 @@
   "_require_wa_inbox",
   "_require_wa_reply",
   "_retry_contact",
+  "_row_still_open",
   "_save_message_attachment",
   "_save_support_attachment",
   "_send_customer_retry_link",
   "_sniff_file",
-  "_staff_active_cache",
   "_staff_claim_code",
   "_staff_role",
   "_staff_still_active",
@@ -839,6 +845,7 @@
    "reaches": [
     "_branch_bearer",
     "_is_nidaan_host",
+    "_row_still_open",
     "app"
    ],
    "uses": [
@@ -856,6 +863,7 @@
    "reaches": [
     "_branch_bearer",
     "_is_nidaan_host",
+    "_row_still_open",
     "app"
    ],
    "uses": [
@@ -873,6 +881,7 @@
    "reaches": [
     "_branch_bearer",
     "_is_nidaan_host",
+    "_row_still_open",
     "app"
    ],
    "uses": [
@@ -890,6 +899,7 @@
    "reaches": [
     "_branch_bearer",
     "_is_nidaan_host",
+    "_row_still_open",
     "app"
    ],
    "uses": [
@@ -907,6 +917,7 @@
    "reaches": [
     "_branch_bearer",
     "_is_nidaan_host",
+    "_row_still_open",
     "app"
    ],
    "uses": [
@@ -924,6 +935,7 @@
    "reaches": [
     "_branch_bearer",
     "_is_nidaan_host",
+    "_row_still_open",
     "app"
    ],
    "uses": [
@@ -942,6 +954,7 @@
     "_ReferrerNoteReq",
     "_branch_bearer",
     "_is_nidaan_host",
+    "_row_still_open",
     "app",
     "limiter"
    ],
@@ -964,6 +977,7 @@
     "_branch_bearer",
     "_clean_complainant_contact",
     "_is_nidaan_host",
+    "_row_still_open",
     "app"
    ],
    "uses": [
@@ -983,6 +997,7 @@
    "reaches": [
     "_branch_bearer",
     "_is_nidaan_host",
+    "_row_still_open",
     "app"
    ],
    "uses": [
@@ -1009,6 +1024,7 @@
     "_doc_magic_ok",
     "_guard_upload_batch",
     "_is_nidaan_host",
+    "_row_still_open",
     "_sniff_file",
     "_upload_refusal",
     "app",
@@ -1044,6 +1060,7 @@
     "_nidaan_rzp_id",
     "_nidaan_rzp_secret",
     "_price_ok",
+    "_row_still_open",
     "app",
     "limiter"
    ],
@@ -1071,6 +1088,7 @@
     "_nidaan_payment_captured",
     "_nidaan_rzp_id",
     "_nidaan_rzp_secret",
+    "_row_still_open",
     "app",
     "limiter",
     "logger"
@@ -1094,6 +1112,7 @@
    "reaches": [
     "_branch_bearer",
     "_is_nidaan_host",
+    "_row_still_open",
     "app",
     "limiter"
    ],
@@ -1118,6 +1137,7 @@
     "_nidaan_rzp_id",
     "_nidaan_rzp_secret",
     "_price_ok",
+    "_row_still_open",
     "app",
     "limiter"
    ],
@@ -1514,11 +1534,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -1535,14 +1554,13 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_nidaan_origin",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -1564,14 +1582,13 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_nidaan_origin",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -1590,13 +1607,12 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -1614,13 +1630,12 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -1638,13 +1653,12 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -1662,11 +1676,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -1684,13 +1697,12 @@
    "product": "nidaan",
    "reaches": [
     "_ClaimantTermsReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -1710,7 +1722,6 @@
    "product": "nidaan",
    "reaches": [
     "_AdminPayLinkReq",
-    "_STAFF_ACTIVE_TTL",
     "_create_rzp_payment_link",
     "_get_staff_from_request",
     "_is_nidaan_host",
@@ -1718,7 +1729,7 @@
     "_nidaan_rzp_secret",
     "_price_ok",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -1740,11 +1751,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -1804,6 +1814,7 @@
     "_is_nidaan_host",
     "_nidaan_account_from_payload",
     "_nidaan_bearer",
+    "_row_still_open",
     "app",
     "limiter"
    ],
@@ -1853,6 +1864,7 @@
     "_doc_ext_for",
     "_is_nidaan_host",
     "_nidaan_bearer",
+    "_row_still_open",
     "_save_support_attachment",
     "_sniff_file",
     "_upload_refusal",
@@ -1882,16 +1894,15 @@
     "_MAX_DOC_SIZE",
     "_MAX_SUPPORT_ATTACH",
     "_NIDAAN_DOCS_DIR",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_doc_ext_for",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
+    "_row_still_open",
     "_save_support_attachment",
     "_sniff_file",
-    "_staff_active_cache",
     "_staff_still_active",
     "_upload_refusal",
     "app",
@@ -1939,6 +1950,7 @@
     "_is_nidaan_host",
     "_nidaan_account_from_payload",
     "_nidaan_bearer",
+    "_row_still_open",
     "app",
     "limiter"
    ],
@@ -2360,6 +2372,7 @@
    "reaches": [
     "_nidaan_account_from_payload",
     "_nidaan_bearer",
+    "_row_still_open",
     "app"
    ],
    "uses": [
@@ -2377,6 +2390,7 @@
    "reaches": [
     "_nidaan_account_from_payload",
     "_nidaan_bearer",
+    "_row_still_open",
     "app"
    ],
    "uses": [
@@ -2394,6 +2408,7 @@
    "reaches": [
     "_nidaan_account_from_payload",
     "_nidaan_bearer",
+    "_row_still_open",
     "app"
    ],
    "uses": [
@@ -2410,6 +2425,7 @@
    "product": "nidaan",
    "reaches": [
     "_nidaan_bearer",
+    "_row_still_open",
     "app"
    ],
    "uses": [
@@ -2455,6 +2471,7 @@
    "product": "nidaan",
    "reaches": [
     "_nidaan_bearer",
+    "_row_still_open",
     "app"
    ],
    "uses": [
@@ -2470,6 +2487,7 @@
    "product": "nidaan",
    "reaches": [
     "_nidaan_bearer",
+    "_row_still_open",
     "app"
    ],
    "uses": [
@@ -2504,6 +2522,7 @@
     "_nidaan_rzp_id",
     "_nidaan_rzp_secret",
     "_price_ok",
+    "_row_still_open",
     "app",
     "limiter"
    ],
@@ -2531,6 +2550,7 @@
     "_nidaan_payment_captured",
     "_nidaan_rzp_id",
     "_nidaan_rzp_secret",
+    "_row_still_open",
     "app",
     "limiter",
     "logger"
@@ -2558,6 +2578,7 @@
     "_nidaan_bearer",
     "_nidaan_rzp_id",
     "_nidaan_rzp_secret",
+    "_row_still_open",
     "app",
     "limiter",
     "logger"
@@ -2600,6 +2621,7 @@
     "_nidaan_account_from_payload",
     "_nidaan_bearer",
     "_notify_branch_signup",
+    "_row_still_open",
     "app",
     "limiter",
     "logger"
@@ -2646,6 +2668,7 @@
     "_nidaan_rzp_id",
     "_nidaan_rzp_secret",
     "_price_ok",
+    "_row_still_open",
     "app",
     "limiter"
    ],
@@ -2672,6 +2695,7 @@
     "_nidaan_payment_captured",
     "_nidaan_rzp_id",
     "_nidaan_rzp_secret",
+    "_row_still_open",
     "app",
     "limiter",
     "logger"
@@ -2705,6 +2729,7 @@
     "_guard_upload_batch",
     "_is_nidaan_host",
     "_nidaan_bearer",
+    "_row_still_open",
     "_sniff_file",
     "_upload_refusal",
     "app",
@@ -2746,6 +2771,7 @@
     "_guard_upload_batch",
     "_is_nidaan_host",
     "_nidaan_bearer",
+    "_row_still_open",
     "_sniff_file",
     "_upload_refusal",
     "app",
@@ -2781,6 +2807,7 @@
     "_is_nidaan_host",
     "_nidaan_bearer",
     "_nidaan_remove_doc_file",
+    "_row_still_open",
     "app",
     "logger"
    ],
@@ -2803,6 +2830,7 @@
     "_is_nidaan_host",
     "_nidaan_bearer",
     "_nidaan_remove_doc_file",
+    "_row_still_open",
     "app",
     "logger"
    ],
@@ -2826,6 +2854,7 @@
     "_doc_sig",
     "_is_nidaan_host",
     "_nidaan_doc_url",
+    "_row_still_open",
     "app"
    ],
    "uses": [
@@ -2848,6 +2877,7 @@
     "_branch_claim_row",
     "_is_nidaan_host",
     "_nidaan_remove_doc_file",
+    "_row_still_open",
     "app",
     "logger"
    ],
@@ -2868,13 +2898,12 @@
    "product": "nidaan",
    "reaches": [
     "_DocRenameReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -2897,11 +2926,10 @@
    "product": "nidaan",
    "reaches": [
     "_NIDAAN_DOCS_DIR",
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "logger"
@@ -2922,14 +2950,13 @@
    "product": "nidaan",
    "reaches": [
     "_NIDAAN_DOCS_DIR",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_nidaan_remove_doc_file",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "logger"
@@ -2955,7 +2982,6 @@
     "_MAX_FILES_PER_UPLOAD",
     "_MAX_UPLOAD_BATCH_BYTES",
     "_NIDAAN_DOCS_DIR",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_as_viewable",
     "_doc_ext_for",
@@ -2965,8 +2991,8 @@
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
+    "_row_still_open",
     "_sniff_file",
-    "_staff_active_cache",
     "_staff_still_active",
     "_upload_refusal",
     "app",
@@ -2999,13 +3025,12 @@
    "product": "nidaan",
    "reaches": [
     "_DocsCompleteReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -3028,13 +3053,12 @@
    "product": "nidaan",
    "reaches": [
     "_DOC_URL_TTL",
-    "_STAFF_ACTIVE_TTL",
     "_doc_sig",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_nidaan_doc_url",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -3053,13 +3077,12 @@
    "product": "nidaan",
    "reaches": [
     "_DOC_URL_TTL",
-    "_STAFF_ACTIVE_TTL",
     "_doc_sig",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_nidaan_doc_url",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -3082,6 +3105,7 @@
     "_is_nidaan_host",
     "_nidaan_bearer",
     "_nidaan_doc_url",
+    "_row_still_open",
     "app"
    ],
    "uses": [
@@ -3105,6 +3129,7 @@
     "_nidaan_bearer",
     "_nidaan_claim_owned_by",
     "_nidaan_doc_url",
+    "_row_still_open",
     "app"
    ],
    "uses": [
@@ -3129,6 +3154,7 @@
     "_is_nidaan_host",
     "_nidaan_bearer",
     "_nidaan_claim_owned_by",
+    "_row_still_open",
     "_save_message_attachment",
     "_sniff_file",
     "_upload_refusal",
@@ -3156,6 +3182,7 @@
    "reaches": [
     "_is_nidaan_host",
     "_nidaan_bearer",
+    "_row_still_open",
     "app"
    ],
    "uses": [
@@ -3172,14 +3199,13 @@
    "product": "nidaan",
    "reaches": [
     "_DOC_URL_TTL",
-    "_STAFF_ACTIVE_TTL",
     "_attach_message_urls",
     "_doc_sig",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_nidaan_doc_url",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -3197,13 +3223,12 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -3224,16 +3249,15 @@
     "_IMAGE_EXTS",
     "_MAX_DOC_SIZE",
     "_NIDAAN_DOCS_DIR",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_doc_ext_for",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
+    "_row_still_open",
     "_save_message_attachment",
     "_sniff_file",
-    "_staff_active_cache",
     "_staff_still_active",
     "_upload_refusal",
     "app",
@@ -3258,11 +3282,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -3280,13 +3303,12 @@
    "product": "nidaan",
    "reaches": [
     "_ClaimInvolveReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter",
@@ -3311,11 +3333,10 @@
    "product": "nidaan",
    "reaches": [
     "_ClaimMuteReq",
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -3338,6 +3359,7 @@
     "_is_nidaan_host",
     "_nidaan_bearer",
     "_nidaan_doc_url",
+    "_row_still_open",
     "app"
    ],
    "uses": [
@@ -3431,6 +3453,7 @@
     "_nidaan_rzp_id",
     "_nidaan_rzp_secret",
     "_plan_label",
+    "_row_still_open",
     "app",
     "limiter"
    ],
@@ -3456,6 +3479,7 @@
     "_is_nidaan_host",
     "_nidaan_account_from_payload",
     "_nidaan_bearer",
+    "_row_still_open",
     "app"
    ],
    "uses": [
@@ -3494,13 +3518,12 @@
    "product": "nidaan",
    "reaches": [
     "_CsRoutingReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -3519,13 +3542,12 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -3638,14 +3660,13 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_finalize_paid_claim",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_nidaan_rzp_id",
     "_nidaan_rzp_secret",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter",
@@ -3671,6 +3692,7 @@
    "reaches": [
     "_is_nidaan_host",
     "_nidaan_bearer",
+    "_row_still_open",
     "app"
    ],
    "uses": [
@@ -3691,6 +3713,7 @@
     "_nidaan_bearer",
     "_nidaan_rzp_id",
     "_nidaan_rzp_secret",
+    "_row_still_open",
     "app",
     "logger"
    ],
@@ -3717,6 +3740,7 @@
     "_nidaan_bearer",
     "_nidaan_rzp_id",
     "_nidaan_rzp_secret",
+    "_row_still_open",
     "app",
     "limiter",
     "logger"
@@ -3748,6 +3772,7 @@
     "_nidaan_rzp_id",
     "_nidaan_rzp_secret",
     "_plan_label",
+    "_row_still_open",
     "app",
     "limiter"
    ],
@@ -3775,6 +3800,7 @@
     "_nidaan_account_from_payload",
     "_nidaan_bearer",
     "_nidaan_rzp_secret",
+    "_row_still_open",
     "app",
     "limiter",
     "logger"
@@ -3800,6 +3826,7 @@
     "_is_nidaan_host",
     "_nidaan_account_from_payload",
     "_nidaan_bearer",
+    "_row_still_open",
     "app",
     "limiter"
    ],
@@ -3821,6 +3848,7 @@
     "_is_nidaan_host",
     "_nidaan_account_from_payload",
     "_nidaan_bearer",
+    "_row_still_open",
     "app",
     "limiter"
    ],
@@ -3844,6 +3872,7 @@
     "_nidaan_bearer",
     "_nidaan_rzp_id",
     "_nidaan_rzp_secret",
+    "_row_still_open",
     "app",
     "limiter",
     "logger"
@@ -3870,6 +3899,7 @@
     "_is_nidaan_host",
     "_nidaan_account_from_payload",
     "_nidaan_bearer",
+    "_row_still_open",
     "app"
    ],
    "uses": [
@@ -3891,6 +3921,7 @@
     "_is_nidaan_host",
     "_nidaan_account_from_payload",
     "_nidaan_bearer",
+    "_row_still_open",
     "app"
    ],
    "uses": [
@@ -3912,6 +3943,7 @@
     "_is_nidaan_host",
     "_nidaan_account_from_payload",
     "_nidaan_bearer",
+    "_row_still_open",
     "app",
     "limiter"
    ],
@@ -4019,13 +4051,12 @@
    "product": "nidaan",
    "reaches": [
     "NidaanMarkPaidReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter",
@@ -4050,11 +4081,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -4071,11 +4101,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -4093,13 +4122,12 @@
    "product": "nidaan",
    "reaches": [
     "NidaanReattributeReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter",
@@ -4124,13 +4152,12 @@
    "product": "nidaan",
    "reaches": [
     "NidaanReattributeReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter",
@@ -4154,12 +4181,11 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
     "_require_wa_inbox",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "health"
@@ -4179,13 +4205,12 @@
    "product": "nidaan",
    "reaches": [
     "OpsWaSettingsReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -4204,11 +4229,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "logger"
@@ -4227,11 +4251,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -4248,11 +4271,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -4269,13 +4291,12 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -4296,13 +4317,12 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -4323,11 +4343,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -4346,11 +4365,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -4369,11 +4387,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -4390,11 +4407,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -4411,11 +4427,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -4433,13 +4448,12 @@
    "product": "nidaan",
    "reaches": [
     "_CaseBlockerReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -4462,13 +4476,12 @@
    "product": "nidaan",
    "reaches": [
     "_CaseAssignReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -4490,13 +4503,12 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -4518,13 +4530,12 @@
    "product": "nidaan",
    "reaches": [
     "_PipelineMoveReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -4546,13 +4557,12 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -4573,11 +4583,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -4595,13 +4604,12 @@
    "product": "nidaan",
    "reaches": [
     "_BucketSaveReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -4623,14 +4631,13 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_SubSaveReq",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -4653,13 +4660,12 @@
    "product": "nidaan",
    "reaches": [
     "_FieldSaveReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -4682,13 +4688,12 @@
    "product": "nidaan",
    "reaches": [
     "_RouteSaveReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -4710,11 +4715,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -4734,7 +4738,6 @@
     "_GIST_CORE",
     "_GIST_CORE_LABELS",
     "_GistSaveReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_gist_remark",
@@ -4743,7 +4746,7 @@
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -4769,11 +4772,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -4790,11 +4792,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -4811,11 +4812,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -4832,11 +4832,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -4853,11 +4852,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -4874,11 +4872,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -4896,13 +4893,12 @@
    "product": "nidaan",
    "reaches": [
     "_HandoverReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -4924,14 +4920,13 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_UndoHandoverReq",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -4953,11 +4948,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -4974,11 +4968,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -4996,13 +4989,12 @@
    "product": "nidaan",
    "reaches": [
     "_BucketMoveReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -5025,12 +5017,11 @@
    "product": "nidaan",
    "reaches": [
     "_BucketSubReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -5052,12 +5043,11 @@
    "product": "nidaan",
    "reaches": [
     "_BucketFieldReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -5079,13 +5069,12 @@
    "product": "nidaan",
    "reaches": [
     "_QueryRaiseReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -5108,13 +5097,12 @@
    "product": "nidaan",
    "reaches": [
     "_QueryResolveReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -5136,11 +5124,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -5158,13 +5145,12 @@
    "product": "nidaan",
    "reaches": [
     "_QueryContactReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -5187,13 +5173,12 @@
    "product": "nidaan",
    "reaches": [
     "_ChangeReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -5215,11 +5200,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -5237,13 +5221,12 @@
    "product": "nidaan",
    "reaches": [
     "_PayFollowReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -5265,11 +5248,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -5287,13 +5269,12 @@
    "product": "nidaan",
    "reaches": [
     "_RaiseForSubReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -5316,13 +5297,12 @@
    "product": "nidaan",
    "reaches": [
     "_DOC_KEYS",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "logger",
@@ -5347,11 +5327,10 @@
    "product": "nidaan",
    "reaches": [
     "_DOC_KEYS",
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "logger"
@@ -5372,12 +5351,11 @@
    "product": "nidaan",
    "reaches": [
     "_DOC_KEYS",
-    "_STAFF_ACTIVE_TTL",
     "_doc_access_ok",
     "_doc_share_key",
     "_get_staff_from_request",
     "_is_nidaan_host",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -5397,12 +5375,11 @@
    "reaches": [
     "_DOC_KEYS",
     "_DocFeedbackReq",
-    "_STAFF_ACTIVE_TTL",
     "_doc_access_ok",
     "_doc_share_key",
     "_get_staff_from_request",
     "_is_nidaan_host",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -5423,12 +5400,11 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
     "_require_wa_inbox",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -5445,12 +5421,11 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
     "_require_wa_inbox",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "_wa_number_or_400",
     "app"
@@ -5469,7 +5444,6 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_WaOwnerReq",
     "_actor_label",
     "_get_staff_from_request",
@@ -5478,7 +5452,7 @@
     "_require_staff",
     "_require_wa_inbox",
     "_require_wa_reply",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "_wa_number_or_400",
     "app"
@@ -5500,7 +5474,6 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_WaReplyReq",
     "_actor_label",
     "_get_staff_from_request",
@@ -5509,7 +5482,7 @@
     "_require_staff",
     "_require_wa_inbox",
     "_require_wa_reply",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "_wa_number_or_400",
     "app",
@@ -5527,18 +5500,105 @@
    ]
   },
   {
+   "func": "nidaan_ops_wa_unsorted",
+   "paths": [
+    "/nidaan/ops/api/wa/unsorted"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_DOC_URL_TTL",
+    "_doc_sig",
+    "_get_staff_from_request",
+    "_is_nidaan_host",
+    "_nidaan_doc_url",
+    "_require_staff",
+    "_require_wa_inbox",
+    "_row_still_open",
+    "_staff_still_active",
+    "app"
+   ],
+   "uses": [
+    "_is_nidaan_host",
+    "_nidaan_doc_url",
+    "_require_staff",
+    "_require_wa_inbox",
+    "app"
+   ]
+  },
+  {
+   "func": "nidaan_ops_wa_unsorted_attach",
+   "paths": [
+    "/nidaan/ops/api/wa/unsorted/{item_id}/attach"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_WaSortAttachReq",
+    "_actor_label",
+    "_get_staff_from_request",
+    "_is_nidaan_host",
+    "_ops_audit",
+    "_require_staff",
+    "_require_wa_inbox",
+    "_require_wa_reply",
+    "_row_still_open",
+    "_staff_still_active",
+    "app",
+    "limiter"
+   ],
+   "uses": [
+    "_WaSortAttachReq",
+    "_actor_label",
+    "_is_nidaan_host",
+    "_ops_audit",
+    "_require_staff",
+    "_require_wa_reply",
+    "app",
+    "limiter"
+   ]
+  },
+  {
+   "func": "nidaan_ops_wa_unsorted_aside",
+   "paths": [
+    "/nidaan/ops/api/wa/unsorted/{item_id}/set-aside"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_WaSortAsideReq",
+    "_actor_label",
+    "_get_staff_from_request",
+    "_is_nidaan_host",
+    "_ops_audit",
+    "_require_staff",
+    "_require_wa_inbox",
+    "_require_wa_reply",
+    "_row_still_open",
+    "_staff_still_active",
+    "app",
+    "limiter"
+   ],
+   "uses": [
+    "_WaSortAsideReq",
+    "_actor_label",
+    "_is_nidaan_host",
+    "_ops_audit",
+    "_require_staff",
+    "_require_wa_reply",
+    "app",
+    "limiter"
+   ]
+  },
+  {
    "func": "nidaan_ops_wa_campaign_preview",
    "paths": [
     "/nidaan/ops/api/wa/campaign/preview"
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_WaCampaignFilters",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -5556,7 +5616,6 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_WaCampaignFilters",
     "_WaCampaignReq",
     "_actor_label",
@@ -5564,7 +5623,7 @@
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -5586,11 +5645,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -5607,13 +5665,12 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -5631,12 +5688,11 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -5656,11 +5712,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -5678,13 +5733,12 @@
    "product": "nidaan",
    "reaches": [
     "_DocTypeReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -5706,13 +5760,12 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -5733,11 +5786,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -5754,14 +5806,13 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_SchedReq",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -5783,14 +5834,13 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_SchedStatusReq",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -5813,13 +5863,12 @@
    "product": "nidaan",
    "reaches": [
     "_DocTickReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -5842,13 +5891,12 @@
    "product": "nidaan",
    "reaches": [
     "_DocAddReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -5871,13 +5919,12 @@
    "product": "nidaan",
    "reaches": [
     "_DocRemoveReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -5900,13 +5947,12 @@
    "product": "nidaan",
    "reaches": [
     "_DocRemoveReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -5929,11 +5975,10 @@
    "product": "nidaan",
    "reaches": [
     "_DocDraftReq",
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -5955,11 +6000,10 @@
    "reaches": [
     "_DocExtraReq",
     "_DocPreviewReq",
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -5982,13 +6026,12 @@
     "_DocExtraReq",
     "_DocPreviewReq",
     "_DocSendReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -6011,13 +6054,12 @@
    "product": "nidaan",
    "reaches": [
     "_EscReplyReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -6040,13 +6082,12 @@
    "product": "nidaan",
    "reaches": [
     "_EscReplyReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -6068,11 +6109,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -6091,11 +6131,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -6114,11 +6153,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -6137,11 +6175,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -6161,13 +6198,12 @@
    "product": "nidaan",
    "reaches": [
     "_DocPauseReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -6190,13 +6226,12 @@
    "product": "nidaan",
    "reaches": [
     "_DocCallReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -6218,12 +6253,11 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -6243,11 +6277,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -6264,11 +6297,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -6285,11 +6317,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -6307,14 +6338,13 @@
    "product": "nidaan",
    "reaches": [
     "_CrmLeadReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_crm_notify_assignment",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -6337,15 +6367,16 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
+    "_crm_lead_for",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
    "uses": [
+    "_crm_lead_for",
     "_is_nidaan_host",
     "_require_staff",
     "app"
@@ -6359,19 +6390,20 @@
    "product": "nidaan",
    "reaches": [
     "_CrmUpdateReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
+    "_crm_lead_for",
     "_crm_notify_assignment",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
    "uses": [
     "_CrmUpdateReq",
     "_actor_label",
+    "_crm_lead_for",
     "_crm_notify_assignment",
     "_is_nidaan_host",
     "_require_staff",
@@ -6386,18 +6418,19 @@
    "product": "nidaan",
    "reaches": [
     "_CrmCommentReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
+    "_crm_lead_for",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
    "uses": [
     "_CrmCommentReq",
     "_actor_label",
+    "_crm_lead_for",
     "_is_nidaan_host",
     "_require_staff",
     "app"
@@ -6410,18 +6443,19 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
+    "_crm_lead_for",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
    "uses": [
     "_actor_label",
+    "_crm_lead_for",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
@@ -6435,11 +6469,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -6456,11 +6489,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -6606,11 +6638,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -6628,13 +6659,12 @@
    "product": "nidaan",
    "reaches": [
     "_DOC_URL_TTL",
-    "_STAFF_ACTIVE_TTL",
     "_doc_sig",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_nidaan_doc_url",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -6656,15 +6686,14 @@
     "_IMAGE_EXTS",
     "_MAX_DOC_SIZE",
     "_NIDAAN_DOCS_DIR",
-    "_STAFF_ACTIVE_TTL",
     "_doc_ext_for",
     "_doc_sig",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_nidaan_doc_url",
     "_require_staff",
+    "_row_still_open",
     "_sniff_file",
-    "_staff_active_cache",
     "_staff_still_active",
     "_upload_refusal",
     "app",
@@ -6691,11 +6720,10 @@
    "product": "nidaan",
    "reaches": [
     "_MeLangReq",
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -6713,12 +6741,11 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_StaffSavedNumbersReq",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "logger"
@@ -6738,11 +6765,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -6760,13 +6786,12 @@
    "product": "nidaan",
    "reaches": [
     "CreateStaffReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "logger"
@@ -6788,13 +6813,12 @@
    "product": "nidaan",
    "reaches": [
     "UpdateStaffReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -6813,13 +6837,12 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -6837,13 +6860,12 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -6861,13 +6883,12 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -6885,13 +6906,12 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -6911,11 +6931,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -6933,14 +6952,13 @@
    "product": "nidaan",
    "reaches": [
     "OpsBranchCreate",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_nidaan_origin",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "logger"
@@ -6963,13 +6981,12 @@
    "product": "nidaan",
    "reaches": [
     "OpsBranchUpdate",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -6988,11 +7005,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -7009,11 +7025,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -7030,11 +7045,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -7052,13 +7066,12 @@
    "product": "nidaan",
    "reaches": [
     "_ReferrerNoteReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -7080,11 +7093,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -7102,13 +7114,12 @@
    "product": "nidaan",
    "reaches": [
     "_RadarMailboxReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -7128,11 +7139,10 @@
    "product": "nidaan",
    "reaches": [
     "_RadarTestReq",
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -7150,11 +7160,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -7171,13 +7180,12 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -7195,11 +7203,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -7216,11 +7223,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -7237,11 +7243,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -7259,13 +7264,12 @@
    "product": "nidaan",
    "reaches": [
     "_RadarFileReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -7288,13 +7292,12 @@
    "product": "nidaan",
    "reaches": [
     "_RadarReplyReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -7313,11 +7316,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -7334,13 +7336,12 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -7358,11 +7359,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -7380,13 +7380,12 @@
    "product": "nidaan",
    "reaches": [
     "_RadarConfigReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -7405,11 +7404,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -7426,11 +7424,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -7447,11 +7444,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -7468,11 +7464,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -7490,13 +7485,12 @@
    "product": "nidaan",
    "reaches": [
     "OpsStaffCommission",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -7516,13 +7510,12 @@
    "product": "nidaan",
    "reaches": [
     "OpsStaffTgAccess",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -7542,18 +7535,19 @@
    "product": "nidaan",
    "reaches": [
     "_BranchClaimReq",
-    "_STAFF_ACTIVE_TTL",
+    "_actor_label",
     "_clean_complainant_contact",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_claim_code",
     "_staff_still_active",
     "app"
    ],
    "uses": [
     "_BranchClaimReq",
+    "_actor_label",
     "_clean_complainant_contact",
     "_is_nidaan_host",
     "_staff_claim_code",
@@ -7567,11 +7561,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_claim_code",
     "_staff_still_active",
     "app"
@@ -7594,7 +7587,6 @@
     "_MAX_FILES_PER_UPLOAD",
     "_MAX_UPLOAD_BATCH_BYTES",
     "_NIDAAN_DOCS_DIR",
-    "_STAFF_ACTIVE_TTL",
     "_as_viewable",
     "_doc_ext_for",
     "_doc_magic_ok",
@@ -7602,8 +7594,8 @@
     "_guard_upload_batch",
     "_is_nidaan_host",
     "_require_staff",
+    "_row_still_open",
     "_sniff_file",
-    "_staff_active_cache",
     "_staff_claim_code",
     "_staff_still_active",
     "_upload_refusal",
@@ -7635,14 +7627,13 @@
    "product": "nidaan",
    "reaches": [
     "_DOC_URL_TTL",
-    "_STAFF_ACTIVE_TTL",
     "_branch_claim_row",
     "_doc_sig",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_nidaan_doc_url",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_claim_code",
     "_staff_still_active",
     "app"
@@ -7663,7 +7654,6 @@
    "product": "nidaan",
    "reaches": [
     "_NIDAAN_DOCS_DIR",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_branch_claim_row",
     "_get_staff_from_request",
@@ -7671,7 +7661,7 @@
     "_nidaan_remove_doc_file",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_claim_code",
     "_staff_still_active",
     "app",
@@ -7694,7 +7684,6 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_branch_claim_row",
     "_get_staff_from_request",
     "_is_nidaan_host",
@@ -7702,7 +7691,7 @@
     "_nidaan_rzp_secret",
     "_price_ok",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_claim_code",
     "_staff_still_active",
     "app",
@@ -7727,14 +7716,13 @@
    "product": "nidaan",
    "reaches": [
     "_BranchL2VerifyReq",
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_nidaan_payment_captured",
     "_nidaan_rzp_id",
     "_nidaan_rzp_secret",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_claim_code",
     "_staff_still_active",
     "app",
@@ -7758,12 +7746,11 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_branch_claim_row",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_claim_code",
     "_staff_still_active",
     "app",
@@ -7784,7 +7771,6 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_branch_claim_row",
     "_create_rzp_payment_link",
@@ -7795,7 +7781,7 @@
     "_ops_audit",
     "_price_ok",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_claim_code",
     "_staff_still_active",
     "app",
@@ -7821,13 +7807,12 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_nidaan_rzp_id",
     "_nidaan_rzp_secret",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "logger"
@@ -7859,17 +7844,124 @@
    ]
   },
   {
+   "func": "ops_claim_cp_state",
+   "paths": [
+    "/nidaan/ops/api/claims/{claim_id}/cp"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_cp_claim_gate",
+    "_get_staff_from_request",
+    "_is_nidaan_host",
+    "_require_staff",
+    "_row_still_open",
+    "_staff_still_active",
+    "app"
+   ],
+   "uses": [
+    "_cp_claim_gate",
+    "_is_nidaan_host",
+    "_require_staff",
+    "app"
+   ]
+  },
+  {
+   "func": "ops_claim_cp_request",
+   "paths": [
+    "/nidaan/ops/api/claims/{claim_id}/cp/request"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_ClaimCPReq",
+    "_actor_label",
+    "_cp_claim_gate",
+    "_get_staff_from_request",
+    "_is_nidaan_host",
+    "_ops_audit",
+    "_require_staff",
+    "_row_still_open",
+    "_staff_still_active",
+    "app",
+    "limiter"
+   ],
+   "uses": [
+    "_ClaimCPReq",
+    "_actor_label",
+    "_cp_claim_gate",
+    "_is_nidaan_host",
+    "_ops_audit",
+    "_require_staff",
+    "app",
+    "limiter"
+   ]
+  },
+  {
+   "func": "ops_claim_cp_decide",
+   "paths": [
+    "/nidaan/ops/api/cp-requests/{req_id}/decide"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_ClaimCPDecision",
+    "_actor_label",
+    "_get_staff_from_request",
+    "_is_nidaan_host",
+    "_ops_audit",
+    "_require_staff",
+    "_row_still_open",
+    "_staff_still_active",
+    "app",
+    "limiter"
+   ],
+   "uses": [
+    "_ClaimCPDecision",
+    "_actor_label",
+    "_is_nidaan_host",
+    "_ops_audit",
+    "_require_staff",
+    "app",
+    "limiter"
+   ]
+  },
+  {
+   "func": "ops_claim_cp_withdraw",
+   "paths": [
+    "/nidaan/ops/api/cp-requests/{req_id}/withdraw"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_actor_label",
+    "_cp_claim_gate",
+    "_get_staff_from_request",
+    "_is_nidaan_host",
+    "_ops_audit",
+    "_require_staff",
+    "_row_still_open",
+    "_staff_still_active",
+    "app",
+    "limiter"
+   ],
+   "uses": [
+    "_actor_label",
+    "_cp_claim_gate",
+    "_is_nidaan_host",
+    "_ops_audit",
+    "_require_staff",
+    "app",
+    "limiter"
+   ]
+  },
+  {
    "func": "ops_cp_list",
    "paths": [
     "/nidaan/ops/api/channel-partners"
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -7887,13 +7979,12 @@
    "product": "nidaan",
    "reaches": [
     "_CpReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter",
@@ -7918,13 +8009,12 @@
    "product": "nidaan",
    "reaches": [
     "_CpReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -7944,13 +8034,12 @@
    "product": "nidaan",
    "reaches": [
     "_CpStatusReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -7970,11 +8059,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -7992,13 +8080,12 @@
    "product": "nidaan",
    "reaches": [
     "OpsContentUpdate",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -8053,11 +8140,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -8076,13 +8162,12 @@
    "reaches": [
     "OpsOffice",
     "OpsOfficesUpdate",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -8101,11 +8186,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -8123,13 +8207,12 @@
    "product": "nidaan",
    "reaches": [
     "OpsPlanConfigUpdate",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -8150,11 +8233,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -8171,11 +8253,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -8193,14 +8274,13 @@
    "product": "nidaan",
    "reaches": [
     "_DOC_URL_TTL",
-    "_STAFF_ACTIVE_TTL",
     "_attach_message_urls",
     "_doc_sig",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_nidaan_doc_url",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -8219,19 +8299,27 @@
    "product": "nidaan",
    "reaches": [
     "OpsSupportReplyReq",
-    "_STAFF_ACTIVE_TTL",
+    "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
+    "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_require_wa_inbox",
+    "_require_wa_reply",
+    "_row_still_open",
     "_staff_still_active",
+    "_wa_number_or_400",
     "app",
     "limiter"
    ],
    "uses": [
     "OpsSupportReplyReq",
+    "_actor_label",
     "_is_nidaan_host",
+    "_ops_audit",
     "_require_staff",
+    "_require_wa_reply",
+    "_wa_number_or_400",
     "app",
     "limiter"
    ]
@@ -8243,11 +8331,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -8264,11 +8351,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -8286,13 +8372,12 @@
    "product": "nidaan",
    "reaches": [
     "OpsSupportHoursReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -8311,11 +8396,54 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
+    "_staff_still_active",
+    "app"
+   ],
+   "uses": [
+    "_is_nidaan_host",
+    "_require_staff",
+    "app"
+   ]
+  },
+  {
+   "func": "ops_ui_opened",
+   "paths": [
+    "/nidaan/ops/api/ui/opened"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_UiOpenedReq",
+    "_get_staff_from_request",
+    "_is_nidaan_host",
+    "_require_staff",
+    "_row_still_open",
+    "_staff_still_active",
+    "app",
+    "limiter"
+   ],
+   "uses": [
+    "_UiOpenedReq",
+    "_is_nidaan_host",
+    "_require_staff",
+    "app",
+    "limiter"
+   ]
+  },
+  {
+   "func": "ops_ui_usage",
+   "paths": [
+    "/nidaan/ops/api/ui/usage"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_get_staff_from_request",
+    "_is_nidaan_host",
+    "_require_staff",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -8333,22 +8461,23 @@
    "product": "nidaan",
    "reaches": [
     "OpsSupportRepReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
-    "app"
+    "app",
+    "logger"
    ],
    "uses": [
     "OpsSupportRepReq",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "app"
+    "app",
+    "logger"
    ]
   },
   {
@@ -8358,13 +8487,12 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -8382,11 +8510,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -8403,11 +8530,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -8425,13 +8551,12 @@
    "product": "nidaan",
    "reaches": [
     "OpsClaimArchiveReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -8454,14 +8579,13 @@
    "product": "nidaan",
    "reaches": [
     "_DOC_URL_TTL",
-    "_STAFF_ACTIVE_TTL",
     "_doc_sig",
     "_enrich_note_attachments",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_nidaan_doc_url",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "logger"
@@ -8482,14 +8606,13 @@
    "product": "nidaan",
    "reaches": [
     "_ContactConfirmReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_nidaan_origin",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -8530,13 +8653,12 @@
    "product": "nidaan",
    "reaches": [
     "OpsClaimAssign",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -8555,11 +8677,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -8577,13 +8698,12 @@
    "product": "nidaan",
    "reaches": [
     "OpsAutoAssignReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -8603,13 +8723,12 @@
    "product": "nidaan",
    "reaches": [
     "OpsClaimInfoUpdate",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "logger"
@@ -8632,13 +8751,12 @@
    "product": "nidaan",
    "reaches": [
     "OpsAdvisorUpdate",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -8658,13 +8776,12 @@
    "product": "nidaan",
    "reaches": [
     "OpsClaimStatusUpdate",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "logger"
@@ -8685,11 +8802,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -8707,13 +8823,12 @@
    "product": "nidaan",
    "reaches": [
     "OpsReviewTemplateCreate",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -8733,13 +8848,12 @@
    "product": "nidaan",
    "reaches": [
     "OpsReviewTemplateUpdate",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -8758,13 +8872,12 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -8783,11 +8896,10 @@
    "product": "nidaan",
    "reaches": [
     "OpsDeliverReviewReq",
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter",
@@ -8809,11 +8921,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -8831,11 +8942,10 @@
    "product": "nidaan",
    "reaches": [
     "OpsReviewStatusUpdate",
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "logger"
@@ -8856,12 +8966,11 @@
    "product": "nidaan",
    "reaches": [
     "OpsAddNote",
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_req_source",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -8881,14 +8990,13 @@
    "product": "nidaan",
    "reaches": [
     "_DOC_URL_TTL",
-    "_STAFF_ACTIVE_TTL",
     "_doc_sig",
     "_enrich_note_attachments",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_nidaan_doc_url",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -8906,11 +9014,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -8927,11 +9034,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -8951,13 +9057,12 @@
     "_IMAGE_EXTS",
     "_MAX_DOC_SIZE",
     "_NIDAAN_DOCS_DIR",
-    "_STAFF_ACTIVE_TTL",
     "_doc_ext_for",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
+    "_row_still_open",
     "_sniff_file",
-    "_staff_active_cache",
     "_staff_still_active",
     "_upload_refusal",
     "app",
@@ -8983,13 +9088,12 @@
    "product": "nidaan",
    "reaches": [
     "_NIDAAN_DOCS_DIR",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -9009,13 +9113,12 @@
    "product": "nidaan",
    "reaches": [
     "_NIDAAN_DOCS_DIR",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -9035,11 +9138,10 @@
    "product": "nidaan",
    "reaches": [
     "OpsAddFollowup",
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -9057,11 +9159,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -9078,11 +9179,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -9099,11 +9199,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -9120,11 +9219,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -9142,13 +9240,12 @@
    "product": "nidaan",
    "reaches": [
     "_MergeAccountsReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -9167,11 +9264,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -9188,13 +9284,12 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -9215,13 +9310,12 @@
    "product": "nidaan",
    "reaches": [
     "_ClaimAutoReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -9244,13 +9338,12 @@
    "product": "nidaan",
    "reaches": [
     "_ClaimPageTypeReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -9272,11 +9365,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -9293,13 +9385,12 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -9317,13 +9408,12 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -9342,13 +9432,12 @@
    "product": "nidaan",
    "reaches": [
     "_ClaimExcludeReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -9370,14 +9459,13 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_doc_ext_for",
     "_doc_magic_ok",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
+    "_row_still_open",
     "_sniff_file",
-    "_staff_active_cache",
     "_staff_still_active",
     "app",
     "limiter",
@@ -9400,12 +9488,11 @@
    "product": "nidaan",
    "reaches": [
     "_DsBatchReq",
-    "_STAFF_ACTIVE_TTL",
     "_docsplit_limit",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -9426,14 +9513,13 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_docsplit_job",
     "_docsplit_limit",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
+    "_row_still_open",
     "_sniff_file",
-    "_staff_active_cache",
     "_staff_still_active",
     "_upload_refusal",
     "app",
@@ -9460,13 +9546,12 @@
    "reaches": [
     "_DS_READ_LOCK",
     "_DS_TASKS",
-    "_STAFF_ACTIVE_TTL",
     "_docsplit_job",
     "_docsplit_read_batch",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter",
@@ -9490,12 +9575,11 @@
    "product": "nidaan",
    "reaches": [
     "_DS_STALE_MIN",
-    "_STAFF_ACTIVE_TTL",
     "_docsplit_job",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -9514,12 +9598,11 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_docsplit_limit",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -9538,14 +9621,13 @@
    "product": "nidaan",
    "reaches": [
     "_DsSettingsReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_docsplit_limit",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -9567,13 +9649,12 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_docsplit_job",
     "_docsplit_pages",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -9593,7 +9674,6 @@
    "product": "nidaan",
    "reaches": [
     "_DocSplitRetypeReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_docsplit_job",
     "_docsplit_pages",
@@ -9601,7 +9681,7 @@
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -9625,7 +9705,6 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_docsplit_job",
     "_docsplit_pages",
@@ -9633,7 +9712,7 @@
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -9653,11 +9732,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -9674,13 +9752,12 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -9701,12 +9778,11 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_docsplit_job",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -9726,14 +9802,13 @@
    "reaches": [
     "_DocSplitDoc",
     "_DocSplitExportReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_docsplit_job",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -9753,14 +9828,13 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_docsplit_job",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -9779,11 +9853,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -9801,11 +9874,10 @@
    "product": "nidaan",
    "reaches": [
     "OpsCreateAccount",
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -9824,13 +9896,12 @@
    "product": "nidaan",
    "reaches": [
     "OpsUpdateAccount",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -9849,13 +9920,12 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -9874,13 +9944,12 @@
    "product": "nidaan",
    "reaches": [
     "OpsBulkDelete",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "logger"
@@ -9901,11 +9970,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "logger"
@@ -9924,11 +9992,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -9945,11 +10012,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "logger"
@@ -9968,13 +10034,12 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "logger"
@@ -9995,12 +10060,11 @@
    "product": "nidaan",
    "reaches": [
     "NIDAAN_OWNER_EMAIL",
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_owner",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -10018,12 +10082,11 @@
    "product": "nidaan",
    "reaches": [
     "NIDAAN_OWNER_EMAIL",
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_owner",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -10041,14 +10104,13 @@
    "product": "nidaan",
    "reaches": [
     "NIDAAN_OWNER_EMAIL",
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_nidaan_rzp_id",
     "_nidaan_rzp_secret",
     "_require_owner",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "logger"
@@ -10071,14 +10133,13 @@
    "reaches": [
     "NIDAAN_OWNER_EMAIL",
     "_ManualRefundReq",
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_nidaan_rzp_id",
     "_nidaan_rzp_secret",
     "_require_owner",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter",
@@ -10105,13 +10166,12 @@
     "SERVER_START_TIME",
     "_ERROR_RING",
     "_LATENCY_RING",
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_latency_stats",
     "_login_checks",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "_subsystem_checks",
     "_system_metrics",
@@ -10137,13 +10197,12 @@
    "product": "nidaan",
    "reaches": [
     "_EXPORT_TABLES",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -10163,13 +10222,12 @@
    "product": "nidaan",
    "reaches": [
     "OpsHealthAction",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "logger"
@@ -10190,11 +10248,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -10211,11 +10268,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -10233,11 +10289,10 @@
    "product": "nidaan",
    "reaches": [
     "_ERROR_RING",
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -10255,11 +10310,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -10276,11 +10330,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -10297,11 +10350,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -10318,11 +10370,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -10339,11 +10390,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -10360,11 +10410,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -10382,13 +10431,12 @@
    "product": "nidaan",
    "reaches": [
     "_DOC_URL_TTL",
-    "_STAFF_ACTIVE_TTL",
     "_doc_sig",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_nidaan_doc_url",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -10406,11 +10454,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -10427,12 +10474,11 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_TaskCategoryCreateReq",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -10450,12 +10496,11 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_TaskCategoryUpdateReq",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -10473,11 +10518,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -10495,13 +10539,12 @@
    "product": "nidaan",
    "reaches": [
     "_DOC_URL_TTL",
-    "_STAFF_ACTIVE_TTL",
     "_doc_sig",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_nidaan_doc_url",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -10519,12 +10562,11 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_TaskMuteReq",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -10543,13 +10585,12 @@
    "product": "nidaan",
    "reaches": [
     "_NoteApprovalReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -10569,12 +10610,11 @@
    "product": "nidaan",
    "reaches": [
     "_QuickTaskCreateReq",
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_req_source",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "logger"
@@ -10596,12 +10636,11 @@
    "product": "nidaan",
    "reaches": [
     "_QuickTaskUpdateReq",
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_req_source",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -10620,11 +10659,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -10641,11 +10679,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -10663,12 +10700,11 @@
    "product": "nidaan",
    "reaches": [
     "_QuickTaskApprovalReq",
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_req_source",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "logger"
@@ -10690,13 +10726,12 @@
    "product": "nidaan",
    "reaches": [
     "_QuickTaskMergeReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -10718,14 +10753,13 @@
     "_IMAGE_EXTS",
     "_MAX_DOC_SIZE",
     "_NIDAAN_DOCS_DIR",
-    "_STAFF_ACTIVE_TTL",
     "_doc_ext_for",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_req_source",
     "_require_staff",
+    "_row_still_open",
     "_sniff_file",
-    "_staff_active_cache",
     "_staff_still_active",
     "_upload_refusal",
     "app",
@@ -10752,13 +10786,12 @@
    "product": "nidaan",
    "reaches": [
     "_NIDAAN_DOCS_DIR",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -10778,13 +10811,12 @@
    "product": "nidaan",
    "reaches": [
     "_LeaveCreateReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "logger"
@@ -10805,11 +10837,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -10827,13 +10858,12 @@
    "product": "nidaan",
    "reaches": [
     "_LeaveDecisionReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "logger"
@@ -10854,11 +10884,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -10875,11 +10904,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -10896,11 +10924,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -10919,13 +10946,12 @@
    "reaches": [
     "NIDAAN_BASE_URL",
     "_GrievanceReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -10945,11 +10971,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -10967,13 +10992,12 @@
    "product": "nidaan",
    "reaches": [
     "_OpsSettingReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -10993,13 +11017,12 @@
    "product": "nidaan",
    "reaches": [
     "_GstReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -11034,13 +11057,12 @@
    "product": "nidaan",
    "reaches": [
     "_ReviewFeeReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -11060,13 +11082,12 @@
    "product": "nidaan",
    "reaches": [
     "_BranchBillingReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -11085,11 +11106,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -11106,11 +11126,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_role",
     "_staff_still_active",
     "app"
@@ -11129,11 +11148,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_role",
     "_staff_still_active",
     "app"
@@ -11152,11 +11170,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_role",
     "_staff_still_active",
     "_task_visible_to_staff",
@@ -11176,12 +11193,11 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_TaskCreateReq",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_role",
     "_staff_still_active",
     "app",
@@ -11203,12 +11219,11 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_TaskUpdateReq",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_role",
     "_staff_still_active",
     "app"
@@ -11228,12 +11243,11 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_TaskAssignReq",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -11251,12 +11265,11 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_TaskTransitionReq",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_role",
     "_staff_still_active",
     "_task_visible_to_staff",
@@ -11278,12 +11291,11 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_TaskQCReq",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_role",
     "_staff_still_active",
     "app"
@@ -11303,12 +11315,11 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_TaskApprovalReq",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_role",
     "_staff_still_active",
     "app"
@@ -11328,11 +11339,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_role",
     "_staff_still_active",
     "_task_visible_to_staff",
@@ -11352,12 +11362,11 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_TaskNoteReq",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_role",
     "_staff_still_active",
     "_task_visible_to_staff",
@@ -11378,11 +11387,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -11399,12 +11407,11 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_StatusUpsertReq",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -11422,12 +11429,11 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_StatusUpsertReq",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -11445,11 +11451,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -11466,11 +11471,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -11487,12 +11491,11 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_prefs_safe",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "logger"
@@ -11512,13 +11515,12 @@
    "product": "nidaan",
    "reaches": [
     "_NotifyPrefReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -11540,13 +11542,12 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "limiter"
@@ -11566,11 +11567,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -11587,12 +11587,11 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_SystemFlagReq",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -11612,14 +11611,13 @@
    "reaches": [
     "_DEFAULT_CLAIM_HANDLERS",
     "_DOC_URL_TTL",
-    "_STAFF_ACTIVE_TTL",
     "_doc_sig",
     "_get_staff_from_request",
     "_handler_ids",
     "_is_nidaan_host",
     "_nidaan_doc_url",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -11639,11 +11637,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -11660,14 +11657,13 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_TelegramTokenReq",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -11686,11 +11682,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -11707,13 +11702,12 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -11731,13 +11725,12 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -11755,11 +11748,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -11777,13 +11769,12 @@
    "product": "nidaan",
    "reaches": [
     "NIDAAN_BASE_URL",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -11802,12 +11793,11 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_TelegramToggleReq",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -11825,11 +11815,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -11847,11 +11836,10 @@
    "product": "nidaan",
    "reaches": [
     "NIDAAN_BASE_URL",
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -11869,11 +11857,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -11890,11 +11877,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -11911,11 +11897,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -11950,13 +11935,12 @@
    "product": "nidaan",
    "reaches": [
     "_AnnounceReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -11975,13 +11959,12 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -12000,13 +11983,12 @@
    "product": "nidaan",
    "reaches": [
     "_BroadcastReq",
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -12025,11 +12007,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -12047,11 +12028,10 @@
    "product": "nidaan",
    "reaches": [
     "_ReactReq",
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -12070,11 +12050,10 @@
    "product": "nidaan",
    "reaches": [
     "_ReactReq",
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -12092,11 +12071,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -12113,11 +12091,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -12134,11 +12111,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -12156,11 +12132,10 @@
    "product": "nidaan",
    "reaches": [
     "_AckReq",
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -12178,11 +12153,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -12199,11 +12173,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -12220,11 +12193,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -12241,11 +12213,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -12262,11 +12233,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -12284,11 +12254,10 @@
    "product": "nidaan",
    "reaches": [
     "_OfficialInstanceUpsertReq",
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -12306,13 +12275,12 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_ops_audit",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app"
    ],
@@ -12330,11 +12298,10 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_STAFF_ACTIVE_TTL",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
-    "_staff_active_cache",
+    "_row_still_open",
     "_staff_still_active",
     "app",
     "logger"
@@ -12355,6 +12322,7 @@
    "reaches": [
     "_is_nidaan_host",
     "_nidaan_bearer",
+    "_row_still_open",
     "app"
    ],
    "uses": [
@@ -12373,6 +12341,7 @@
     "_SubscriberPrefsReq",
     "_is_nidaan_host",
     "_nidaan_bearer",
+    "_row_still_open",
     "app"
    ],
    "uses": [
@@ -18846,6 +18815,9 @@
   "nidaan_ops_wa_settings",
   "nidaan_ops_wa_start",
   "nidaan_ops_wa_thread",
+  "nidaan_ops_wa_unsorted",
+  "nidaan_ops_wa_unsorted_aside",
+  "nidaan_ops_wa_unsorted_attach",
   "nidaan_paylink_verify",
   "nidaan_payment_confirm_check",
   "nidaan_payments_reconcile",
@@ -18941,6 +18913,10 @@
   "ops_case_secret",
   "ops_claim_consent_proof",
   "ops_claim_contact_confirm",
+  "ops_claim_cp_decide",
+  "ops_claim_cp_request",
+  "ops_claim_cp_state",
+  "ops_claim_cp_withdraw",
   "ops_claim_doc_auto",
   "ops_claim_doc_exclude",
   "ops_claim_doc_page",
@@ -19189,6 +19165,8 @@
   "ops_telegram_unlink",
   "ops_tg_login_start",
   "ops_tg_login_status",
+  "ops_ui_opened",
+  "ops_ui_usage",
   "ops_update_account",
   "ops_update_branch",
   "ops_update_claim_advisor",
