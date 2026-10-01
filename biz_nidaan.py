@@ -6135,39 +6135,24 @@ async def cancel_account_deletion(account_id: int) -> bool:
 
 
 async def execute_account_erasure(account_id: int) -> dict:
-    """Hard purge: delete the account's documents + all PII rows, anonymise the
-    account row. KEEPS nidaan_subscriptions (financial record) — those reference
-    only account_id, which now points at an anonymised shell."""
-    from pathlib import Path as _Path
+    """Close an account for good: stop billing, anonymise the account row, drop its own
+    preferences. KEEPS nidaan_subscriptions (financial record).
+
+    Its CLAIMS are not the account's to take with it (founder, 1 Oct 2026: "Account deletion
+    doesn't mean claim deletion ... claims will always be in our archived until I say to
+    delete"). Every claim - with its documents, signed authorization, notes, checklist and
+    history - stays, ARCHIVED, and nothing is removed from disk. Deleting a claim is the
+    founder's decision alone, and nothing in this function makes it."""
     await cancel_nidaan_subscription(account_id)     # an erased account is never billed again
     async with aiosqlite.connect(DB_PATH) as conn:
         claim_ids = [r[0] for r in await (await conn.execute(
             "SELECT claim_id FROM nidaan_claims WHERE account_id=?", (account_id,))).fetchall()]
-        doc_names = [r[0] for r in await (await conn.execute(
-            "SELECT stored_name FROM nidaan_claim_documents WHERE account_id=?", (account_id,))).fetchall()]
-    docs_dir = _Path(__file__).parent / "uploads" / "nidaan-docs"
-    files_deleted = 0
-    for n in doc_names:
-        try:
-            (docs_dir / n).unlink(missing_ok=True); files_deleted += 1
-        except Exception:
-            pass
-    async with aiosqlite.connect(DB_PATH) as conn:
-        for cid in claim_ids:
-            for t in ("nidaan_claim_documents", "nidaan_claim_doc_checklist", "nidaan_claim_notes",
-                      "nidaan_claim_status_log", "nidaan_tasks", "nidaan_notifications"):
-                try:
-                    await conn.execute(f"DELETE FROM {t} WHERE claim_id=?", (cid,))
-                except Exception:
-                    pass
-        # account-level PII rows
-        await conn.execute("DELETE FROM nidaan_claim_documents WHERE account_id=?", (account_id,))
+        await conn.execute(
+            "UPDATE nidaan_claims SET archived=1, archived_at=COALESCE(archived_at, CURRENT_TIMESTAMP), "
+            "archived_by=CASE WHEN COALESCE(archived_by,'')='' THEN 'account closed' ELSE archived_by END "
+            "WHERE account_id=?", (account_id,))
+        # the account's own settings - not claim data
         await conn.execute("DELETE FROM nidaan_subscriber_prefs WHERE account_id=?", (account_id,))
-        try:
-            await conn.execute("DELETE FROM nidaan_notifications WHERE recipient_type='subscriber' AND recipient_id=?", (account_id,))
-        except Exception:
-            pass
-        await conn.execute("DELETE FROM nidaan_claims WHERE account_id=?", (account_id,))
         # anonymise the account (row kept for FK integrity with retained billing records)
         await conn.execute(
             "UPDATE nidaan_accounts SET owner_name='[deleted]', firm_name=NULL, "
@@ -6175,8 +6160,8 @@ async def execute_account_erasure(account_id: int) -> dict:
             "google_sub=NULL, notes=NULL, status='deleted', deleted_at=CURRENT_TIMESTAMP "
             "WHERE account_id=?", (account_id,))
         await conn.commit()
-    logger.info("Account ERASED: account=%d (%d files, %d claims)", account_id, files_deleted, len(claim_ids))
-    return {"erased": True, "files_deleted": files_deleted, "claims_deleted": len(claim_ids)}
+    logger.info("Account ERASED: account=%d (%d claims kept, archived)", account_id, len(claim_ids))
+    return {"erased": True, "files_deleted": 0, "claims_deleted": 0, "claims_archived": len(claim_ids)}
 
 
 async def run_account_erasure_sweep() -> int:
@@ -6580,6 +6565,9 @@ OPS_SETTING_DEFAULTS = {
     # later % change never rewrites an already-accepted agreement (grandfathered).
     # ⚠️ The T&C wording itself is founder/counsel-owned (claimant_terms_version bumps it).
     "claimant_success_fee_pct": "15",
+    # Unpaid-lead DOCUMENT purge after 30 days (biz_nidaan_retention). OFF since 1 Oct 2026 - the
+    # founder: claims and their papers stay, archived, until he says delete. "1" turns it back on.
+    "lead_document_purge": "0",
     # v2 (1 Oct 2026): the firm's registered name corrected to "Consultants" in the English terms.
     "claimant_terms_version": "v2",
     # Master switch for AUTO-emailing the complainant their portal link when a claim reaches L2.

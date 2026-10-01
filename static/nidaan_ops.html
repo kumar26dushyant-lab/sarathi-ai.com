@@ -8183,7 +8183,7 @@ function confirmDeleteAccounts(ids){
   ov.innerHTML=`
     <div style="background:var(--nd-bg-base-2);border:1px solid rgba(239,68,68,.45);border-radius:14px;max-width:480px;width:100%;padding:1.5rem">
       <div style="font-size:1.15rem;font-weight:800;color:var(--nd-danger-text);margin-bottom:.5rem">⚠️ Delete ${accts.length} account${accts.length>1?'s':''}?</div>
-      <div style="font-size:.85rem;color:var(--nd-text-secondary);margin-bottom:.7rem">This permanently removes their <b>claims, documents and personal data</b> (an anonymised billing record is kept as required by law). <b style="color:var(--nd-danger-text)">This cannot be undone.</b></div>
+      <div style="font-size:.85rem;color:var(--nd-text-secondary);margin-bottom:.7rem">Their login and personal details are removed for good. Their <b>claims stay</b> - with every document and signed authorization - <b>archived</b> (Claims - Archived). An anonymised billing record is kept as required by law. <b style="color:var(--nd-danger-text)">The account cannot be brought back.</b></div>
       <ul style="font-size:.82rem;color:var(--nd-text-primary);max-height:150px;overflow:auto;background:var(--nd-bg-surface);border-radius:8px;padding:.6rem .6rem .6rem 1.6rem;margin:0 0 1rem">${listHtml}</ul>
       <div id="delStep1" style="display:flex;gap:.6rem;justify-content:flex-end">
         <button class="btn btn-ghost" onclick="closeDelModal()">Cancel</button>

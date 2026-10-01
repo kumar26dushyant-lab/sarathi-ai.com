@@ -82,10 +82,11 @@ async def run():
     # ── re-request + hard purge ──
     await nidaan.request_account_deletion(acc)
     out = await nidaan.execute_account_erasure(acc)
-    res.append(("erasure deleted the file", not (docs_dir / fname).exists()))
-    res.append(("claims purged", (await _count("nidaan_claims", "account_id=?", (acc,))) == 0))
-    res.append(("documents purged", (await _count("nidaan_claim_documents", "account_id=?", (acc,))) == 0))
-    res.append(("checklist purged", (await _count("nidaan_claim_doc_checklist", "claim_id=?", (cid,))) == 0))
+    # Founder, 1 Oct 2026: account deletion is not claim deletion - claims stay, archived.
+    res.append(("the claim's file is KEPT on disk", (docs_dir / fname).exists()))
+    res.append(("the claim is KEPT, archived", (await _count("nidaan_claims", "account_id=? AND archived=1", (acc,))) == 1))
+    res.append(("its documents are KEPT", (await _count("nidaan_claim_documents", "account_id=?", (acc,))) >= 1))
+    res.append(("its checklist is KEPT", (await _count("nidaan_claim_doc_checklist", "claim_id=?", (cid,))) >= 1))
     res.append(("subscriber_prefs purged", (await _count("nidaan_subscriber_prefs", "account_id=?", (acc,))) == 0))
     res.append(("account anonymised (name)", (await _col(acc, "owner_name")) == "[deleted]"))
     res.append(("account anonymised (email)", str(await _col(acc, "email")).startswith("deleted_")))

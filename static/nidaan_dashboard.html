@@ -713,8 +713,8 @@
       </div>
       <div id="del-default">
         <p style="font-size:.82rem;color:var(--nd-text-muted);line-height:1.6;margin-bottom:.75rem">
-          <span class="en">Permanently delete your account and all your data (claims, documents, messages). Any active subscription is cancelled. Under applicable data-protection law, this is irreversible after a 7-day grace period. Financial records may be retained in anonymised form as required by law.</span>
-          <span class="hi">अपना खाता और सारा डेटा (क्लेम, दस्तावेज़, संदेश) स्थायी रूप से हटाएं। कोई भी सक्रिय सदस्यता रद्द हो जाएगी। लागू डेटा-सुरक्षा कानून के तहत, 7-दिन की छूट अवधि के बाद यह अपरिवर्तनीय है।</span>
+          <span class="en">Delete your account: your login and personal details are removed after a 7-day grace period (you can undo it until then), and any active subscription is cancelled. Claims already filed with us, with their documents, are kept by Nidaan The Legal Consultants LLP as case records - we may still be acting on them, and fees and the law can depend on them. To ask about a claim's records, write to enquiries@nidaanlegalindia.com. Financial records are kept in anonymised form as required by law.</span>
+          <span class="hi">अपना खाता हटाएं: 7 दिन की छूट अवधि के बाद आपका लॉगिन और निजी विवरण हटा दिए जाते हैं (तब तक आप इसे वापस ले सकते हैं), और कोई भी सक्रिय सदस्यता रद्द हो जाती है। हमारे पास दर्ज क्लेम, उनके दस्तावेज़ों के साथ, Nidaan The Legal Consultants LLP के पास केस रिकॉर्ड के रूप में रहते हैं - हम उन पर काम कर रहे हो सकते हैं, और फीस व कानून उन पर निर्भर हो सकते हैं। किसी क्लेम के रिकॉर्ड के बारे में पूछने के लिए enquiries@nidaanlegalindia.com पर लिखें। वित्तीय रिकॉर्ड कानून के अनुसार गुमनाम रूप में रखे जाते हैं।</span>
         </p>
         <div class="msg" id="delMsg"></div>
         <button class="btn-danger" onclick="requestAccountDeletion()">
@@ -2624,8 +2624,8 @@ function doLogout() {
 async function requestAccountDeletion() {
   const isHi = document.body.classList.contains('hi');
   const ans = prompt(isHi
-    ? 'क्या आप वाकई अपना खाता हटाना चाहते हैं? आपका सारा डेटा 7 दिनों में स्थायी रूप से हट जाएगा।\n\nपुष्टि के लिए DELETE टाइप करें:'
-    : 'This permanently deletes your account and all data in 7 days, and cancels any subscription.\n\nType DELETE to confirm:', '');
+    ? 'क्या आप वाकई अपना खाता हटाना चाहते हैं? 7 दिनों में आपका लॉगिन और निजी विवरण हट जाएंगे और सदस्यता रद्द हो जाएगी। दर्ज क्लेम केस रिकॉर्ड के रूप में रहते हैं।\n\nपुष्टि के लिए DELETE टाइप करें:'
+    : 'This deletes your account (login and personal details) in 7 days and cancels any subscription. Claims already filed stay with us as case records.\n\nType DELETE to confirm:', '');
   if (ans === null) return;
   if (ans.trim().toUpperCase() !== 'DELETE') { alert(isHi ? 'पुष्टि के लिए DELETE टाइप करें।' : 'Please type DELETE to confirm.'); return; }
   const r = await api('/nidaan/api/account/delete', { method: 'POST' });

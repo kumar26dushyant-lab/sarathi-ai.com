@@ -13763,8 +13763,8 @@ async def ops_update_account(account_id: int, body: OpsUpdateAccount, request: R
 
 @app.delete("/nidaan/ops/api/accounts/{account_id}")
 async def ops_delete_account(account_id: int, request: Request):
-    """Superadmin hard-delete of a customer account (DPDP-safe purge: removes
-    claims/docs/PII, keeps an anonymised billing shell). Audit-logged."""
+    """Superadmin deletes a customer account: the account is anonymised, its claims stay ARCHIVED
+    with every document (founder, 1 Oct 2026 - only he deletes claims). Audit-logged."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     _require_staff(request, "super_admin")
@@ -13776,7 +13776,7 @@ async def ops_delete_account(account_id: int, request: Request):
     label = f"{acct.get('owner_name','')} <{acct.get('email','')}>"
     res = await nidaan.execute_account_erasure(account_id)
     await _ops_audit(request, "account.delete", "account", account_id,
-                     f"Deleted {label} — {res.get('claims_deleted',0)} claims, {res.get('files_deleted',0)} files")
+                     f"Deleted {label} — {res.get('claims_archived',0)} claims kept, archived")
     return {"account_id": account_id, "deleted": True, **res}
 
 
@@ -13801,7 +13801,7 @@ async def ops_bulk_delete_accounts(body: OpsBulkDelete, request: Request):
         try:
             res = await nidaan.execute_account_erasure(aid)
             await _ops_audit(request, "account.delete", "account", aid,
-                             f"[bulk] Deleted {label} — {res.get('claims_deleted',0)} claims")
+                             f"[bulk] Deleted {label} — {res.get('claims_archived',0)} claims kept, archived")
             deleted.append(aid)
         except Exception as e:
             logger.warning("bulk delete failed for account %s: %s", aid, e)

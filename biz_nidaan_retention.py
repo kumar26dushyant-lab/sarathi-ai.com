@@ -49,9 +49,22 @@ async def _claim_doc_names(conn, claim_id: int) -> list[str]:
     return [r[0] for r in rows if r[0]]
 
 
+async def _purge_enabled() -> bool:
+    """OFF by default (founder, 1 Oct 2026: claims and their papers stay until he says delete).
+    Off also means no "your documents will be deleted" notice - we never announce a deletion
+    that is not going to happen. Fails closed: unreadable setting = off = nothing deleted."""
+    try:
+        import biz_nidaan as _n
+        return (await _n.get_ops_setting("lead_document_purge") or "0").strip() == "1"
+    except Exception:  # noqa: BLE001
+        return False
+
+
 async def run_lead_retention() -> dict:
     """One sweep: send pre-notices, then purge expired leads' documents.
     Idempotent — lead_notice_at / lead_purged_at gate each stage. Returns counts."""
+    if not await _purge_enabled():
+        return {"notified": 0, "purged": 0, "off": True}
     retention = _retention_days()
     notice = _notice_days()
     notice_after = max(0, retention - notice)  # send the heads-up at this age

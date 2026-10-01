@@ -93,6 +93,17 @@ async def run():
     if pend:
         await ck.mark_doc_received(cid, pend[0]["key"], via=ck.VIA_DASHBOARD, doc_id=doc_id)
 
+    # The purge is OFF by default since 1 Oct 2026 (founder: claims and papers stay until he
+    # says delete) - first prove that, then switch it on in-process to exercise the purge itself.
+    await _set_age(cid, 31)                      # old enough to be purged, if the purge were on
+    off = await ret.run_lead_retention()
+    results.append(("purge is off by default (nothing noticed or deleted)", off.get("off") is True
+                     and not await _col(cid, "lead_notice_at") and await _doc_count(cid) == 1))
+
+    async def _on():
+        return True
+    ret._purge_enabled = _on
+
     # ── Stage 1: age = 25 days (past notice@23, before purge@30) → pre-notice only
     await _set_age(cid, 25)
     await ret.run_lead_retention()
