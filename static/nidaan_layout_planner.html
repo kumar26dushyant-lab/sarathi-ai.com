@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ops Layout Planner</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f4f7fa; --card:#ffffff; --fg:#152238; --mut:#5a6b85; --line:#dfe6ef; --soft:#eef3f8;
+  --accent:#0f766e; --accent-fg:#ffffff; --accent-soft:#e3f4f1; --warn:#9a6a00; --warn-bg:#fff6e0;
+  --bin:#8a3b33; --bin-bg:#fdf0ef; --drop:#bfe8e1; --chosen:#166534; --chosen-bg:#e6f6ec;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0c1422; --card:#121c2e; --fg:#e6edf7; --mut:#9fb0c9; --line:#22314a; --soft:#18243a;
+    --accent:#2dd4bf; --accent-fg:#06302b; --accent-soft:#133a36; --warn:#f2c35b; --warn-bg:#2b2410;
+    --bin:#f0a59c; --bin-bg:#2c1615; --drop:#1f5f56; --chosen:#7ee2a8; --chosen-bg:#123020;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0c1422; --card:#121c2e; --fg:#e6edf7; --mut:#9fb0c9; --line:#22314a; --soft:#18243a;
+  --accent:#2dd4bf; --accent-fg:#06302b; --accent-soft:#133a36; --warn:#f2c35b; --warn-bg:#2b2410;
+  --bin:#f0a59c; --bin-bg:#2c1615; --drop:#1f5f56; --chosen:#7ee2a8; --chosen-bg:#123020;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--fg);font-family:'Inter',system-ui,-apple-system,sans-serif;line-height:1.5}
+button,input,select,textarea{font:inherit;color:inherit}
+.top{position:sticky;top:0;z-index:5;background:var(--accent);color:var(--accent-fg);padding:.75rem 1rem;display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
+.top b{font-family:'Poppins',sans-serif;font-size:1rem;flex:1}
+.top a,.top button{color:inherit;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.35);border-radius:999px;padding:.2rem .7rem;font-size:.8rem;font-weight:600;text-decoration:none;cursor:pointer}
+.wrap{max-width:1240px;margin:0 auto;padding:1rem 1rem 4rem}
+h1{font-family:'Poppins',sans-serif;font-size:1.35rem;margin-bottom:.25rem;text-wrap:balance}
+.sub{color:var(--mut);font-size:.9rem;max-width:70ch}
+.steps{display:flex;gap:.5rem;flex-wrap:wrap;margin:.8rem 0 1rem}
+.steps span{background:var(--card);border:1px solid var(--line);border-radius:999px;padding:.25rem .75rem;font-size:.8rem}
+.lay{display:grid;grid-template-columns:16rem 1fr;gap:1rem;align-items:start}
+@media (max-width:860px){.lay{grid-template-columns:1fr}}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:.8rem}
+.panel h2{font-size:.78rem;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);margin-bottom:.5rem}
+.prop{display:block;width:100%;text-align:left;background:none;border:1px solid var(--line);border-radius:9px;padding:.5rem .6rem;margin-bottom:.4rem;cursor:pointer}
+.prop[aria-current="true"]{border-color:var(--accent);background:var(--accent-soft)}
+.prop .t{font-weight:600;font-size:.86rem}
+.prop .m{font-size:.74rem;color:var(--mut)}
+.tag{display:inline-block;font-size:.66rem;font-weight:700;border-radius:999px;padding:.05rem .45rem;margin-left:.25rem}
+.tag.chosen{background:var(--chosen-bg);color:var(--chosen)}
+.tag.mine{background:var(--soft);color:var(--mut)}
+.btn{border:1px solid var(--line);background:var(--card);border-radius:9px;padding:.4rem .75rem;font-size:.84rem;font-weight:600;cursor:pointer}
+.btn.pri{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.btn:focus-visible,.prop:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.board{display:grid;grid-template-columns:repeat(auto-fill,minmax(15.5rem,1fr));gap:.8rem}
+.grp{background:var(--card);border:1px solid var(--line);border-radius:12px;display:flex;flex-direction:column;min-height:6rem}
+.grp.bin{background:var(--bin-bg);border-style:dashed}
+.ghd{display:flex;gap:.35rem;align-items:center;padding:.5rem .55rem;border-bottom:1px solid var(--line)}
+.ghd input{flex:1;min-width:0;border:1px solid transparent;background:transparent;border-radius:6px;padding:.2rem .35rem;font-weight:700;font-size:.9rem}
+.ghd input:hover,.ghd input:focus{border-color:var(--line);background:var(--soft)}
+.ghd .n{font-size:.72rem;color:var(--mut);white-space:nowrap}
+.ghd .x{border:none;background:none;color:var(--mut);cursor:pointer;font-size:.85rem;padding:.1rem .3rem}
+.list{padding:.45rem;display:flex;flex-direction:column;gap:.4rem;flex:1;min-height:3rem;border-radius:0 0 12px 12px}
+.list.over{background:var(--drop)}
+.blk{background:var(--soft);border:1px solid var(--line);border-radius:9px;padding:.45rem .5rem;cursor:grab}
+.blk.drag{opacity:.45}
+.blk .l{font-weight:600;font-size:.84rem}
+.blk .w{font-size:.74rem;color:var(--mut);margin:.1rem 0 .35rem}
+.blk .c{display:flex;gap:.3rem;align-items:center}
+.blk select{flex:1;min-width:0;font-size:.74rem;padding:.15rem .25rem;border:1px solid var(--line);border-radius:6px;background:var(--card)}
+.blk .mv{border:1px solid var(--line);background:var(--card);border-radius:6px;font-size:.74rem;padding:.1rem .4rem;cursor:pointer}
+.empty{font-size:.76rem;color:var(--mut);text-align:center;padding:.6rem}
+.save{margin-top:1rem;display:grid;gap:.5rem;grid-template-columns:1fr auto;align-items:start}
+@media (max-width:600px){.save{grid-template-columns:1fr}}
+.save input,.save textarea{width:100%;border:1px solid var(--line);border-radius:9px;padding:.45rem .6rem;background:var(--card)}
+.msg{font-size:.84rem;margin-top:.4rem;min-height:1.2em}
+.msg.bad{color:var(--bin)}
+.ro{background:var(--warn-bg);color:var(--warn);border-radius:9px;padding:.5rem .7rem;font-size:.82rem;margin-bottom:.7rem}
+.hi{display:none}
+body.lang-hi .en{display:none}
+body.lang-hi .hi{display:revert}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="top">
+  <b>NidaanPartner · <span class="en">Layout Planner</span><span class="hi">लेआउट प्लानर</span></b>
+  <button type="button" id="langBtn">हिंदी</button>
+  <a href="/nidaan/ops"><span class="en">Back to ops</span><span class="hi">ops पर वापस</span></a>
+</div>
+<div class="wrap">
+  <h1><span class="en">Arrange the ops menu</span><span class="hi">ops मेन्यू को सजाइये</span></h1>
+  <p class="sub"><span class="en">Every option in the ops menu is a block. Put each one in the group where you would look for it, rename groups, add a group, and move what nobody uses to <b>Not needed</b>. Save it under your name - the founder reviews everyone's and chooses one. Nothing changes in the real menu until then.</span><span class="hi">ops मेन्यू का हर विकल्प एक ब्लॉक है। हर ब्लॉक को उस समूह में रखिये जहाँ आप उसे ढूँढेंगे, समूहों के नाम बदलिये, नया समूह जोड़िये, और जो कोई इस्तेमाल नहीं करता उसे <b>ज़रूरी नहीं</b> में डालिये। अपने नाम से सेव कीजिये - फ़ाउंडर सबकी देखकर एक चुनेंगे। तब तक असली मेन्यू में कुछ नहीं बदलता।</span></p>
+  <div class="steps"><span class="en">1 · Drag a block, or use "Move to"</span><span class="hi">1 · ब्लॉक खींचिये, या "Move to" चुनिये</span><span class="en">2 · Name it and save</span><span class="hi">2 · नाम देकर सेव कीजिये</span><span class="en">3 · The founder chooses one</span><span class="hi">3 · फ़ाउंडर एक चुनेंगे</span></div>
+
+  <div id="gate" class="panel" hidden></div>
+  <div class="lay" id="app" hidden>
+    <aside class="panel">
+      <h2><span class="en">Layouts</span><span class="hi">लेआउट</span></h2>
+      <div id="props"></div>
+      <button class="btn" type="button" id="newBtn" style="width:100%;margin-top:.3rem"><span class="en">+ Start from today's menu</span><span class="hi">+ आज के मेन्यू से शुरू करें</span></button>
+    </aside>
+    <main>
+      <div id="ro" class="ro" hidden></div>
+      <div class="board" id="board"></div>
+      <button class="btn" type="button" id="addGrp" style="margin-top:.7rem"><span class="en">+ Add a group</span><span class="hi">+ नया समूह</span></button>
+      <div class="save" id="saveBox">
+        <div>
+          <input id="title" maxlength="80" placeholder="Name this layout, e.g. Ravi's office menu">
+          <textarea id="note" rows="2" maxlength="1000" placeholder="Why this way? (optional)" style="margin-top:.4rem"></textarea>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:.4rem">
+          <button class="btn pri" type="button" id="saveBtn"><span class="en">Save my layout</span><span class="hi">मेरा लेआउट सेव करें</span></button>
+          <button class="btn" type="button" id="chooseBtn" hidden><span class="en">Choose this one</span><span class="hi">इसे चुनें</span></button>
+        </div>
+      </div>
+      <div class="msg" id="msg"></div>
+    </main>
+  </div>
+</div>
+<script>
+(function(){
+  'use strict';
+  var TOKEN = ''; try { TOKEN = localStorage.getItem('nidaan_ops_token') || ''; } catch(e){}
+  var BLOCKS = {}, ORDER = [], ME = {}, PROPS = [], CUR = null, STATE = null, READONLY = false, DRAG = null;
+  var BIN = '__bin__';
+
+  function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function $(id){ return document.getElementById(id); }
+  function api(path, opts){
+    opts = opts || {};
+    opts.headers = Object.assign({'Authorization':'Bearer ' + TOKEN, 'Content-Type':'application/json'}, opts.headers || {});
+    return fetch('/nidaan/ops/api/layout' + path, opts);
+  }
+  function say(t, bad){ var m = $('msg'); m.textContent = t; m.className = 'msg' + (bad ? ' bad' : ''); }
+
+  // ── language ──
+  function lang(){ try { return localStorage.getItem('nidaan_lang') || 'en'; } catch(e){ return 'en'; } }
+  function applyLang(l){ var hi = (l||'').indexOf('hi') === 0; document.body.classList.toggle('lang-hi', hi);
+    document.documentElement.lang = hi ? 'hi' : 'en'; $('langBtn').textContent = hi ? 'English' : 'हिंदी'; }
+  applyLang(lang());
+  $('langBtn').onclick = function(){ var n = lang().indexOf('hi') === 0 ? 'en' : 'hi';
+    try { localStorage.setItem('nidaan_lang', n); } catch(e){} applyLang(n); };
+
+  // ── drawing ──
+  function groupsWithBin(){ return STATE.groups.concat([{name:'Not needed', blocks:STATE.not_needed, bin:true}]); }
+  function listOf(gi){ return gi === BIN ? STATE.not_needed : STATE.groups[gi].blocks; }
+
+  function render(){
+    var all = groupsWithBin(), html = '';
+    var moveOpts = STATE.groups.map(function(g, i){ return '<option value="' + i + '">' + esc(g.name) + '</option>'; }).join('')
+      + '<option value="' + BIN + '">Not needed</option>';
+    all.forEach(function(g, idx){
+      var gi = g.bin ? BIN : idx;
+      html += '<section class="grp' + (g.bin ? ' bin' : '') + '" data-g="' + gi + '">'
+        + '<div class="ghd">'
+        + (g.bin ? '<div style="flex:1;font-weight:700;font-size:.9rem;padding:.2rem .35rem">🗑️ Not needed</div>'
+                 : '<input aria-label="Group name" maxlength="40" value="' + esc(g.name) + '" data-rename="' + gi + '"' + (READONLY ? ' disabled' : '') + '>')
+        + '<span class="n">' + g.blocks.length + '</span>'
+        + (!g.bin && !READONLY && !g.blocks.length ? '<button class="x" title="Remove this empty group" data-delgrp="' + gi + '">✕</button>' : '')
+        + '</div><div class="list" data-list="' + gi + '">';
+      if (!g.blocks.length) html += '<div class="empty">' + (g.bin ? 'Drop blocks nobody needs here' : 'Drop blocks here') + '</div>';
+      g.blocks.forEach(function(id, bi){
+        var b = BLOCKS[id] || {label:id, what:''};
+        html += '<div class="blk" draggable="' + (!READONLY) + '" data-id="' + esc(id) + '">'
+          + '<div class="l">' + esc(b.label) + '</div><div class="w">' + esc(b.what) + '</div>'
+          + (READONLY ? '' : '<div class="c"><select aria-label="Move to group" data-move="' + esc(id) + '">'
+            + '<option value="">Move to…</option>' + moveOpts + '</select>'
+            + '<button class="mv" title="Up" data-up="' + esc(id) + '"' + (bi === 0 ? ' disabled' : '') + '>↑</button>'
+            + '<button class="mv" title="Down" data-down="' + esc(id) + '"' + (bi === g.blocks.length - 1 ? ' disabled' : '') + '>↓</button></div>')
+          + '</div>';
+      });
+      html += '</div></section>';
+    });
+    $('board').innerHTML = html;
+    $('addGrp').hidden = READONLY;
+    $('saveBox').hidden = READONLY && !(CUR && CUR.mine);
+  }
+
+  function findBlock(id){
+    for (var i = 0; i < STATE.groups.length; i++){
+      var k = STATE.groups[i].blocks.indexOf(id); if (k >= 0) return [i, k];
+    }
+    var b = STATE.not_needed.indexOf(id); return b >= 0 ? [BIN, b] : null;
+  }
+  function moveBlock(id, toG, toIdx){
+    var at = findBlock(id); if (!at) return;
+    listOf(at[0]).splice(at[1], 1);
+    var dest = listOf(toG);
+    if (toIdx == null || toIdx > dest.length) toIdx = dest.length;
+    dest.splice(toIdx, 0, id);
+    render();
+  }
+
+  // ── controls ──
+  $('board').addEventListener('change', function(e){
+    var t = e.target;
+    if (t.dataset.move && t.value !== ''){ moveBlock(t.dataset.move, t.value === BIN ? BIN : +t.value, null); }
+  });
+  $('board').addEventListener('input', function(e){
+    var t = e.target; if (t.dataset.rename != null){ STATE.groups[+t.dataset.rename].name = t.value.slice(0, 40); }
+  });
+  $('board').addEventListener('focusout', function(e){ if (e.target.dataset && e.target.dataset.rename != null) render(); });
+  $('board').addEventListener('click', function(e){
+    var t = e.target.closest('button'); if (!t) return;
+    if (t.dataset.up || t.dataset.down){
+      var id = t.dataset.up || t.dataset.down, at = findBlock(id); if (!at) return;
+      moveBlock(id, at[0], at[1] + (t.dataset.up ? -1 : 1));
+    } else if (t.dataset.delgrp != null){
+      STATE.groups.splice(+t.dataset.delgrp, 1); render();
+    }
+  });
+  $('addGrp').onclick = function(){
+    if (STATE.groups.length >= 15){ say('At most 15 groups.', true); return; }
+    STATE.groups.push({name:'New group', blocks:[]}); render();
+  };
+
+  // drag and drop (desktop); phones use "Move to" and the arrows
+  $('board').addEventListener('dragstart', function(e){
+    var b = e.target.closest('.blk'); if (!b || READONLY) return;
+    DRAG = b.dataset.id; b.classList.add('drag');
+    try { e.dataTransfer.setData('text/plain', DRAG); e.dataTransfer.effectAllowed = 'move'; } catch(x){}
+  });
+  $('board').addEventListener('dragend', function(e){
+    var b = e.target.closest('.blk'); if (b) b.classList.remove('drag');
+    document.querySelectorAll('.list.over').forEach(function(l){ l.classList.remove('over'); }); DRAG = null;
+  });
+  $('board').addEventListener('dragover', function(e){
+    var l = e.target.closest('.list'); if (!l || !DRAG) return;
+    e.preventDefault(); l.classList.add('over');
+  });
+  $('board').addEventListener('dragleave', function(e){ var l = e.target.closest('.list'); if (l && !l.contains(e.relatedTarget)) l.classList.remove('over'); });
+  $('board').addEventListener('drop', function(e){
+    var l = e.target.closest('.list'); if (!l || !DRAG) return;
+    e.preventDefault();
+    var g = l.dataset.list === BIN ? BIN : +l.dataset.list, idx = null;
+    var blocks = Array.prototype.slice.call(l.querySelectorAll('.blk'));
+    for (var i = 0; i < blocks.length; i++){
+      var r = blocks[i].getBoundingClientRect();
+      if (e.clientY < r.top + r.height / 2){ idx = i; break; }
+    }
+    var at = findBlock(DRAG);
+    if (at && at[0] === g && idx != null && idx > at[1]) idx -= 1;
+    moveBlock(DRAG, g, idx);
+  });
+
+  // ── layouts ──
+  function drawProps(){
+    $('props').innerHTML = PROPS.map(function(p){
+      return '<button class="prop" type="button" data-p="' + p.proposal_id + '" aria-current="' + (CUR && CUR.proposal_id === p.proposal_id) + '">'
+        + '<div class="t">' + esc(p.title) + (p.status === 'chosen' ? '<span class="tag chosen">Chosen</span>' : '')
+        + (p.mine ? '<span class="tag mine">Yours</span>' : '') + '</div>'
+        + '<div class="m">' + esc(p.staff_name) + ' · ' + esc(String(p.updated_at || '').slice(0, 16)) + '</div></button>';
+    }).join('') || '<div class="m" style="font-size:.8rem;color:var(--mut)">No layouts saved yet - be the first.</div>';
+  }
+  $('props').addEventListener('click', function(e){
+    var b = e.target.closest('.prop'); if (!b) return;
+    var p = PROPS.filter(function(x){ return String(x.proposal_id) === b.dataset.p; })[0]; if (!p) return;
+    open(p);
+  });
+  function open(p){
+    CUR = p; STATE = JSON.parse(JSON.stringify(p ? p.layout : DEFAULT));
+    READONLY = !!(p && !p.mine);
+    $('ro').hidden = !READONLY;
+    $('ro').innerHTML = READONLY ? (esc(p.staff_name) + "'s layout - you can look, not change it. "
+      + '<button class="btn" type="button" id="copyBtn">Copy it to start mine</button>') : '';
+    if (READONLY) $('copyBtn').onclick = function(){ CUR = null; READONLY = false; $('ro').hidden = true;
+      $('title').value = ''; $('note').value = ''; render(); drawProps(); say('Copied - change it and save it as yours.'); };
+    $('title').value = p && p.mine ? p.title : '';
+    $('note').value = p && p.mine ? (p.note || '') : '';
+    $('chooseBtn').hidden = !(ME.role === 'super_admin' && p && p.status !== 'chosen');
+    render(); drawProps(); say('');
+  }
+  $('newBtn').onclick = function(){ open(null); };
+  $('chooseBtn').onclick = async function(){
+    if (!CUR || !confirm('Choose "' + CUR.title + '" as the layout to build the menu from?')) return;
+    var r = await api('/proposals/' + CUR.proposal_id + '/choose', {method:'POST'});
+    var d = await r.json().catch(function(){ return {}; });
+    if (!r.ok){ say(d.detail || 'Could not choose it.', true); return; }
+    say('Chosen. The menu will be rebuilt from it after review.'); load(CUR.proposal_id);
+  };
+  $('saveBtn').onclick = async function(){
+    var title = ($('title').value || '').trim();
+    if (!title){ say('Give your layout a name first.', true); $('title').focus(); return; }
+    var body = {title: title, note: ($('note').value || '').trim(), layout: STATE};
+    if (CUR && CUR.mine) body.proposal_id = CUR.proposal_id;
+    var r = await api('/proposals', {method:'POST', body: JSON.stringify(body)});
+    var d = await r.json().catch(function(){ return {}; });
+    if (!r.ok){ say(d.detail || 'Could not save it.', true); return; }
+    say('Saved. Everyone can see it now.'); load(d.proposal_id);
+  };
+
+  var DEFAULT = null;
+  async function load(openId){
+    var r;
+    try { r = await api(''); } catch(e){ r = null; }
+    if (!r || r.status === 401 || r.status === 403){
+      $('gate').hidden = false; $('app').hidden = true;
+      $('gate').innerHTML = 'Please <a href="/nidaan/ops">sign in to ops</a> first, then open this page again.';
+      return;
+    }
+    var d = await r.json();
+    ME = d.me || {}; BLOCKS = {}; ORDER = [];
+    (d.blocks || []).forEach(function(b){ BLOCKS[b.id] = b; ORDER.push(b.id); });
+    DEFAULT = d.current; PROPS = d.proposals || [];
+    $('gate').hidden = true; $('app').hidden = false;
+    var p = openId ? PROPS.filter(function(x){ return x.proposal_id === openId; })[0] : null;
+    open(p || null);
+  }
+  load();
+})();
+</script>
+</body>
+</html>

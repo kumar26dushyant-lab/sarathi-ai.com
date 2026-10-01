@@ -69,6 +69,7 @@ details>summary{cursor:pointer}
 .nav-chev{font-size:.7rem}
 .nav-group.collapsed{display:none}
 .nav-item.nav-sub{padding-left:2.1rem;font-size:.8rem;font-weight:500}
+.nd-ghost, .nd-ghost *{animation:none!important;transition:none!important}
 .nav-item.nav-sub2{padding-left:2.9rem;font-size:.78rem;font-weight:500}
 .nav-late{margin-left:auto;font-size:.66rem;font-weight:700;color:var(--nd-danger-text);white-space:nowrap}
 .nav-late + .nav-cnt{margin-left:.35rem}
@@ -639,6 +640,7 @@ async function _ndSilentRefresh(){
   _ndSilentPending = false;
   _ndSilentBusy = true;
   const y = window.scrollY;
+  const mainEl = document.querySelector('.main'), my = mainEl ? mainEl.scrollTop : 0;
   // Scroll positions inside the panel (tables, the Level-2 rail and list), by position in the tree.
   const boxes = Array.from(panel.querySelectorAll('.table-wrap, .l2rail, .l2main, .cb-list, .board, .dcol'));
   const scr = boxes.map(function(b){ return [b.scrollTop, b.scrollLeft]; });
@@ -667,6 +669,7 @@ async function _ndSilentRefresh(){
     panel.style.display = (_currentPanel === id) ? '' : 'none';
     ghost.remove();
     window.scrollTo(0, y);
+    if (mainEl) mainEl.scrollTop = my;     // the page scrolls inside .main
     const nb = Array.from(panel.querySelectorAll('.table-wrap, .l2rail, .l2main, .cb-list, .board, .dcol'));
     nb.forEach(function(b, i){ if (scr[i]){ b.scrollTop = scr[i][0]; b.scrollLeft = scr[i][1]; } });
     _ndSilentBusy = false;
@@ -5128,7 +5131,7 @@ async function loadBranches() {
       <td style="text-align:center;font-size:.78rem">${(b.share_pct||0)}%${_role==='super_admin'?` <a href="#" onclick="setBranchShare('${esc(b.branch_code)}',${b.share_pct||0});return false" style="color:var(--nd-cyan-text);font-size:.7rem">edit</a>`:''}</td>
       <td style="text-align:right;font-size:.78rem;color:var(--nd-warning-text)">₹${fmt(b.share||0)}</td>
       <td><span style="font-size:.7rem;font-weight:700;color:${active?'var(--nd-success-text)':'#fca5a5'}">${b.status}</span></td>
-      <td style="white-space:nowrap">${(_role==='super_admin'||_role==='sub_super_admin')?`<button class="btn-sm btn-ghost" style="color:var(--nd-cyan-text)" onclick="impersonateBranch('${esc(b.branch_code)}')" title="See inside this Authorized Partner's own dashboard (audited)">↪ Enter</button> `:''}<button class="btn-sm btn-ghost" onclick="toggleBranch('${esc(b.branch_code)}','${active?'disabled':'active'}')">${active?'Disable':'Enable'}</button></td>
+      <td style="white-space:nowrap">${(_role==='super_admin'||_role==='sub_super_admin')?`<button class="btn-sm btn-ghost" style="color:var(--nd-cyan-text)" onclick="impersonateBranch('${esc(b.branch_code)}')" title="See inside this Authorized Partner's own dashboard (audited)">↪ Enter</button> `:''}<button class="btn-sm btn-ghost" style="color:var(--nd-cyan-text)" onclick="editBranchIdentity('${esc(b.branch_code)}')">✏️ Edit</button> <button class="btn-sm btn-ghost" onclick="toggleBranch('${esc(b.branch_code)}','${active?'disabled':'active'}')">${active?'Disable':'Enable'}</button></td>
     </tr>`;}).join('');
   document.getElementById('branchTableWrap').innerHTML = `
     <div class="table-wrap"><table>
@@ -5165,11 +5168,17 @@ function editBranchIdentity(code){
   const b = _apList.find(x=>x.branch_code===code); if (!b) return;
   const opts = '<option value="">Choose…</option>' + _apStates.map(s=>`<option value="${esc(s.code)}"${s.code===b.state?' selected':''}>${esc(s.en)} (${esc(s.code)})</option>`).join('');
   const lbl = 'font-size:.75rem;color:var(--nd-text-muted);display:block;margin:.6rem 0 .2rem';
-  openModal('Authorized Partner '+code+' - details', `
+  const isSA = (_role === 'super_admin');
+  openModal('Edit Authorized Partner ' + code, `
+    <div style="font-size:.75rem;color:var(--nd-text-muted)">The code <b>${esc(code)}</b> cannot change - it is on every referral link and every claim this partner brought.</div>
     <label style="${lbl}">Person's name (signs the messages)</label><input id="apiPerson" maxlength="80" value="${esc(b.contact_person||'')}" style="width:100%">
     <label style="${lbl}">City</label><input id="apiCity" maxlength="60" value="${esc(b.city||'')}" style="width:100%">
     <label style="${lbl}">State</label><select id="apiState" style="width:100%">${opts}</select>
     <label style="${lbl}">Office name (shown to staff)</label><input id="apiName" maxlength="80" value="${esc(b.name||'')}" style="width:100%">
+    <label style="${lbl}">Login &amp; alert email (how the partner signs in)</label><input id="apiEmail" type="email" maxlength="120" value="${esc(b.contact_email||'')}" style="width:100%">
+    <label style="${lbl}">WhatsApp number (10 digits)</label><input id="apiPhone" inputmode="numeric" maxlength="13" value="${esc(b.contact_phone||'')}" style="width:100%">
+    ${isSA ? `<label style="${lbl}">Profit share % (0-100)</label><input id="apiShare" type="number" min="0" max="100" step="0.01" value="${esc(String(b.share_pct||0))}" style="width:100%">` : ''}
+    <label style="${lbl}">Status</label><select id="apiStatus" style="width:100%"><option value="active"${b.status==='active'?' selected':''}>Active</option><option value="disabled"${b.status!=='active'?' selected':''}>Disabled (cannot log in; messages keep the team sign-off)</option></select>
     <div style="${lbl}">Messages about this partner's claims will end with:</div>
     <div id="apiPreview" style="background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:8px;padding:.6rem .75rem;font-size:.85rem"></div>`,
     [{label:'Save', cls:'btn-primary', fn: saveBranchIdentity.bind(null, code)}, {label:'Cancel', cls:'btn-ghost', fn: closeModal}]);
@@ -5183,8 +5192,21 @@ async function saveBranchIdentity(code){
   const body = {contact_person:(document.getElementById('apiPerson').value||'').trim(),
                 city:(document.getElementById('apiCity').value||'').trim(),
                 state:document.getElementById('apiState').value||'',
-                name:(document.getElementById('apiName').value||'').trim()};
+                name:(document.getElementById('apiName').value||'').trim(),
+                contact_email:(document.getElementById('apiEmail').value||'').trim(),
+                contact_phone:(document.getElementById('apiPhone').value||'').trim(),
+                status:document.getElementById('apiStatus').value||'active'};
+  const sh = document.getElementById('apiShare');
+  if (sh){
+    const v = parseFloat(sh.value);
+    if (isNaN(v) || v < 0 || v > 100){ alert('Profit share must be between 0 and 100.'); return; }
+    body.share_pct = v;
+  }
   if (!body.city){ alert('City is required.'); return; }
+  if (body.contact_email && body.contact_email.indexOf('@') < 1){ alert('That email does not look right.'); return; }
+  const b0 = _apList.find(x=>x.branch_code===code) || {};
+  if (body.status !== (b0.status||'active') && body.status === 'disabled'
+      && !confirm('Disable ' + code + '? The partner will be logged out and cannot sign in until enabled again.')) return;
   const r = await API('/branches/'+encodeURIComponent(code), {method:'PATCH', body: JSON.stringify(body)});
   if (!r.ok){ const d=await r.json().catch(()=>({})); alert(d.detail||'Could not save the details.'); return; }
   closeModal();
@@ -13822,7 +13844,7 @@ async function loadWhatsapp(){
 `;
   // Campaigns are a super-admin screen; asking for the list as anybody else is a guaranteed 403.
   if (d.can_configure) waLoadCampaigns();
-  waiLoadList().then(function(){ if (_waiSel) waiOpen(_waiSel); });
+  waiLoadList().then(function(){ if (_waiSel && !document.getElementById('waiMsgs')) waiOpen(_waiSel); });
   waiStartPoll();
   // Files that came in on WhatsApp and matched no claim - kept, to be filed by a person.
   const _hdr = panel.querySelector('.section-hdr');
@@ -20366,6 +20388,39 @@ const _WAI_SENDER = {
 };
 
 let _waiOnDuty = false, _waiMayReply = false;
+// PAINT ONLY WHAT CHANGED (founder, 1 Oct: "why our app flicker?"). A refresh that rebuilds a
+// list with the same content is what made screens blink. Compared against the markup we last
+// painted (not el.innerHTML - the browser rewrites that), and when it did change, the scroll
+// position, the focused box and what was typed in it survive the repaint.
+function ndPaint(el, html){
+  if (!el) return false;
+  if (el._ndHtml === html) return false;
+  const main = document.querySelector('.main'), my = main ? main.scrollTop : 0;
+  const scrolled = [el].concat(Array.from(el.querySelectorAll('[data-keep-scroll]')));
+  const pos = scrolled.map(function(b){ return [b.getAttribute('data-keep-scroll') || '', b.scrollTop, b.scrollHeight - b.clientHeight - b.scrollTop]; });
+  const a = document.activeElement;
+  const aid = (a && a.id && el.contains(a)) ? a.id : '';
+  const av = aid && ('value' in a) ? a.value : null;
+  let sel = null; try { if (aid) sel = [a.selectionStart, a.selectionEnd]; } catch(e){}
+  el.innerHTML = html;
+  el._ndHtml = html;
+  pos.forEach(function(p, i){
+    const b = i === 0 ? el : el.querySelector('[data-keep-scroll="' + p[0] + '"]');
+    if (!b) return;
+    // A conversation that was at its newest message stays there; otherwise the reader stays put.
+    b.scrollTop = (p[0] === 'bottom' && p[2] < 40) ? b.scrollHeight : p[1];
+  });
+  if (main) main.scrollTop = my;
+  if (aid){
+    const n = document.getElementById(aid);
+    if (n){
+      if (av != null && 'value' in n && !n.value) n.value = av;
+      try { n.focus({preventScroll:true}); if (sel) n.setSelectionRange(sel[0], sel[1]); } catch(e){}
+    }
+  }
+  return true;
+}
+
 async function waiLoadList(keepSel){
   _waiStyles();
   const el = document.getElementById('waiList'); if(!el) return;
@@ -20377,15 +20432,15 @@ async function waiLoadList(keepSel){
   _waiOnDuty = !!d.on_duty; _waiMayReply = !!d.may_reply;
   const list = d.conversations || [], k = d.counters || {};
   const ct = document.getElementById('waiCounts');
-  if (ct) ct.innerHTML =
+  if (ct) ndPaint(ct,
       '<span style="color:var(--nd-warning-text);font-weight:700">'+(k.unread||0)+' waiting for a reply</span> · '
     + '<span style="color:var(--nd-purple-text)">'+(k.with_human||0)+' with a person</span> · '
-    + '<span style="color:var(--nd-text-muted)">'+(k.total||0)+' total</span>';
+    + '<span style="color:var(--nd-text-muted)">'+(k.total||0)+' total</span>');
   if (!list.length){
-    el.innerHTML = '<div style="padding:1.2rem;font-size:.82rem;color:var(--nd-text-faint);text-align:center">No conversations here yet.</div>';
+    ndPaint(el, '<div style="padding:1.2rem;font-size:.82rem;color:var(--nd-text-faint);text-align:center">No conversations here yet.</div>');
     return;
   }
-  el.innerHTML = list.map(function(c){
+  ndPaint(el, list.map(function(c){
     const nm = _waiName(c);
     const owner = c.bot_paused
       ? '<span class="wai-badge wai-b-hum">With '+esc((c.assigned_name||'a person').split(' ')[0])+'</span>'
@@ -20406,18 +20461,21 @@ async function waiLoadList(keepSel){
       +   '<div class="wai-pv">'+dir+esc(c.preview||'—')+'</div>'
       +   '<div style="margin-top:.3rem;display:flex;gap:.3rem;flex-wrap:wrap">'+owner+ver+stop+claim+'</div>'
       + '</div></div>';
-  }).join('');
+  }).join(''));
   if (!keepSel && !_waiSel && list.length && window.innerWidth > 820) waiOpen(list[0].msisdn);
 }
 
-async function waiOpen(msisdn){
+async function waiOpen(msisdn, quiet){
+  const same = (_waiSel === msisdn) && !!document.getElementById('waiMsgs');
   _waiSel = msisdn;
-  const grid = document.getElementById('waiGrid'); if (grid) grid.dataset.view = 'thread';
+  // A refresh never moves you: on a phone, Back means back - the poll used to throw you into
+  // the conversation again every 25 seconds.
+  const grid = document.getElementById('waiGrid'); if (grid && !quiet) grid.dataset.view = 'thread';
   const el = document.getElementById('waiThread'); if(!el) return;
-  el.innerHTML = '<div style="padding:1.5rem;color:var(--nd-text-muted);font-size:.85rem">Opening…</div>';
+  if (!same){ el.innerHTML = '<div style="padding:1.5rem;color:var(--nd-text-muted);font-size:.85rem">Opening…</div>'; el._ndHtml = null; }
   let d = {};
   try{ const r = await API('/wa/thread/'+encodeURIComponent(msisdn)); if(!r.ok) throw 0; d = await r.json(); }
-  catch(e){ el.innerHTML = '<div style="padding:1.5rem;color:var(--nd-danger-text);font-size:.85rem">Could not open this conversation.</div>'; return; }
+  catch(e){ if (!same) el.innerHTML = '<div style="padding:1.5rem;color:var(--nd-danger-text);font-size:.85rem">Could not open this conversation.</div>'; return; }
   const c = d.contact||{}, id = d.identity||{}, w = c.window||{};
   const nm = (id.name||'').trim() || _waiName(c);
   const isHuman = !!c.bot_paused;
@@ -20465,7 +20523,8 @@ async function waiOpen(msisdn){
     : '<span class="wai-badge wai-b-bot" style="padding:.25rem .6rem">The AI is replying</span>'
       + '<button class="btn-sm btn-ghost" style="color:var(--nd-purple-text)" onclick="waiOwner(true)">I will take over</button>';
 
-  el.innerHTML =
+  const typed = same ? ((document.getElementById('waiBox') || {}).value || '') : '';
+  ndPaint(el,
       '<div style="padding:.7rem .9rem;border-bottom:1px solid var(--nd-border);display:flex;gap:.6rem;align-items:center;flex-wrap:wrap">'
     +   '<button class="btn-sm btn-ghost wai-back" onclick="waiBack()">← Back</button>'
     +   '<div style="flex:1;min-width:150px">'
@@ -20477,7 +20536,7 @@ async function waiOpen(msisdn){
     +   ownerBar
     + '</div>'
     + _waiContext(d.context||{}, id)
-    + '<div class="wai-msgs" id="waiMsgs">'+bubbles+'</div>'
+    + '<div class="wai-msgs" id="waiMsgs" data-keep-scroll="bottom">'+bubbles+'</div>'
     + '<div style="padding:.7rem .9rem;border-top:1px solid var(--nd-border);display:flex;flex-direction:column;gap:.5rem">'
     +   verifyNote
     +   windowNote
@@ -20492,8 +20551,11 @@ async function waiOpen(msisdn){
     +     '<button class="btn btn-primary" '+(canType?'':'disabled')+' onclick="waiSend(this)">Send</button>'
     +   '</div>'
     +   '<div id="waiMsg" style="font-size:.78rem"></div>'
-    + '</div>';
-  const box = document.getElementById('waiMsgs'); if (box) box.scrollTop = box.scrollHeight;
+    + '</div>');
+  // Never lose what somebody was typing to a refresh.
+  const tb = document.getElementById('waiBox'); if (tb && typed && !tb.value) tb.value = typed;
+  // A newly opened conversation starts at its newest message; a refresh keeps the reader's place.
+  if (!same){ const box = document.getElementById('waiMsgs'); if (box) box.scrollTop = box.scrollHeight; }
   waiLoadList(true);
 }
 
@@ -20567,7 +20629,7 @@ async function waiOwner(human){
   if(!confirm(q)) return;
   try{
     const r = await API('/wa/thread/'+encodeURIComponent(_waiSel)+'/owner', {method:'POST', body: JSON.stringify({human: !!human})});
-    if(r.ok){ ndUI.toast(human?'You are handling this conversation.':'Handed back to the AI.','success'); waiOpen(_waiSel); }
+    if(r.ok){ ndUI.toast(human?'You are handling this conversation.':'Handed back to the AI.','success'); waiOpen(_waiSel, true); }
     else { const e = await r.json().catch(function(){return {};}); ndUI.toast(e.detail||'Could not change who is handling it.','error'); }
   }catch(e){ ndUI.toast('Could not change who is handling it.','error'); }
 }
@@ -20581,7 +20643,7 @@ async function waiSend(btn){
   m.style.color = 'var(--nd-text-faint)'; m.textContent = '';
   try{
     const r = await API('/wa/thread/'+encodeURIComponent(_waiSel)+'/reply', {method:'POST', body: JSON.stringify({text: text})});
-    if(r.ok){ box.value=''; await waiOpen(_waiSel); }
+    if(r.ok){ box.value=''; await waiOpen(_waiSel, true); }
     else { const e = await r.json().catch(function(){return {};}); m.style.color='var(--nd-danger-text)'; m.textContent = e.detail || 'Could not send.'; }
   }catch(e){ m.style.color='var(--nd-danger-text)'; m.textContent='Could not send.'; }
   finally{ _waiBusy=false; btn.disabled=false; btn.textContent=orig; }
@@ -20596,8 +20658,8 @@ function waiStartPoll(){
     if(!p || p.style.display==='none' || !document.getElementById('waiList')){ waiStopPoll(); return; }
     if(document.hidden) return;
     const box = document.getElementById('waiBox');
-    if(box && (box.value||'').trim()){ waiLoadList(true); return; }   // never wipe a half-typed reply
-    if(_waiSel && document.getElementById('waiMsgs')) waiOpen(_waiSel);  // reloads the list too
+    if(box && ((box.value||'').trim() || document.activeElement === box)){ waiLoadList(true); return; }   // never disturb someone typing
+    if(_waiSel && document.getElementById('waiMsgs')) waiOpen(_waiSel, true);  // silent; reloads the list too
     else waiLoadList(true);
   }, 25000);
 }

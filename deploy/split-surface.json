@@ -133,6 +133,7 @@
   "_GstReq",
   "_HandoverReq",
   "_IMAGE_EXTS",
+  "_LayoutSaveReq",
   "_LeaveCreateReq",
   "_LeaveDecisionReq",
   "_MAX_DOCS_PER_CLAIM",
@@ -8456,6 +8457,97 @@
    ],
    "uses": [
     "_is_nidaan_host",
+    "_require_staff",
+    "app"
+   ]
+  },
+  {
+   "func": "ops_layout_planner_page",
+   "paths": [
+    "/nidaan/ops/layout-planner"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_PAGE_ETAG",
+    "_etag_matches",
+    "_is_nidaan_host",
+    "_nidaan_page",
+    "_page_etag",
+    "app",
+    "static_dir"
+   ],
+   "uses": [
+    "_is_nidaan_host",
+    "_nidaan_page",
+    "app"
+   ]
+  },
+  {
+   "func": "ops_layout_get",
+   "paths": [
+    "/nidaan/ops/api/layout"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_get_staff_from_request",
+    "_is_nidaan_host",
+    "_require_staff",
+    "_row_still_open",
+    "_staff_still_active",
+    "app"
+   ],
+   "uses": [
+    "_is_nidaan_host",
+    "_require_staff",
+    "app"
+   ]
+  },
+  {
+   "func": "ops_layout_save",
+   "paths": [
+    "/nidaan/ops/api/layout/proposals"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_LayoutSaveReq",
+    "_actor_label",
+    "_get_staff_from_request",
+    "_is_nidaan_host",
+    "_require_staff",
+    "_row_still_open",
+    "_staff_still_active",
+    "app",
+    "limiter"
+   ],
+   "uses": [
+    "_LayoutSaveReq",
+    "_actor_label",
+    "_is_nidaan_host",
+    "_require_staff",
+    "app",
+    "limiter"
+   ]
+  },
+  {
+   "func": "ops_layout_choose",
+   "paths": [
+    "/nidaan/ops/api/layout/proposals/{proposal_id}/choose"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_actor_label",
+    "_get_staff_from_request",
+    "_is_nidaan_host",
+    "_ops_audit",
+    "_require_staff",
+    "_row_still_open",
+    "_staff_still_active",
+    "app"
+   ],
+   "uses": [
+    "_actor_label",
+    "_is_nidaan_host",
+    "_ops_audit",
     "_require_staff",
     "app"
    ]
@@ -19027,6 +19119,10 @@
   "ops_impersonate_branch",
   "ops_impersonate_staff",
   "ops_l2_pending_handover",
+  "ops_layout_choose",
+  "ops_layout_get",
+  "ops_layout_planner_page",
+  "ops_layout_save",
   "ops_leave_cancel",
   "ops_leave_create",
   "ops_leave_decide",

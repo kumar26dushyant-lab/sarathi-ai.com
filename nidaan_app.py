@@ -10587,7 +10587,7 @@ async def ops_create_branch(body: OpsBranchCreate, request: Request):
 class OpsBranchUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     status: Optional[str] = None          # active | disabled
-    contact_email: Optional[str] = None
+    contact_email: Optional[str] = Field(None, max_length=120)
     contact_phone: Optional[str] = Field(None, max_length=20)  # WhatsApp number for claim updates
     share_pct: Optional[float] = Field(None, ge=0, le=100)   # profit-share % (super-admin only)
     name: Optional[str] = Field(None, max_length=80)
@@ -11924,6 +11924,64 @@ async def ops_ui_usage(request: Request, days: int = 14):
     _require_staff(request, "super_admin")
     import biz_nidaan_usage as _use
     return {"days": max(1, min(int(days), 90)), "screens": await _use.report(max(1, min(int(days), 90)))}
+
+
+# ── Layout Planner (founder, 1 Oct): the team arranges the ops menu block by block ──────────────
+# The page is served to anyone (it holds no data); every API call needs a signed-in staff member.
+@app.get("/nidaan/ops/layout-planner", response_class=HTMLResponse)
+async def ops_layout_planner_page(request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    return _nidaan_page("nidaan_layout_planner.html", request)
+
+
+@app.get("/nidaan/ops/api/layout")
+async def ops_layout_get(request: Request):
+    """The blocks, today's menu, and everyone's saved layouts."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_nav as _nav
+    return {"blocks": _nav.blocks(), "current": _nav.current_layout(),
+            "proposals": await _nav.proposals(caller.get("staff_id")),
+            "me": {"staff_id": caller.get("staff_id"), "role": caller.get("role")}}
+
+
+class _LayoutSaveReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    proposal_id: Optional[int] = Field(None, ge=1)
+    title: str = Field(..., min_length=1, max_length=80)
+    note: str = Field("", max_length=1000)
+    layout: dict
+
+
+@app.post("/nidaan/ops/api/layout/proposals")
+@limiter.limit("30/minute")
+async def ops_layout_save(body: _LayoutSaveReq, request: Request):
+    """Save MY layout (a new one, or change one of mine before it is chosen)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_nav as _nav
+    res = await _nav.save_proposal({"staff_id": caller.get("staff_id"), "name": _actor_label(caller)},
+                                   body.title, body.note, body.layout, body.proposal_id)
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "Could not save it")
+    return res
+
+
+@app.post("/nidaan/ops/api/layout/proposals/{proposal_id}/choose")
+async def ops_layout_choose(proposal_id: int, request: Request):
+    """The founder's choice: the layout the menu will be rebuilt from, after review."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "super_admin")
+    import biz_nidaan_nav as _nav
+    res = await _nav.choose(proposal_id, _actor_label(caller))
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "Could not choose it")
+    await _ops_audit(request, "layout.choose", "layout", str(proposal_id), "menu layout chosen")
+    return res
 
 
 class OpsSupportRepReq(BaseModel):
