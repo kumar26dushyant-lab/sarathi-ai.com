@@ -10817,7 +10817,7 @@ async function loadHealth() {
     </div>`:''}
 
     <div style="margin-bottom:1.25rem">
-      <div class="section-hdr" style="margin-bottom:.55rem"><div class="section-title" style="font-size:1rem">Service Checks</div>${d.errors_recent>0?`<span style="font-size:.78rem;color:var(--nd-danger-text)">⚠️ ${d.errors_recent} recent error log(s)</span>`:'<span style="font-size:.78rem;color:var(--nd-success-text)">No recent errors</span>'}</div>
+      <div class="section-hdr" style="margin-bottom:.55rem"><div class="section-title" style="font-size:1rem">Service Checks</div>${d.errors_recent>0?`<span style="font-size:.78rem;color:var(--nd-danger-text)">⚠️ ${d.errors_recent} error(s) since the last restart</span>`:'<span style="font-size:.78rem;color:var(--nd-success-text)">No errors since the last restart</span>'}${d.warnings_recent>0?`<span style="font-size:.74rem;color:var(--nd-text-faint);margin-left:.5rem">· ${d.warnings_recent} warning(s) — slow pages and the like, not failures</span>`:''}</div>
       <div class="stats-row">${checks||'<div class="stat-card"><div class="sl">No checks</div></div>'}</div>
     </div>
 

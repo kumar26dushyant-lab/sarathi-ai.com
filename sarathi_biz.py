@@ -13957,9 +13957,20 @@ async def _subsystem_checks() -> list:
         else:
             async with aiosqlite.connect(nidaan.DB_PATH) as _wc:
                 _wc.row_factory = aiosqlite.Row
-                _in = [dict(r) for r in await (await _wc.execute(
-                    "SELECT msisdn, created_at FROM nidaan_wa_messages WHERE direction='in' "
+                _rows = [dict(r) for r in await (await _wc.execute(
+                    "SELECT msisdn, created_at, body FROM nidaan_wa_messages WHERE direction='in' "
                     "AND created_at >= datetime('now','-24 hours') ORDER BY created_at")).fetchall()]
+                # PER PERSON, not per message (1 Oct): the bot now deliberately stays quiet on
+                # a chat a person holds, after its three "we will reach out" messages, and on a
+                # phone's automatic reply. What must hold is that everybody who wrote was answered
+                # - so take each person's first real message and ask whether a reply followed.
+                import biz_nidaan_wa_autoreply as _wauto
+                _first = {}
+                for _m in _rows:
+                    if _wauto.reads_automatic(_m.get("body") or ""):
+                        continue
+                    _first.setdefault(_m["msisdn"], _m)
+                _in = list(_first.values())
                 _unans = 0
                 for _m in _in:
                     _r = await (await _wc.execute(
@@ -13982,12 +13993,12 @@ async def _subsystem_checks() -> list:
                 # Some answered, some not. The connection is fine and messages are going out;
                 # this is a queue, and it belongs on the WhatsApp automation screen, not here.
                 _chk("WhatsApp bot replies", True,
-                     "working — %d of %d answered within 15 min; %d still waiting"
+                     "working — %d of %d people who wrote got a reply within 15 min; %d did not"
                      % (len(_in) - _unans, len(_in), _unans),
                      level="attention", where="WhatsApp automation")
             elif _in:
                 _chk("WhatsApp bot replies", True,
-                     "%d inbound in 24h, every one answered" % len(_in))
+                     "%d people wrote in 24h, every one got a reply" % len(_in))
             else:
                 # Nobody wrote. Not a fault - but say when somebody last did, so a week of
                 # silence is visible as a week of silence rather than as "fine".
@@ -14133,7 +14144,7 @@ async def _subsystem_checks() -> list:
         # A missing phone number is a record to complete, not a system that is down. It stays
         # visible - it is why a complainant never hears from us - but amber, and it says where.
         _chk("Contact reachability", True,
-             (f"{_nob} branch(es) without WhatsApp, {_noc} claim(s) with no phone at all"
+             (f"{_nob} Authorized Partner(s) without WhatsApp, {_noc} claim(s) with no phone at all"
               if (_nob + _noc) else "every Authorized Partner and claim has a contact"),
              level=("attention" if (_nob + _noc) else "ok"),
              where="Authorized Partners · Claims")
@@ -14277,7 +14288,7 @@ async def _login_checks() -> list:
              "all %d active Authorized Partners have an email or a mobile" % total if not stranded
              else "%d of %d Authorized Partners have NEITHER an email nor a mobile and cannot log in at "
                   "all: %s" % (len(stranded), total, ", ".join(stranded[:8])),
-             level=("attention" if stranded else "ok"), where="Branches")
+             level=("attention" if stranded else "ok"), where="Authorized Partners")
         # Email is the only channel most branches have today; the founder's plan is to make
         # WhatsApp primary once every branch has a mobile on file, so track the gap.
         _chk("Authorized Partner login — WhatsApp fallback", bool(with_phone),
@@ -14512,7 +14523,10 @@ async def ops_health(request: Request):
     health["attention"] = [{"name": c["name"], "note": c.get("note", ""),
                             "where": c.get("where", "")}
                            for c in checks if c.get("level") == "attention"]
-    health["errors_recent"] = len(_ERROR_RING)
+    # Real errors and warnings, apart. Every slow page is a WARNING, so counting warnings as
+    # "errors" kept this line red all the time (founder, 1 Oct: "shows errors everytime").
+    health["errors_recent"] = sum(1 for _e in _ERROR_RING if _e.get("level") in ("ERROR", "CRITICAL"))
+    health["warnings_recent"] = sum(1 for _e in _ERROR_RING if _e.get("level") == "WARNING")
     health["system"] = _system_metrics()
     health["latency"] = _latency_stats()
     return health
