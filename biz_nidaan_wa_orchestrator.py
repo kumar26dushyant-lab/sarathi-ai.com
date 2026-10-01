@@ -772,6 +772,18 @@ async def _capture_case_email(claim_id, text: str, lang: str, msisdn: str) -> di
                                         by="complainant (WhatsApp)")
         except Exception:
             pass
+    if saved:
+        # The password is on the claim now; the chat copy of the message keeps everything but it,
+        # so it is not in the inbox, its preview, or the history the AI reads later.
+        try:
+            async with aiosqlite.connect(DB_PATH) as _c:
+                await _c.execute(
+                    "UPDATE nidaan_wa_messages SET body=REPLACE(body, ?, '••••••••') WHERE msisdn=? "
+                    "AND direction='in' AND INSTR(body, ?)>0 AND INSTR(body, ?)>0 "
+                    "AND created_at >= datetime('now','-1 day')", (pwd, msisdn, pwd, email))
+                await _c.commit()
+        except Exception as e:  # noqa: BLE001
+            logger.warning("could not hide the password in the chat copy (claim %s): %s", claim_id, e)
     # The password never goes into the summary line - a claim's own timeline is read by everybody.
     if saved and correcting:
         note = ("Complainant CORRECTED the case email on WhatsApp — now %s (it was %s). "

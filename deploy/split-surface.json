@@ -5051,6 +5051,7 @@
     "_actor_label",
     "_get_staff_from_request",
     "_is_nidaan_host",
+    "_ops_audit",
     "_require_staff",
     "_row_still_open",
     "_staff_still_active",
@@ -5061,6 +5062,7 @@
     "_BucketFieldReq",
     "_actor_label",
     "_is_nidaan_host",
+    "_ops_audit",
     "_require_staff",
     "app",
     "limiter"

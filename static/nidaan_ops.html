@@ -16875,6 +16875,12 @@ async function l2ShowSecret(claimId, key){
     if (!r.ok){ ndUI.toast(_extractErr(d, 'Could not show that'), 'error'); return; }
     const el = document.getElementById('lf_' + key);
     if (el){ el.value = d.value || ''; el.focus(); el.select && el.select(); }
+    // The case email card shows it in place (it used to write to a box that is not on screen,
+    // so "Show it" logged a look and showed nothing). Until the case is reloaded.
+    if (_l2Case && _l2Case.st && _l2Case.st.values){
+      _l2Case.st.values[key] = d.value || '';
+      if (typeof _escCredRepaint === 'function') _escCredRepaint();
+    }
     ndUI.toast('Shown \u2014 this is recorded against your name', 'success');
   }catch(e){ ndUI.toast('Could not show that.', 'error'); }
 }

@@ -727,11 +727,10 @@ def may_see_secrets(role: str) -> bool:
 
 
 def mask_secrets(values: dict, role: str) -> dict:
-    """Hide credential values from anyone whose role does not include them. Done on the SERVER,
-    so a password never reaches a browser that should not have it - hiding it in the page would
-    only mean it was one Inspect away."""
-    if may_see_secrets(role):
-        return values
+    """Hide credential values - from EVERYONE, on the SERVER. A password never rides along in an
+    ordinary page load, not even a super admin's (1 Oct: it did, so "Show it" hid nothing and
+    looking at it left no record). Seeing it is one deliberate, audited request
+    (/cases/{id}/secret/...), allowed to super admins and sub-super admins."""
     out = dict(values or {})
     for k in SECRET_FIELDS:
         if (out.get(k) or "").strip():
@@ -899,6 +898,11 @@ async def set_field(claim_id: int, field_key: str, value: str, actor: str = "",
         # Sending the mask back means "leave it alone", which is what the person intended.
         if field_key in SECRET_FIELDS and val == MASK:
             return {"ok": True, "unchanged": True}
+        # Only the roles that may SEE a credential may change it (the complainant's own WhatsApp
+        # capture passes no role and is allowed). The page hid the pencil; the API did not.
+        if field_key in SECRET_FIELDS and role and not may_see_secrets(role):
+            return {"ok": False, "error": "Only super admins and sub-super admins can change the "
+                                          "case email password."}
         limit = _FIELD_MAX.get(ftype, 2000)
         if len(val) > limit:
             # Refuse rather than cut: a truncated legal draft looks complete and is not.

@@ -8537,6 +8537,9 @@ async def ops_case_bucket_field(claim_id: int, body: _BucketFieldReq, request: R
                               role=caller.get("role") or "")
     if not res.get("ok"):
         raise HTTPException(status_code=400, detail=res.get("error") or "Could not save that")
+    if body.field_key in _bk.SECRET_FIELDS and not res.get("unchanged"):
+        # Changing a credential is recorded with the name, never the value.
+        await _ops_audit(request, "case.secret_set", "claim", str(claim_id), body.field_key)
     return res
 
 
