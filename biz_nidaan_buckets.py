@@ -1952,14 +1952,18 @@ async def _tell_escalation_query(claim_id: int, row: dict, text: str, actor: str
         subj = "\u2705 Escalation query answered \u2014 NP-%s %s" % (claim_id, who)
         body = ("%s answered the insurer's query on NP-%s:\n\n\u201c%s\u201d\n\nThe claim is on "
                 "Escalation Query Responded - waiting for the insurance company." % (actor or "Someone", claim_id, text[:600]))
-        key = "case.escalation_query_answered"
     else:
         subj = "\u2753 Escalation query \u2014 NP-%s %s" % (claim_id, who)
         body = ("%s recorded a query from the insurer on NP-%s:\n\n\u201c%s\u201d\n\nAnswer it, then press "
                 "\u2705 We have answered them on the claim (Escalation)." % (actor or "Someone", claim_id, text[:600]))
-        key = "case.escalation_query"
     try:
-        await _nnot.notify_staff_inapp(ids, subj, body, event_key=key, email=False, claim_id=claim_id)
+        # Literal keys, one per branch: the notification register is checked against them.
+        if answered:
+            await _nnot.notify_staff_inapp(ids, subj, body, event_key="case.escalation_query_answered",
+                                           email=False, claim_id=claim_id)
+        else:
+            await _nnot.notify_staff_inapp(ids, subj, body, event_key="case.escalation_query",
+                                           email=False, claim_id=claim_id)
     except Exception as e:  # noqa: BLE001
         logger.warning("escalation query alert failed for %s: %s", claim_id, e)
 
