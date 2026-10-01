@@ -49,7 +49,11 @@ a generic link.
 
 **This is the single worst item here** and it is a ten-line fix.
 
-### 🔴 2. The published policy names an entity that may not be ours
+### ✅ 2. The published policy names an entity that may not be ours — SETTLED
+
+> **1 Oct 2026:** the founder confirmed the registered name is **"Nidaan The Legal Consultants
+> LLP"**, which is what the legal pages, the logo and the authorization letter now say. The LLPIN is
+> still not recorded anywhere. The original note follows.
 
 The live page says **"Nidaan – The Legal Consultants LLP"**. The founder states the legal entity
 is **"Nidaan Legal India LLP"**.

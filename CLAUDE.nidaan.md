@@ -10,17 +10,18 @@ how it is built, the rules it is built under, where the work has got to and what
 
 ## What this is
 
-A **live** insurance-claim legal ERP for **Nidaan Legal India LLP** (Indore). Real claims, real
+A **live** insurance-claim legal ERP for **Nidaan The Legal Consultants LLP** (Indore). Real claims, real
 staff, real money, real medical documents belonging to real people. Nothing here is a sandbox.
 
 Claimants are mostly **not our customers** — they are the insured person on a claim a branch or
 a subscriber brought to us. They never signed up with us, and they hold the most sensitive data
 in the system with the fewest routes back to us.
 
-**Registered entity:** Nidaan Legal India LLP · 79/A Ranjeet Hanuman Road, Dravid Nagar Colony,
-Scheme 71, Indore, MP 452009 · enquiries@nidaanlegalindia.com · +91 95844 68804 · courts at
-Indore. NidaanPartner.com is its **technology operations wing**, built by GoLuQ.com Digital
-Consultancy.
+**Registered entity:** Nidaan The Legal Consultants LLP (confirmed by the founder 1 Oct 2026, as
+on his registration document; "Nidaan Legal India LLP" was wrong) · 79/A Ranjeet Hanuman Road,
+Dravid Nagar Colony, Scheme 71, Indore, MP 452009 · enquiries@nidaanlegalindia.com ·
++91 95844 68804 · courts at Indore. No LLPIN or GSTIN is recorded anywhere yet. NidaanPartner.com
+is its **technology operations wing**, built by GoLuQ.com Digital Consultancy.
 
 ---
 
@@ -385,6 +386,29 @@ a claim (virus-scanned, 25 MB, 30 a day per number) in **WhatsApp -> Files to so
 attach it to a claim or set it aside with a reason. Nothing is deleted. A staff member may forward a
 customer's papers from ANY staff number with `NP-<claim>` in the caption: filed on that claim if
 they may work on it, otherwise kept to sort.
+
+### The Authorized Partner's name on messages (1 Oct)
+
+`biz_nidaan_ap_sign` is the ONE rule. A claim came through an AP if its own `branch_code` is a
+real AP, else its account's referral code is (a code typed at signup or an AP's shared link both
+land there). Staff `SP-` codes never count. The AP must be active and have a person's name
+(`nidaan_branches.contact_person`, plus `state`). Then every customer message about the claim ends
+with "Rakesh Sharma, Authorized Partner of NidaanPartner.com, Pune (MH)", replacing the team
+sign-off. It is applied at the two transports: `biz_nidaan_whatsapp._post` (before the STOP line)
+and `biz_email.send_email`. Email is signed only inside `about(claim_id=/account_id=)`, which the
+customer hubs set. WhatsApp falls back to the contact's claim. One-time codes run inside
+`unsigned()`. A NEW customer message path must sit inside `about(...)`, and a new code path inside
+`unsigned()`. Meta templates have fixed text and cannot carry the name. Never email an
+`@house.nidaanpartner.internal` address - `send_email` refuses it.
+
+### The authorization letter (1 Oct)
+
+When the complainant accepts the fee card, `record_consent` freezes the signer (the complainant),
+their contact and the tentative fee on the disputed amount (`consent_*` columns, inside the hash),
+and stamps `consent_letter_version = 2`. Version 2 renders with the letterhead (`LETTERHEAD`,
+`static/nidaan_logo.png`) from the record alone, so a later download is identical. Version-1
+letters keep their old layout - never change `build_consent_proof_pdf`'s v1 branch. A document
+with `source='authorization'` can never be deleted (`ProtectedDocument`, 409 on every route).
 
 ### The ops menu (1 Oct)
 

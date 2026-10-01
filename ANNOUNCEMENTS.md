@@ -1,6 +1,28 @@
 # Staff Announcement Drafts
 
-## 2026-10-01 (short) — What changed today  ← SEND THIS ONE (after the 1:30 pm update)
+## 2026-10-01 (evening, short) — Partner's name on messages, the new authorization letter  ← SEND AFTER THE EVENING UPDATE
+
+_For: all staff. Not yet sent. The SOP has the details (sections 9 and 10)._
+
+**EN**
+
+📘 **Two more changes this evening — details: nidaanpartner.com/sop-whats-new** (sign in to ops first)
+
+1. Every email and WhatsApp about a claim that came through an **Authorized Partner** now ends with the partner's name, e.g. "Rakesh Sharma, Authorized Partner of NidaanPartner.com, Pune (MH)". Never on login codes. Sub-super-admins: please add each partner's **person's name and state** (Authorized Partners → edit details).
+2. The **authorization letter** is now on our letterhead and shows the fee worked out on the disputed amount. **Check the disputed amount before you push the authorization.** A signed authorization can no longer be removed from a claim.
+3. A subscriber who **cancels and subscribes again** can raise claims straight away.
+
+**HI**
+
+📘 **आज शाम दो और बदलाव — विवरण: nidaanpartner.com/sop-whats-new** (पहले ops में साइन इन कीजिये)
+
+1. **अधिकृत पार्टनर** के ज़रिये आए क्लेम के बारे में हर ईमेल और WhatsApp अब पार्टनर के नाम से ख़त्म होता है, जैसे "राकेश शर्मा, NidaanPartner.com के अधिकृत पार्टनर, Pune (MH)"। लॉगिन कोड पर कभी नहीं। सब-सुपर-एडमिन: हर पार्टनर का **व्यक्ति का नाम और राज्य** जोड़ें (Authorized Partners → edit details)।
+2. **अनुमति-पत्र** अब हमारे लेटरहेड पर है और विवादित राशि पर फीस का हिसाब दिखाता है। **अनुमति भेजने से पहले विवादित राशि जाँच लें।** हस्ताक्षरित अनुमति अब क्लेम से हटाई नहीं जा सकती।
+3. जो सब्सक्राइबर **प्लान बंद करके दोबारा लेता है**, वह तुरंत क्लेम दर्ज कर सकता है।
+
+---
+
+## 2026-10-01 (short) — What changed today  ← SENT? (after the 1:30 pm update)
 
 _For: all staff. Not yet sent. Replaces the two drafts below it._
 
