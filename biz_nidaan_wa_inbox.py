@@ -193,12 +193,31 @@ async def claim_thread(claim_id: int, *, limit: int = 300) -> dict:
                     nums.append(n)
         if not nums:
             return {"ok": True, "numbers": [], "messages": [], "contact": {}}
-        ph = ",".join("?" * len(nums))
+        # A number on SEVERAL claims (an agent's mobile, a shared family phone) shows only the
+        # messages tagged to THIS claim; a number on this claim alone shows its untagged ones too.
+        shared = set()
+        for n in nums:
+            last10 = n[-10:]
+            k = (await (await c.execute(
+                "SELECT COUNT(*) FROM nidaan_claims WHERE claim_id<>? AND COALESCE(archived,0)=0 AND "
+                "(substr(replace(COALESCE(complainant_phone,''),' ',''),-10)=? OR "
+                " substr(replace(COALESCE(insured_phone,''),' ',''),-10)=?)",
+                (int(claim_id), last10, last10))).fetchone())[0]
+            if k:
+                shared.add(n)
+        mine = [n for n in nums if n not in shared]
+        cond, args = [], []
+        if mine:
+            cond.append("(msisdn IN (%s) AND (claim_id IS NULL OR claim_id=?))" % ",".join("?" * len(mine)))
+            args += mine + [int(claim_id)]
+        if shared:
+            cond.append("(msisdn IN (%s) AND claim_id=?)" % ",".join("?" * len(shared)))
+            args += list(shared) + [int(claim_id)]
         rows = await (await c.execute(
             "SELECT wam_row_id, msisdn, direction, msg_type, template_name, body, media_id, status, "
             "error, sender, sender_name, claim_id, created_at FROM nidaan_wa_messages "
-            "WHERE msisdn IN (%s) AND (claim_id IS NULL OR claim_id=?) "
-            "ORDER BY wam_row_id DESC LIMIT ?" % ph, (*nums, int(claim_id), max(1, min(int(limit), 500))))).fetchall()
+            "WHERE " + " OR ".join(cond) + " ORDER BY wam_row_id DESC LIMIT ?",
+            (*args, max(1, min(int(limit), 500))))).fetchall()
         ct = await (await c.execute("SELECT * FROM nidaan_wa_contacts WHERE msisdn=?", (nums[0],))).fetchone()
     contact = dict(ct) if ct else {"msisdn": nums[0]}
     contact["window"] = _window(contact.get("last_inbound_at"))

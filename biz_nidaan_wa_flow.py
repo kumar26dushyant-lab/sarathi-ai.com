@@ -41,6 +41,14 @@ async def log_message(*, direction: str, msisdn: str, claim_id: Optional[int] = 
     """
     if not sender:
         sender = "customer" if direction == "in" else "bot"
+    if direction == "in" and claim_id is None:
+        # Tag the customer's message with the claim their number is linked to, so a claim's own
+        # WhatsApp window never shows another claim's messages (review, 2 Oct).
+        try:
+            c0 = await get_contact(msisdn) or {}
+            claim_id = c0.get("claim_id") or None
+        except Exception:  # noqa: BLE001
+            claim_id = None
     if direction == "out" and sender == "human":
         # A person from our team answered: the bot's "someone will reach out" count starts again.
         try:
@@ -188,29 +196,30 @@ async def _on_inbound_text(msisdn: str, text: str) -> None:
     # after that with a short "we're on it" nudge. Free-form is fine — they just wrote to us,
     # so the 24h session is open and no template is required.
     if not res.get("ok") and res.get("error") == "no_claim":
-        await _reply_unlinked(msisdn)
+        await _reply_unlinked(msisdn, text)
     return
 
 
-async def _lead_reply(msisdn: str, lang: str) -> str:
-    """NidaanMitra's reply to a stranger, checked by the public leak guard; '' to fall back."""
+async def _lead_reply(msisdn: str, lang: str, text: str = "") -> dict:
+    """NidaanMitra's reply to a stranger, checked by the public leak guard.
+    {"reply": text} | {"handoff": True} | {"silent": True} (flooding) | {} to fall back."""
     try:
         import biz_nidaan_wa_brain as _brain
         import biz_nidaan_wa_orchestrator as _orch
         import biz_nidaan_wa_auth as _auth
-        async with aiosqlite.connect(DB_PATH) as conn:
-            row = await (await conn.execute(
-                "SELECT body FROM nidaan_wa_messages WHERE msisdn=? AND direction='in' "
-                "ORDER BY wam_row_id DESC LIMIT 1", (msisdn,))).fetchone()
-        text = (row[0] if row else "") or ""
-        if not text.strip():
-            return ""
+        import biz_nidaan_wa_charter as _charter
+        # The flood guard FIRST: reaching the AI is the expensive part (review, 2 Oct).
+        if not (await _charter.flood(msisdn)).get("ok"):
+            return {"silent": True}
+        text = (text or "").strip()
+        if not text:
+            return {}
         d = await _brain.decide(text, lang, history=await _orch._recent_history(msisdn), lead_mode=True)
         if d.get("set_lang"):
             await upsert_contact(msisdn, language=d["set_lang"])
             lang = d["set_lang"]
         if d.get("action") == "handoff":
-            return ""                                 # the human follow-up text + staff alert
+            return {"handoff": True}
         reply, blocked = await _auth.guard_public_reply(msisdn, d.get("reply") or "", lang)
         if d.get("lead_name") or d.get("lead_need"):
             try:
@@ -226,13 +235,13 @@ async def _lead_reply(msisdn: str, lang: str) -> str:
                         await _crm.update_lead(found[0]["lead_id"], by_name="NidaanMitra (WhatsApp)", **upd)
             except Exception:  # noqa: BLE001
                 pass
-        return reply
+        return {"reply": reply}
     except Exception as e:  # noqa: BLE001 - the canned text is the fallback
         logger.info("lead reply skipped for %s: %s", msisdn, e)
-        return ""
+        return {}
 
 
-async def _reply_unlinked(msisdn: str) -> None:
+async def _reply_unlinked(msisdn: str, text: str = "") -> None:
     """Reply to an inbound from a number we have no claim for, and alert ops on first contact."""
     try:
         import biz_nidaan_wa_messages as _msg
@@ -242,9 +251,25 @@ async def _reply_unlinked(msisdn: str) -> None:
         # A stranger is a LEAD (founder, 2 Oct): NidaanMitra talks with them - why they came, what
         # happened - and ends with where to start and what other customers say. The canned text
         # stays only as the fallback when the AI cannot answer.
-        body = await _lead_reply(msisdn, lang)
+        lr = await _lead_reply(msisdn, lang, text)
+        if lr.get("silent"):
+            return                                     # flooding: nothing more goes out
+        body = lr.get("reply") or ""
         if not body:
             body = _msg.compose("intro_value" if first_touch else "human_followup", lang, {"name": ""})
+        if lr.get("handoff") and not first_touch:
+            # They asked for a person (or the bot was unsure) mid-conversation: somebody is told -
+            # at most twice for this chat (review, 2 Oct: only the first message alerted anyone).
+            try:
+                import biz_nidaan_notifications as _nnot
+                if await _nnot.chat_notice_allowed("chat:wa:" + "".join(ch for ch in msisdn if ch.isdigit())):
+                    await _nnot.notify_staff_inapp(
+                        await _admin_ids(), "💬 A WhatsApp enquiry needs a person",
+                        f"{msisdn} (not on any claim) asked for a person or something the bot should "
+                        f"not answer. Reply from WhatsApp Automation.",
+                        event_key="wa.new_enquiry", email=False)
+            except Exception:  # noqa: BLE001
+                pass
         if body:
             await wa.send_text(msisdn, body)
             await upsert_contact(msisdn, mark_outbound=True)

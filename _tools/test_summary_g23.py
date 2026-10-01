@@ -92,6 +92,8 @@ async def main():
            "gist_changed": set(), "notes": [], "acts": [], "claims": {}, "test_claims": {99},
            "moves_prev": [{"staff_id": 3, "claim_id": 84, "from_key": "live_cases", "to_key": "pending_draft"}],
            "moves": [{"staff_id": 3, "claim_id": 84, "from_key": "pending_draft", "to_key": "live_cases"},
+                     {"staff_id": 3, "claim_id": 86, "from_key": "live_cases", "to_key": "hold", "kind": "park"},
+                     {"staff_id": 3, "claim_id": 86, "from_key": "hold", "to_key": "live_cases", "kind": "resume"},
                      {"staff_id": 3, "claim_id": 99, "from_key": "a", "to_key": "b"},
                      {"staff_id": 3, "claim_id": 99, "from_key": "b", "to_key": "a"}],
            "status_flips": [{"claim_id": 85, "from_status": "in_review", "to_status": "review_query", "changed_by_id": 3},
@@ -106,6 +108,7 @@ async def main():
     check("a claim moved there and straight back is flagged", "NP-84 moved" in why, why)
     check("a status changed and changed back is flagged", "NP-85 status changed and changed back" in why, why)
     check("a test claim is never flagged", "NP-99" not in why, why)
+    check("a park and its resume is not 'there and straight back' (review, 2 Oct)", "NP-86" not in why, why)
     check("a super-admin is never flagged", 1 not in flags, flags.get(1))
 
     # ── G3: blockers - nobody's first, owners named ──

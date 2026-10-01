@@ -1945,6 +1945,12 @@ async def _tell_escalation_query(claim_id: int, row: dict, text: str, actor: str
                         ids.append(s["staff_id"])
             except Exception:  # noqa: BLE001
                 pass
+    try:
+        me = {s["staff_id"] for s in await _n.list_staff()
+              if (s.get("name") or "").strip().lower() == (actor or "").split(" (as ")[0].strip().lower()}
+        ids = [i for i in ids if i not in me]
+    except Exception:  # noqa: BLE001
+        pass
     if not ids:
         ids = [a["staff_id"] for a in await _nnot._super_admin_staff()]
     who = (row.get("complainant_name") or row.get("insured_name") or "").strip()

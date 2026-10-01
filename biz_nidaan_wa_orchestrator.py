@@ -561,8 +561,9 @@ async def start_for_claim(claim_id: int, *, by: str = "system", preview: bool = 
         ct = await (await c.execute(
             "SELECT status FROM nidaan_wa_contacts WHERE msisdn=?", (msisdn,))).fetchone()
     if ct and dict(ct).get("status") == "stopped":
-        await _activity(claim_id, "doc_collection_start",
-                        f"WhatsApp not started by {by} — {who or 'the complainant'} replied STOP")
+        if not preview:
+            await _activity(claim_id, "doc_collection_start",
+                            f"WhatsApp not started by {by} — {who or 'the complainant'} replied STOP")
         return {"ok": False, "error": "opted_out", "to": masked, "who": who}
 
     pending = await _ck.pending_required_docs(claim_id, claim.get("claim_type") or "")

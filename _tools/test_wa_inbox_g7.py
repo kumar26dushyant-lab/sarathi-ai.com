@@ -71,6 +71,29 @@ async def main():
     check("...but never a message tagged to another claim on a shared number", "about claim 99 only" not in bodies)
     check("...nor another person's chat", not any("100%" in b for b in bodies))
 
+    # a number on SEVERAL claims (an agent's mobile): only the rows tagged to this claim
+    async with aiosqlite.connect(DBP) as c:
+        await c.execute("INSERT INTO nidaan_claims (claim_id, account_id, claim_type, insured_name, insured_phone, "
+                        "complainant_name, complainant_phone, status) VALUES "
+                        "(52,1,'health','OTHER','9811100099','Other','9811100052','intimated')")
+        await c.execute("INSERT INTO nidaan_wa_messages (msisdn, direction, body, status, claim_id) "
+                        "VALUES ('919811100052','in','about claim 52 only','sent',52)")
+        await c.commit()
+    b51 = [m["body"] for m in (await inbox.claim_thread(51))["messages"]]
+    b52 = [m["body"] for m in (await inbox.claim_thread(52))["messages"]]
+    check("a shared number never shows another claim's messages (review, 2 Oct)",
+          "about claim 52 only" not in b51 and "about claim 52 only" in b52, (b51, b52))
+    check("...nor its untagged ones on either claim", "I sent the discharge summary yesterday" not in b52, b52)
+    await flow.log_message(direction="in", msisdn="919811100051", body="tagged at the door")
+    async with aiosqlite.connect(DBP) as c:
+        await c.execute("INSERT OR IGNORE INTO nidaan_wa_contacts (msisdn) VALUES ('919811100051')")
+        await c.execute("UPDATE nidaan_wa_contacts SET claim_id=51 WHERE msisdn='919811100051'")
+        await c.commit()
+    await flow.log_message(direction="in", msisdn="919811100051", body="tagged now")
+    async with aiosqlite.connect(DBP) as c:
+        cid = (await (await c.execute("SELECT claim_id FROM nidaan_wa_messages WHERE body='tagged now'")).fetchone())[0]
+    check("a customer's message is tagged with their number's claim as it arrives", cid == 51, cid)
+
 
 asyncio.run(main())
 print("\n%s" % ("all passed" if not FAILED else "%d failed" % FAILED))

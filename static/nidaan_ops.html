@@ -16966,7 +16966,7 @@ window.l2QueryRaise = l2QueryRaise; window.l2QueryResolve = l2QueryResolve; wind
 // matters is that it went and how long ago. Green, like the draft-query-resolved badge, because
 // this is a step completed and not a warning (founder, page 7).
 function _escBadge(i){
-  if (i.bucket !== 'escalation' || (i.sub || '') !== 'escalated') return '';
+  if (i.bucket !== 'escalation' || ['escalated', 'query_answered'].indexOf(i.sub || '') < 0) return '';
   const raw = String(i.escalation_date || '').slice(0, 10);
   if (!raw) return '';
   const d = new Date(raw + 'T00:00:00Z');

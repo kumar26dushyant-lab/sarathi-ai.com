@@ -66,6 +66,8 @@ async def main():
     check("a published figure (5,000+ policyholders) passes the public leak guard",
           auth.scan_for_leak("We have helped 5,000+ policyholders and resolved 2,000+ cases.") == "")
     check("...a real amount is still blocked", auth.scan_for_leak("Your claim of ₹45,000 is pending") == "an amount")
+    check("...and a real ₹5,000 is blocked too (only the published '5,000+' form passes)",
+          auth.scan_for_leak("You were paid ₹5,000+ less") == "an amount" and auth.scan_for_leak("short by 5,000") == "an amount")
 
     intro = msgs.compose("intro_value", "en", {"name": ""})
     check("the first-contact text no longer starts with a stray comma", intro and not intro.startswith(","), intro[:40])
@@ -82,7 +84,7 @@ async def main():
     real = brain.decide
     brain.decide = fake_decide
     try:
-        r = await flow._lead_reply("919800000055", "en")
+        r = (await flow._lead_reply("919800000055", "en", "my health claim was rejected by Star Health")).get("reply", "")
     finally:
         brain.decide = real
     check("a stranger gets NidaanMitra's reply", r.startswith("Namaste, I'm NidaanMitra"), r)
@@ -92,12 +94,45 @@ async def main():
 
     async def handoff(text, lang="hinglish", **k):
         return {"action": "handoff", "reply": "", "set_lang": ""}
-    brain.decide = handoff
+    import biz_nidaan_notifications as nn
+    told, sent = [], []
+
+    async def tell(ids, subj, body, **k):
+        told.append(k.get("event_key"))
+        return 1
+
+    async def admins():
+        return [1]
+
+    async def send(to, body):
+        sent.append(body)
+        return {"ok": True}
+    real_tell, real_admins, real_send = nn.notify_staff_inapp, flow._admin_ids, flow.wa.send_text
+    brain.decide, nn.notify_staff_inapp, flow._admin_ids, flow.wa.send_text = handoff, tell, admins, send
     try:
-        check("when the bot is unsure it hands to a person (canned follow-up + staff alert)",
-              await flow._lead_reply("919800000055", "en") == "")
+        await flow.upsert_contact("919800000055", mark_outbound=True)     # not their first message
+        await flow._reply_unlinked("919800000055", "I want to talk to a person")
+        check("a hand-off mid-conversation gets the follow-up text AND a staff alert (review, 2 Oct)",
+              sent and "wa.new_enquiry" in told, (sent, told))
     finally:
-        brain.decide = real
+        brain.decide, nn.notify_staff_inapp, flow._admin_ids, flow.wa.send_text = real, real_tell, real_admins, real_send
+
+    import biz_nidaan_wa_charter as charter
+
+    async def flooding(msisdn, **k):
+        return {"ok": False, "reason": "too many"}
+    called = []
+
+    async def never(*a, **k):
+        called.append(1)
+        return {"action": "answer", "reply": "x"}
+    real_flood = charter.flood
+    charter.flood, brain.decide = flooding, never
+    try:
+        r = await flow._lead_reply("919800000055", "en", "spam spam")
+        check("a flooding number is not answered and costs no AI call", r.get("silent") and not called, (r, called))
+    finally:
+        charter.flood, brain.decide = real_flood, real
 
     web = open(os.path.join(ROOT, "biz_ai.py"), encoding="utf-8").read()
     check("the website bot has the same trap rule and no longer invites claim-status questions",

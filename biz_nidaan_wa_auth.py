@@ -293,8 +293,10 @@ async def try_verify(msisdn: str, code: str, lang: str = "hinglish") -> dict:
 
 # ── the outbound inspector ───────────────────────────────────────────────────
 # Public pricing may be quoted freely; anything else with a rupee sign is somebody's money.
-# 2000 and 5000 are also the published track record (2,000+ cases, 5,000+ policyholders).
-_PUBLIC_AMOUNTS = {"99", "199", "299", "499", "999", "1999", "2000", "2999", "4999", "5000"}
+_PUBLIC_AMOUNTS = {"99", "199", "299", "499", "999", "1999", "2000", "2999", "4999"}
+# The published track record ("5,000+ policyholders", "2,000+ cases") - only that exact form, so a
+# real ₹5,000 in somebody's history still cannot reach an unverified number (review, 2 Oct).
+_PUBLISHED = re.compile(r"(?<![₹\d])(?<!Rs )(?<!Rs\.)(?<!INR )\b[25],?000\+")
 
 _LEAK_PATTERNS = [
     ("claim reference", re.compile(r"\bNP[-\s]?\d{2,}\b", re.I)),
@@ -311,7 +313,7 @@ _GROUPED = re.compile(r"\b\d{1,3}(?:,\d{2,3})+\b")
 
 def scan_for_leak(text: str) -> str:
     """What private thing this reply would disclose, or '' if it is safe to send publicly."""
-    t = text or ""
+    t = _PUBLISHED.sub("", text or "")
     for label, rx in _LEAK_PATTERNS:
         if rx.search(t):
             return label

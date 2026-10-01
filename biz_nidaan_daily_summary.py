@@ -553,7 +553,7 @@ def padding(day: dict, people: dict) -> dict:
     seen: dict = {}
     for m in list(day.get("moves_prev", [])) + list(day.get("moves", [])):
         key = (m.get("staff_id"), m["claim_id"])
-        if m["claim_id"] in tests:
+        if m["claim_id"] in tests or (m.get("kind") or "") in ("park", "resume", "undo"):
             continue
         last = seen.get(key)
         if last and last["from_key"] == m["to_key"] and last["to_key"] == m["from_key"]:

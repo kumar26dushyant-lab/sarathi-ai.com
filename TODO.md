@@ -24,6 +24,7 @@ it. Newest first within each group._
 | G9 | ✅ **Claim-level WhatsApp window** (`1ca38ec`) | In the drawer and the case sheet: the same messages as the inbox (both numbers), reply (duty only), Start collection, open in inbox |
 | G10 | ✅ **Start WhatsApp collection: preview first, Send to confirm** (`6253462`) | Who, which number, how, every document, warnings (junk name, unconfirmed number); a staff start is no longer recorded as the complainant's consent; a person handling the chat stops the bot on every path; the send caps counted only 'sent' and undercounted. **His call: 14 numbers are marked as consenting though they never wrote to us (they are in campaign audiences) - set them to not-consented?** |
 | G11 | 🟡 **App Health - honest answer** | It reads real outcomes for login codes, WhatsApp replies, payments, backups, scheduled jobs, disk. Still CONFIGURATION, not outcome: "Email (Brevo) API key configured", "SMTP configured", "AI (Gemini) configured", "Payments configured". Next: each to read its last real success (an email delivered, a Gemini answer, a payment captured). It does not repair anything by itself - it links to the screen that fixes each item |
+| G12 | Days in a bucket can over-count if a stay's exit was never logged, or after a bucket is renamed (review, 2 Oct, low) | Close an open stay at the next logged entry elsewhere; map renamed keys |
 
 ### ▶ 1 Oct EVENING — the founder's decisions and list (after the 18:00 deploy), in order
 
