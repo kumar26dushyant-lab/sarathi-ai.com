@@ -2445,6 +2445,14 @@ async def board(bucket_key: str = "", *, sub: str = "", q: str = "",
         i["note"] = n.get("note", "")
         i["note_by"] = n.get("by", "")
         i["missing_n"] = len(miss)
+    # WHY IT IS WAITING, as chips: what we know (documents, fee, authorization) + what staff ticked.
+    try:
+        import biz_nidaan_waits as _w
+        _wt = await _w.for_rows(rows)
+        for i in items:
+            i["waits"] = _wt.get(int(i["claim_id"]), [])
+    except Exception as e:  # noqa: BLE001 - chips never sink the list
+        logger.info("waits skipped on the board: %s", e)
 
     order = {"red": 0, "amber": 1, "ok": 2}
     # An open draft query comes first, always - it is the one ClaimShield let go quiet.

@@ -200,6 +200,7 @@
   "_WaSortAsideReq",
   "_WaSortAttachReq",
   "_WaStartReq",
+  "_WaitingReq",
   "_actor_label",
   "_as_viewable",
   "_attach_message_urls",
@@ -8657,9 +8658,9 @@
    ]
   },
   {
-   "func": "ops_list_claims",
+   "func": "ops_claim_waiting",
    "paths": [
-    "/nidaan/ops/api/claims"
+    "/nidaan/ops/api/claims/{claim_id}/waiting"
    ],
    "product": "nidaan",
    "reaches": [
@@ -8674,6 +8675,56 @@
     "_is_nidaan_host",
     "_require_staff",
     "app"
+   ]
+  },
+  {
+   "func": "ops_claim_waiting_set",
+   "paths": [
+    "/nidaan/ops/api/claims/{claim_id}/waiting"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_WaitingReq",
+    "_actor_label",
+    "_get_staff_from_request",
+    "_is_nidaan_host",
+    "_ops_audit",
+    "_require_staff",
+    "_row_still_open",
+    "_staff_still_active",
+    "app",
+    "limiter"
+   ],
+   "uses": [
+    "_WaitingReq",
+    "_actor_label",
+    "_is_nidaan_host",
+    "_ops_audit",
+    "_require_staff",
+    "app",
+    "limiter"
+   ]
+  },
+  {
+   "func": "ops_list_claims",
+   "paths": [
+    "/nidaan/ops/api/claims"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_get_staff_from_request",
+    "_is_nidaan_host",
+    "_require_staff",
+    "_row_still_open",
+    "_staff_still_active",
+    "app",
+    "logger"
+   ],
+   "uses": [
+    "_is_nidaan_host",
+    "_require_staff",
+    "app",
+    "logger"
    ]
   },
   {
@@ -19078,6 +19129,8 @@
   "ops_claim_reminder_create",
   "ops_claim_reminder_status",
   "ops_claim_reminders",
+  "ops_claim_waiting",
+  "ops_claim_waiting_set",
   "ops_claim_watchers",
   "ops_claimant_terms_get",
   "ops_claimant_terms_set",

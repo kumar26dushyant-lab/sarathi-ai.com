@@ -70,6 +70,14 @@ details>summary{cursor:pointer}
 .nav-group.collapsed{display:none}
 .nav-item.nav-sub{padding-left:2.1rem;font-size:.8rem;font-weight:500}
 .nd-ghost, .nd-ghost *{animation:none!important;transition:none!important}
+.wchips{display:flex;flex-wrap:wrap;gap:.25rem;margin:.25rem 0}
+.wchip{font-size:.68rem;font-weight:600;border-radius:999px;padding:.08rem .5rem;border:1px solid var(--nd-border-warn);background:var(--nd-warning-soft);color:var(--nd-warning-text)}
+.wchip.auto{border-color:var(--nd-border);background:var(--nd-bg-surface-2);color:var(--nd-text-secondary)}
+.waitbox{margin:.6rem 0}
+.wticks{display:flex;flex-wrap:wrap;gap:.35rem .9rem;margin:.35rem 0}
+.wtick{font-size:.82rem;display:flex;align-items:center;gap:.3rem}
+.wby{font-size:.7rem;color:var(--nd-text-muted)}
+.wauto{font-size:.8rem;color:var(--nd-text-secondary)}
 .nav-item.nav-sub2{padding-left:2.9rem;font-size:.78rem;font-weight:500}
 .nav-late{margin-left:auto;font-size:.66rem;font-weight:700;color:var(--nd-danger-text);white-space:nowrap}
 .nav-late + .nav-cnt{margin-left:.35rem}
@@ -4657,7 +4665,7 @@ function _renderOutcome(key){
         <td>${esc(c.claim_type||'—')}</td>
         <td>₹${fmt(c.disputed_amount||0)}</td>`
         + (isL2?`<td>${_l2Eligible(c)?`<span style="color:var(--nd-success-text);font-weight:700" title="${esc(_l2PayBasis(c))}">Paid ✓</span>`:'<span style="color:var(--nd-warning-text)">Due</span>'}</td>`
-             + `<td><span class="pill-status ${claimStatusClass(c.status)}" style="font-size:.68rem">${(c.status||'').replace(/_/g,' ')}</span></td>`
+             + `<td><span class="pill-status ${claimStatusClass(c.status)}" style="font-size:.68rem">${(c.status||'').replace(/_/g,' ')}</span>${_waitChips(c.waits)}</td>`
              + csCell + l2Cell:'')
         + `<td style="font-size:.78rem">${_subscriberCell(c)}</td>`
         + `<td style="font-size:.78rem">${_referredByCell(c)}</td>`
@@ -7058,6 +7066,7 @@ async function openClaimDrawer(claimId) {
       }</span></div>
       ${c.l2_paid_at?`<div class="kv"><span class="kv-label">L2 paid</span><span class="kv-val">${fmtDate(c.l2_paid_at)}</span></div>`:''}
     </div>`:''}
+    <div data-ord="15" class="drawer-section waitbox" id="waitBox_${c.claim_id}"></div>
     <!-- Where this claim came from: who, when and how, in names rather than codes -->
     <div data-ord="20" class="drawer-section">
       <h4 style="display:flex;justify-content:space-between;align-items:center;gap:.5rem">Where this claim came from${((_role==='super_admin'||_role==='sub_super_admin')&&!String(c.email||'').includes('@house.nidaanpartner.internal'))?`<button class="btn-sm btn-ghost" style="font-size:.72rem;padding:.2rem .55rem;color:var(--nd-cyan-text)" onclick="editAdvisorModal(${c.claim_id})">✏️ Edit</button>`:''}</h4>
@@ -7201,6 +7210,7 @@ async function openClaimDrawer(claimId) {
   loadClaimWatchers(c.claim_id);
   // Complainant portal state (direct policyholder dashboard)
   loadClaimPortalCard(c.claim_id, null, c.disputed_amount||0);
+  waitLoad(c.claim_id);
   // Claim notes: load @mention candidates + mark notes read (drives seen-receipts)
   loadClaimMentions(c.claim_id);
   claimNotesMarkRead(c.claim_id);
@@ -15457,6 +15467,11 @@ function l2RenderBucket(){
     +   '<input class="l2srch" id="l2Q" placeholder="Search name, claim no., phone, insurance company…" '
     +     'value="' + esc(_l2Q) + '" oninput="l2Search(this.value)">'
     +   _l2DaysSel(d)
+    +   '<select class="l2days" aria-label="Waiting on" onchange="l2WaitFilter(this.value)">'
+    +     [['', 'Waiting on: anything'], ['docs', 'Documents'], ['fee', 'L2 fee unpaid'], ['auth', 'Authorization not accepted'],
+           ['query_complainant', 'Query - complainant'], ['insurer_reply', 'Reply - insurer'], ['our_team', 'Our team'], ['other', 'Other']]
+          .map(function(o){ return '<option value="' + o[0] + '"' + (_l2WaitOn === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('')
+    +   '</select>'
     +   '<button class="btn-sm btn-ghost" onclick="l2Export()">⤓ Excel</button>'
     + '</div>';
 
@@ -15517,10 +15532,68 @@ function rowAttrs(opener, id){
 }
 window.rowOpen = rowOpen; window.rowKey = rowKey; window.rowAttrs = rowAttrs;
 
+// WHY IS THIS CLAIM WAITING (founder, 2 Oct): automatic chips (documents, fee, authorization)
+// and the ones staff ticked, with how many days. One renderer for every list.
+function _waitChips(list){
+  if (!list || !list.length) return '';
+  return '<div class="wchips">' + list.map(function(w){
+    const lbl = (_ndLang() === 'hi' && w.label_hi) ? w.label_hi : w.label;
+    const extra = w.key === 'other' && w.note ? ': ' + w.note : '';
+    return '<span class="wchip' + (w.auto ? ' auto' : '') + '" title="'
+      + esc((w.auto ? 'Automatic' : 'Ticked by ' + (w.by || 'staff')) + (w.days != null && !w.auto ? ' · ' + w.days + ' day(s)' : '')) + '">'
+      + esc(lbl + extra) + (w.days && !w.auto ? ' · ' + w.days + 'd' : '') + '</span>';
+  }).join('') + '</div>';
+}
+function _ndLang(){ try{ return (localStorage.getItem('nidaan_lang') || 'en').slice(0,2); }catch(e){ return 'en'; } }
+// The tick box, on the case sheet and in the claim drawer.
+async function waitLoad(claimId){
+  const el = document.getElementById('waitBox_' + claimId); if (!el) return;
+  let d = null;
+  try{ const r = await API('/claims/' + claimId + '/waiting'); if (r.ok) d = await r.json(); }catch(e){}
+  if (!d){ el.innerHTML = ''; return; }
+  const ticked = {}; (d.ticked || []).forEach(function(t){ ticked[t.key] = t; });
+  const auto = (d.auto || []).map(function(a){
+    return '<div class="wauto">• ' + esc(a.label)
+      + (a.missing && a.missing.length ? ' — <b>missing:</b> ' + esc(a.missing.join(', ')) : '') + '</div>';
+  }).join('');
+  const boxes = (d.choices || []).map(function(c){
+    const t = ticked[c.key];
+    return '<label class="wtick"><input type="checkbox" value="' + esc(c.key) + '"' + (t ? ' checked' : '')
+      + (c.key === 'other' ? ' onchange="document.getElementById(\'waitOther_' + claimId + '\').style.display=this.checked?\'block\':\'none\'"' : '')
+      + '> ' + esc(c.label) + (t ? ' <span class="wby">(' + esc(t.by) + ', ' + t.days + 'd)</span>' : '') + '</label>';
+  }).join('');
+  const other = ticked.other ? ticked.other.note : '';
+  el.innerHTML = '<div class="l2sec">Why is this claim waiting?</div>'
+    + (auto ? '<div class="wautos">' + auto + '</div>' : '<div class="hint">Nothing automatic is holding it.</div>')
+    + '<div class="wticks">' + boxes + '</div>'
+    + '<textarea id="waitOther_' + claimId + '" rows="2" maxlength="300" placeholder="Other - say why, in your own words" '
+    + 'style="width:100%;display:' + (ticked.other ? 'block' : 'none') + '">' + esc(other) + '</textarea>'
+    + '<button class="btn-sm btn-primary" style="margin-top:.35rem" onclick="waitSave(' + claimId + ')">Save</button> '
+    + '<span id="waitMsg_' + claimId + '" style="font-size:.78rem"></span>';
+}
+async function waitSave(claimId){
+  const el = document.getElementById('waitBox_' + claimId); if (!el) return;
+  const keys = Array.from(el.querySelectorAll('.wticks input:checked')).map(function(x){ return x.value; });
+  const note = ((document.getElementById('waitOther_' + claimId) || {}).value || '').trim();
+  const m = document.getElementById('waitMsg_' + claimId);
+  if (keys.indexOf('other') >= 0 && note.length < 3){ if (m){ m.style.color='var(--nd-danger-text)'; m.textContent = "Say why in your own words for 'Other'."; } return; }
+  const r = await API('/claims/' + claimId + '/waiting', {method:'POST', body: JSON.stringify({keys: keys, note: note})});
+  const d = await r.json().catch(function(){ return {}; });
+  if (!r.ok){ if (m){ m.style.color='var(--nd-danger-text)'; m.textContent = _l2Err(d, 'Could not save'); } return; }
+  if (m){ m.style.color='var(--nd-success-text)'; m.textContent = 'Saved'; }
+  waitLoad(claimId);
+}
+window.waitLoad = waitLoad; window.waitSave = waitSave;
+let _l2WaitOn = '';   // the "Waiting on" filter on a bucket list
+function l2WaitFilter(v){ _l2WaitOn = v || ''; l2Load(); }
+window.l2WaitFilter = l2WaitFilter;
+
 function l2Table(b){
   // One page key per BUCKET: paging Live Cases must not leave you on page 3 of Escalation.
   const _pk = 'bucket:' + (b.bucket_key || '');
-  const _allRows = _l2Rows || [];
+  const _allRows = (_l2Rows || []).filter(function(i){
+    return !_l2WaitOn || (i.waits || []).some(function(w){ return w.key === _l2WaitOn; });
+  });
   const rows = pageSlice(_pk, _allRows).map(function(i){
     const mv = (b.moves || []);
     const fwd = mv.filter(function(x){ return x.kind === 'forward'; })[0];
@@ -15587,6 +15660,7 @@ function l2Table(b){
       + '<td data-label="Why it is waiting" class="l2why">'
       +   _escBadge(i)
       +   _qBadge(i.query)
+      +   _waitChips(i.waits)
       +   (!(i.query && i.query.state) && i.back && i.back.at
           ? '<div class="l2back' + (i.back.super ? ' su' : '') + '">\u21a9 '
             + (i.back.super ? 'Pulled back by super admin ' : 'Sent back by ') + esc(i.back.by)
@@ -16145,6 +16219,7 @@ function l2CaseRender(rem){
         ? '<div class="l2ban amber">Before this can move on: <b>'
           + miss.map(function(x){ return esc(x.label); }).join(', ') + '</b></div>' : '')
     + '<div class="l2kv" id="l2kv">' + _l2KvHtml() + '</div>'
+    + '<div class="waitbox" id="waitBox_' + id + '"></div>'
     + _l2AssignPanel(id, c.assigned_to_staff_id)
     // THE CASE EMAIL, WHEREVER THE CLAIM IS. It reaches us two ways - the complainant sends it on
     // WhatsApp, or a staffer types it while they are on the phone - and it is read much later,
@@ -16298,6 +16373,7 @@ function l2CaseRender(rem){
         + 'page and try again.</div>';
     }
   }
+  waitLoad(_l2Case && _l2Case.claim_id);
 }
 
 // THE FACTS AT THE TOP OF A CLAIM, each one correctable where it is read.

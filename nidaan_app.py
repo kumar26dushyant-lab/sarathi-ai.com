@@ -12070,6 +12070,42 @@ async def ops_branch_unpaid_leads(branch_code: str, request: Request):
     return {"leads": await nidaan.get_branch_unpaid_leads(branch_code)}
 
 
+class _WaitingReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    keys: list[str] = Field(default_factory=list, max_length=8)
+    note: str = Field("", max_length=300)
+
+
+@app.get("/nidaan/ops/api/claims/{claim_id}/waiting")
+async def ops_claim_waiting(claim_id: int, request: Request):
+    """Why this claim is waiting: the automatic reasons and what staff ticked (founder, 2 Oct)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    import biz_nidaan_waits as _w
+    res = await _w.for_claim(claim_id)
+    if not res.get("ok"):
+        raise HTTPException(status_code=404, detail="Claim not found")
+    return res
+
+
+@app.post("/nidaan/ops/api/claims/{claim_id}/waiting")
+@limiter.limit("60/minute")
+async def ops_claim_waiting_set(claim_id: int, body: _WaitingReq, request: Request):
+    """Tick / untick why this claim is waiting. Unticked reasons are kept as history."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_waits as _w
+    res = await _w.set_reasons(claim_id, [str(k)[:30] for k in body.keys], body.note,
+                               {"staff_id": caller.get("staff_id"), "name": _actor_label(caller)})
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=res.get("error") or "Could not save that")
+    await _ops_audit(request, "claim.waiting", "claim", str(claim_id),
+                     "waiting on: " + ", ".join(body.keys)[:150])
+    return res
+
+
 @app.get("/nidaan/ops/api/claims")
 async def ops_list_claims(
     request: Request,
@@ -12112,6 +12148,14 @@ async def ops_list_claims(
         for r in await (await _c.execute(
                 f"SELECT payment_status, COUNT(*) n FROM nidaan_claims{_scope} GROUP BY payment_status")).fetchall():
             counts[r["payment_status"] or "paid"] = r["n"]
+    # Why each claim is waiting (chips), for the L2 Claims list and All Claims alike.
+    try:
+        import biz_nidaan_waits as _w
+        _wt = await _w.for_rows(claims)
+        for _c in claims:
+            _c["waits"] = _wt.get(int(_c.get("claim_id") or 0), [])
+    except Exception as _we:  # noqa: BLE001
+        logger.info("waits skipped on the claims list: %s", _we)
     # `count` keeps its meaning (this page's size) because callers read it. `total` is how many
     # match the filters — what a pager needs, and what nothing could previously ask for.
     return {"claims": claims, "count": len(claims),
