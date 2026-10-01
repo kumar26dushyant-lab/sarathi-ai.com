@@ -1828,6 +1828,51 @@ def business_hours_deadline(start: datetime, hours: int = 48) -> datetime:
     return cur
 
 
+def _quota_anchor(sub: Optional[dict]) -> str:
+    """When the subscription's current run began: its start, or the moment it came back after a
+    lapse. UTC 'YYYY-MM-DD HH:MM:SS', like the counter's updated_at."""
+    s = str((sub or {}).get("active_since") or (sub or {}).get("started_at") or "")
+    return s[:19].replace("T", " ")
+
+
+def quota_used(quota: Optional[dict], sub: Optional[dict]) -> int:
+    """Claims counted against the monthly cap right now - the ONE rule, used by the claim check,
+    the counter and the accounts list.
+
+    A subscriber who cancels and subscribes again starts with a fresh count: claims raised under
+    an earlier subscription never count against a new one (1 Oct: Deepika Yadav was blocked by
+    three claims from her previous Silver plan).
+    """
+    if not quota:
+        return 0
+    ws = str(quota.get("current_window_start") or "")[:10]
+    if not ws or ws < (date.today() - timedelta(days=30)).isoformat():
+        return 0                      # the 30-day window has rolled over
+    last = str(quota.get("updated_at") or "")[:19].replace("T", " ")
+    anchor = _quota_anchor(sub)
+    if anchor and last and last < anchor:
+        return 0                      # every claim in it was raised before this subscription
+    return int(quota.get("claims_this_window") or 0)
+
+
+def claim_block_message(reason: str, *, for_staff: bool = False) -> str:
+    """Plain words for why a claim could not be raised - never a raw code on a screen."""
+    r = str(reason or "")
+    if r.startswith("quota_exceeded"):
+        if for_staff:
+            return ("This subscriber's plan has used all its claims for this month. It frees up when "
+                    "the month rolls over, or they can move to a bigger plan. / इस सब्सक्राइबर के प्लान के "
+                    "इस महीने के क्लेम पूरे हो चुके हैं।")
+        return ("Your plan's claims for this month are used up. Please talk to us to raise another. / "
+                "इस महीने आपके प्लान के क्लेम पूरे हो चुके हैं। एक और क्लेम के लिए हमसे बात करें।")
+    if r == "per_claim_balance_exhausted":
+        return ("The one-time review on this account has already been used for a claim. / "
+                "इस खाते का एक बार का रिव्यू पहले ही एक क्लेम में लग चुका है।")
+    if r == "no_active_subscription":
+        return "There is no active plan on this account right now. / इस खाते पर अभी कोई चालू प्लान नहीं है।"
+    return r or "Could not raise the claim. / क्लेम दर्ज नहीं हो सका।"
+
+
 async def can_submit_claim(account_id: int) -> tuple[bool, str]:
     """
     Returns (allowed, reason).
@@ -1852,13 +1897,7 @@ async def can_submit_claim(account_id: int) -> tuple[bool, str]:
             )
             quota = await cur.fetchone()
 
-        window_start = date.today() - timedelta(days=30)  # monthly claim window
-        if quota is None:
-            return True, "ok"
-        stored_start = date.fromisoformat(str(quota["current_window_start"]))
-        if stored_start < window_start:
-            return True, "ok"  # window has rolled over, reset on next insert
-        if quota["claims_this_window"] >= limit:
+        if quota_used(dict(quota) if quota else None, sub) >= limit:
             return False, f"quota_exceeded_{plan}"
         return True, "ok"
 
@@ -1888,16 +1927,17 @@ async def can_submit_claim(account_id: int) -> tuple[bool, str]:
     return False, "no_active_subscription"
 
 
-async def _increment_quota(account_id: int, conn: aiosqlite.Connection):
-    """Upsert the rolling 30-day quota counter (call inside the same connection as claim insert)."""
+async def _increment_quota(account_id: int, conn: aiosqlite.Connection, sub: Optional[dict] = None):
+    """Upsert the rolling 30-day quota counter (call inside the same connection as claim insert).
+    Starts a fresh count when the old one no longer applies - window over, or a new subscription."""
     today = date.today().isoformat()
-    window_start = (date.today() - timedelta(days=30)).isoformat()  # monthly claim window
     cur = await conn.execute(
-        "SELECT current_window_start, claims_this_window FROM nidaan_plan_quota WHERE account_id=?",
+        "SELECT current_window_start, claims_this_window, updated_at FROM nidaan_plan_quota WHERE account_id=?",
         (account_id,),
     )
     row = await cur.fetchone()
-    if row is None or row[0] < window_start:
+    if row is None or quota_used({"current_window_start": row[0], "claims_this_window": row[1],
+                                  "updated_at": row[2]}, sub) == 0:
         await conn.execute(
             """INSERT INTO nidaan_plan_quota (account_id, current_window_start, claims_this_window, updated_at)
                VALUES (?, ?, 1, CURRENT_TIMESTAMP)
@@ -2288,7 +2328,7 @@ async def submit_claim(
         # Quota: only increment for subscription users (per-claim users have 1-claim hard limit via linked_claim_id)
         sub = await get_active_subscription(account_id)
         if sub:
-            await _increment_quota(account_id, conn)
+            await _increment_quota(account_id, conn, sub)
         await conn.commit()
 
     # Per-claim users: link this claim back to their purchase (enforces the 1-claim limit server-side)
@@ -3754,12 +3794,12 @@ async def get_all_accounts_admin(limit: int = 200, offset: int = 0) -> list[dict
     Adds claims_used / claims_cap (None = unlimited) for the usage bar, disputed_cap, and
     per-claim balance. Caps come from the super-admin-editable plans config."""
     cfg = await get_plans_config()
-    window_floor = (date.today() - timedelta(days=30)).isoformat()
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         cur = await conn.execute(
             """SELECT a.*, s.plan, s.status AS sub_status, s.current_period_end,
-                      q.claims_this_window, q.current_window_start,
+                      q.claims_this_window, q.current_window_start, q.updated_at AS quota_updated_at,
+                      s.started_at AS sub_started_at, s.active_since AS sub_active_since,
                       rst.name AS ref_staff_name, rbr.name AS ref_branch_name,
                       (SELECT COUNT(*) FROM nidaan_per_claim_purchase p
                         WHERE p.account_id = a.account_id AND p.status = 'paid') AS per_claim_total,
@@ -3791,11 +3831,10 @@ async def get_all_accounts_admin(limit: int = 200, offset: int = 0) -> list[dict
             pc = cfg.get(plan, {}) if cfg else {}
             r["claims_cap"] = pc.get("claims_per_month")   # None = unlimited
             r["disputed_cap"] = pc.get("disputed_cap")
-            used = r.get("claims_this_window") or 0
-            ws = r.get("current_window_start")
-            if not ws or str(ws) < window_floor:
-                used = 0                                    # window rolled over → resets on next claim
-            r["claims_used"] = used
+            r["claims_used"] = quota_used(
+                {"current_window_start": r.get("current_window_start"),
+                 "claims_this_window": r.get("claims_this_window"), "updated_at": r.get("quota_updated_at")},
+                {"started_at": r.get("sub_started_at"), "active_since": r.get("sub_active_since")})
         else:
             # "Paid one-time" = a bought review CREDIT (per_claim_purchase) OR a claim
             # whose ₹499 review fee was paid directly (advisor-lead funnel — no purchase
@@ -5899,7 +5938,9 @@ async def activate_from_razorpay_webhook(
         # Extend from the LATER of now / current end, so an early webhook never shortens a period.
         async with aiosqlite.connect(DB_PATH) as conn:
             await conn.execute(
-                "UPDATE nidaan_subscriptions SET status='active', current_period_end = datetime("
+                "UPDATE nidaan_subscriptions SET "
+                "active_since = CASE WHEN status <> 'active' THEN CURRENT_TIMESTAMP ELSE active_since END, "
+                "status='active', current_period_end = datetime("
                 "  CASE WHEN COALESCE(current_period_end,'') > datetime('now') "
                 "       THEN current_period_end ELSE datetime('now') END, ?) WHERE sub_id=?",
                 (f"+{int(period_days)} days", existing["sub_id"]))

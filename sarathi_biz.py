@@ -1226,7 +1226,7 @@ async def nidaan_branch_raise_claim(body: _BranchClaimReq, request: Request):
         complainant_name=_cname, complainant_phone=cphone, complainant_email=cemail,
         complainant_role="branch")
     if not claim_id:
-        raise HTTPException(400, msg or "Could not raise claim")
+        raise HTTPException(400, nidaan.claim_block_message(msg, for_staff=True))
     try:
         import biz_nidaan_notifications as _nnot
         # Reliable all-channel ops alert (bell + email + Telegram) for branch-raised claims.
@@ -4210,7 +4210,7 @@ async def nidaan_api_submit_claim(body: NidaanClaimReq, request: Request):
         complainant_email=(body.complainant_email or "").strip(),
     )
     if claim_id is None:
-        raise HTTPException(status_code=402, detail=reason)
+        raise HTTPException(status_code=402, detail=nidaan.claim_block_message(reason))
     # Auto-assign to the least-loaded handler if enabled + this is a real (payable) claim, not an
     # unpaid lead. Fire-and-forget so it never blocks or breaks claim submission; notifies the
     # chosen handler by email exactly like a manual assignment.
@@ -8746,7 +8746,7 @@ async def nidaan_ops_raise_for_subscriber(body: _RaiseForSubReq, request: Reques
         raised_via="on_behalf",
     )
     if not claim_id:
-        raise HTTPException(status_code=400, detail=msg or "Could not raise that claim.")
+        raise HTTPException(status_code=400, detail=nidaan.claim_block_message(msg, for_staff=True))
     _why = (body.no_letter_reason or "").strip()
     await _ops_audit(request, "claim.raised_on_behalf", "claim", claim_id,
                      (f"for account {body.account_id} ({acct.get('owner_name') or ''})"
@@ -11023,7 +11023,7 @@ async def ops_my_raise_claim(body: _BranchClaimReq, request: Request):
         raised_by_staff_id=(_staff or {}).get("staff_id"), raised_by_name=_actor_label(_staff or {}),
         raised_via="my_business")
     if not claim_id:
-        raise HTTPException(400, msg or "Could not raise claim")
+        raise HTTPException(400, nidaan.claim_block_message(msg, for_staff=True))
     try:
         import biz_nidaan_notifications as _nnot
         _rb = (_staff or {}).get("name") or "A staff member"

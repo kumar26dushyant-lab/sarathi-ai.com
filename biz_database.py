@@ -3754,6 +3754,12 @@ async def init_db():
                 "ALTER TABLE nidaan_subscriptions ADD COLUMN cancelled_at TIMESTAMP")
         except Exception:
             pass
+        # When the subscription's current run began, if it came back after a lapse (NULL = started_at).
+        try:
+            await conn.execute(
+                "ALTER TABLE nidaan_subscriptions ADD COLUMN active_since TIMESTAMP")
+        except Exception:
+            pass
 
         await conn.commit()
 
