@@ -9,6 +9,22 @@ _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned ·
 _Anything raised and not finished lives here until it is done, so an interruption does not lose
 it. Newest first within each group._
 
+### ▶ 2 Oct — the founder's list (sent after the 19:10 deploy), in order
+
+| # | What | Founder's words / notes |
+|---|---|---|
+| G1 | **Escalation: a working filter for every step, and a real query flow** - moving a claim to "Escalation Query" opens a box for the query (like other queries); another staff member answers it and it moves to a new step **"Escalation Query Responded"**; every step is a filter chip | "as we have 3 steps inside the bucket, so as anything moving to escalation query, it should open a dialog box ... then other staff will respond the query and move to escalation query responded" |
+| G2 | **8 pm voice note stops at ~48 seconds** - it must read the WHOLE summary (super-admins' and everyone's) | Founder, 2 Oct |
+| G3 | **The summary's purpose** - super-admins: who did what real work, what progressed, follow-ups, the BLOCKERS found and who is working on each; a blocker nobody owns is FLAGGED; focus areas. Each person: their own real work. **Flag "number-padding"**: the same claim updated again and again (today and again tomorrow) with no real progress, edits that only make a count bigger - for every staff member except super-admins and anyone testing a feature | The staff's own WhatsApp reports (screenshot, Chanchal 1 Oct) show the categories that matter: authorizations + dashboard verification done, review queries solved, claim forms filled, documents sorted + uploaded, gists prepared, pending-document coordination, case email + password coordination, contact verification, internal remarks |
+| G4 | **"Why is this claim waiting?" - APPROVED** as proposed (E5), with "Other" taking the staff member's own words | Build it |
+| G5 | **Days in a bucket = the FULL time inside the bucket**, adding up every stay if a claim leaves and comes back - not the time in the current step | Founder, 2 Oct |
+| G6 | **Escalation date**: mandatory, recorded the day it happens (Lokpal opens 30 days after it); a past date only with a super-admin's approval | Change E8: super-admins may set a past date; others ask for approval |
+| G7 | **WhatsApp inbox like real WhatsApp**: search all messages and inside a chat, a small set of good emojis, ticks (sent / delivered / read), date + time in IST (am/pm), the bot named **NidaanMitra** (not "AI assistant"); the website bot "Ask NidaanMitra" | |
+| G8 | **The bots know who they are talking to**: an unknown number is a LEAD - welcome them, learn why they came (a claim already? what happened?), encourage, quote the success rate from the homepage, end with the homepage testimonials link. Same on the website bot. Both bots give the SAME facts (one source), never fall for "your other bot said..." traps, protect PII (WhatsApp: code to verify; website: send a login link, never claim details), and hand to a person when unsure | |
+| G9 | **Claim-level WhatsApp conversation window, "fully loaded"**, in sync with the inbox - the same bot intelligence per claim | "I've not seen any progress on it yet" (D2 from 30 Sep) |
+| G10 | **"Start WhatsApp collection" must not send in one click** - a guided, step-by-step start with a confirmation, maybe inside the claim's WhatsApp window | Screenshot: it reported "Asked ... on WhatsApp ... went as our approved first message" (complainant name entered as "OLKL;L;L;L;L;L;" - junk data on that claim) |
+| G11 | **App Health: is it really connected and able to fix things?** | Honest answer owed: some cards still read CONFIGURATION ("API key configured", "SMTP configured", "AI configured") rather than an outcome - convert them |
+
 ### ▶ 1 Oct EVENING — the founder's decisions and list (after the 18:00 deploy), in order
 
 | # | What | Founder's words / notes |
