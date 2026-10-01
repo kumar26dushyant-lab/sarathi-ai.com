@@ -2050,8 +2050,8 @@ async function loadFeaturesTab(){
   const box = document.getElementById('featList'); if (!box) return;
   try {
     const [en, hi] = await Promise.all([
-      api('/features?lang=en').then(r=>r.ok?r.json():{features:[]}),
-      api('/features?lang=hi').then(r=>r.ok?r.json():{features:[]}),
+      api('/nidaan/api/features?lang=en').then(r=>r.ok?r.json():{features:[]}),
+      api('/nidaan/api/features?lang=hi').then(r=>r.ok?r.json():{features:[]}),
     ]);
     const byId = {}; (hi.features||[]).forEach(f=>{ byId[f.id]=f; });
     box.innerHTML = (en.features||[]).map(f=>{
@@ -2101,7 +2101,7 @@ async function _featSpeakBrowser(lang){
   const note = document.getElementById('featAudioNote');
   if (!('speechSynthesis' in window)) { if(note) note.textContent=''; return; }
   let speech = '';
-  try { const d = await api('/features?lang='+lang).then(r=>r.json()); speech = d.speech||''; } catch(e){}
+  try { const d = await api('/nidaan/api/features?lang='+lang).then(r=>r.json()); speech = d.speech||''; } catch(e){}
   if (!speech) { _featStop(); return; }
   const btn = document.getElementById('featPlayBtn');
   const u = new SpeechSynthesisUtterance(speech);
