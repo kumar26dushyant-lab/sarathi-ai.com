@@ -163,6 +163,54 @@ async def main():
         cid = (await (await c.execute("SELECT claim_id FROM nidaan_claim_documents WHERE doc_id=?", (did,))).fetchone())[0]
     check("7. a review that did not become claim 55 does not put its upload on claim 55", not cid, cid)
 
+    # 8 (re-review A) ─ a WhatsApp chat answered on WhatsApp is not "waiting" through its support thread
+    num = "915550000008"
+    th = await nid.create_support_thread(name="Caller", contact=num, channel="whatsapp", lang="hi")
+    await nid.set_support_status(th["thread_id"], "escalated")
+    await flow.log_message(direction="in", msisdn=num, body="please call me")
+    await flow.log_message(direction="out", msisdn=num, body="calling you now", sender="human")
+    async with aiosqlite.connect(DBP) as c:
+        await c.execute("UPDATE nidaan_support_threads SET sa_escalated_at=datetime('now','-2 hours') WHERE thread_id=?",
+                        (th["thread_id"],))
+        await c.execute("UPDATE nidaan_wa_messages SET created_at=datetime('now','-2 hours') WHERE msisdn=? AND direction='in'", (num,))
+        await c.execute("UPDATE nidaan_wa_messages SET created_at=datetime('now','-110 minutes') WHERE msisdn=? AND direction='out'", (num,))
+        await c.commit()
+    said = []
+
+    async def record(ids, title, body, **k):
+        said.append(body)
+        return 1
+    nid.is_within_business_hours, nn.notify_staff_inapp = open_, record
+    await nn.sweep_unanswered()
+    nid.is_within_business_hours, nn.notify_staff_inapp = real_open, real_notify
+    check("8. an answered WhatsApp chat gets no 'waiting' notice through its escalated support thread",
+          not any(num in b or ("#%s " % th["thread_id"]) in b for b in said), said)
+
+    # 8b ─ a staff reply sent from the WhatsApp screen answers that support thread too
+    import biz_nidaan_wa_inbox as inbox
+    import biz_nidaan_whatsapp as wa
+
+    async def contact(m):
+        return {"msisdn": m, "status": "", "bot_paused": 1,
+                "last_inbound_at": __import__("datetime").datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")}
+
+    async def sent(m, t):
+        return {"ok": True}
+    real = (flow.get_contact, wa.is_configured, wa.send_text)
+    flow.get_contact, wa.is_configured, wa.send_text = contact, (lambda: True), sent
+    try:
+        r = await inbox.send_human(num, "we have your papers", staff_id="3", staff_name="Ravi")
+    finally:
+        flow.get_contact, wa.is_configured, wa.send_text = real
+    after = await nid.find_open_support_thread(contact=num, channel="whatsapp")
+    check("8b. after a WhatsApp reply the support thread is no longer 'escalated' and its alarm is cleared",
+          r.get("ok") and after and after.get("status") != "escalated" and not after.get("sa_escalated_at"), (r, after))
+
+    # 9 (re-review B) ─ the charter-path ping to the claim's people does not spend the chat's notices
+    src = Path(orch.__file__).read_text(encoding="utf-8")
+    check("9. the WhatsApp bot never spends a chat's two notices itself (handover + escalation keep them)",
+          "chat_notice_allowed" not in src)
+
 
 asyncio.run(main())
 print("\n%s" % ("all passed" if not FAILED else "%d failed" % FAILED))

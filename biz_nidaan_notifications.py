@@ -3650,7 +3650,7 @@ _ESCALATE_AGAIN_MIN = 180       # still waiting — now it is a management probl
 _NOT_A_QUESTION = ("sticker", "reaction", "system", "unsupported", "ephemeral", "order")
 
 
-async def _unanswered_whatsapp(minutes: int) -> list:
+async def _unanswered_whatsapp(minutes: int, limit: int = 25) -> list:
     """Numbers whose LAST REAL message is theirs, older than `minutes`, still unanswered.
 
     "Real" excludes stickers and reactions, and excludes an inbound with no body and no media at
@@ -3685,8 +3685,8 @@ async def _unanswered_whatsapp(minutes: int) -> list:
             HAVING last_dir = 'in'
                AND last_at <= datetime('now', ?)
                AND last_at >= datetime('now', '-4 days')
-            ORDER BY last_at ASC LIMIT 25
-            """, (cutoff,))).fetchall()]
+            ORDER BY last_at ASC LIMIT ?
+            """, (cutoff, int(limit)))).fetchall()]
     return rows
 
 
@@ -3697,7 +3697,7 @@ async def _unanswered_support(minutes: int) -> list:
         conn.row_factory = aiosqlite.Row
         rows = [dict(r) for r in await (await conn.execute(
             """
-            SELECT thread_id, COALESCE(NULLIF(name,''),contact) AS who, contact,
+            SELECT thread_id, COALESCE(NULLIF(name,''),contact) AS who, contact, channel,
                    sa_escalated_at, last_at
             FROM nidaan_support_threads
             WHERE sa_escalated_at IS NOT NULL
@@ -3854,18 +3854,21 @@ async def sweep_unanswered() -> dict:
         return out
     # A WhatsApp chat handed to a person ALSO opens a support thread - one customer, not two.
     wa_numbers = {_digits(r["msisdn"]) for r in wa}
-    sup = [r for r in sup if _digits(r.get("contact") or "") not in wa_numbers]
+    # A support thread opened FROM WhatsApp is judged by the WhatsApp chat itself - answered there
+    # means answered (re-review, 1 Oct: an answered chat kept reading as waiting through its thread).
+    sup = [r for r in sup if (r.get("channel") or "") != "whatsapp"
+           and _digits(r.get("contact") or "") not in wa_numbers]
 
     items = [("chat:wa:" + "".join(ch for ch in r["msisdn"] if ch.isdigit()), "WhatsApp %s" % r["msisdn"],
               r["last_at"], "whatsapp") for r in wa] + \
-            [(chat_key_for_thread(r["thread_id"], "", r.get("contact") or ""),
+            [(chat_key_for_thread(r["thread_id"], r.get("channel") or "", r.get("contact") or ""),
               "Support #%s %s" % (r["thread_id"], r.get("who") or ""), r["sa_escalated_at"], "support")
              for r in sup]
     # Forget a count only when the chat has been ANSWERED - a chat still waiting but younger than
     # 45 minutes is not in `items`, and clearing it would hand it two more notices (review, 1 Oct).
     try:
         still = {"chat:wa:" + "".join(ch for ch in r["msisdn"] if ch.isdigit())
-                 for r in await _unanswered_whatsapp(0)}
+                 for r in await _unanswered_whatsapp(0, limit=5000)}
         async with aiosqlite.connect(db.DB_PATH) as _c:
             for (tid, ch, ct) in await (await _c.execute(
                     "SELECT thread_id, COALESCE(channel,''), COALESCE(contact,'') FROM nidaan_support_threads "

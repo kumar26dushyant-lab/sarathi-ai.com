@@ -898,9 +898,10 @@ async def handle_inbound_text(msisdn: str, text: str) -> dict:
         if _n_hold == 1:
             # The start of a wait is this chat's first of two staff notices - in office hours
             # only; at night the customer has been told when we open and the sweep raises it then.
-            import biz_nidaan_notifications as _nn_gate
-            if await _n.is_within_business_hours() and \
-                    await _nn_gate.chat_notice_allowed("chat:wa:" + msisdn):
+            # Information for the claim's own people - in office hours, once per wait. It does NOT
+            # use up the chat's two notices: those are the handover alert and the 3-hour
+            # escalation (re-review, 1 Oct - spending one here left the super-admins unwarned).
+            if await _n.is_within_business_hours():
                 await _tell_staff_inbound(claim_id, msisdn, text)
         await _handoff_to_support(claim, msisdn, text, lang, reason=_st["reason"], identity=ident,
                                   alert=(_n_hold == 1))

@@ -242,6 +242,11 @@ async def attach(item_id: int, claim_id: int, *, staff: dict) -> dict:
     item = dict(r)
     if item["status"] != "to_sort" or not item["stored_name"]:
         raise SortError("That file has already been sorted.")
+    from biz_nidaan_doc_intake import DOCS_DIR
+    try:
+        data = (DOCS_DIR / item["stored_name"]).read_bytes()
+    except OSError:
+        raise SortError("The stored file is missing - set it aside and ask them to send it again.")
     who = (staff.get("name") or "staff")[:80]
     # Claim the row FIRST: of two people pressing Attach at once, exactly one files it.
     c = await _conn()
@@ -255,8 +260,6 @@ async def attach(item_id: int, claim_id: int, *, staff: dict) -> dict:
         await c.close()
     if cur.rowcount != 1:
         raise SortError("That file has already been sorted.")
-    from biz_nidaan_doc_intake import DOCS_DIR
-    data = (DOCS_DIR / item["stored_name"]).read_bytes()
     name = item["filename"] or "document"
     if "." not in name:
         name += _ext(item["mime"], "")

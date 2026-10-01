@@ -267,6 +267,16 @@ async def send_human(msisdn: str, text: str, *, staff_id: str = "", staff_name: 
     # the customer hears two voices.
     if not ct.get("bot_paused"):
         await set_owner(msisdn, human=True, by_id=staff_id, by_name=staff_name)
+    # The same customer's support thread (opened when the bot handed them over) is answered too:
+    # otherwise it stays "escalated" and keeps reading as unanswered (re-review, 1 Oct).
+    try:
+        import biz_nidaan as _nd
+        th = await _nd.find_open_support_thread(contact=msisdn, channel="whatsapp")
+        if th and th.get("status") == "escalated":
+            await _nd.set_support_status(th["thread_id"], "ai")
+            await _nd.clear_support_sa_escalation(th["thread_id"])
+    except Exception:  # noqa: BLE001 - the reply went; this is bookkeeping
+        pass
     await mark_read(msisdn)
     return {"ok": True, "owner": "human"}
 
