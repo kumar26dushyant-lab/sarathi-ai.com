@@ -916,6 +916,16 @@ async def set_field(claim_id: int, field_key: str, value: str, actor: str = "",
             if not ("1900-01-01" <= val <= "2100-12-31"):
                 return {"ok": False, "error":
                         "%s is not a date anybody meant - check the year and try again." % val}
+        # The escalation date cannot be before today (founder, 1 Oct: a past date picked by
+        # mistake started the escalation clock days early). Only a CHANGED value is checked, so a
+        # form that sends every field back (the gist) never fails on a date already on file.
+        if val and field_key == "escalation_date" and val < _today_ist().isoformat():
+            had = await (await c.execute(
+                "SELECT value FROM nidaan_claim_fields WHERE claim_id=? AND field_key=?",
+                (int(claim_id), field_key))).fetchone()
+            if not had or (had[0] or "").strip() != val:
+                return {"ok": False, "error": "The escalation date cannot be before today (%s). "
+                        "Pick today's date or a later one." % _today_ist().strftime("%d-%m-%Y")}
 
         # A rejection cannot be dated before the admission it rejects (founder, 22 Sep). Same
         # shape and the same wording as the discharge rule below, because it is the same kind of
@@ -1215,6 +1225,15 @@ async def move(claim_id: int, to_key: str, *, sub: str = "", reason: str = "",
     if not sub:
         sub = next((s["sub_key"] for s in subs if s.get("is_default")),
                    (subs[0]["sub_key"] if subs else ""))
+        # Back from Lokpal, out of Hold, round from Reimbursement: an escalation already recorded
+        # is Escalated, not "Escalation Pending" (founder, 1 Oct - the step filter mixed them).
+        if to_key == "escalation" and "escalated" in valid_subs:
+            async with aiosqlite.connect(DB_PATH) as c:
+                ed = await (await c.execute(
+                    "SELECT value FROM nidaan_claim_fields WHERE claim_id=? AND field_key='escalation_date'",
+                    (int(claim_id),))).fetchone()
+            if ed and (ed[0] or "").strip():
+                sub = "escalated"
 
     # A park remembers where it came from; resuming clears the memory.
     if dest.get("is_park"):

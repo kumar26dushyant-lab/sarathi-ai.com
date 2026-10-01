@@ -1382,7 +1382,7 @@ async function _navLoadBuckets(){
 
 function navBucket(key){
   if (_currentPanel === 'l2' && typeof l2Pick === 'function'){ l2Pick(key); closeMobileNav(); }
-  else { _l2Sel = key; showPanel('l2'); }
+  else { _l2Sel = key; _l2Sub = ''; showPanel('l2'); }
   _navMark();
 }
 window.navBucket = navBucket;
@@ -15987,6 +15987,8 @@ function l2CaseRender(rem){
       // still saves on change, which for a text box is exactly when they leave it.
       input = (f.field_type === 'date')
         ? '<input type="date" id="lf_' + f.field_key + '" value="' + esc(v) + '" '
+          + (f.field_key === 'escalation_date'
+              ? 'min="' + new Date(Date.now()+5.5*3600*1000).toISOString().slice(0,10) + '" ' : '')
           + 'onchange="_l2DateEdit(this,\'' + f.field_key + '\',\'field\')" '
           + 'onblur="_l2DateCommit()">'
         : '<input type="' + (f.field_type === 'number' || f.field_type === 'money' ? 'number' : 'text')
