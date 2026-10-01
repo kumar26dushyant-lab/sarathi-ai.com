@@ -815,6 +815,16 @@ CAPABILITIES: list[dict] = [
         "telegram": False, "web": True, "min_role": "team_member",
     },
     {
+        "id": "office_hours_bot",
+        "en": {"t": "Customers waiting on chat or WhatsApp are told our office hours",
+               "d": "Whenever a customer is waiting for a person - at night, or in office hours before anyone picks it up - the website, dashboard and WhatsApp bot tell them our office hours (from the Customer Support setting) and when someone will reach out, at most three times, then stay quiet. Staff get at most two Telegram reminders per waiting chat, in office hours only. Your reply restarts the count.",
+               "u": "Answer waiting chats from WhatsApp Automation or Customer Support. Office hours are set on the Customer Support screen."},
+        "hi": {"t": "चैट या WhatsApp पर इंतज़ार करते ग्राहक को ऑफ़िस का समय बताया जाता है",
+               "d": "जब भी कोई ग्राहक किसी व्यक्ति का इंतज़ार कर रहा हो - रात में, या ऑफ़िस समय में जवाब मिलने से पहले - वेबसाइट, डैशबोर्ड और WhatsApp का बॉट उसे हमारे ऑफ़िस का समय (Customer Support सेटिंग से) और कब संपर्क होगा, बताता है - ज़्यादा से ज़्यादा तीन बार, फिर चुप। स्टाफ़ को हर इंतज़ार करती चैट के लिए ज़्यादा से ज़्यादा दो टेलीग्राम याद, सिर्फ़ ऑफ़िस समय में। आपका जवाब गिनती फिर से शुरू करता है।",
+               "u": "इंतज़ार करती चैट का जवाब WhatsApp Automation या Customer Support से दीजिये। ऑफ़िस का समय Customer Support स्क्रीन पर तय होता है।"},
+        "telegram": False, "web": True, "min_role": "team_member",
+    },
+    {
         "id": "evening_summary",
         "en": {"t": "Every evening, your day on Telegram - text and a voice note",
                "d": "At 8 pm each person gets their own summary: the claims they worked on and which bucket each sits in, the claims they moved (from where to where), what they did and their tasks - in their own language, with a voice note. Super-admins also get the team's day: bucket by bucket, every move and who made it, who worked on what, who recorded nothing, who is on leave. Money is always read out as rupees. A day with nothing recorded sends nothing.",

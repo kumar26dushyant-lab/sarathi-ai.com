@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SOP — What changed (1 October)</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#ffffff; --fg:#152238; --mut:#5a6b85; --line:#e3e9f2; --soft:#f6f9fc;
+  --accent:#0f766e; --accent-fg:#ffffff; --warn-bg:#fff8e6; --warn-line:#e8c96a;
+  --good-bg:#eefaf6; --good-line:#8fd4c2; --stop-bg:#fdf0ef; --stop-line:#e8a9a3;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0e1626; --fg:#e6edf7; --mut:#9fb0c9; --line:#1f2c42; --soft:#141f33;
+    --accent:#2dd4bf; --accent-fg:#06302b; --warn-bg:#2b2410; --warn-line:#6b5a1f;
+    --good-bg:#0f2a24; --good-line:#1f6b59; --stop-bg:#2c1615; --stop-line:#7a3430;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0e1626; --fg:#e6edf7; --mut:#9fb0c9; --line:#1f2c42; --soft:#141f33;
+  --accent:#2dd4bf; --accent-fg:#06302b; --warn-bg:#2b2410; --warn-line:#6b5a1f;
+  --good-bg:#0f2a24; --good-line:#1f6b59; --stop-bg:#2c1615; --stop-line:#7a3430;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:'Inter',system-ui,-apple-system,sans-serif;line-height:1.7}
+a{color:var(--accent)}
+.top{position:sticky;top:0;z-index:10;background:var(--accent);color:var(--accent-fg);padding:.85rem 1rem;display:flex;justify-content:space-between;align-items:center;gap:.6rem;flex-wrap:wrap}
+.top b{font-family:'Poppins',sans-serif;font-size:1rem}
+.langbtn{background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.4);color:inherit;font:inherit;font-size:.8rem;font-weight:600;padding:.25rem .7rem;border-radius:999px;cursor:pointer}
+.wrap{max-width:780px;margin:0 auto;padding:1.5rem 1rem 4rem}
+h1{font-family:'Poppins',sans-serif;font-size:1.5rem;line-height:1.3;margin-bottom:.3rem;text-wrap:balance}
+.sub{color:var(--mut);font-size:.87rem;margin-bottom:1.5rem}
+h2{font-family:'Poppins',sans-serif;font-size:1.05rem;margin:2rem 0 .6rem;padding-top:.9rem;border-top:1px solid var(--line)}
+p,li{font-size:.94rem}
+ul,ol{margin:.5rem 0 .5rem 1.3rem}
+li{margin-bottom:.45rem}
+.step{background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:1rem 1.1rem;margin:.9rem 0}
+.step .n{display:inline-block;background:var(--accent);color:var(--accent-fg);font-weight:700;font-size:.8rem;border-radius:999px;padding:.1rem .65rem;margin-bottom:.45rem}
+.step h3{font-size:1rem;font-family:'Poppins',sans-serif;margin-bottom:.35rem}
+.box{border-radius:10px;padding:.85rem 1rem;margin:1rem 0;font-size:.9rem}
+.good{background:var(--good-bg);border:1px solid var(--good-line)}
+.warn{background:var(--warn-bg);border:1px solid var(--warn-line)}
+.stop{background:var(--stop-bg);border:1px solid var(--stop-line)}
+.blank{background:var(--warn-bg);border:1px dashed var(--warn-line);padding:.15rem .5rem;border-radius:6px;font-weight:700}
+table{border-collapse:collapse;width:100%;min-width:30rem;font-size:.88rem}
+.tw{overflow-x:auto;border:1px solid var(--line);border-radius:10px;margin:1rem 0}
+th,td{text-align:left;padding:.55rem .75rem;border-bottom:1px solid var(--line);vertical-align:top}
+th{background:var(--soft);font-weight:700;white-space:nowrap}
+tr:last-child td{border-bottom:0}
+.hi{display:none}
+body.lang-hi .en{display:none}
+body.lang-hi .hi{display:block}
+body.lang-hi li.hi,body.lang-hi span.hi{display:revert}
+.foot{margin-top:2.5rem;padding-top:1rem;border-top:1px solid var(--line);color:var(--mut);font-size:.82rem}
+@media(max-width:600px){h1{font-size:1.3rem}.wrap{padding:1.2rem .9rem 3rem}}
+</style>
+</head>
+<body>
+<div class="top">
+  <b>NidaanPartner · SOP</b>
+  <button class="langbtn" id="langBtn" type="button">हिंदी</button>
+</div>
+<div class="wrap">
+
+<!-- ══════════════════ ENGLISH ══════════════════ -->
+<div class="en">
+
+<h1>What changed — and what to do</h1>
+<div class="sub">Everything new on NidaanPartner from 1 October 2026, with a real example for each. Read once; keep it open while you work today.</div>
+
+<div class="box good"><b>The three that matter most</b>
+<ol>
+<li>When a customer is waiting on chat or WhatsApp, the bot now tells them our office hours and that we will reach out. <b>You still have to reply</b> — you will get at most <b>two</b> Telegram reminders per chat.</li>
+<li>Every evening at 8 pm you get <b>your day</b> on Telegram, with a voice note. It only shows what you <b>recorded on the claims</b> — so record your work there.</li>
+<li>Forgot the Channel Partner on a My Business claim? <b>Ask to add it</b> on the claim; a super-admin approves.</li>
+</ol></div>
+
+<h2>1. Customers waiting on chat or WhatsApp</h2>
+<p>Our office hours are <b>Mon–Fri, 10 am–6 pm IST</b> (set on the Customer Support screen). Whenever a customer is waiting for a person — at night, or in office hours when nobody has picked it up yet — the bot on the website, the dashboard and WhatsApp now says:</p>
+<div class="box warn"><i>"Thank you for writing to NidaanPartner 🙏 Our office hours are Mon–Fri, 10 am–6 pm IST, and we are closed right now. Someone from our team will reach out to you on Monday at 10 am — your message is saved with us. We appreciate your patience."</i></div>
+<ul>
+<li>The bot says this <b>at most three times</b> while they wait, then stays quiet. Their messages are all still saved.</li>
+<li>The bot no longer argues or answers questions on a chat that is waiting for a person — that is your job.</li>
+<li>When <b>you</b> reply, the count starts again for the next time they wait.</li>
+</ul>
+<div class="step"><span class="n">Example</span><h3>A complainant writes at 9 pm on Friday</h3>
+<p>He writes "Mera claim kab hoga?" three times. He gets the office-hours message (it says <b>Monday at 10 am</b>), and after the third message the bot stops. Nobody is woken at night. On Monday at 10 am whoever is on <b>WhatsApp duty</b> gets one Telegram notice; if nobody replies in 3 hours, a second and last notice goes to them and the super-admins.</p>
+<p><b>What you do:</b> open <b>WhatsApp Automation</b> (WhatsApp chats) or <b>Customer Support</b> (website chat) and reply.</p></div>
+<div class="box stop"><b>Two notices, then silence.</b> Telegram will remind you about a waiting chat only twice. After that it is on your desk — it will not keep pinging. Please do not wait for a third reminder.</div>
+
+<h2>2. Files a customer sends while a person handles their chat</h2>
+<p>Before, if a chat had been handed to a person, files the customer sent on WhatsApp were <b>lost</b>. Now they are saved to the claim with the customer's own file name, and the people on the claim get <b>one</b> notice.</p>
+<div class="step"><span class="n">Example</span><h3>NP-123, Brajesh Gupta</h3>
+<p>His chat was with a person. At night he sent 8 files — discharge summary, claim form, final bills, investigation reports. They had been lost; they are now on the claim (19 documents). <b>What you do:</b> open the claim → 📂 Documents, check the new files, and reply to him.</p></div>
+
+<h2>3. Automatic replies are not the customer</h2>
+<p>Some phones answer by themselves ("We're unavailable right now", or a business greeting). The bot no longer replies to these, and they <b>no longer count</b> as the customer confirming their mobile. On the claim timeline you will see: <i>"Automatic reply from the complainant's phone (not a person…)"</i>.</p>
+<div class="step"><span class="n">Example</span><h3>NP-245</h3>
+<p>The complainant's number answered with "This message is sent to you from New India Insurance, Badwani…". That looks like an insurance agent's number, not the complainant's. <b>What you do:</b> call and confirm who the complainant is and which number is theirs; then press <b>Send confirmation</b>.</p></div>
+
+<h2>4. Your evening summary (8 pm, Telegram)</h2>
+<ul>
+<li><b>Everyone</b> gets their own day: the claims you worked on and which bucket each is in, the claims you moved (from where to where), what you did, and your tasks — in your language, with a voice note.</li>
+<li><b>Super-admins</b> also get the team's day: every bucket with what came in and went out, every move and who made it, who worked on what, and who is on leave.</li>
+<li>A day with nothing recorded sends you nothing. Change your language in the Telegram bot.</li>
+<li>Money is always read out as <b>rupees</b> (it used to say "dollars").</li>
+</ul>
+<div class="box warn"><b>Record your work on the claim.</b> A call you made but did not note, or a document you checked but did not tick, does not exist for the summary.</div>
+
+<h2>5. Channel Partner on an existing claim</h2>
+<div class="step"><span class="n">Steps</span><h3>Add a CP you forgot at intake</h3>
+<ol>
+<li>Open the claim (My Business claims only).</li>
+<li>In <b>Where this claim came from</b> → <b>Channel Partner</b> → <b>+ Ask to add a Channel Partner</b>.</li>
+<li>Choose the CP (only approved ones are listed), write why ("forgot at intake"), press <b>Send for approval</b>.</li>
+<li>A super-admin approves or rejects on the same claim. You get a message either way. Nothing changes on the claim until it is approved.</li>
+</ol></div>
+<p>To <b>remove</b> a wrong CP: same place → <b>Ask to remove this Channel Partner</b>, with a reason. To change one CP for another: remove first, then add. You can <b>withdraw</b> your request while it waits.</p>
+
+<h2>6. Duty</h2>
+<ul>
+<li>When a super-admin puts you on duty for a bucket or a channel, you now get a <b>Telegram message</b>.</li>
+<li>On a full day of approved <b>leave</b>, your duty alerts go to the cover you named. Work-from-home and half days do not move your duty.</li>
+</ul>
+
+<h2>7. The Level-2 Claims screen</h2>
+<div class="tw"><table>
+<tr><th>Card</th><th>What it counts</th></tr>
+<tr><td>Waiting for handover</td><td>Review said GO; not yet in Consolidation</td></tr>
+<tr><td>Fee settled</td><td>Level-2 fee paid, <b>or</b> covered by the plan / review (shown separately)</td></tr>
+<tr><td>Fee pending</td><td>Authorized Partner / My Business fee not paid yet</td></tr>
+<tr><td>All documents in</td><td>Ticked "all documents received" — ready to hand over</td></tr>
+<tr><td>ClaimShield case opened</td><td>A case exists at ClaimShield</td></tr>
+</table></div>
+<p>"Oldest waiting" and "average days" now count from the <b>GO review</b>, not from when the claim was registered.</p>
+
+<h2>8. Smaller things</h2>
+<ul>
+<li><b>"Branch" is now "Authorized Partner (AP)"</b> everywhere. Same partners, same codes, same login page.</li>
+<li>A suspended account or a disabled Authorized Partner is <b>logged out on their next click</b>. If a partner says "I can't log in", check whether they are disabled.</li>
+<li>A subscriber who presses <b>Cancel</b> is no longer charged again next month.</li>
+<li>On a staff or partner claim the <b>Edit Advisor</b> button is gone — there is no advisor to edit. Use <b>Fix</b> to correct who referred it.</li>
+</ul>
+
+</div>
+
+<!-- ══════════════════ HINDI ══════════════════ -->
+<div class="hi">
+
+<h1>क्या बदला — और आपको क्या करना है</h1>
+<div class="sub">1 अक्टूबर 2026 से NidaanPartner पर सब नया, हर एक का असली उदाहरण। एक बार पढ़िये; आज काम करते समय खुला रखिये।</div>
+
+<div class="box good"><b>सबसे ज़रूरी तीन बातें</b>
+<ol>
+<li>जब कोई ग्राहक चैट या WhatsApp पर इंतज़ार कर रहा हो, तो बॉट अब उसे हमारे ऑफ़िस का समय बताता है और कहता है कि हम संपर्क करेंगे। <b>जवाब आपको ही देना है</b> — हर चैट के लिए आपको टेलीग्राम पर <b>ज़्यादा से ज़्यादा दो</b> याद-दिलाने वाले संदेश आएँगे।</li>
+<li>हर शाम 8 बजे टेलीग्राम पर <b>आपका दिन</b> आएगा, आवाज़ के साथ। इसमें वही दिखता है जो आपने <b>क्लेम पर दर्ज</b> किया — इसलिए अपना काम वहीं दर्ज कीजिये।</li>
+<li>My Business क्लेम पर चैनल पार्टनर जोड़ना भूल गए? क्लेम पर <b>जोड़ने का अनुरोध</b> कीजिये; सुपर-एडमिन मंज़ूरी देंगे।</li>
+</ol></div>
+
+<h2>1. चैट या WhatsApp पर इंतज़ार करते ग्राहक</h2>
+<p>हमारे ऑफ़िस का समय <b>सोम–शुक्र, सुबह 10 से शाम 6 बजे (IST)</b> है (Customer Support स्क्रीन पर तय)। जब भी कोई ग्राहक किसी व्यक्ति का इंतज़ार कर रहा हो — रात में, या ऑफ़िस समय में जब किसी ने अभी तक जवाब नहीं दिया — वेबसाइट, डैशबोर्ड और WhatsApp का बॉट अब कहता है:</p>
+<div class="box warn"><i>"NidaanPartner को लिखने के लिए धन्यवाद 🙏 हमारे ऑफ़िस का समय सोम–शुक्र, सुबह 10 से शाम 6 बजे है, अभी ऑफ़िस बंद है। हमारी टीम से कोई सोमवार सुबह 10 बजे आपसे संपर्क करेगा — आपका संदेश हमारे पास सुरक्षित है। आपके धैर्य के लिए धन्यवाद।"</i></div>
+<ul>
+<li>इंतज़ार के दौरान बॉट यह <b>ज़्यादा से ज़्यादा तीन बार</b> कहता है, फिर चुप रहता है। ग्राहक के सारे संदेश फिर भी सुरक्षित रहते हैं।</li>
+<li>जो चैट किसी व्यक्ति का इंतज़ार कर रही है, उस पर बॉट अब सवालों के जवाब नहीं देता — वह काम आपका है।</li>
+<li>जब <b>आप</b> जवाब देते हैं, तो अगली बार के इंतज़ार के लिए गिनती फिर से शुरू होती है।</li>
+</ul>
+<div class="step"><span class="n">उदाहरण</span><h3>शुक्रवार रात 9 बजे एक शिकायतकर्ता लिखता है</h3>
+<p>वह तीन बार लिखता है "मेरा क्लेम कब होगा?"। उसे ऑफ़िस-समय वाला संदेश मिलता है (जिसमें <b>सोमवार सुबह 10 बजे</b> लिखा है), और तीसरे संदेश के बाद बॉट रुक जाता है। रात में किसी को नहीं जगाया जाता। सोमवार सुबह 10 बजे जो <b>WhatsApp ड्यूटी</b> पर है उसे टेलीग्राम पर एक सूचना मिलती है; 3 घंटे में जवाब न हो तो दूसरी और आख़िरी सूचना उन्हें और सुपर-एडमिन को जाती है।</p>
+<p><b>आपको क्या करना है:</b> <b>WhatsApp Automation</b> (WhatsApp चैट) या <b>Customer Support</b> (वेबसाइट चैट) खोलकर जवाब दीजिये।</p></div>
+<div class="box stop"><b>दो सूचनाएँ, फिर चुप्पी।</b> इंतज़ार करती चैट के बारे में टेलीग्राम सिर्फ़ दो बार याद दिलाएगा। उसके बाद वह आपकी ज़िम्मेदारी है — बार-बार संदेश नहीं आएगा। तीसरी याद का इंतज़ार मत कीजिये।</div>
+
+<h2>2. जब चैट किसी व्यक्ति के पास हो, तब ग्राहक की भेजी फ़ाइलें</h2>
+<p>पहले, अगर चैट किसी व्यक्ति को सौंप दी गई हो, तो ग्राहक की WhatsApp पर भेजी फ़ाइलें <b>खो जाती थीं</b>। अब वे ग्राहक के अपने फ़ाइल-नाम के साथ क्लेम में सेव होती हैं, और क्लेम से जुड़े लोगों को <b>एक</b> सूचना जाती है।</p>
+<div class="step"><span class="n">उदाहरण</span><h3>NP-123, बृजेश गुप्ता</h3>
+<p>उनकी चैट एक व्यक्ति के पास थी। रात में उन्होंने 8 फ़ाइलें भेजीं — डिस्चार्ज समरी, क्लेम फ़ॉर्म, फ़ाइनल बिल, जाँच रिपोर्ट। वे खो गई थीं; अब क्लेम पर हैं (19 दस्तावेज़)। <b>आपको क्या करना है:</b> क्लेम → 📂 Documents खोलिये, नई फ़ाइलें जाँचिये, और उन्हें जवाब दीजिये।</p></div>
+
+<h2>3. अपने-आप आने वाले जवाब ग्राहक नहीं हैं</h2>
+<p>कुछ फ़ोन खुद जवाब दे देते हैं ("We're unavailable right now", या किसी बिज़नेस का स्वागत संदेश)। बॉट अब इनका जवाब नहीं देता, और इन्हें ग्राहक का मोबाइल <b>कन्फ़र्म होना नहीं माना जाता</b>। क्लेम की टाइमलाइन पर लिखा दिखेगा: <i>"Automatic reply from the complainant's phone (not a person…)"</i>।</p>
+<div class="step"><span class="n">उदाहरण</span><h3>NP-245</h3>
+<p>शिकायतकर्ता के नंबर से जवाब आया "यह मैसेज आपको न्यू भारत इंश्योरेंस बड़वानी से भेजा गया है…"। यह किसी इंश्योरेंस एजेंट का नंबर लगता है, शिकायतकर्ता का नहीं। <b>आपको क्या करना है:</b> कॉल करके पक्का कीजिये कि शिकायतकर्ता कौन है और उनका नंबर कौन-सा है; फिर <b>Send confirmation</b> दबाइये।</p></div>
+
+<h2>4. आपका शाम का सार (रात 8 बजे, टेलीग्राम)</h2>
+<ul>
+<li><b>हर किसी</b> को अपना दिन मिलता है: आपने किन क्लेम पर काम किया और वे किस बकेट में हैं, कौन-से क्लेम कहाँ से कहाँ भेजे, आपने क्या किया, और आपके टास्क — आपकी भाषा में, आवाज़ के साथ।</li>
+<li><b>सुपर-एडमिन</b> को पूरी टीम का दिन भी मिलता है: हर बकेट में क्या आया-गया, हर मूव और किसने किया, किसने किस पर काम किया, और कौन छुट्टी पर है।</li>
+<li>जिस दिन कुछ दर्ज न हो, कुछ नहीं आता। भाषा टेलीग्राम बॉट में बदलिये।</li>
+<li>रकम हमेशा <b>रुपये</b> में बोली जाती है (पहले "डॉलर" बोला जाता था)।</li>
+</ul>
+<div class="box warn"><b>अपना काम क्लेम पर दर्ज कीजिये।</b> जो कॉल आपने की पर नोट नहीं किया, या जो दस्तावेज़ जाँचा पर टिक नहीं किया, वह सार में दिखेगा ही नहीं।</div>
+
+<h2>5. मौजूदा क्लेम पर चैनल पार्टनर</h2>
+<div class="step"><span class="n">कदम</span><h3>इनटेक में भूला हुआ CP जोड़ना</h3>
+<ol>
+<li>क्लेम खोलिये (सिर्फ़ My Business क्लेम)।</li>
+<li><b>Where this claim came from</b> → <b>Channel Partner</b> → <b>+ Ask to add a Channel Partner</b>।</li>
+<li>CP चुनिये (सिर्फ़ मंज़ूर CP दिखते हैं), कारण लिखिये ("इनटेक में भूल गए"), <b>Send for approval</b> दबाइये।</li>
+<li>सुपर-एडमिन उसी क्लेम पर मंज़ूर या अस्वीकार करते हैं। दोनों हालात में आपको संदेश आएगा। मंज़ूरी से पहले क्लेम पर कुछ नहीं बदलता।</li>
+</ol></div>
+<p>गलत CP <b>हटाने</b> के लिए: उसी जगह → <b>Ask to remove this Channel Partner</b>, कारण के साथ। एक CP की जगह दूसरा लगाना हो तो पहले हटाइये, फिर जोड़िये। इंतज़ार के दौरान आप अपना अनुरोध <b>वापस</b> ले सकते हैं।</p>
+
+<h2>6. ड्यूटी</h2>
+<ul>
+<li>जब सुपर-एडमिन आपको किसी बकेट या चैनल की ड्यूटी देते हैं, तो अब आपको <b>टेलीग्राम संदेश</b> आता है।</li>
+<li>मंज़ूर पूरे दिन की <b>छुट्टी</b> पर आपकी ड्यूटी के अलर्ट आपके बताए साथी (cover) को जाते हैं। वर्क-फ़्रॉम-होम और आधे दिन की छुट्टी में ड्यूटी नहीं बदलती।</li>
+</ul>
+
+<h2>7. Level-2 Claims स्क्रीन</h2>
+<div class="tw"><table>
+<tr><th>कार्ड</th><th>किसे गिनता है</th></tr>
+<tr><td>Waiting for handover</td><td>रिव्यू में GO; अभी Consolidation में नहीं</td></tr>
+<tr><td>Fee settled</td><td>लेवल-2 फ़ीस भरी गई, <b>या</b> प्लान / रिव्यू में शामिल (अलग-अलग दिखाया गया)</td></tr>
+<tr><td>Fee pending</td><td>अधिकृत पार्टनर / My Business की फ़ीस अभी बाकी</td></tr>
+<tr><td>All documents in</td><td>"सभी दस्तावेज़ मिले" टिक — सौंपने के लिए तैयार</td></tr>
+<tr><td>ClaimShield case opened</td><td>ClaimShield पर केस बन गया</td></tr>
+</table></div>
+<p>"Oldest waiting" और "average days" अब <b>GO रिव्यू</b> से गिने जाते हैं, क्लेम दर्ज होने के दिन से नहीं।</p>
+
+<h2>8. छोटी बातें</h2>
+<ul>
+<li><b>"ब्रांच" अब "अधिकृत पार्टनर (AP)" है</b>, हर जगह। वही पार्टनर, वही कोड, वही लॉगिन पेज।</li>
+<li>सस्पेंड अकाउंट या बंद किया गया अधिकृत पार्टनर <b>अगले क्लिक पर ही लॉग-आउट</b> हो जाता है। अगर कोई पार्टनर कहे "लॉगिन नहीं हो रहा", तो देखिये कहीं वह बंद तो नहीं।</li>
+<li>जो सब्सक्राइबर <b>Cancel</b> दबाता है, उससे अगले महीने दोबारा पैसे नहीं कटते।</li>
+<li>स्टाफ़ या पार्टनर के क्लेम पर <b>Edit Advisor</b> बटन अब नहीं है — वहाँ कोई एडवाइज़र है ही नहीं। किसने रेफ़र किया यह ठीक करना हो तो <b>Fix</b> इस्तेमाल कीजिये।</li>
+</ul>
+
+</div>
+
+<div class="foot">
+  <span class="en">Internal document — NidaanPartner operations. Please do not post this link publicly.</span>
+  <span class="hi">आंतरिक दस्तावेज़ — NidaanPartner ऑपरेशंस। यह लिंक सार्वजनिक रूप से न डालें।</span>
+</div>
+</div>
+
+<script>
+(function(){
+  function get(){ try{ return localStorage.getItem('nidaan_lang') || 'en'; }catch(e){ return 'en'; } }
+  function apply(l){
+    var hi = (l||'').toLowerCase().indexOf('hi') === 0;
+    document.body.classList.toggle('lang-hi', hi);
+    document.documentElement.lang = hi ? 'hi' : 'en';
+    var b = document.getElementById('langBtn');
+    if (b) b.textContent = hi ? 'English' : 'हिंदी';
+  }
+  apply(get());
+  var b = document.getElementById('langBtn');
+  if (b) b.addEventListener('click', function(){
+    var next = (get().toLowerCase().indexOf('hi') === 0) ? 'en' : 'hi';
+    try{ localStorage.setItem('nidaan_lang', next); }catch(e){}
+    apply(next);
+  });
+})();
+</script>
+</body>
+</html>

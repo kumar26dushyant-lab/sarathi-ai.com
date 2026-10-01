@@ -895,7 +895,12 @@ async def handle_inbound_text(msisdn: str, text: str) -> dict:
         import biz_nidaan_bot_hold as _hold
         _n_hold, _txt = await _hold.message_for("wa:" + msisdn, lang)
         if _n_hold == 1:
-            await _tell_staff_inbound(claim_id, msisdn, text)
+            # The start of a wait is this chat's first of two staff notices - in office hours
+            # only; at night the customer has been told when we open and the sweep raises it then.
+            import biz_nidaan_notifications as _nn_gate
+            if await _n.is_within_business_hours() and \
+                    await _nn_gate.chat_notice_allowed("chat:wa:" + msisdn):
+                await _tell_staff_inbound(claim_id, msisdn, text)
         await _handoff_to_support(claim, msisdn, text, lang, reason=_st["reason"], identity=ident,
                                   alert=(_n_hold == 1))
         if _txt:

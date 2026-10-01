@@ -129,6 +129,27 @@ async def main():
         told.append("escalated")
     orch._wa.send_text, orch._tell_staff_inbound = send_text, tell
     nn.on_support_escalated = esc
+    real_hours0 = nid.is_within_business_hours
+
+    async def _open():
+        return True
+
+    async def _closed():
+        return False
+    # at night: the customer is told, nobody on staff is pinged
+    nid.is_within_business_hours = _closed
+    await flow.upsert_contact("917000000001", mark_inbound=True)
+    async with aiosqlite.connect(DBP) as c:
+        await c.execute("INSERT INTO nidaan_claims (claim_id, account_id, claim_type, insured_name, "
+                        "insured_phone, complainant_phone, status) VALUES (124,1,'health','Y','7000000001',"
+                        "'7000000001','review_delivered')")
+        await c.commit()
+    await orch.handle_inbound_text("917000000001", "hello at night")
+    check("at night the customer gets the office-hours message", any("closed right now" in x or "band hai" in x
+                                                                    or "बंद है" in x for x in sent), sent)
+    check("...and nobody on staff is pinged at night", [t for t in told if t != "escalated"] == [], told)
+    sent.clear(); told.clear()
+    nid.is_within_business_hours = _open
     await flow.upsert_contact("918103283241", mark_inbound=True)
     for i in range(5):
         await orch.handle_inbound_text("918103283241", "Apko kya chahiye clear kare %d" % i)
@@ -137,6 +158,7 @@ async def main():
     check("unverified complainant: the holding message, three times in all", len(holding) == 3, sent)
     check("...never the old 'tell us what the claim is for' text", not any("kaunsi insurance company" in s for s in sent), sent)
     check("...staff told once for the wait, not per message", told.count("escalated") == 1 and len(told) == 2, told)
+    nid.is_within_business_hours = real_hours0
 
     # ── the sweep: two notices per chat, office hours only ────────────────
     notices = []

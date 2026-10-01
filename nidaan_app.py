@@ -8795,6 +8795,8 @@ _DOC_KEYS = {
     # forwarded and read on a phone - which is why it lives here behind the share key rather
     # than on the open web: it describes how we work, and it names our WhatsApp number.
     "sop-documents": "nidaan_sop_documents.html",
+    # What changed on 1 Oct, with an example for each - read by staff after the lunch deploy.
+    "sop-whats-new": "nidaan_sop_whats_new.html",
     # The Level-2 operating manual — how a paid claim travels through the buckets. Shared with
     # staff on an ordinary browser link so it can be forwarded and read on a phone; one page,
     # Hinglish and English, because the people doing the work do not read release notes.

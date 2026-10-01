@@ -1,5 +1,29 @@
 # Staff Announcement Drafts
 
+## 2026-10-01 (short) — What changed today  ← SEND THIS ONE (after the 1:30 pm update)
+
+_For: all staff. Not yet sent. Replaces the two drafts below it._
+
+**EN**
+
+📘 **NidaanPartner was updated during lunch. Please read: nidaanpartner.com/sop-whats-new** (sign in to ops first)
+
+1. A customer waiting on chat or WhatsApp is now told our office hours and that we will reach out. **You still reply** — Telegram reminds you only **twice** per chat.
+2. Files a customer sends while you handle their chat are now **saved to the claim** (they used to be lost).
+3. Every evening at 8 pm you get **your day** on Telegram, with a voice note. Record your work on the claims.
+4. Forgot the Channel Partner on a My Business claim? **Ask to add** it on the claim.
+
+**HI**
+
+📘 **लंच के समय NidaanPartner अपडेट हुआ। कृपया पढ़िये: nidaanpartner.com/sop-whats-new** (पहले ops में साइन इन कीजिये)
+
+1. चैट या WhatsApp पर इंतज़ार करते ग्राहक को अब हमारे ऑफ़िस का समय बताया जाता है और कहा जाता है कि हम संपर्क करेंगे। **जवाब आप ही देंगे** — हर चैट के लिए टेलीग्राम सिर्फ़ **दो बार** याद दिलाएगा।
+2. जब आप किसी की चैट संभाल रहे हों, तब ग्राहक की भेजी फ़ाइलें अब **क्लेम में सेव** होती हैं (पहले खो जाती थीं)।
+3. हर शाम 8 बजे टेलीग्राम पर **आपका दिन** आएगा, आवाज़ के साथ। अपना काम क्लेम पर दर्ज कीजिये।
+4. My Business क्लेम पर चैनल पार्टनर भूल गए? क्लेम पर **जोड़ने का अनुरोध** कीजिये।
+
+---
+
 ## 2026-09-30 (late, short) — Evening summary, Channel Partner requests, duty
 
 _For: all staff. Not yet sent._
