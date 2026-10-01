@@ -440,6 +440,27 @@ name; a super admin chooses one. `biz_nidaan_nav.BLOCKS` is the block list, and
 `deploy/verify-nav-blocks.py` (in check:all) fails if it and `buildSidebar` disagree. **Adding a menu
 option means adding it to both.**
 
+### 2 Oct: waiting reasons, escalation queries, days in a bucket, the summary, the bots
+
+- **Why a claim waits** - `biz_nidaan_waits`: automatic (documents, L2 fee, authorization) +
+  ticked (Query - complainant, Reply - insurer, Our team, Other with words), history in
+  `nidaan_claim_waits`, never deleted. Every list renders `_waitChips(...)`.
+- **Escalation steps** - pending -> query -> query_answered ("Escalation Query Responded") ->
+  escalated. A query step is entered only through the words (`WORDED_STEPS`, `via_flow`); the
+  text and who raised/answered live in `nidaan_bucket_queries`.
+- **Days in a bucket** - `bucket_days()`: `pipeline_bucket_at` (set ONLY by a bucket change) +
+  earlier stays from `nidaan_bucket_move_log`. `pipeline_stage_at` is the STEP clock. New code
+  that changes `pipeline_stage` must set `pipeline_bucket_at` too.
+- **A past escalation date** - super admins only.
+- **The 8 pm summary** - the voice is the whole text (`biz_tts.long_wav`); blockers with owners
+  (`blockers()`), "worth a look" (`padding()`) - never super-admins, never test claims.
+- **The bots** - both are NidaanMitra and read the same Content facts (track record, links). A
+  WhatsApp stranger gets lead mode; every public reply passes `guard_public_reply`. Trap and
+  injection rules are in both prompts - keep them when editing either.
+- **WhatsApp** - "Start collection" is preview -> confirm; a staff start is never the
+  complainant's consent (`opted_in` = campaign audience). `claim_thread()` is the claim's window -
+  the same rows as the inbox.
+
 ### The ops menu (1 Oct)
 
 The left menu is an office: foldable groups (My work, Consolidation with every bucket inside it,

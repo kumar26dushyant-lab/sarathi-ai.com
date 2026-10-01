@@ -1,5 +1,31 @@
 # Staff Announcement Drafts
 
+## 2026-10-02 (short) — Why a claim waits, escalation queries, WhatsApp in every claim  ← SEND AFTER TONIGHT'S UPDATE
+
+_For: all staff. Not yet sent._
+
+**EN**
+
+1. **Why is this claim waiting?** Every claim now shows it as small labels. Documents, fee and authorization fill themselves in; tick the rest on the claim (Query - complainant, Reply - insurer, Our team, Other with your own words). Each bucket can be filtered by it.
+2. **Escalation query:** choosing "Escalation Query" now asks what the insurer asked. Whoever answers presses "We have answered them" - the claim moves to **Escalation Query Responded**.
+3. **Days in a bucket** now count the whole time a claim has spent in that bucket.
+4. **WhatsApp inside every claim:** open a claim - "WhatsApp with the complainant" - read the conversation, reply (if you are on WhatsApp duty), or start document collection.
+5. **Start WhatsApp collection** now shows exactly what will be sent and to whom - nothing goes until you press Send.
+6. The WhatsApp inbox has search, ticks (✓ sent, ✓✓ delivered, blue ✓✓ read) and Indian times. The bot is called **NidaanMitra** everywhere.
+7. Your 8 pm summary now reads out everything in the voice note.
+
+**HI**
+
+1. **यह क्लेम क्यों रुका है?** हर क्लेम अब छोटे लेबल में दिखाता है। दस्तावेज़, फ़ीस और अनुमति अपने-आप भरते हैं; बाकी क्लेम पर टिक कीजिये (सवाल - शिकायतकर्ता, जवाब - बीमा कंपनी, हमारी टीम, अन्य अपने शब्दों में)। हर बकेट में इससे फ़िल्टर कर सकते हैं।
+2. **एस्केलेशन सवाल:** "Escalation Query" चुनने पर अब पूछा जाता है कि बीमा कंपनी ने क्या पूछा। जो जवाब दे वह "We have answered them" दबाए - क्लेम **Escalation Query Responded** पर जाता है।
+3. **बकेट में दिन** अब उस बकेट में बिताया पूरा समय गिनते हैं।
+4. **हर क्लेम में WhatsApp:** क्लेम खोलिये - "WhatsApp with the complainant" - बातचीत पढ़िये, जवाब दीजिये (अगर आप WhatsApp ड्यूटी पर हैं), या दस्तावेज़ माँगना शुरू कीजिये।
+5. **Start WhatsApp collection** अब पहले दिखाता है कि क्या और किसे भेजा जाएगा - Send दबाने तक कुछ नहीं जाता।
+6. WhatsApp इनबॉक्स में सर्च, टिक (✓ भेजा, ✓✓ पहुँचा, नीले ✓✓ पढ़ा) और भारतीय समय है। बॉट का नाम हर जगह **NidaanMitra** है।
+7. रात 8 बजे का सार अब आवाज़ में पूरा पढ़ा जाता है।
+
+---
+
 ## 2026-10-01 (night, short) — Cleaner screens, and help us arrange the menu  ← SEND TOMORROW MORNING
 
 _For: all staff. Not yet sent._
