@@ -12,6 +12,7 @@ _For: all staff. Not yet sent. Replaces the two drafts below it._
 2. Files a customer sends while you handle their chat are now **saved to the claim** (they used to be lost).
 3. Every evening at 8 pm you get **your day** on Telegram, with a voice note. Record your work on the claims.
 4. Forgot the Channel Partner on a My Business claim? **Ask to add** it on the claim.
+5. A customer sent papers to **your own** WhatsApp? Forward them to our WhatsApp number with the claim number in the caption (**NP-123**) — they are filed on the claim. Files from numbers not on a claim wait in **WhatsApp → Files to sort**.
 
 **HI**
 
@@ -21,6 +22,7 @@ _For: all staff. Not yet sent. Replaces the two drafts below it._
 2. जब आप किसी की चैट संभाल रहे हों, तब ग्राहक की भेजी फ़ाइलें अब **क्लेम में सेव** होती हैं (पहले खो जाती थीं)।
 3. हर शाम 8 बजे टेलीग्राम पर **आपका दिन** आएगा, आवाज़ के साथ। अपना काम क्लेम पर दर्ज कीजिये।
 4. My Business क्लेम पर चैनल पार्टनर भूल गए? क्लेम पर **जोड़ने का अनुरोध** कीजिये।
+5. किसी ग्राहक ने काग़ज़ **आपके अपने** WhatsApp पर भेजे? उन्हें हमारे WhatsApp नंबर पर फ़ॉरवर्ड कीजिये, कैप्शन में क्लेम नंबर (**NP-123**) लिखकर — फ़ाइल क्लेम पर लग जाएगी। जो फ़ाइलें किसी क्लेम वाले नंबर से नहीं आतीं, वे **WhatsApp → Files to sort** में रहती हैं।
 
 ---
 
