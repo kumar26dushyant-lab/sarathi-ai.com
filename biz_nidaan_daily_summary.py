@@ -81,6 +81,15 @@ ACTIONS = {
     "doc_reminder":            ("document reminders sent", "दस्तावेज़ रिमाइंडर भेजे", "document reminders bheje"),
     "doc_call":                ("calls made about documents", "दस्तावेज़ के लिए कॉल किए", "documents ke liye call kiye"),
     "contact_confirm_sent":    ("contact confirmations sent", "संपर्क पुष्टि भेजी", "contact confirmation bheje"),
+    # 2 Oct: the work staff report in their own evening messages that was not counted before.
+    "doc.chase":               ("documents chased", "दस्तावेज़ के लिए याद दिलाया", "documents ke liye yaad dilaya"),
+    "doc.called":              ("calls made about documents", "दस्तावेज़ के लिए कॉल किए", "documents ke liye call kiye"),
+    "doc.add":                 ("documents added to the list", "दस्तावेज़ सूची में जोड़े", "documents list mein jode"),
+    "doc_sorted":              ("WhatsApp files filed on claims", "WhatsApp फ़ाइलें क्लेम पर लगाईं", "WhatsApp files claim par lagayi"),
+    "claim.wa_start":          ("WhatsApp document collection started", "WhatsApp से दस्तावेज़ माँगना शुरू किया", "WhatsApp se documents maangna shuru kiya"),
+    "wa.reply":                ("WhatsApp replies to customers", "ग्राहकों को WhatsApp जवाब", "customers ko WhatsApp jawab"),
+    "case.secret_set":         ("case email / password updated", "केस ईमेल / पासवर्ड अपडेट", "case email / password update"),
+    "case.blocker":            ("blockers recorded", "रुकावट दर्ज की", "rukawat darj ki"),
 }
 
 # What counts as what. Progress and follow-ups are the work; document handling is the work's
@@ -91,10 +100,11 @@ PROGRESS = {"l2.handover", "claim.docs_complete", "claim.status", "case.draft_qu
             "claim.escalation_answered", "escalation.reply", "claim.raised_on_behalf"}
 FOLLOW = {"claim_message", "claimant_portal.link", "claimant_portal.email", "claimant_portal.push_auth",
           "claim.contact_confirm", "l2.pay_link", "doc.request", "case.query_contact",
-          "doc_reminder", "doc_call", "contact_confirm_sent"}
+          "doc_reminder", "doc_call", "contact_confirm_sent", "doc.chase", "doc.called",
+          "claim.wa_start", "wa.reply", "case.secret_set"}
 DOCS = {"claim.doc_upload", "doc.tick", "claim.doc_set", "claim.doc_set_parts", "claim.doc_rename",
-        "claim.doc_delete", "claim.doc_auto", "doc.remove", "myclaim.doc_delete"}
-NOTES = {"claim.gist", "case.draft_query", "note"}
+        "claim.doc_delete", "claim.doc_auto", "doc.remove", "myclaim.doc_delete", "doc.add", "doc_sorted"}
+NOTES = {"claim.gist", "case.draft_query", "note", "case.blocker"}
 KINDS = ("progress", "follow", "docs", "notes", "other")
 KIND_WORDS = {
     "en": {"progress": "moved forward", "follow": "followed up", "docs": "documents",
@@ -142,6 +152,8 @@ T = {
         "v_own": "Your day. You worked on {n} claims{where}. {moved}{tasks}Thank you for today.",
         "v_where": ", mostly in {b}", "v_moved": "You moved {n} claims. ",
         "v_tasks": "You finished {n} tasks. ",
+        "blk_head": "*Blockers on our side* ({n}; {u} with NOBODY on them):", "nobody": "⚠️ NOBODY", "owner": "owner",
+        "focus": "Focus: {what}", "pad_head": "*Worth a look* (counts that grew without a claim moving):",
     },
     "hi": {
         "team_head": "🌙 *NidaanPartner — आज* ({d})",
@@ -165,6 +177,8 @@ T = {
         "v_own": "आपका दिन। आपने {n} क्लेम पर काम किया{where}। {moved}{tasks}आज के काम के लिए धन्यवाद।",
         "v_where": ", ज़्यादातर {b} में", "v_moved": "आपने {n} क्लेम आगे बढ़ाए। ",
         "v_tasks": "आपने {n} टास्क पूरे किए। ",
+        "blk_head": "*हमारी तरफ़ रुके क्लेम* ({n}; {u} पर कोई नहीं):", "nobody": "⚠️ कोई नहीं", "owner": "ज़िम्मेदार",
+        "focus": "ध्यान दें: {what}", "pad_head": "*एक नज़र देखें* (गिनती बढ़ी, क्लेम आगे नहीं बढ़ा):",
     },
     "hinglish": {
         "team_head": "🌙 *NidaanPartner — aaj* ({d})",
@@ -188,6 +202,8 @@ T = {
         "v_own": "Aapka din. Aapne {n} claims par kaam kiya{where}. {moved}{tasks}Aaj ke kaam ke liye dhanyavaad.",
         "v_where": ", zyada tar {b} mein", "v_moved": "Aapne {n} claims move kiye. ",
         "v_tasks": "Aapne {n} tasks poore kiye. ",
+        "blk_head": "*Hamari taraf ruke claims* ({n}; {u} par koi nahi):", "nobody": "⚠️ KOI NAHI", "owner": "owner",
+        "focus": "Focus: {what}", "pad_head": "*Ek nazar dekhein* (count badha, claim aage nahi badha):",
     },
 }
 _LI = {"en": 0, "hi": 1, "hinglish": 2}
@@ -253,7 +269,27 @@ async def gather(start_utc: str, end_utc: str, today_ist: str) -> dict:
         out["notes"] = await q("SELECT staff_id, claim_id FROM nidaan_claim_notes "
                                "WHERE created_at>=? AND created_at<?", (start_utc, end_utc))
         out["acts"] = await q("SELECT actor, claim_id, kind FROM nidaan_claim_activity "
-                              "WHERE created_at>=? AND created_at<? AND kind IN ('doc_reminder','doc_call')", (start_utc, end_utc))
+                              "WHERE created_at>=? AND created_at<? AND kind IN ('doc_reminder','doc_call','doc_sorted')",
+                              (start_utc, end_utc))
+        # A gist save that CHANGED something leaves a 'gist' remark; one that changed nothing
+        # does not. The audit row is written either way - so only these count as work.
+        out["gist_changed"] = {(int(r["claim_id"]), (r["actor"] or "").split(" (as ")[0].strip().lower())
+                               for r in await q("SELECT DISTINCT claim_id, actor FROM nidaan_claim_activity "
+                                                "WHERE kind='gist' AND created_at>=? AND created_at<?",
+                                                (start_utc, end_utc)) if r.get("claim_id")}
+        # Yesterday too - "updated today and again tomorrow" is a two-day pattern.
+        y0 = (datetime.strptime(start_utc, "%Y-%m-%d %H:%M:%S") - timedelta(days=1)).strftime("%Y-%m-%d %H:%M:%S")
+        out["audit_prev"] = await q(
+            "SELECT actor_id, action, target_type, target_id FROM nidaan_audit_log "
+            "WHERE actor_type='staff' AND created_at>=? AND created_at<?", (y0, start_utc))
+        out["moves_prev"] = await _mv.between(y0, start_utc)
+        out["status_flips"] = await q(
+            "SELECT claim_id, from_status, to_status, changed_by_id, changed_at FROM nidaan_claim_status_log "
+            "WHERE changed_by_type='staff' AND changed_at>=? AND changed_at<? ORDER BY changed_at",
+            (y0, end_utc))
+        out["test_claims"] = {r["claim_id"] for r in await q(
+            "SELECT claim_id FROM nidaan_claims WHERE UPPER(COALESCE(insured_name,'')||' '||"
+            "COALESCE(complainant_name,'')) LIKE '%TEST%'")}
         ids = {int(a["target_id"]) for a in out["audit"]
                if a.get("target_type") == "claim" and str(a.get("target_id") or "").isdigit()}
         ids |= {int(m["claim_id"]) for m in out["moves"]}
@@ -325,7 +361,7 @@ def per_person(day: dict) -> dict:
 
     def p(sid):
         return people.setdefault(int(sid), {"claims": {}, "claim_ids": set(), "moves": [],
-                                            "actions": {}, "per_claim": {}})
+                                            "actions": {}, "per_claim": {}, "empty_saves": 0})
 
     def on(me, cid, action):
         pc = me["per_claim"].setdefault(int(cid), {"moves": [], "acts": {}})
@@ -333,10 +369,15 @@ def per_person(day: dict) -> dict:
         me["actions"][action] = me["actions"].get(action, 0) + 1
         me["claim_ids"].add(int(cid))
 
+    names_by_id = {st["staff_id"]: (st.get("name") or "").strip().lower() for st in day.get("staff", [])}
     for a in day["audit"]:
         if not a.get("actor_id") or a["action"] in _MOVE_ACTIONS:
             continue
         me = p(a["actor_id"])
+        if a["action"] == "claim.gist" and str(a.get("target_id") or "").isdigit() and \
+                (int(a["target_id"]), names_by_id.get(a["actor_id"], "")) not in day.get("gist_changed", set()):
+            me["empty_saves"] = me.get("empty_saves", 0) + 1     # saved, changed nothing
+            continue
         if a.get("target_type") == "claim" and str(a.get("target_id") or "").isdigit():
             on(me, int(a["target_id"]), a["action"])
         else:
@@ -437,6 +478,97 @@ def _actions_text(actions: dict, lang: str) -> str:
     return " · ".join(bits)
 
 
+# ── blockers and "worth a look" (founder, 2 Oct) ──────────────────────────────
+async def blockers(limit: int = 12) -> dict:
+    """Open claims that are stuck on US, worst first, each with who owns it - or NOBODY."""
+    try:
+        import biz_nidaan_case_state as _cs
+        b = await _cs.board(limit=1000)
+    except Exception as e:  # noqa: BLE001
+        logger.info("summary blockers skipped: %s", e)
+        return {"items": [], "by_flag": {}, "unowned": 0}
+    ids = [it["claim_id"] for it in b["items"]]
+    extra: dict = {}
+    if ids:
+        async with aiosqlite.connect(DB_PATH) as c:
+            ph = ",".join("?" * len(ids))
+            try:
+                for cid, sid in await (await c.execute(
+                        "SELECT claim_id, staff_id FROM nidaan_claim_assignees WHERE claim_id IN (%s)" % ph,
+                        ids)).fetchall():
+                    extra.setdefault(cid, set()).add(sid)
+            except Exception:  # noqa: BLE001
+                pass
+    stuck = []
+    for it in b["items"]:
+        if it.get("blocker") not in ("none", "internal") or not it.get("flags"):
+            continue
+        owners = set(extra.get(it["claim_id"], set()))
+        if it.get("assigned_to"):
+            owners.add(it["assigned_to"])
+        stuck.append({"claim_id": it["claim_id"], "who": it.get("who", ""), "stage": it.get("stage", ""),
+                      "flags": it["flags"], "age": it.get("age_days") or 0, "owners": owners})
+    stuck.sort(key=lambda x: (bool(x["owners"]), -x["age"]))     # nobody's first, then the oldest
+    flags: dict = {}
+    for s in stuck:
+        for f in s["flags"]:
+            flags[f] = flags.get(f, 0) + 1
+    return {"items": stuck[:limit], "total": len(stuck), "by_flag": flags,
+            "unowned": sum(1 for s in stuck if not s["owners"])}
+
+
+def padding(day: dict, people: dict) -> dict:
+    """{staff_id: [reasons]} - patterns that make a count bigger without moving a claim: saves
+    that changed nothing, the same claim re-touched today and yesterday with no progress,
+    a claim moved there and back, a status flipped and flipped back. Never super-admins, never
+    test claims. It says 'worth a look', not 'guilty' - a person decides."""
+    roles = {s["staff_id"]: s.get("role") for s in day.get("staff", [])}
+    tests = day.get("test_claims", set())
+    out: dict = {}
+
+    def add(sid, why):
+        if sid and roles.get(sid) and roles.get(sid) != "super_admin":
+            out.setdefault(sid, []).append(why)
+
+    for sid, me in people.items():
+        if me.get("empty_saves", 0) >= 3:
+            add(sid, "%d saves that changed nothing" % me["empty_saves"])
+    prev: dict = {}
+    for a in day.get("audit_prev", []):
+        if a.get("target_type") == "claim" and str(a.get("target_id") or "").isdigit():
+            prev.setdefault(a.get("actor_id"), {}).setdefault(int(a["target_id"]), set()).add(a["action"])
+    for sid, me in people.items():
+        again = []
+        for cid in me["claim_ids"]:
+            if cid in tests:
+                continue
+            pc = me["per_claim"].get(cid) or {}
+            today_kinds = {kind_of(x) for x in (pc.get("acts") or {})}
+            y = prev.get(sid, {}).get(cid)
+            if y and not pc.get("moves") and today_kinds <= {"other"} and {kind_of(x) for x in y} <= {"other"}:
+                again.append(cid)
+        if len(again) >= 3:
+            add(sid, "%d claims edited yesterday and again today with no progress (%s)"
+                % (len(again), ", ".join("NP-%d" % c for c in sorted(again)[:5])))
+    seen: dict = {}
+    for m in list(day.get("moves_prev", [])) + list(day.get("moves", [])):
+        key = (m.get("staff_id"), m["claim_id"])
+        if m["claim_id"] in tests:
+            continue
+        last = seen.get(key)
+        if last and last["from_key"] == m["to_key"] and last["to_key"] == m["from_key"]:
+            add(m.get("staff_id"), "NP-%d moved %s and straight back" % (m["claim_id"], m["from_key"]))
+        seen[key] = m
+    flips: dict = {}
+    for r in day.get("status_flips", []):
+        key = (r.get("changed_by_id"), r["claim_id"])
+        last = flips.get(key)
+        if last and last["from_status"] == r["to_status"] and r["claim_id"] not in tests:
+            add(r.get("changed_by_id"), "NP-%d status changed and changed back" % r["claim_id"])
+        flips[key] = r
+    return out
+
+
 # ── writing it ───────────────────────────────────────────────────────────────
 def own_text(day: dict, me: dict, staff_id: int, lang: str, date_label: str,
              head: bool = True) -> str:
@@ -518,6 +650,27 @@ def team_text(day: dict, people: dict, names: dict, lang: str, date_label: str) 
         lines.append(t["leave"].format(names=", ".join(leave)))
     if day["overdue_tasks"] or day["l2_unassigned"]:
         lines += ["", t["pend"].format(o=day["overdue_tasks"], u=day["l2_unassigned"])]
+    # BLOCKERS: stuck on us, who owns each - and the ones nobody owns, first (founder, 2 Oct).
+    bl = day.get("blockers") or {}
+    if bl.get("items"):
+        import biz_nidaan_case_state as _cs
+        lines += ["", t["blk_head"].format(n=bl.get("total", 0), u=bl.get("unowned", 0))]
+        for s in bl["items"]:
+            own = ", ".join(names.get(o, "?") for o in s["owners"]) if s["owners"] else t["nobody"]
+            why = "; ".join(_cs.FLAG_LABEL.get(f, f) for f in s["flags"][:2])
+            lines.append("• NP-%d %s — %s — %s: %s" % (s["claim_id"], s["who"][:24], why,
+                                                    t["owner"], own))
+        if bl.get("by_flag"):
+            import biz_nidaan_case_state as _cs2
+            top = sorted(bl["by_flag"].items(), key=lambda x: -x[1])[:3]
+            lines.append(t["focus"].format(what="; ".join("%s %d" % (_cs2.FLAG_LABEL.get(f, f), n) for f, n in top)))
+    # WORTH A LOOK: counts that grew without a claim moving (never super-admins, never tests).
+    pad = day.get("padding") or {}
+    if pad:
+        lines += ["", t["pad_head"]]
+        for sid, why in pad.items():
+            if sid in names:
+                lines.append("• %s — %s" % (names[sid], "; ".join(why)))
     return "\n".join(lines)
 
 
@@ -555,13 +708,29 @@ def _wav_to_ogg(wav: bytes) -> "bytes | None":
                 pass
 
 
+def _split_message(text: str, n: int = 3900) -> list:
+    """Telegram takes 4,096 characters a message: split at line ends, keep every line."""
+    out, cur = [], ""
+    for line in (text or "").split("\n"):
+        while len(line) > n:
+            out.append(line[:n]); line = line[n:]
+        if len(cur) + 1 + len(line) > n:
+            out.append(cur); cur = line
+        else:
+            cur = (cur + "\n" + line) if cur else line
+    if cur:
+        out.append(cur)
+    return out
+
+
 async def _voice_bytes(text: str) -> "bytes | None":
     """The voice note. biz_tts reads money as rupees (biz_speakable) - never dollars."""
     if os.getenv("NIDAAN_NO_OUTBOUND") == "1":
         return None
     try:
         import biz_tts
-        wav = await biz_tts.cached_wav(text[:1500], voice="Kore")
+        # The WHOLE summary, not a short script and not cut at 1,500 characters (founder, 2 Oct).
+        wav = await biz_tts.long_wav(text, voice="Kore")
         return _wav_to_ogg(wav) if wav else None
     except Exception as e:  # noqa: BLE001
         logger.info("daily_summary tts failed: %s", e); return None
@@ -578,6 +747,8 @@ async def build(now_ist: datetime | None = None) -> dict:
                        now_ist.strftime("%Y-%m-%d"))
     date_label = now_ist.strftime("%d %b %Y")
     people = per_person(day)
+    day["blockers"] = await blockers()
+    day["padding"] = padding(day, people)
     names = {s["staff_id"]: s["name"] for s in day["staff"]}
     admins = ("super_admin",)   # the team view is for super-admins; everyone else gets their own day
     out = []
@@ -588,15 +759,14 @@ async def build(now_ist: datetime | None = None) -> dict:
         me = people.get(sid)
         if s["role"] in admins:
             text = team_text(day, people, names, lang, date_label)
-            voice = team_voice(day, people, names, lang)
             if me:
                 text += "\n\n" + own_text(day, me, sid, lang, date_label, head=False)
             out.append({"staff_id": sid, "name": s["name"], "chat": s["chat"], "lang": lang,
-                        "kind": "team", "text": text, "voice": voice})
+                        "kind": "team", "text": text, "voice": text})
         elif me:
+            own = own_text(day, me, sid, lang, date_label)
             out.append({"staff_id": sid, "name": s["name"], "chat": s["chat"], "lang": lang,
-                        "kind": "own", "text": own_text(day, me, sid, lang, date_label),
-                        "voice": own_voice(day, me, sid, lang)})
+                        "kind": "own", "text": own, "voice": own})
     return {"date": date_label, "messages": out, "moves": len(day["moves"])}
 
 
@@ -620,8 +790,10 @@ async def run_daily_ops_summary(force: bool = False) -> dict:
         if not m["chat"]:
             continue
         try:
-            text = m["text"] if len(m["text"]) <= 3900 else m["text"][:3890] + "\n…"
-            ok, _ = await _tg.send_message(str(m["chat"]), text)
+            # The whole text: several messages when it is long, never cut off.
+            ok = True
+            for part in _split_message(m["text"]):
+                ok = (await _tg.send_message(str(m["chat"]), part))[0] and ok
             if ok:
                 sent += 1
                 v = await _voice_bytes(m["voice"])

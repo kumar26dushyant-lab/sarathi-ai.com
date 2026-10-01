@@ -69,6 +69,47 @@ async def _gemini_wav(text: str, voice: str, model: str) -> Optional[bytes]:
     return _pcm_to_wav(pcm, rate)
 
 
+CHUNK_CHARS = 1200
+
+
+def _chunks(text: str, n: int = CHUNK_CHARS) -> list:
+    """Split at line ends (then sentence ends) into pieces of at most `n` characters."""
+    out, cur = [], ""
+    for line in (text or "").split("\n"):
+        parts = [line]
+        if len(line) > n:
+            import re as _re
+            parts = [p for p in _re.split(r"(?<=[.!?।])\s+", line) if p]
+        for p in parts:
+            while len(p) > n:                       # a sentence longer than a piece: cut on a space
+                cut = p.rfind(" ", 0, n) if p.rfind(" ", 0, n) > n // 2 else n
+                out.append(p[:cut]); p = p[cut:].lstrip()
+            if cur and len(cur) + 1 + len(p) > n:
+                out.append(cur); cur = p
+            else:
+                cur = (cur + "\n" + p) if cur else p
+    if cur.strip():
+        out.append(cur)
+    return [c for c in out if c.strip()]
+
+
+async def long_wav(text: str, voice: str = "Kore", model: str = "") -> Optional[bytes]:
+    """The WHOLE text as one recording, however long (founder, 2 Oct: the 8 pm voice note
+    stopped at ~48 seconds). Read in pieces - each cached - and joined. If a piece fails twice
+    there is no voice note at all: half a summary read aloud is worse than the full text alone."""
+    pcm, rate = b"", None
+    for piece in _chunks(text):
+        wav = await cached_wav(piece, voice, model) or await cached_wav(piece, voice, model)
+        if not wav or len(wav) <= 44:
+            logger.info("long_wav: a piece failed - no voice note")
+            return None
+        r = struct.unpack("<I", wav[24:28])[0]
+        if rate is None:
+            rate = r
+        pcm += wav[44:]
+    return _pcm_to_wav(pcm, rate or 24000) if pcm else None
+
+
 async def cached_wav(text: str, voice: str = "Kore", model: str = "") -> Optional[bytes]:
     """WAV bytes for `text` in `voice`, generated once then served from disk cache. None on failure."""
     # Every voice reads Indian money as rupees, never dollars, and skips Markdown and emoji.
