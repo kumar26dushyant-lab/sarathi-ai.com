@@ -196,6 +196,17 @@ regulator). The ops config box is for what changes, and is **additive only**: a 
 sender can set red, never green. Unrecognised is amber; only our own mail and service notices are
 cleared.
 
+### Customers waiting for a person (1 Oct)
+
+`biz_nidaan_bot_hold` is the ONLY place a bot says "our office hours / someone will reach out":
+the website chat route and both WhatsApp paths call `message_for(conv_key, lang)` (keys
+`wa:<msisdn>`, `sup:<thread_id>`); at most 3 per wait, never two within a minute; a staff reply
+resets it (in `wa_flow.log_message` for sender "human", in `biz_nidaan.add_support_message` for
+staff). While a chat waits for a person the AI is not asked. Staff Telegram about a waiting chat:
+`chat_notice_allowed("chat:wa:..."/"chat:sup:...")` - two in all, office hours only. A Support
+reply on a WhatsApp thread goes out through `biz_nidaan_wa_inbox.send_human` first, and is saved
+only if WhatsApp accepted it.
+
 ### Evening summary, bucket moves, voice (30 Sep)
 
 `biz_nidaan_daily_summary` sends at 20:00 IST, once a day (`daily_summary_last`): super-admins the

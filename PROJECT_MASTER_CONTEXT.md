@@ -8169,3 +8169,21 @@ fresh-install pass for five columns created by ALTER before their table.
 came from an automatic away message (fixed); the number was later proven properly by a code on
 the claim page. The complainant mobile may belong to an insurance agency ("New India Insurance,
 Badwani") - staff should check who the complainant really is.
+
+## 1 Oct 2026 (morning) — bots tell people our hours; menu as an office; summary says what was done
+
+Founder, 1 Oct: every customer-facing bot (homepage chat, dashboard chat, WhatsApp) tells a waiting
+customer our office hours and that someone will reach out - the bot's message is the last one,
+at most three times, then silent; staff get at most TWO Telegram notices per waiting chat; the
+summary must say what was done on each claim; the ops menu must be an office with foldable
+groups and the buckets inside Consolidation; App Health must stop crying wolf; an SOP page for
+what changed; CRM revamp to be thought through. Deploy at 13:30 IST (staff lunch).
+
+Built: `biz_nidaan_bot_hold` (one rule, hours from the Support setting, atomic 3-message cap,
+reset on a staff reply); sweep rewritten to two notices per chat in office hours only, shared
+count with the handover alert, WhatsApp chat and its support thread = one customer, 4-day
+look-back; the Support screen now SENDS a reply to a WhatsApp-origin thread on WhatsApp (it was
+saved only - staff thought they had answered); evening summary per claim with kinds of work
+(moved forward / followed up / documents / notes / only edited); office menu + screen-open
+counting (`biz_nidaan_usage`) so tabs are retired on evidence; App Health per-person WhatsApp
+outcome and errors apart from warnings; CRM lead record routes authorised; `/sop-whats-new`.
