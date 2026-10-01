@@ -9169,6 +9169,67 @@ async def nidaan_ops_wa_reply(msisdn: str, body: _WaReplyReq, request: Request):
     return res
 
 
+# ── WhatsApp files to sort ────────────────────────────────────────────────────
+# A file sent to our number that matched no claim is kept (biz_nidaan_wa_unsorted) instead of
+# being dropped. Whoever may answer WhatsApp may sort it: attach to a claim they may work on, or
+# set it aside with a reason. Nothing is ever deleted.
+class _WaSortAttachReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    claim_id: int = Field(..., ge=1, le=10_000_000)
+
+
+class _WaSortAsideReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    reason: str = Field(..., min_length=3, max_length=200)
+
+
+@app.get("/nidaan/ops/api/wa/unsorted")
+async def nidaan_ops_wa_unsorted(request: Request, status: str = "to_sort"):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    await _require_wa_inbox(request)          # reading follows the inbox rule; sorting, the reply rule
+    import biz_nidaan_wa_unsorted as _sort
+    items = await _sort.listing(status)
+    for it in items:
+        it["url"] = _nidaan_doc_url(it["stored_name"]) if it.get("stored_name") else ""
+        it.pop("stored_name", None)
+    return {"items": items, "to_sort": await _sort.count_to_sort()}
+
+
+@app.post("/nidaan/ops/api/wa/unsorted/{item_id}/attach")
+@limiter.limit("60/minute")
+async def nidaan_ops_wa_unsorted_attach(item_id: int, body: _WaSortAttachReq, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    caller = await _require_wa_reply(request)
+    import biz_nidaan_wa_unsorted as _sort
+    try:
+        res = await _sort.attach(item_id, body.claim_id, staff={**caller, "name": _actor_label(caller)})
+    except _sort.SortError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    await _ops_audit(request, "wa.file_attach", "claim", body.claim_id, "unsorted #%s" % item_id)
+    return res
+
+
+@app.post("/nidaan/ops/api/wa/unsorted/{item_id}/set-aside")
+@limiter.limit("60/minute")
+async def nidaan_ops_wa_unsorted_aside(item_id: int, body: _WaSortAsideReq, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    caller = await _require_wa_reply(request)
+    import biz_nidaan_wa_unsorted as _sort
+    try:
+        res = await _sort.set_aside(item_id, staff={**caller, "name": _actor_label(caller)},
+                                    reason=body.reason)
+    except _sort.SortError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    await _ops_audit(request, "wa.file_aside", "wa", str(item_id), body.reason[:120])
+    return res
+
+
 # ── WhatsApp bulk campaigns (super_admin) ────────────────────────────────────
 class _WaCampaignFilters(BaseModel):
     model_config = ConfigDict(extra="forbid")

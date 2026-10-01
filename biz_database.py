@@ -1384,6 +1384,29 @@ async def init_db():
                 n         INTEGER NOT NULL DEFAULT 0,
                 PRIMARY KEY (day, staff_id, panel)
             );
+            -- WhatsApp files that matched no claim - kept to be sorted by a person, never deleted
+            -- (biz_nidaan_wa_unsorted).
+            CREATE TABLE IF NOT EXISTS nidaan_wa_unsorted (
+                item_id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                msisdn         TEXT NOT NULL,
+                sender_role    TEXT NOT NULL DEFAULT '',
+                sender_name    TEXT NOT NULL DEFAULT '',
+                wamid          TEXT NOT NULL DEFAULT '',
+                media_id       TEXT NOT NULL DEFAULT '',
+                mime           TEXT NOT NULL DEFAULT '',
+                filename       TEXT NOT NULL DEFAULT '',
+                caption        TEXT NOT NULL DEFAULT '',
+                stored_name    TEXT NOT NULL DEFAULT '',
+                size           INTEGER NOT NULL DEFAULT 0,
+                status         TEXT NOT NULL DEFAULT 'to_sort',
+                reason         TEXT NOT NULL DEFAULT '',
+                claim_id       INTEGER,
+                decided_by     INTEGER,
+                decided_name   TEXT NOT NULL DEFAULT '',
+                decided_at     TIMESTAMP,
+                received_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_waunsorted_status ON nidaan_wa_unsorted(status, item_id);
             -- The bot's "someone will reach out" count per waiting conversation (biz_nidaan_bot_hold).
             CREATE TABLE IF NOT EXISTS nidaan_bot_holds (
                 conv_key  TEXT PRIMARY KEY,

@@ -759,6 +759,11 @@ def _doc_sig(stored_name: str, exp: int) -> str:
         secret = secret.encode()
     return hmac.new(secret, f"{stored_name}:{exp}".encode(), hashlib.sha256).hexdigest()[:32]
 
+def _nidaan_doc_url(stored_name: str) -> str:
+    """Relative URL to a claim document, signed and valid for _DOC_URL_TTL."""
+    exp = int(_time.time()) + _DOC_URL_TTL
+    return f"/uploads/nidaan-docs/{stored_name}?exp={exp}&sig={_doc_sig(stored_name, exp)}"
+
 def _verify_doc_sig(stored_name: str, exp: str, sig: str) -> bool:
     import hmac
     try:
@@ -958,6 +963,135 @@ def _register_doc_routes() -> None:
 
 
 _register_doc_routes()
+
+
+# ── WhatsApp INBOX (conversations, takeover, human reply) ────────────────────
+# Gated at sub_super_admin, not super_admin: the whole point of takeover is that a senior human
+# can answer a customer, and there are only three super-admins. Settings and campaigns (below)
+# stay super-admin — reading and replying is day-to-day work, changing automation is not.
+
+async def _require_wa_inbox(request: Request) -> dict:
+    """Who may read and answer WhatsApp conversations.
+
+    Super-admins and sub-super-admins keep it for oversight. Beyond that it belongs to whoever is
+    ROSTERED onto WhatsApp today — the same duty roster the support chat uses, so nobody has to
+    learn a second way of saying who is answering. A team member rostered on can work the inbox;
+    the same person tomorrow, off duty, cannot.
+    """
+    caller = _require_staff(request, "team_member")
+    role = (caller or {}).get("role") or ""
+    if role in ("super_admin", "sub_super_admin"):
+        return caller
+    try:
+        if int(caller.get("staff_id") or 0) in await nidaan.on_duty_rep_ids("whatsapp"):
+            return caller
+    except Exception:
+        pass
+    raise HTTPException(status_code=403,
+                        detail="The WhatsApp inbox is open to whoever is on WhatsApp duty today. "
+                               "Ask a super-admin to add you to the roster.")
+
+
+async def _require_wa_reply(request: Request) -> dict:
+    """READING the inbox and REPLYING in it are different privileges.
+
+    Every admin can read, because they need to see what customers are being told. Replying is
+    narrower: a super-admin, or whoever is actually rostered on WhatsApp today. A customer should
+    get one voice, from the person holding the conversation - not four admins answering at once
+    because they all happened to have the screen open.
+    """
+    caller = await _require_wa_inbox(request)
+    role = (caller or {}).get("role") or ""
+    if role == "super_admin":
+        return caller
+    try:
+        if int(caller.get("staff_id") or 0) in await nidaan.on_duty_rep_ids("whatsapp"):
+            return caller
+    except Exception:
+        pass
+    raise HTTPException(
+        status_code=403,
+        detail="You can read this inbox, but replying is for whoever is on WhatsApp duty today. "
+               "Ask a super-admin to put you on the roster if you need to answer.")
+
+
+# ── WhatsApp files to sort ────────────────────────────────────────────────────
+# A file sent to our number that matched no claim is kept (biz_nidaan_wa_unsorted) instead of
+# being dropped. Whoever may answer WhatsApp may sort it: attach to a claim they may work on, or
+# set it aside with a reason. Nothing is ever deleted.
+class _WaSortAttachReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    claim_id: int = Field(..., ge=1, le=10_000_000)
+
+
+class _WaSortAsideReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    reason: str = Field(..., min_length=3, max_length=200)
+
+
+@app.get("/nidaan/ops/api/wa/unsorted")
+async def nidaan_ops_wa_unsorted(request: Request, status: str = "to_sort"):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    await _require_wa_inbox(request)          # reading follows the inbox rule; sorting, the reply rule
+    import biz_nidaan_wa_unsorted as _sort
+    items = await _sort.listing(status)
+    for it in items:
+        it["url"] = _nidaan_doc_url(it["stored_name"]) if it.get("stored_name") else ""
+        it.pop("stored_name", None)
+    return {"items": items, "to_sort": await _sort.count_to_sort()}
+
+
+@app.post("/nidaan/ops/api/wa/unsorted/{item_id}/attach")
+@limiter.limit("60/minute")
+async def nidaan_ops_wa_unsorted_attach(item_id: int, body: _WaSortAttachReq, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    caller = await _require_wa_reply(request)
+    import biz_nidaan_wa_unsorted as _sort
+    try:
+        res = await _sort.attach(item_id, body.claim_id, staff={**caller, "name": _actor_label(caller)})
+    except _sort.SortError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    await _ops_audit(request, "wa.file_attach", "claim", body.claim_id, "unsorted #%s" % item_id)
+    return res
+
+
+@app.post("/nidaan/ops/api/wa/unsorted/{item_id}/set-aside")
+@limiter.limit("60/minute")
+async def nidaan_ops_wa_unsorted_aside(item_id: int, body: _WaSortAsideReq, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    caller = await _require_wa_reply(request)
+    import biz_nidaan_wa_unsorted as _sort
+    try:
+        res = await _sort.set_aside(item_id, staff={**caller, "name": _actor_label(caller)},
+                                    reason=body.reason)
+    except _sort.SortError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    await _ops_audit(request, "wa.file_aside", "wa", str(item_id), body.reason[:120])
+    return res
+
+
+async def _crm_lead_for(staff: dict, lead_id: int) -> dict:
+    """The lead, if this person may see it - else 404, the same answer as no such lead.
+
+    The list was filtered by owner but the record routes were not: any team member could read,
+    edit, comment on or mark won ANY lead by its number (found 1 Oct). Admins see every lead; a
+    team member sees the leads they own or created - exactly what their list already shows."""
+    import biz_nidaan_crm as _crm
+    lead = await _crm.get_lead(lead_id)
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    if (staff.get("role") or "") in ("super_admin", "sub_super_admin"):
+        return lead
+    me = staff.get("staff_id")
+    if me and me in (lead.get("owner_staff_id"), lead.get("created_by_staff_id")):
+        return lead
+    raise HTTPException(status_code=404, detail="Lead not found")
 
 
 # =============================================================================

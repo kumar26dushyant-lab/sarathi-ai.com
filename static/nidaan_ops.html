@@ -13724,7 +13724,61 @@ async function loadWhatsapp(){
   if (d.can_configure) waLoadCampaigns();
   waiLoadList().then(function(){ if (_waiSel) waiOpen(_waiSel); });
   waiStartPoll();
+  // Files that came in on WhatsApp and matched no claim - kept, to be filed by a person.
+  const _hdr = panel.querySelector('.section-hdr');
+  if (_hdr && !document.getElementById('waSort')) _hdr.insertAdjacentHTML('afterend', '<div id="waSort"></div>');
+  waSortLoad();
 }
+
+// ── Files to sort ────────────────────────────────────────────────────────────
+async function waSortLoad(){
+  const box = document.getElementById('waSort'); if (!box) return;
+  let d = {items: [], to_sort: 0};
+  try{ const r = await API('/wa/unsorted?status=to_sort'); if (!r.ok) { box.innerHTML = ''; return; } d = await r.json(); }catch(e){ return; }
+  const items = d.items || [];
+  if (!items.length){
+    box.innerHTML = '<div style="font-size:.78rem;color:var(--nd-text-faint);margin:0 0 .8rem">📎 Files to sort: none. Every file that came in is on a claim.</div>';
+    return;
+  }
+  const rows = items.map(function(it){
+    const who = (it.sender_name ? esc(it.sender_name) + ' · ' : '') + esc(it.sender_role || 'unknown')
+      + ' · …' + esc(String(it.msisdn || '').slice(-4));
+    const name = esc(it.filename || 'document') + (it.caption ? ' <span style="color:var(--nd-text-faint)">— “' + esc(it.caption) + '”</span>' : '');
+    return '<div style="display:flex;flex-wrap:wrap;gap:.45rem;align-items:center;padding:.5rem 0;border-top:1px solid var(--nd-border)">'
+      + '<div style="flex:1 1 220px;min-width:0"><div style="font-size:.84rem;font-weight:600;word-break:break-word">' + name + '</div>'
+      + '<div style="font-size:.72rem;color:var(--nd-text-muted)">' + who + ' · ' + esc(String(it.received_at || '').slice(0, 16)) + ' UTC</div></div>'
+      + (it.url ? '<a class="btn-sm btn-ghost" href="' + esc(it.url) + '" target="_blank" rel="noopener">Open</a>' : '')
+      + '<input id="wsC_' + it.item_id + '" inputmode="numeric" placeholder="NP-…" aria-label="Claim number" style="width:6.5rem">'
+      + '<button class="btn-sm btn-primary" onclick="waSortAttach(' + it.item_id + ')">Attach</button>'
+      + '<button class="btn-sm btn-ghost" onclick="waSortAside(' + it.item_id + ')">Set aside</button></div>';
+  }).join('');
+  box.innerHTML = '<div style="background:var(--nd-bg-surface);border:1px solid var(--nd-warning-text);border-radius:12px;padding:.75rem .9rem;margin-bottom:1rem">'
+    + '<div style="font-weight:800;color:var(--nd-warning-text)">📎 Files to sort (' + (d.to_sort || items.length) + ')</div>'
+    + '<div style="font-size:.76rem;color:var(--nd-text-muted);margin:.15rem 0 .35rem">Sent to our WhatsApp from a number that is not on a claim. Open it, then attach it to the right claim — or set it aside with a reason. Nothing is deleted. Staff can file their own forwards directly by writing the claim number (e.g. NP-123) in the caption.</div>'
+    + rows + '</div>';
+}
+async function waSortAttach(id){
+  const raw = ((document.getElementById('wsC_' + id) || {}).value || '').replace(/[^0-9]/g, '');
+  if (!raw){ ndUI.toast('Type the claim number first', 'warning'); return; }
+  if (!confirm('Attach this file to NP-' + raw + '?')) return;
+  try{
+    const r = await API('/wa/unsorted/' + id + '/attach', {method:'POST', body: JSON.stringify({claim_id: parseInt(raw, 10)})});
+    const d = await r.json().catch(function(){ return {}; });
+    if (!r.ok){ ndUI.toast((typeof d.detail === 'string' && d.detail) || 'Could not attach', 'error'); return; }
+    ndUI.toast('Attached to NP-' + raw, 'success'); waSortLoad();
+  }catch(e){ ndUI.toast('Could not attach', 'error'); }
+}
+async function waSortAside(id){
+  const why = (prompt('Why is this file not for any claim? (e.g. duplicate, not a document)') || '').trim();
+  if (why.length < 3) return;
+  try{
+    const r = await API('/wa/unsorted/' + id + '/set-aside', {method:'POST', body: JSON.stringify({reason: why})});
+    const d = await r.json().catch(function(){ return {}; });
+    if (!r.ok){ ndUI.toast((typeof d.detail === 'string' && d.detail) || 'Could not set aside', 'error'); return; }
+    ndUI.toast('Set aside', 'success'); waSortLoad();
+  }catch(e){ ndUI.toast('Could not set aside', 'error'); }
+}
+window.waSortLoad = waSortLoad; window.waSortAttach = waSortAttach; window.waSortAside = waSortAside;
 async function waPreviewAudience(){
   const el=document.getElementById('wcCount'); el.textContent='Counting…';
   const filters={language:document.getElementById('wcAudLang').value, segment:document.getElementById('wcSeg').value};

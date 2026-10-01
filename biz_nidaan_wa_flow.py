@@ -218,13 +218,27 @@ async def _reply_unlinked(msisdn: str) -> None:
 
 
 async def _on_inbound_media(msisdn: str, media_id: str, mime: str, wamid: str,
-                            filename: str = "") -> None:
+                            filename: str = "", caption: str = "") -> None:
     """A complainant sent a FILE (a document). PHASE 1 HANDOFF — the intelligent pipeline goes here:
       1. download_media → 2. right-doc + quality check (Gemini vision, against the doc we asked for)
       3. normalize_to_pdf + segment → 4. name per convention → 5. mark_doc_received / nudge if wrong
       6. sync the checklist (single source of truth) → 7. guided next-step reply.
     Routed to the orchestrator's guided pipeline: right-doc + quality gate → convert → save →
-    mark checklist → ask next. Falls back to an ops alert only if no claim matches the number."""
+    mark checklist → ask next. A file that matches no claim is KEPT in "Files to sort"
+    (biz_nidaan_wa_unsorted) - it used to be dropped with only a bell to say it had come."""
+    import biz_nidaan_wa_unsorted as _sort
+    # A STAFF member forwarding a customer's papers, with the claim number in the caption
+    # (founder, 1 Oct: forwarding allowed from any staff number). Filed on that claim if they may
+    # work on it; otherwise kept to sort. Without a claim number it goes the normal way below.
+    staff = await _sort.staff_for(msisdn)
+    if staff and _sort.claim_number(caption):
+        try:
+            res = await _sort.staff_forward(staff, msisdn, media_id, mime, filename=filename,
+                                            caption=caption, wamid=wamid)
+            await wa.send_text(msisdn, _sort.staff_reply(res))
+        except Exception as e:  # noqa: BLE001
+            logger.warning("staff forward failed: %s", e)
+        return
     try:
         import biz_nidaan_wa_orchestrator as _orch
         res = await _orch.handle_inbound_document(msisdn, media_id, mime, filename=filename)
@@ -232,15 +246,32 @@ async def _on_inbound_media(msisdn: str, media_id: str, mime: str, wamid: str,
             return   # handled (accepted, nudged, or human-takeover)
     except Exception as e:  # noqa: BLE001
         logger.info("orchestrator media handoff failed: %s", e)
-    # No matching claim (or orchestrator error) — don't lose it: alert ops.
-    claim_id = await _claim_for_msisdn(msisdn)
+    # No claim matched: KEEP it, tell the sender once, tell the person on WhatsApp duty once.
     try:
-        import biz_nidaan_notifications as _nnot
-        await _nnot.notify_staff_inapp(
-            await _admin_ids(), "📎 Complainant sent a document on WhatsApp",
-            f"A document arrived from {msisdn}" + (f" (claim #{claim_id})" if claim_id else "")
-            + " but it could not be auto-matched to a claim — review in ops.",
-            event_key="wa.doc_received", email=False, claim_id=claim_id)
+        import biz_nidaan_wa_identity as _ident
+        who = await _ident.resolve(msisdn)
+    except Exception:  # noqa: BLE001
+        who = {}
+    kept = await _sort.keep(msisdn, media_id, mime, filename=filename, caption=caption, wamid=wamid,
+                            sender_role=("staff" if staff else (who.get("role") or "unknown")),
+                            sender_name=((staff or {}).get("name") or who.get("name") or ""))
+    try:
+        import biz_nidaan_wa_orchestrator as _orch
+        if await _orch._reserve_reply(msisdn, 30):
+            await wa.send_text(msisdn, _sort.sender_ack(staff=bool(staff), lang=await _orch._lang(msisdn)))
+    except Exception as e:  # noqa: BLE001
+        logger.info("file ack failed: %s", e)
+    try:
+        if await _sort.notice_due(msisdn):
+            import biz_nidaan_notifications as _nnot
+            await _nnot.notify_staff_inapp(
+                await _admin_ids(), "\U0001f4ce A file arrived on WhatsApp - it needs a claim",
+                "From %s (%s). It is kept in WhatsApp → Files to sort: open it and attach it to "
+                "the right claim.%s" % (
+                    msisdn, kept.get("status") == "not_stored" and "NOT stored: " + kept.get("reason", "")
+                    or ((staff or {}).get("name") or who.get("name") or who.get("role") or "unknown number"),
+                    ""),
+                event_key="wa.doc_received", email=False)
     except Exception:
         pass
 
@@ -402,7 +433,8 @@ async def handle_inbound_payload(payload: dict) -> dict:
                     elif mtype in ("image", "document", "audio", "video"):
                         media = m.get(mtype) or {}
                         await _on_inbound_media(msisdn, media.get("id", ""), media.get("mime_type", ""), wamid,
-                                                filename=media.get("filename", ""))
+                                                filename=media.get("filename", ""),
+                                                caption=media.get("caption", ""))
                     elif mtype == "button":
                         await _on_inbound_text(msisdn, (m.get("button") or {}).get("text", ""))
                     elif mtype == "interactive":
