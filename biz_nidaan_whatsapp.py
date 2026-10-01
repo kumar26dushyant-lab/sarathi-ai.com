@@ -171,6 +171,10 @@ def is_configured() -> bool:
 def normalize_msisdn(to: str) -> str:
     """Digits only; default India country code (91) for a bare 10-digit number."""
     d = re.sub(r"\D", "", to or "")
+    if d.startswith("0091") and len(d) == 14:
+        d = d[2:]                       # 0091XXXXXXXXXX - the international dialling form
+    elif d.startswith("0") and len(d) == 11:
+        d = "91" + d[1:]                # 0XXXXXXXXXX - how many people write a mobile (2 Oct)
     if len(d) == 10:
         d = "91" + d
     return d

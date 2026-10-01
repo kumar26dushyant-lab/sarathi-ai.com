@@ -47,5 +47,16 @@ check('a short row of good emojis under the reply box', h.includes("const _WAI_E
 check("the claim's own WhatsApp window, in the drawer and the case sheet",
   h.includes('id="claimWa_${c.claim_id}"') && h.includes("'<div id=\"claimWa_' + id + '\""));
 
+// The claim's window is the inbox's window (founder, 2 Oct: "no texts messaging box").
+const cw = h.slice(h.indexOf('async function claimWaLoad('), h.indexOf('async function claimWaSend('));
+check("the claim's reply box is ALWAYS there (greyed with the reason when WhatsApp's rules stop a reply)",
+  cw.includes("'<textarea id=\"' + boxId + '\"") && cw.includes("(canType ? '' : ' disabled')"));
+check('...with take over / give back, search in the chat, the 24-hour note and the emoji row',
+  cw.includes('I will take over') && cw.includes('Give back to NidaanMitra') && cw.includes('claimWaFind(')
+  && cw.includes('24-hour') && cw.includes('_waiEmojiBar(boxId)'));
+check('...the same bubbles as the inbox (ticks, Indian time, day separators)', cw.includes('_waiBubbles(d.messages, nm)'));
+check('...and it refreshes quietly while open, never while someone types',
+  cw.includes('setInterval(') && cw.includes('ndPaint(el, html)') && cw.includes('document.activeElement === b'));
+
 console.log(failed ? '\n' + failed + ' failed' : '\nall passed');
 process.exit(failed ? 1 : 0);

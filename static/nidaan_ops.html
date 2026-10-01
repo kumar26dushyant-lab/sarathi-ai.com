@@ -15589,35 +15589,91 @@ async function waitSave(claimId){
 }
 window.waitLoad = waitLoad; window.waitSave = waitSave;
 
-// THE CLAIM'S WHATSAPP (founder, 2 Oct: "claim level whatsapp chat box, fully loaded ... in sync"):
-// the same messages the inbox shows, the same bubbles, reply and the guided start - inside the claim.
-async function claimWaLoad(claimId){
+// THE CLAIM'S WHATSAPP (founder, 2 Oct: "make it as original messaging box as we have outside ...
+// like a real whatsapp window inside the claim"). The same messages as the inbox, the same bubbles
+// (ticks, Indian time, day separators), the same header (who is handling it, take over / give
+// back, search in the chat), the reply box ALWAYS there - greyed with the reason when WhatsApp's
+// 24-hour rule or the duty roster stops a reply - the emoji row, and a quiet refresh while open.
+async function claimWaLoad(claimId, quiet){
   const el = document.getElementById('claimWa_' + claimId); if (!el) return;
   _waiStyles();
   let d = null;
   try{ const r = await API('/claims/' + claimId + '/wa'); if (r.ok) d = await r.json(); }catch(e){}
-  if (!d){ el.innerHTML = '<div class="hint">WhatsApp for this claim is open to the people on the claim and to whoever is on WhatsApp duty.</div>'; return; }
+  if (!d){ if (!quiet) el.innerHTML = '<div class="hint">WhatsApp for this claim is open to the people on the claim and to whoever is on WhatsApp duty.</div>'; return; }
   if (!(d.numbers||[]).length){ el.innerHTML = '<div class="hint">This claim has no phone number yet - add the complainant\'s mobile first.</div>'; return; }
   const c = d.contact || {}, w = c.window || {}, nm = d.name || ('+' + d.numbers[0]);
-  const stopped = c.status === 'stopped';
-  const canType = d.may_reply && w.open && !stopped;
-  const note = stopped ? 'This person sent STOP - we must not message them.'
-    : !w.open ? 'WhatsApp allows a free reply only within 24 hours of their last message. To reach them now, use Start WhatsApp collection (our approved first message).'
-    : !d.may_reply ? 'Replying is for whoever is on WhatsApp duty today, so the customer hears one voice.' : '';
-  el.innerHTML = '<div class="cwa">'
-    + '<div style="font-size:.76rem;color:var(--nd-text-muted);margin-bottom:.35rem">' + d.numbers.map(function(n){ return '+' + esc(n); }).join(' · ')
-    + ' · ' + (c.owner === 'human' ? 'a person is handling it' : 'NidaanMitra is replying')
-    + ' · <a href="#" onclick="showPanel(\'whatsapp\');setTimeout(function(){waiOpen(\'' + esc(d.numbers[0]) + '\')},400);return false">Open in the inbox</a></div>'
-    + '<div class="wai-msgs" id="claimWaMsgs_' + claimId + '">' + _waiBubbles(d.messages, nm) + '</div>'
-    + (note ? '<div class="hint" style="margin-top:.35rem">' + esc(note) + '</div>' : '')
-    + (canType ? '<div style="display:flex;gap:.4rem;margin-top:.4rem"><textarea id="claimWaBox_' + claimId + '" rows="2" style="flex:1" placeholder="Write your reply…"></textarea>'
-        + '<button class="btn btn-primary" onclick="claimWaSend(' + claimId + ',\'' + esc(d.numbers[0]) + '\',this)">Send</button></div>'
-        + _waiEmojiBar('claimWaBox_' + claimId) : '')
-    + '<div style="margin-top:.45rem"><button class="btn-sm btn-ghost" style="color:var(--nd-success-text)" onclick="startWaCollection(' + claimId + ')">💬 Start WhatsApp collection</button>'
-    + ' <span id="docReminderMsg_' + claimId + '" style="font-size:.78rem"></span></div>'
-    + '</div>';
-  const box = document.getElementById('claimWaMsgs_' + claimId); if (box) box.scrollTop = box.scrollHeight;
+  const msisdn = d.numbers[0];
+  const stopped = c.status === 'stopped', isHuman = !!c.bot_paused, mayReply = !!d.may_reply;
+  const canType = mayReply && w.open && !stopped;
+  const hrs = Math.floor((w.minutes_left||0)/60), mins = (w.minutes_left||0)%60;
+  const windowNote = stopped
+    ? '<div class="l2ban red" style="margin:0">This person sent STOP. We must not message them.</div>'
+    : w.open
+      ? '<div style="font-size:.74rem;color:var(--nd-text-muted)">You can reply freely for another <b>' + hrs + 'h ' + mins + 'm</b> (WhatsApp allows free replies for 24 hours after they write).</div>'
+      : '<div class="l2ban amber" style="margin:0">The 24-hour reply window has closed - WhatsApp will not deliver a normal message now. Use <b>Start WhatsApp collection</b> below (our approved first message); when they reply, you can write freely again.</div>';
+  const vv = c.verified || {};
+  const verifyNote = vv.ok
+    ? '<div style="font-size:.74rem;color:var(--nd-success-text)">✅ Identity confirmed (' + esc(vv.role||'') + ') - safe to discuss their case.</div>'
+    : '<div style="font-size:.74rem;color:var(--nd-text-secondary)">🔒 Not verified on WhatsApp - do not send claim, payment or document details until they verify (they send the word <b>CODE</b>).</div>';
+  const ownerBar = (isHuman
+      ? '<span class="wai-badge wai-b-hum" style="padding:.2rem .55rem">' + esc(c.assigned_name || 'A person') + ' is handling this</span>'
+        + (mayReply ? ' <button class="btn-sm btn-ghost" onclick="claimWaOwner(' + claimId + ',\'' + esc(msisdn) + '\',false)">Give back to NidaanMitra</button>' : '')
+      : '<span class="wai-badge wai-b-bot" style="padding:.2rem .55rem">NidaanMitra is replying</span>'
+        + (mayReply ? ' <button class="btn-sm btn-ghost" style="color:var(--nd-purple-text)" onclick="claimWaOwner(' + claimId + ',\'' + esc(msisdn) + '\',true)">I will take over</button>' : ''));
+  const boxId = 'claimWaBox_' + claimId;
+  const prev = document.getElementById(boxId);
+  const typed = prev ? prev.value : '';
+  const placeholder = canType ? 'Write your reply…'
+    : (!mayReply ? 'Read-only - replying is for whoever is on WhatsApp duty today'
+       : stopped ? 'They sent STOP - no messages' : 'The 24-hour window is closed - use Start WhatsApp collection');
+  const html = '<div class="cwa wai-pane" style="display:flex;flex-direction:column">'
+    + '<div style="padding:.55rem .7rem;border-bottom:1px solid var(--nd-border);display:flex;gap:.45rem;align-items:center;flex-wrap:wrap">'
+    +   '<div style="flex:1;min-width:140px"><div style="font-weight:800;font-size:.88rem">' + esc(nm) + '</div>'
+    +   '<div style="font-size:.7rem;color:var(--nd-text-muted)">' + d.numbers.map(function(n){ return '+' + esc(n); }).join(' · ')
+    +   ' · <a href="#" onclick="showPanel(\'whatsapp\');setTimeout(function(){waiOpen(\'' + esc(msisdn) + '\')},400);return false">Open in the inbox</a></div></div>'
+    +   ownerBar
+    +   '<input class="wai-find" type="search" placeholder="Search in this chat" aria-label="Search in this chat" oninput="claimWaFind(' + claimId + ',this.value)">'
+    + '</div>'
+    + '<div class="wai-msgs" id="claimWaMsgs_' + claimId + '" data-keep-scroll="bottom">' + _waiBubbles(d.messages, nm) + '</div>'
+    + '<div style="padding:.55rem .7rem;border-top:1px solid var(--nd-border);display:flex;flex-direction:column;gap:.4rem">'
+    +   verifyNote + windowNote
+    +   '<div style="display:flex;gap:.45rem;align-items:flex-end">'
+    +     '<textarea id="' + boxId + '" rows="2" placeholder="' + esc(placeholder) + '"' + (canType ? '' : ' disabled')
+    +       ' style="flex:1;resize:vertical;background:var(--nd-bg-surface-2);color:var(--nd-text-primary);border:1px solid var(--nd-border);border-radius:10px;padding:.5rem .65rem;font-size:.85rem;font-family:inherit"></textarea>'
+    +     '<button class="btn btn-primary"' + (canType ? '' : ' disabled') + ' onclick="claimWaSend(' + claimId + ',\'' + esc(msisdn) + '\',this)">Send</button>'
+    +   '</div>'
+    +   (canType ? _waiEmojiBar(boxId) : '')
+    +   '<div><button class="btn-sm btn-ghost" style="color:var(--nd-success-text)" onclick="startWaCollection(' + claimId + ')">💬 Start WhatsApp collection</button>'
+    +   ' <span id="docReminderMsg_' + claimId + '" style="font-size:.78rem"></span></div>'
+    + '</div></div>';
+  const first = !el._ndHtml;
+  ndPaint(el, html);
+  const tb = document.getElementById(boxId); if (tb && typed && !tb.value) tb.value = typed;
+  if (first){ const box = document.getElementById('claimWaMsgs_' + claimId); if (box) box.scrollTop = box.scrollHeight; }
+  // Fresh while it is open: every 25 s, quietly - never while somebody is typing.
+  if (!el._poll) el._poll = setInterval(function(){
+    if (!document.body.contains(el)){ clearInterval(el._poll); return; }
+    const det = el.closest('details'); if ((det && !det.open) || document.hidden) return;
+    const b = document.getElementById(boxId);
+    if (b && ((b.value||'').trim() || document.activeElement === b)) return;
+    claimWaLoad(claimId, true);
+  }, 25000);
 }
+function claimWaFind(claimId, v){
+  const q = (v||'').trim().toLowerCase();
+  const box = document.getElementById('claimWaMsgs_' + claimId); if (!box) return;
+  box.querySelectorAll('.wai-b').forEach(function(b){ b.style.display = (!q || (b.getAttribute('data-t')||'').indexOf(q) >= 0) ? '' : 'none'; });
+  box.querySelectorAll('.wai-day').forEach(function(x){ x.style.display = q ? 'none' : ''; });
+}
+async function claimWaOwner(claimId, msisdn, human){
+  const q = human ? 'Take this conversation over? NidaanMitra will stop replying to this person until you hand it back.'
+                  : 'Hand this conversation back to NidaanMitra? It will start replying to this person again.';
+  if (!confirm(q)) return;
+  const r = await API('/wa/thread/' + encodeURIComponent(msisdn) + '/owner', {method:'POST', body: JSON.stringify({human: !!human})});
+  if (r.ok){ ndUI.toast(human ? 'You are handling this conversation.' : 'Handed back to NidaanMitra.', 'success'); claimWaLoad(claimId, true); }
+  else { const e = await r.json().catch(function(){ return {}; }); ndUI.toast(e.detail || 'Could not change who is handling it.', 'error'); }
+}
+window.claimWaFind = claimWaFind; window.claimWaOwner = claimWaOwner;
 async function claimWaSend(claimId, msisdn, btn){
   const box = document.getElementById('claimWaBox_' + claimId); if (!box) return;
   const text = (box.value||'').trim(); if (!text){ box.focus(); return; }
@@ -15626,7 +15682,9 @@ async function claimWaSend(claimId, msisdn, btn){
     const r = await API('/wa/thread/' + encodeURIComponent(msisdn) + '/reply', {method:'POST', body: JSON.stringify({text: text})});
     const e = await r.json().catch(function(){ return {}; });
     if (!r.ok){ ndUI.toast(e.detail || 'Could not send.', 'error'); return; }
-    await claimWaLoad(claimId);
+    box.value = '';
+    await claimWaLoad(claimId, true);
+    const mb = document.getElementById('claimWaMsgs_' + claimId); if (mb) mb.scrollTop = mb.scrollHeight;
   } finally { btn.disabled = false; }
 }
 window.claimWaLoad = claimWaLoad; window.claimWaSend = claimWaSend;
@@ -20501,7 +20559,8 @@ function _waiStyles(){
   .wai-hit{padding:.55rem .8rem;border-bottom:1px solid var(--nd-border);cursor:pointer}
   .wai-hit:hover{background:var(--nd-bg-surface-2)}
   .wai-hit .s{font-size:.74rem;color:var(--nd-text-secondary)}
-  .cwa .wai-msgs{height:340px;border:1px solid var(--nd-border);border-radius:10px}
+  .cwa .wai-msgs{height:380px}
+  @media (max-width:820px){ .cwa .wai-msgs{height:55vh} }
   @media (max-width:820px){
     .wai-grid{grid-template-columns:1fr}
     .wai-grid[data-view="thread"] .wai-list-pane{display:none}
