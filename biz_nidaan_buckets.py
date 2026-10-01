@@ -2137,13 +2137,28 @@ async def _last_notes(claim_ids: list) -> dict:
     return out
 
 
+# How long claims have sat in the bucket, as the founder asked for it (1 Oct): 0-10, 11-20,
+# 21-30 and more than 30 days. ONE definition - the filter, its counts and the screen all use it.
+DAY_RANGES = (("0-10", 0, 10), ("11-20", 11, 20), ("21-30", 21, 30), ("30+", 31, None))
+
+
+def day_range(days) -> str:
+    d = int(days or 0)
+    for key, lo, hi in DAY_RANGES:
+        if d >= lo and (hi is None or d <= hi):
+            return key
+    return DAY_RANGES[0][0]
+
+
 async def board(bucket_key: str = "", *, sub: str = "", q: str = "",
-                limit: int = 300) -> dict:
+                limit: int = 300, days: str = "") -> dict:
     """The claims in one bucket, ready to draw as a table.
 
     Ordered so the answer to "what do I do next" is the top of the list: the most overdue first.
     """
     limit = max(1, min(int(limit or 300), 1000))
+    # Kept under its own name: the loop below reuses `days` for each claim's own count.
+    day_filter = (days or "").strip()
     where = ["COALESCE(c.archived,0)=0", "COALESCE(c.pipeline_stage,'') <> ''"]
     params: list = []
     if bucket_key:
@@ -2266,8 +2281,15 @@ async def board(bucket_key: str = "", *, sub: str = "", q: str = "",
     for i in items:
         sub_counts[i["sub"]] = sub_counts.get(i["sub"], 0) + 1
     in_bucket = len(items)
-    # Only now does the tab apply, and only to what is shown.
+    # Days in the bucket, counted over the whole bucket like the step chips.
+    day_counts = {k: 0 for k, _lo, _hi in DAY_RANGES}
+    for i in items:
+        day_counts[day_range(i.get("days"))] += 1
+    # Only now do the tab and the days filter apply, and only to what is shown.
     shown = [i for i in items if i["sub"] == sub] if sub else items
+    day_filter = day_filter if day_filter in day_counts else ""
+    if day_filter:
+        shown = [i for i in shown if day_range(i.get("days")) == day_filter]
 
     # A one-line summary for the top of the bucket: what is in here, and what needs a person.
     # Every figure below counts the BUCKET (`items`), never the current tab (`shown`) - they sit
@@ -2280,6 +2302,8 @@ async def board(bucket_key: str = "", *, sub: str = "", q: str = "",
             "matching": in_bucket,
             "sub": sub,
             "sub_counts": sub_counts,
+            "days": day_filter,
+            "day_counts": day_counts,
             "late": sum(1 for i in items if i["age_state"] in ("red", "amber")),
             "red": sum(1 for i in items if i["age_state"] == "red"),
             "ours": ours,

@@ -8364,13 +8364,14 @@ async def ops_buckets_counts(request: Request):
 
 @app.get("/nidaan/ops/api/buckets/{bucket_key}/claims")
 async def ops_bucket_claims(bucket_key: str, request: Request, sub: str = "",
-                            q: str = "", limit: int = 300):
-    """The claims in one bucket, most overdue first."""
+                            q: str = "", limit: int = 300, days: str = ""):
+    """The claims in one bucket, most overdue first. `days`: 0-10 | 11-20 | 21-30 | 30+."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     _require_staff(request, "team_member")
     import biz_nidaan_buckets as _bk
-    return await _bk.board(bucket_key.strip(), sub=sub.strip(), q=q.strip(), limit=limit)
+    return await _bk.board(bucket_key.strip(), sub=sub.strip(), q=q.strip(), limit=limit,
+                           days=days.strip()[:8])
 
 
 @app.get("/nidaan/ops/api/buckets/waiting-to-start")

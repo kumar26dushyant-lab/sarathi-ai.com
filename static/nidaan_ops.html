@@ -69,6 +69,13 @@ details>summary{cursor:pointer}
 .nav-chev{font-size:.7rem}
 .nav-group.collapsed{display:none}
 .nav-item.nav-sub{padding-left:2.1rem;font-size:.8rem;font-weight:500}
+.nav-item.nav-sub2{padding-left:2.9rem;font-size:.78rem;font-weight:500}
+.nav-late{margin-left:auto;font-size:.66rem;font-weight:700;color:var(--nd-danger-text);white-space:nowrap}
+.nav-late + .nav-cnt{margin-left:.35rem}
+.nav-pre > summary{list-style:none;cursor:pointer}
+.nav-pre > summary::-webkit-details-marker{display:none}
+.nav-pre > summary::before{content:'▸';font-size:.7rem;margin-right:.35rem;color:var(--nd-text-faint)}
+.nav-pre[open] > summary::before{content:'▾'}
 .nav-cnt{margin-left:auto;font-size:.7rem;font-weight:700;color:var(--nd-text-faint);background:var(--nd-bg-surface-2);border-radius:10px;padding:.05rem .45rem;min-width:1.4rem;text-align:center}
 .nav-item:focus-visible{outline:2px solid var(--nd-cyan-text);outline-offset:-2px}
 .nav-item .badge{margin-left:auto;background:rgba(220,38,38,.25);color:var(--nd-danger-text);border-radius:10px;font-size:.68rem;font-weight:700;padding:.1rem .4rem;min-width:18px;text-align:center}
@@ -1353,6 +1360,7 @@ function _navItem(item){
   el.setAttribute('role', 'button');
   el.setAttribute('tabindex', '0');
   el.innerHTML = '<span>' + esc(item.label) + '</span>'
+    + (item.late ? '<span class="nav-late" title="' + item.late + ' past its clock">' + item.late + ' late</span>' : '')
     + (item.count != null ? '<span class="nav-cnt">' + item.count + '</span>' : '');
   const go = () => item.bucket ? navBucket(item.bucket) : showPanel(item.id);
   el.onclick = go;
@@ -1380,9 +1388,55 @@ async function _navLoadBuckets(){
   }catch(e){ /* the menu never fails because a count did */ }
 }
 
+// Everything the Consolidation rail used to show, in the menu: the buckets with their counts and
+// how many are past their clock, "handed over, not started" when there is any, Paused, and
+// "Not yet at Level-2 (coming)" folded with its stages. Fed by the data l2Shell already loaded.
+function _navSyncL2(){
+  const holder = document.getElementById('navBuckets'); if (!holder) return;
+  const bs = (_l2Cfg && _l2Cfg.buckets) || [];
+  if (!bs.length) return;
+  const ln = _l2Line || {}, byS = ln.by_stage || {}, lab = ((ln.labels || {}).stage) || {};
+  const keys = bs.map(function(b){ return b.bucket_key; });
+  holder.innerHTML = '';
+  if (_l2Cfg.waiting) holder.appendChild(_navItem({id:'l2', bucket:'start',
+    label:'⚠️ Handed over, not started', count:_l2Cfg.waiting, late:_l2Cfg.waiting}));
+  bs.forEach(function(b){
+    const c = (_l2Counts || {})[b.bucket_key] || {};
+    holder.appendChild(_navItem({id:'l2', bucket:b.bucket_key,
+      label:((b.icon || '') + ' ' + (b.name_en || b.bucket_key)).trim(), count:(c.total || 0), late:(c.red || 0)}));
+  });
+  if (byS.hold) holder.appendChild(_navItem({id:'l2', bucket:'pre:hold',
+    label:'⏸️ ' + (lab.hold || 'Paused'), count:byS.hold}));
+  const pre = (ln.stage_order || []).filter(function(k){ return keys.indexOf(k) < 0 && k !== 'hold'; });
+  if (pre.length){
+    const icon = {intake:'📝', review:'🔎', conversion:'💰'};
+    const total = pre.reduce(function(a, k){ return a + (byS[k] || 0); }, 0);
+    const d = document.createElement('details');
+    d.className = 'nav-pre';
+    let open = false; try { open = localStorage.getItem('nd_nav_pre') === '1'; } catch(e){}
+    if (open || pre.some(function(k){ return _l2Sel === 'pre:' + k; })) d.open = true;
+    d.innerHTML = '<summary class="nav-item nav-sub" title="Open claims still in intake, review or waiting for payment">'
+      + '<span>Not yet at Level-2 (coming)</span><span class="nav-cnt">' + total + '</span></summary>';
+    pre.forEach(function(k){
+      const it = _navItem({id:'l2', bucket:'pre:' + k, label:(icon[k] || '•') + ' ' + (lab[k] || k), count:(byS[k] || 0)});
+      it.classList.add('nav-sub2');
+      d.appendChild(it);
+    });
+    d.addEventListener('toggle', function(){ try { localStorage.setItem('nd_nav_pre', d.open ? '1' : '0'); } catch(e){} });
+    holder.appendChild(d);
+  }
+  const all = document.querySelector('.nav-item[data-bucket="all"]');
+  if (all){
+    let ct = all.querySelector('.nav-cnt');
+    if (!ct){ ct = document.createElement('span'); ct.className = 'nav-cnt'; all.appendChild(ct); }
+    ct.textContent = ln.open_total || 0;
+  }
+  _navMark();
+}
+
 function navBucket(key){
   if (_currentPanel === 'l2' && typeof l2Pick === 'function'){ l2Pick(key); closeMobileNav(); }
-  else { _l2Sel = key; _l2Sub = ''; showPanel('l2'); }
+  else { _l2Sel = key; _l2Sub = ''; _l2Days = ''; showPanel('l2'); }
   _navMark();
 }
 window.navBucket = navBucket;
@@ -14645,6 +14699,7 @@ window.loadPayFollow=loadPayFollow; window.pfSet=pfSet; window.pfMark=pfMark; wi
 // buttons ON the row rather than buried in a dialog. Everything here is drawn from the server's
 // bucket configuration, so a bucket a super-admin adds later appears without a line of new code.
 let _l2Line = null, _l2Today = null, _l2TodayOpen = false;
+let _l2Days = '';   // days-in-bucket filter: '' | '0-10' | '11-20' | '21-30' | '30+'
 let _l2Cfg = null, _l2Sel = '', _l2Sub = '', _l2Q = '', _l2Counts = {},
     _l2Rows = [], _l2Wait = [], _l2Busy = false, _l2Rows2 = null;
 
@@ -14654,6 +14709,7 @@ function _l2Styles(){
   st.textContent = `
   .l2wrap{display:flex;gap:.85rem;align-items:flex-start}
   .l2rail{flex:0 0 13.5rem;position:sticky;top:.5rem}
+  .l2rail[hidden]{display:none!important}   /* the buckets live in the left menu (1 Oct) */
   .l2rh{font-size:.63rem;font-weight:800;letter-spacing:.09em;text-transform:uppercase;
     color:var(--nd-text-faint);padding:.4rem .5rem .3rem}
   .l2b{display:flex;align-items:center;gap:.4rem;width:100%;text-align:left;font-family:inherit;
@@ -14688,6 +14744,7 @@ function _l2Styles(){
   .l2tab[aria-pressed="true"]{background:var(--nd-text-primary);color:var(--nd-bg-base);
     border-color:var(--nd-text-primary);font-weight:700}
   .l2tools{display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;margin-bottom:.6rem}
+  .l2days{font-size:.82rem;padding:.3rem .4rem;max-width:12rem}
   .l2srch{flex:1;min-width:11rem;background:var(--nd-bg-surface-2);border:1px solid var(--nd-border);
     color:var(--nd-text-primary);border-radius:8px;padding:.38rem .6rem;font-size:.84rem;
     font-family:inherit}
@@ -15002,7 +15059,7 @@ function l2Shell(){
     + '</div><button class="btn-sm btn-ghost" onclick="loadL2()">🔄 Refresh</button></div>'
     + _l2TodayHtml()
     + '<div class="l2wrap">'
-    +   '<div class="l2rail">'
+    +   '<div class="l2rail" hidden>'
     +     '<button class="l2b" aria-pressed="' + (_l2Sel === 'all') + '" onclick="l2Pick(\'all\')">'
     +       '<span>🗂️</span><span class="nm" title="Every open claim on the line - the buckets below AND the ones not yet at Level-2">All open claims (whole line)</span>'
     +       '<span class="ct">' + (ln.open_total || 0) + '</span></button>'
@@ -15036,6 +15093,9 @@ function l2Shell(){
     +   '</div>'
     +   '<div class="l2main" id="l2Main"><div class="empty"><p>Loading…</p></div></div>'
     + '</div>';
+  // ONE list of buckets (founder, 1 Oct: "why are we showing bucketing at two places?"). The
+  // left menu holds it, with the counts this page just loaded - so the two can never disagree.
+  _navSyncL2();
 }
 
 // ── Today (was My Desk) ──────────────────────────────────────────────────────
@@ -15096,7 +15156,7 @@ window.l2TodayToggle = l2TodayToggle;
 function l2Pick(key){
   setTimeout(function(){ try{ _navMark(); }catch(e){} }, 0);
   if (_l2Sel !== key){
-    _l2Sel = key; _l2Sub = ''; _l2Q = '';
+    _l2Sel = key; _l2Sub = ''; _l2Q = ''; _l2Days = '';
     // Each entry keeps its own chip filters until they are cleared; a stage entry pins its stage.
     const kept = ((_ndKeepGet().cbBy) || {})[key];
     _cbState = kept ? Object.assign({blocker:'', stage:'', flag:'', mine:false}, kept)
@@ -15146,7 +15206,8 @@ async function l2Load(){
     return;
   }
   try{
-    const qs = '?sub=' + encodeURIComponent(_l2Sub) + '&q=' + encodeURIComponent(_l2Q);
+    const qs = '?sub=' + encodeURIComponent(_l2Sub) + '&q=' + encodeURIComponent(_l2Q)
+      + '&days=' + encodeURIComponent(_l2Days);
     const r = await API('/buckets/' + encodeURIComponent(_l2Sel) + '/claims' + qs);
     if (!r.ok) throw 0;
     const d = await r.json();
@@ -15374,6 +15435,7 @@ function l2RenderBucket(){
     + '<div class="l2tools">'
     +   '<input class="l2srch" id="l2Q" placeholder="Search name, claim no., phone, insurance company…" '
     +     'value="' + esc(_l2Q) + '" oninput="l2Search(this.value)">'
+    +   _l2DaysSel(d)
     +   '<button class="btn-sm btn-ghost" onclick="l2Export()">⤓ Excel</button>'
     + '</div>';
 
@@ -15603,6 +15665,19 @@ window.l2SetType = l2SetType; window.l2SetOwner = l2SetOwner;
 let _l2QT = null;
 function l2Search(v){ _l2Q = v; clearTimeout(_l2QT); _l2QT = setTimeout(l2Load, 300); }
 function l2Sub(s){ _l2Sub = s; l2Load(); }
+function l2Days(v){ _l2Days = v || ''; l2Load(); }
+window.l2Days = l2Days;
+// "Days in this bucket": every range with how many claims sit in it (the whole bucket).
+function _l2DaysSel(d){
+  const dc = (d && d.day_counts) || {};
+  const opts = [['', 'Any number of days'], ['0-10', '0–10 days'], ['11-20', '11–20 days'],
+                ['21-30', '21–30 days'], ['30+', 'More than 30 days']];
+  return '<select class="l2days" aria-label="Days in this bucket" onchange="l2Days(this.value)">'
+    + opts.map(function(o){
+        const n = o[0] ? (' (' + (dc[o[0]] || 0) + ')') : '';
+        return '<option value="' + o[0] + '"' + (_l2Days === o[0] ? ' selected' : '') + '>' + o[1] + n + '</option>';
+      }).join('') + '</select>';
+}
 
 function l2Export(){
   if (!_l2Rows.length) return;

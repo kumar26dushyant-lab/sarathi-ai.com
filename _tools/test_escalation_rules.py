@@ -74,6 +74,23 @@ async def main():
     check("a claim returning to Escalation with its date recorded is on 'Escalated'",
           m.get("ok") and sub == "escalated", (m, sub))
 
+    # days in the bucket: 0-10 / 11-20 / 21-30 / 30+, counted over the whole bucket
+    async with aiosqlite.connect(DB) as c:
+        await c.execute("UPDATE nidaan_claims SET pipeline_stage_at=datetime('now','-40 days') WHERE claim_id=91")
+        await c.execute("UPDATE nidaan_claims SET pipeline_stage_at=datetime('now','-2 days') WHERE claim_id=92")
+        await c.commit()
+    allb = await bk.board("escalation")
+    old = await bk.board("escalation", days="30+")
+    new = await bk.board("escalation", days="0-10")
+    check("the days counts cover the whole bucket", sum(allb["day_counts"].values()) == allb["matching"] == 2,
+          allb.get("day_counts"))
+    check("'More than 30 days' shows only the 40-day claim", [i["claim_id"] for i in old["items"]] == [91],
+          [i["claim_id"] for i in old["items"]])
+    check("'0-10 days' shows only the 2-day claim", [i["claim_id"] for i in new["items"]] == [92],
+          [i["claim_id"] for i in new["items"]])
+    check("...and the counts do not move with the filter", old["day_counts"] == new["day_counts"] == allb["day_counts"])
+    check("an unknown range is ignored (whole bucket)", len((await bk.board("escalation", days="x"))["items"]) == 2)
+
 
 asyncio.run(main())
 print("\n%s" % ("all passed" if not FAILED else "%d failed" % FAILED))
