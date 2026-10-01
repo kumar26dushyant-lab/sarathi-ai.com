@@ -249,6 +249,14 @@ async def _install_bg_exception_handler():
 limiter = Limiter(key_func=get_remote_address, default_limits=["200/minute"])
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+async def _protected_document_handler(request: Request, exc: Exception):
+    # Every document-delete route reaches biz_nidaan.delete_claim_document; one answer for all.
+    return JSONResponse(status_code=409, content={"detail": (
+        "This is the complainant's signed authorization. It is kept as a record and cannot be "
+        "removed. / यह शिकायतकर्ता की हस्ताक्षरित अनुमति है - रिकॉर्ड के रूप में रखी जाती है, हटाई नहीं जा सकती।")})
+app.add_exception_handler(nidaan.ProtectedDocument, _protected_document_handler)
 app.add_middleware(SlowAPIMiddleware)
 
 # ── CORS ─────────────────────────────────────────────────────────────────────

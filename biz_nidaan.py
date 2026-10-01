@@ -8763,6 +8763,15 @@ async def rename_claim_document(doc_id: int, claim_id: int, new_name: str) -> Op
     return {"doc_id": int(doc_id), "old": old, "name": name}
 
 
+class ProtectedDocument(Exception):
+    """A document that is a record, not a working file - it can never be removed."""
+
+
+# Sources whose documents are evidence: the complainant's signed authorization (their digital
+# acceptance of the fee terms). Removing one would leave the firm acting without proof of consent.
+PROTECTED_DOC_SOURCES = ("authorization",)
+
+
 async def delete_claim_document(doc_id: int, *, account_id: Optional[int] = None,
                                 claim_id: Optional[int] = None, purchase_id: Optional[int] = None,
                                 allow_any: bool = False) -> Optional[str]:
@@ -8778,6 +8787,10 @@ async def delete_claim_document(doc_id: int, *, account_id: Optional[int] = None
         if not row:
             return None
         d = dict(row)
+        if (d.get("source") or "") in PROTECTED_DOC_SOURCES:
+            # Checked before ownership, for everyone - staff, subscriber and the complainant alike.
+            raise ProtectedDocument("This is the complainant's signed authorization. It is kept as "
+                                    "a record and cannot be removed.")
         if not allow_any:
             if account_id is not None and int(d.get("account_id") or 0) != int(account_id):
                 return None
