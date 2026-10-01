@@ -9,6 +9,17 @@ _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned ·
 _Anything raised and not finished lives here until it is done, so an interruption does not lose
 it. Newest first within each group._
 
+### ▶ 2 Oct (morning) — decisions and the next discussion
+
+| # | What | Notes |
+|---|---|---|
+| H1 | ✅ **14 numbers marked as consenting without writing to us -> not consented** (his yes; done 04:16 IST, opt_source `staff_start_no_consent`, nothing deleted) | |
+| H2 | ✅ **Homepage figures confirmed correct** (95%+ success, 5,000+ policyholders, 2,000+ cases) - the bots quote them | |
+| H3 | ✅ **Case email password stays as it is** (no encryption) - his call: these mailboxes are created only for insurer correspondence. E14 closed | |
+| H4 | ✅ **Claim-level WhatsApp = a real chat window like the inbox** (`39accd0`) - header, take over / give back, search, the same bubbles, the reply box always there (greyed with the reason), emojis, quiet refresh | His screenshots, 2 Oct |
+| H5 | 🟢 **TEST KIT - discuss** (his ask: "sample claims only for testing each and every feature ... in live environment"). Proposal: (1) a **Test** flag on a claim (super-admin sets it; claim 92 and the "TEST..." claims first); (2) a test claim is **never counted** (dashboards, analytics, revenue, the 8 pm summary, App Health) and **never reaches a real person** - every WhatsApp / email / SMS for it goes only to a short list of staff test numbers and inboxes he names; (3) a **kit of 6 sample claims**, one at each point of the line (intake, review, L2 waiting, Live Cases, Escalation with a query, Lokpal), with names starting "TEST -" and staff test numbers as their phones; (4) **"Fresh test kit"** (super-admin): the old kit is archived, never deleted, and a new one is made in its starting places; (5) a yellow **TEST CLAIM** band on the claim so nobody mistakes it; (6) a one-page checklist per new feature ("open TEST - Escalation, raise a query, answer it ..."). Questions for him: which staff numbers/inboxes receive test messages; who may mark a claim as Test (super-admins only?) | Decide, then build |
+| H6 | Mobile numbers written with a leading 0 (07869350978) are now understood as +91 (`39accd0`) | One claim's number was being messaged as written |
+
 ### ▶ 2 Oct — the founder's list (sent after the 19:10 deploy), in order
 
 Deployed 03:37 IST 2 Oct (`7439bdf`): G1-G10 + the review fixes; suite clean; outside checks as expected; App Health 0 errors.

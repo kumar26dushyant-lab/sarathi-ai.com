@@ -1,5 +1,81 @@
 # Staff Announcement Drafts
 
+## 2026-10-02 — WHAT CHANGED IN THE LAST TWO DAYS (1–2 Oct) — one message for the whole team  ← SEND THIS ONE
+
+_For: all staff. Not yet sent. Replaces the separate 1 Oct and 2 Oct drafts below. Details: nidaanpartner.com/sop-whats-new (sign in to ops first)._
+
+**EN**
+
+📘 *NidaanPartner — what changed on 1–2 October*
+
+*Your screens*
+• The left menu is arranged like an office. The buckets (Live Cases → Hold) are only there, with live counts.
+• Screens no longer flicker or jump while you read or type.
+• Every bucket has a *"Days in this bucket"* filter (0–10, 11–20, 21–30, 30+). Days = the whole time a claim has spent in that bucket.
+• *Why is this claim waiting?* — every claim shows small labels. Documents, fee and authorization fill themselves in; tick the rest on the claim (Query - complainant, Reply - insurer, Our team, Other in your own words). Filter a bucket by it.
+
+*Escalation*
+• Record the escalation date *on the day it happens* (Lokpal opens 30 days after it). Only a super-admin can enter a past date.
+• "Escalation Query" now asks what the insurer asked. Whoever answers presses "We have answered them" → the claim moves to *Escalation Query Responded*.
+
+*WhatsApp*
+• The bot is called *NidaanMitra* everywhere.
+• The inbox: search all chats and inside a chat, ✓ sent · ✓✓ delivered · blue ✓✓ read, Indian time with am/pm, a few emojis.
+• *Every claim has its own WhatsApp window*: open the claim → "WhatsApp with the complainant". Read, reply (if you are on WhatsApp duty), take over or give back to NidaanMitra.
+• *Start WhatsApp collection* first shows what will be sent and to whom — nothing goes until you press Send. Check the complainant's name first.
+• A customer sent papers to your own WhatsApp? Forward them to our WhatsApp number with the claim number in the caption (NP-1050). Files from unknown numbers wait in WhatsApp → Files to sort.
+• Waiting customers are told our office hours. You still reply — Telegram reminds you at most twice per chat.
+
+*Partners and letters*
+• Messages about an Authorized Partner's claims end with the partner's name. Sub-super-admins: fill each partner's person's name and state (Authorized Partners → Edit).
+• The authorization letter is on our letterhead and shows the fee worked out on the disputed amount — *check the disputed amount before you push the authorization*. A signed authorization can never be removed.
+
+*Your day*
+• At 8 pm Telegram sends your day — what you actually did on each claim — and the voice note reads all of it. Record your work on the claims; saves that change nothing are not counted.
+
+*Smaller things*
+• A subscriber who cancels and subscribes again can raise claims straight away.
+• Deleting an account never deletes its claims — they stay, archived.
+• If an email confirmation was sent twice, any of the codes now works; the complainant can type it with "I already have a code".
+• Channel Partner forgotten on a My Business claim? Ask to add it on the claim; a super-admin approves.
+
+**HI**
+
+📘 *NidaanPartner — 1–2 अक्टूबर को क्या बदला*
+
+*आपकी स्क्रीन*
+• बायाँ मेन्यू ऑफ़िस की तरह सजा है। बकेट (Live Cases → Hold) सिर्फ़ वहीं हैं, नई गिनती के साथ।
+• पढ़ते या लिखते समय स्क्रीन अब टिमटिमाती या उछलती नहीं।
+• हर बकेट में *"Days in this bucket"* फ़िल्टर है (0–10, 11–20, 21–30, 30+)। दिन = क्लेम ने उस बकेट में बिताया पूरा समय।
+• *यह क्लेम क्यों रुका है?* — हर क्लेम पर छोटे लेबल। दस्तावेज़, फ़ीस और अनुमति अपने-आप; बाकी क्लेम पर टिक कीजिये (सवाल - शिकायतकर्ता, जवाब - बीमा कंपनी, हमारी टीम, अन्य अपने शब्दों में)। बकेट को इससे फ़िल्टर कीजिये।
+
+*एस्केलेशन*
+• एस्केलेशन की तारीख *उसी दिन* दर्ज कीजिये (लोकपाल उसके 30 दिन बाद खुलता है)। पुरानी तारीख सिर्फ़ सुपर-एडमिन डाल सकते हैं।
+• "Escalation Query" चुनने पर अब पूछा जाता है कि बीमा कंपनी ने क्या पूछा। जो जवाब दे वह "We have answered them" दबाए → क्लेम *Escalation Query Responded* पर जाता है।
+
+*WhatsApp*
+• बॉट का नाम हर जगह *NidaanMitra* है।
+• इनबॉक्स: सभी चैट में और एक चैट के अंदर सर्च, ✓ भेजा · ✓✓ पहुँचा · नीले ✓✓ पढ़ा, भारतीय समय am/pm के साथ, कुछ इमोजी।
+• *हर क्लेम में उसकी अपनी WhatsApp विंडो*: क्लेम खोलिये → "WhatsApp with the complainant"। पढ़िये, जवाब दीजिये (अगर आप WhatsApp ड्यूटी पर हैं), बात संभालिये या NidaanMitra को वापस दीजिये।
+• *Start WhatsApp collection* पहले दिखाता है कि क्या और किसे भेजा जाएगा — Send दबाने तक कुछ नहीं जाता। पहले शिकायतकर्ता का नाम जाँचिये।
+• किसी ग्राहक ने काग़ज़ आपके अपने WhatsApp पर भेजे? हमारे WhatsApp नंबर पर फ़ॉरवर्ड कीजिये, कैप्शन में क्लेम नंबर (NP-1050)। अनजान नंबरों की फ़ाइलें WhatsApp → Files to sort में रहती हैं।
+• इंतज़ार करते ग्राहक को ऑफ़िस का समय बताया जाता है। जवाब आप ही देंगे — टेलीग्राम हर चैट के लिए ज़्यादा से ज़्यादा दो बार याद दिलाता है।
+
+*पार्टनर और पत्र*
+• अधिकृत पार्टनर के क्लेम के संदेशों के आख़िर में पार्टनर का नाम आता है। सब-सुपर-एडमिन: हर पार्टनर का व्यक्ति का नाम और राज्य भरिये (Authorized Partners → Edit)।
+• अनुमति-पत्र अब हमारे लेटरहेड पर है और विवादित राशि पर फ़ीस का हिसाब दिखाता है — *अनुमति भेजने से पहले विवादित राशि जाँचिये*। हस्ताक्षरित अनुमति कभी हटाई नहीं जा सकती।
+
+*आपका दिन*
+• रात 8 बजे टेलीग्राम पर आपका दिन आता है — हर क्लेम पर आपने वास्तव में क्या किया — और आवाज़ में पूरा पढ़ा जाता है। अपना काम क्लेम पर दर्ज कीजिये; जिस सेव से कुछ नहीं बदला वह गिना नहीं जाता।
+
+*छोटी बातें*
+• जो सब्सक्राइबर प्लान बंद करके दोबारा लेता है, वह तुरंत क्लेम दर्ज कर सकता है।
+• अकाउंट हटाने पर उसके क्लेम कभी नहीं हटते — वे आर्काइव में रहते हैं।
+• ईमेल कन्फ़र्मेशन दो बार भेजा गया हो तो कोई भी कोड चलता है; शिकायतकर्ता "मेरे पास कोड है" से डाल सकता है।
+• My Business क्लेम पर चैनल पार्टनर भूल गए? क्लेम पर जोड़ने का अनुरोध कीजिये; सुपर-एडमिन मंज़ूरी देंगे।
+
+---
+
 ## 2026-10-02 (short) — Why a claim waits, escalation queries, WhatsApp in every claim  ← SEND AFTER TONIGHT'S UPDATE
 
 _For: all staff. Not yet sent._
