@@ -11,6 +11,8 @@ it. Newest first within each group._
 
 ### ▶ 2 Oct — the founder's list (sent after the 19:10 deploy), in order
 
+Deployed 03:37 IST 2 Oct (`7439bdf`): G1-G10 + the review fixes; suite clean; outside checks as expected; App Health 0 errors.
+
 | # | What | Founder's words / notes |
 |---|---|---|
 | G1 | ✅ **Escalation Query -> Escalation Query Responded** (`8e257dc`) | The step dropdown opens the query box; the words + who raised/answered are kept (nidaan_bucket_queries); the escalation team and the claim's people are told; answering moves to the new step and tells whoever raised it; every step is a filter chip, even at zero |
