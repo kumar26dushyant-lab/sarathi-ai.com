@@ -3006,6 +3006,16 @@ async def init_db():
             # (accountability — staff must verify the dispute amount before pushing).
             "ALTER TABLE nidaan_claimant_portal ADD COLUMN consent_pushed_by TEXT DEFAULT ''",
             "ALTER TABLE nidaan_claimant_portal ADD COLUMN consent_pushed_at TIMESTAMP",
+            # Authorization letter v2 (1 Oct): the letter's layout version, and the tentative fee
+            # calculation and the signer's contact FROZEN at the moment of acceptance.
+            "ALTER TABLE nidaan_claimant_portal ADD COLUMN consent_letter_version INTEGER DEFAULT 1",
+            "ALTER TABLE nidaan_claimant_portal ADD COLUMN consent_disputed_amount REAL",
+            "ALTER TABLE nidaan_claimant_portal ADD COLUMN consent_fee_amount REAL",
+            "ALTER TABLE nidaan_claimant_portal ADD COLUMN consent_gst_amount REAL",
+            "ALTER TABLE nidaan_claimant_portal ADD COLUMN consent_total_fee REAL",
+            "ALTER TABLE nidaan_claimant_portal ADD COLUMN consent_net_amount REAL",
+            "ALTER TABLE nidaan_claimant_portal ADD COLUMN consent_phone TEXT DEFAULT ''",
+            "ALTER TABLE nidaan_claimant_portal ADD COLUMN consent_email TEXT DEFAULT ''",
         ):
             try:
                 await conn.execute(_cp_sql)
@@ -3507,6 +3517,14 @@ async def init_db():
                 consent_hash          TEXT DEFAULT '',
                 consent_pushed_by     TEXT DEFAULT '',
                 consent_pushed_at     TIMESTAMP,
+                consent_letter_version INTEGER DEFAULT 1,
+                consent_disputed_amount REAL,
+                consent_fee_amount    REAL,
+                consent_gst_amount    REAL,
+                consent_total_fee     REAL,
+                consent_net_amount    REAL,
+                consent_phone         TEXT DEFAULT '',
+                consent_email         TEXT DEFAULT '',
                 link_sent_at          TIMESTAMP,
                 link_sent_count       INTEGER DEFAULT 0,
                 created_at            TIMESTAMP DEFAULT CURRENT_TIMESTAMP

@@ -2213,9 +2213,13 @@ async def _claimant_accept_thankyou_impl(claim_id: int) -> None:
     (best-effort, in-session), and record it on the claim timeline. No ClaimShield/L2 wording."""
     async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
         _c.row_factory = __import__("aiosqlite").Row
+        # The COMPLAINANT accepted, so the complainant is thanked (the insured only when no
+        # complainant is recorded) - it used to go to the insured.
         r = await (await _c.execute(
-            "SELECT insured_name, insured_email, insured_phone FROM nidaan_claims WHERE claim_id=?",
-            (claim_id,))).fetchone()
+            "SELECT COALESCE(NULLIF(complainant_name,''), insured_name) AS insured_name, "
+            "COALESCE(NULLIF(complainant_email,''), insured_email) AS insured_email, "
+            "COALESCE(NULLIF(complainant_phone,''), insured_phone) AS insured_phone "
+            "FROM nidaan_claims WHERE claim_id=?", (claim_id,))).fetchone()
     if not r:
         return
     name = (r["insured_name"] or "").split(" ")[0]

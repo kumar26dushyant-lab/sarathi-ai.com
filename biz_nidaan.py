@@ -6580,7 +6580,8 @@ OPS_SETTING_DEFAULTS = {
     # later % change never rewrites an already-accepted agreement (grandfathered).
     # ⚠️ The T&C wording itself is founder/counsel-owned (claimant_terms_version bumps it).
     "claimant_success_fee_pct": "15",
-    "claimant_terms_version": "v1",
+    # v2 (1 Oct 2026): the firm's registered name corrected to "Consultants" in the English terms.
+    "claimant_terms_version": "v2",
     # Master switch for AUTO-emailing the complainant their portal link when a claim reaches L2.
     # Default OFF — staff can still issue/copy/email a link manually; flip to "1" only when the
     # founder is happy to auto-contact real policyholders.
@@ -6613,11 +6614,11 @@ OPS_SETTING_DEFAULTS = {
     # pinned to the version agreed. Plain text / simple HTML.
     "claimant_terms_html": (
         "This engagement is between you (the policyholder / complainant) and Nidaan The Legal "
-        "Consultant LLP (\"the Firm\"). The Firm will assist you in pursuing and, where possible, "
+        "Consultants LLP (\"the Firm\"). The Firm will assist you in pursuing and, where possible, "
         "recovering your insurance claim.\n\n"
         "Fee: The Firm works purely on a success basis. A professional fee of 15% of the amount "
         "actually recovered from the insurer/authority, plus applicable GST, is payable to Nidaan "
-        "The Legal Consultant LLP only upon successful recovery. If nothing is recovered, no fee is "
+        "The Legal Consultants LLP only upon successful recovery. If nothing is recovered, no fee is "
         "payable.\n\n"
         "This fee is payable to Nidaan The Legal Consultants LLP and is separate from any "
         "subscription or service of NidaanPartner.com.\n\n"

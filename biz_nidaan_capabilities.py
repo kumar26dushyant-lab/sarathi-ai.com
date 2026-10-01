@@ -835,6 +835,16 @@ CAPABILITIES: list[dict] = [
         "telegram": False, "web": True, "min_role": "team_member",
     },
     {
+        "id": "authorization_letter",
+        "en": {"t": "The complainant's authorization letter - on our letterhead, with the fee worked out",
+               "d": "When a complainant accepts the fee terms on their claim page, the letter filed on the claim now carries Nidaan The Legal Consultants LLP's name and logo, the complainant who accepted, and the tentative fee on the disputed amount - our 15%, GST, the total and what they would receive - exactly as they saw it, frozen at that moment. The firm's registered office and contacts are in the footer. Letters accepted before 1 October stay exactly as they were. A signed authorization can never be removed from a claim.",
+               "u": "Nothing changes in how you push the authorization. Check the disputed amount before pushing - the letter's figures come from it. Super-admins download the letter from the claim's portal box."},
+        "hi": {"t": "शिकायतकर्ता का अनुमति-पत्र - हमारे लेटरहेड पर, फीस के हिसाब के साथ",
+               "d": "जब शिकायतकर्ता अपने क्लेम पेज पर फीस की शर्तें स्वीकार करता है, तो क्लेम पर रखा जाने वाला पत्र अब Nidaan The Legal Consultants LLP के नाम और लोगो के साथ होता है, उसमें स्वीकार करने वाले शिकायतकर्ता का नाम और विवादित राशि पर अनुमानित फीस - हमारा 15%, GST, कुल और उन्हें कितना मिलेगा - ठीक वैसा जैसा उन्होंने देखा, उसी पल के लिए तय। नीचे फर्म का पंजीकृत पता और संपर्क है। 1 अक्टूबर से पहले स्वीकार किए गए पत्र जैसे थे वैसे ही रहते हैं। हस्ताक्षरित अनुमति कभी भी क्लेम से हटाई नहीं जा सकती।",
+               "u": "अनुमति भेजने का तरीका नहीं बदला। भेजने से पहले विवादित राशि जाँच लें - पत्र के आँकड़े उसी से बनते हैं। सुपर-एडमिन क्लेम के पोर्टल बॉक्स से पत्र डाउनलोड करते हैं।"},
+        "telegram": False, "web": True, "min_role": "sub_super_admin",
+    },
+    {
         "id": "ap_signature",
         "en": {"t": "Messages about an Authorized Partner's claims carry their name",
                "d": "Every email and WhatsApp we send about a claim that came through an Authorized Partner - raised by them, or by someone who joined with their code or link - ends with that person's name, e.g. \u201cRakesh Sharma, Authorized Partner of NidaanPartner.com, Pune (MH)\u201d. People in smaller towns trust the local person they know. Login codes never carry a name, and staff My Business claims are never signed by a partner.",

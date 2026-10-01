@@ -19,6 +19,7 @@ success-fee T&C copy is vetted by counsel (founder-owned).
 """
 from __future__ import annotations
 
+import os
 import secrets
 import logging
 from typing import Optional
@@ -192,25 +193,39 @@ async def record_consent(claim_id: int, ip: str = "", user_agent: str = "") -> d
     if existing and existing.get("consent_accepted_at"):
         return {"ok": True, "already": True, "portal": existing}
     cfg = await fee_config()
-    contact = await _claim_contact(claim_id)
-    name = (contact or {}).get("insured_name") or ""
+    contact = await _claim_contact(claim_id) or {}
+    # The person accepting is the COMPLAINANT (the insured only when they are the same person).
+    name = contact.get("to_name") or contact.get("insured_name") or ""
+    phone = contact.get("to_phone") or ""
+    email = contact.get("to_email") or ""
+    # The tentative calculation exactly as the card showed it: on the disputed amount.
+    calc = compute_fee(float(contact.get("disputed_amount") or 0), cfg["fee_pct"], cfg["gst_pct"])
     # The exact wording shown to the complainant (both languages), pinned for the record.
     snapshot = (("ENGLISH\n" + (cfg.get("terms_html") or "")).strip()
                 + "\n\n————————————————\n\nहिंदी\n" + (cfg.get("terms_html_hi") or "")).strip()
     ist = timezone(timedelta(hours=5, minutes=30))
     accepted_at = datetime.now(ist).strftime("%Y-%m-%d %H:%M:%S")
     canonical = "|".join([str(claim_id), name, cfg["terms_version"], str(cfg["fee_pct"]),
-                          str(cfg["gst_pct"]), accepted_at, (ip or ""), snapshot])
+                          str(cfg["gst_pct"]), accepted_at, (ip or ""), snapshot,
+                          # letter v2: the figures and the signer's contact are part of the record
+                          "v%d" % LETTER_VERSION, phone, email,
+                          "%.2f|%.2f|%.2f|%.2f|%.2f" % (calc["recovered_amount"], calc["fee_amount"],
+                                                        calc["gst_amount"], calc["total_our_fee"],
+                                                        calc["net_to_claimant"])])
     chash = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
     await ensure_portal(claim_id, with_token=False)  # make sure a row exists
     async with aiosqlite.connect(DB_PATH) as conn:
         await conn.execute(
             "UPDATE nidaan_claimant_portal SET consent_accepted_at=?, "
             "consent_terms_version=?, consent_fee_pct=?, consent_gst_pct=?, consent_ip=?, "
-            "consent_terms_snapshot=?, consent_user_agent=?, consent_name=?, consent_hash=? "
-            "WHERE claim_id=?",
+            "consent_terms_snapshot=?, consent_user_agent=?, consent_name=?, consent_hash=?, "
+            "consent_letter_version=?, consent_disputed_amount=?, consent_fee_amount=?, "
+            "consent_gst_amount=?, consent_total_fee=?, consent_net_amount=?, consent_phone=?, "
+            "consent_email=? WHERE claim_id=?",
             (accepted_at, cfg["terms_version"], cfg["fee_pct"], cfg["gst_pct"], (ip or "")[:64],
-             snapshot, (user_agent or "")[:400], name[:120], chash, claim_id))
+             snapshot, (user_agent or "")[:400], name[:120], chash, LETTER_VERSION,
+             calc["recovered_amount"], calc["fee_amount"], calc["gst_amount"], calc["total_our_fee"],
+             calc["net_to_claimant"], phone[:20], email[:120], claim_id))
         await conn.commit()
     logger.info("Complainant consent recorded: claim=%s fee=%s%% gst=%s%% ver=%s hash=%s",
                 claim_id, cfg["fee_pct"], cfg["gst_pct"], cfg["terms_version"], chash[:12])
@@ -316,8 +331,9 @@ async def _claim_contact(claim_id: int) -> Optional[dict]:
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         row = await (await conn.execute(
-            "SELECT claim_id, insured_name, insured_email, complainant_name, complainant_email, "
-            "       account_id FROM nidaan_claims WHERE claim_id=?", (claim_id,))).fetchone()
+            "SELECT claim_id, insured_name, insured_email, insured_phone, complainant_name, "
+            "       complainant_email, complainant_phone, disputed_amount, account_id "
+            "FROM nidaan_claims WHERE claim_id=?", (claim_id,))).fetchone()
     if not row:
         return None
     d = dict(row)
@@ -325,6 +341,8 @@ async def _claim_contact(claim_id: int) -> Optional[dict]:
                      or (d.get("insured_email") or "").strip())
     d["to_name"] = ((d.get("complainant_name") or "").strip()
                     or (d.get("insured_name") or "").strip())
+    d["to_phone"] = ((d.get("complainant_phone") or "").strip()
+                     or (d.get("insured_phone") or "").strip())
     return d
 
 
@@ -407,6 +425,169 @@ def _wrap_lines(text: str, maxchars: int = 92) -> list:
     return out
 
 
+# ── Authorization letter, version 2 (1 Oct 2026) ─────────────────────────────
+# Letterhead with the firm's registered name and logo, the complainant who accepted, the tentative
+# fee calculation they saw (frozen at acceptance and inside the hash), the terms, and a footer with
+# the firm's details on every page. Rendered ONLY from the stored record, so downloading it again
+# years later gives the same letter.
+LETTER_VERSION = 2
+LETTERHEAD = {
+    "entity": "Nidaan The Legal Consultants LLP",
+    "tagline": "Insurance claim dispute resolution  |  NidaanPartner.com",
+    "address": ("79/A, Ranjeet Hanuman Road, Dravid Nagar, Scheme 71, Indore, "
+                "Madhya Pradesh 452009, India"),
+    "contact": "enquiries@nidaanlegalindia.com  |  +91 95844 68804  |  nidaanpartner.com",
+}
+_LOGO = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "nidaan_logo.png")
+
+
+def _rs(v) -> str:
+    """Rs 1,23,456 (Indian grouping; paise only when there are any). Core PDF fonts have no ₹."""
+    try:
+        x = round(float(v or 0), 2)
+    except (TypeError, ValueError):
+        x = 0.0
+    whole = int(abs(x))
+    paise = int(round((abs(x) - whole) * 100))
+    s = str(whole)
+    if len(s) > 3:
+        head, tail = s[:-3], s[-3:]
+        parts = []
+        while len(head) > 2:
+            parts.insert(0, head[-2:])
+            head = head[:-2]
+        if head:
+            parts.insert(0, head)
+        s = ",".join(parts) + "," + tail
+    return ("-" if x < 0 else "") + "Rs " + s + (".%02d" % paise if paise else "")
+
+
+def _pdf_safe(text: str) -> str:
+    """The core PDF fonts cover Latin-1 only: say the rupee in words and plain the dashes."""
+    import html as _h
+    import re as _re
+    t = _h.unescape(_re.sub(r"<[^>]+>", "", text or ""))
+    for a, b in (("₹", "Rs "), ("—", "-"), ("–", "-"), ("’", "'"), ("‘", "'"), ("“", '"'), ("”", '"'),
+                 ("•", "-"), ("…", "...")):
+        t = t.replace(a, b)
+    return t.encode("latin-1", "replace").decode("latin-1")
+
+
+def _letter_v2(claim_id: int, p: dict) -> bytes:
+    import fitz  # PyMuPDF
+    W, H, M = 595, 842, 50
+    ink, mut, rule = (0.08, 0.13, 0.20), (0.36, 0.42, 0.50), (0.80, 0.84, 0.88)
+    accent = (0.04, 0.46, 0.43)
+    doc = fitz.open()
+    state = {"page": None, "y": 0.0}
+
+    def new_page():
+        pg = doc.new_page(width=W, height=H)
+        # letterhead
+        try:
+            pg.insert_image(fitz.Rect(M, 30, M + 54, 84), filename=_LOGO, keep_proportion=True)
+        except Exception:  # noqa: BLE001 - a missing logo must not stop the record
+            pass
+        pg.insert_text((M + 66, 52), LETTERHEAD["entity"], fontsize=15, fontname="hebo", color=accent)
+        pg.insert_text((M + 66, 68), LETTERHEAD["tagline"], fontsize=8.5, fontname="helv", color=mut)
+        pg.draw_line((M, 94), (W - M, 94), color=accent, width=1.2)
+        # footer
+        pg.draw_line((M, H - 58), (W - M, H - 58), color=rule, width=0.6)
+        pg.insert_text((M, H - 44), _pdf_safe(LETTERHEAD["entity"] + " - Registered office: "
+                                              + LETTERHEAD["address"]), fontsize=7, fontname="helv", color=mut)
+        pg.insert_text((M, H - 33), LETTERHEAD["contact"], fontsize=7, fontname="helv", color=mut)
+        pg.insert_text((M, H - 22), "Electronic record of a digital acceptance. Claim NP-%s." % claim_id,
+                       fontsize=7, fontname="helv", color=mut)
+        state["page"], state["y"] = pg, 118.0
+
+    def need(h):
+        if state["y"] + h > H - 72:
+            new_page()
+
+    def text(t, size=10, bold=False, color=ink, gap=4, width=95):
+        for ln in (_wrap_lines(_pdf_safe(t), width) if t else [""]):
+            need(size + gap)
+            if ln:
+                state["page"].insert_text((M, state["y"]), ln, fontsize=size,
+                                          fontname=("hebo" if bold else "helv"), color=color)
+            state["y"] += size + gap
+
+    def heading(t):
+        state["y"] += 6
+        need(26)
+        text(t.upper(), size=9.5, bold=True, color=accent, gap=6)
+
+    def row(label, value, bold=False):
+        need(16)
+        pg = state["page"]
+        pg.insert_text((M, state["y"]), _pdf_safe(label), fontsize=10, fontname="helv", color=mut)
+        v = _pdf_safe(value)
+        w = fitz.get_text_length(v, fontname=("hebo" if bold else "helv"), fontsize=10)
+        pg.insert_text((W - M - w, state["y"]), v, fontsize=10, fontname=("hebo" if bold else "helv"),
+                       color=ink)
+        state["y"] += 15
+
+    new_page()
+    text("AUTHORIZATION AND SUCCESS-FEE CONSENT", size=14, bold=True, gap=6)
+    text("Claim NP-%s  |  accepted digitally on %s IST" % (claim_id, p.get("consent_accepted_at") or "-"),
+         size=9, color=mut, gap=10)
+
+    heading("Complainant")
+    row("Name", p.get("consent_name") or "-")
+    row("Mobile", p.get("consent_phone") or "-")
+    row("Email", p.get("consent_email") or "-")
+
+    fee_pct = p.get("consent_fee_pct") or 0
+    gst_pct = p.get("consent_gst_pct") or 0
+    heading("Tentative fee calculation")
+    text("Worked out on the disputed amount. The actual fee is %s%% of the amount actually recovered%s;"
+         " if nothing is recovered, no fee is payable." % (_num(fee_pct), (" plus %s%% GST" % _num(gst_pct))
+                                                          if gst_pct else ""), size=9, color=mut, gap=8)
+    row("Disputed amount (if recovered in full)", _rs(p.get("consent_disputed_amount")))
+    row("Our fee (%s%% of the amount recovered)" % _num(fee_pct), _rs(p.get("consent_fee_amount")))
+    if gst_pct:
+        row("GST (%s%% on our fee)" % _num(gst_pct), _rs(p.get("consent_gst_amount")))
+    row("Total fee", _rs(p.get("consent_total_fee")), bold=True)
+    row("You would receive", _rs(p.get("consent_net_amount")), bold=True)
+    text("Payable to %s, only upon successful recovery." % LETTERHEAD["entity"], size=8.5, color=mut, gap=6)
+
+    heading("Terms as presented and accepted")
+    snap = p.get("consent_terms_snapshot") or ""
+    en_terms = snap.split("————")[0].replace("ENGLISH", "", 1).strip() if snap else ""
+    for para in en_terms.split("\n"):
+        text(para, size=9.5, gap=4)
+    text("(The terms were also shown in Hindi on screen; the full bilingual text is part of the record "
+         "and covered by the integrity hash below.)", size=8, color=mut, gap=6)
+
+    heading("Record of acceptance")
+    row("Accepted (IST)", p.get("consent_accepted_at") or "-")
+    row("Terms version", p.get("consent_terms_version") or "-")
+    row("IP address", p.get("consent_ip") or "-")
+    text("Device: " + (p.get("consent_user_agent") or "-"), size=7.5, color=mut, gap=4)
+    text("Integrity hash (SHA-256): " + (p.get("consent_hash") or "-"), size=7.5, color=mut, gap=4)
+    text("Any change to the recorded fields, the figures above or the terms text would change this hash. "
+         "A certificate under Section 65B of the Indian Evidence Act may be issued on request.",
+         size=7.5, color=mut, gap=4)
+
+    # page numbers, once the count is known
+    n = doc.page_count
+    for i, pg in enumerate(doc):
+        lbl = "Page %d of %d" % (i + 1, n)
+        w = fitz.get_text_length(lbl, fontname="helv", fontsize=7)
+        pg.insert_text((W - M - w, H - 22), lbl, fontsize=7, fontname="helv", color=mut)
+    out = doc.tobytes(deflate=True)
+    doc.close()
+    return out
+
+
+def _num(v) -> str:
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return str(v)
+    return str(int(f)) if f == int(f) else ("%.2f" % f).rstrip("0").rstrip(".")
+
+
 async def build_consent_proof_pdf(claim_id: int) -> Optional[bytes]:
     """A downloadable, tamper-evident PDF of the complainant's digital acceptance — for the super-admin
     to retain as proof (auditable before authorities). English layout (fitz core fonts don't render
@@ -416,6 +597,9 @@ async def build_consent_proof_pdf(claim_id: int) -> Optional[bytes]:
     p = await get_portal(claim_id)
     if not p or not p.get("consent_accepted_at"):
         return None
+    if int(p.get("consent_letter_version") or 1) >= 2:
+        return _letter_v2(claim_id, p)
+    # Version 1 - letters accepted before 1 Oct 2026 keep exactly this layout (founder's rule).
     contact = await _claim_contact(claim_id) or {}
     snap = p.get("consent_terms_snapshot") or ""
     en_terms = snap.split("————")[0].replace("ENGLISH", "", 1).strip() if snap else ""
