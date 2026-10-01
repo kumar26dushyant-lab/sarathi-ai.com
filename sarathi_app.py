@@ -691,6 +691,11 @@ async def google_search_console_verify(request: Request):
     return "google-site-verification: google3df0c6b7c9115ee9.html"
 
 
+# Customer messages in one website chat before it goes to a person regardless - a runaway ceiling,
+# not the handover rule (the AI hands over by intent; a repeated question hands over at once).
+SUPPORT_CHAT_CEILING = 15
+
+
 _MAX_SUPPORT_ATTACH = 15          # per-thread storage-abuse cap
 
 

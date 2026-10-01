@@ -2617,6 +2617,11 @@ async def nidaan_support_close(body: _SupportCloseReq, request: Request):
     return {"ok": True}
 
 
+# Customer messages in one website chat before it goes to a person regardless - a runaway ceiling,
+# not the handover rule (the AI hands over by intent; a repeated question hands over at once).
+SUPPORT_CHAT_CEILING = 15
+
+
 @app.post("/nidaan/api/support/message")
 @limiter.limit("20/minute")
 async def nidaan_support_message(body: NidaanSupportMsgReq, request: Request):
@@ -2715,7 +2720,10 @@ async def nidaan_support_message(body: NidaanSupportMsgReq, request: Request):
         return _re_sup.sub(r"\W+", " ", (s or "").lower()).strip()
     _nmsg = _norm_sup(msg)
     _repeat = bool(_nmsg) and sum(1 for p in _cust if _norm_sup(p) == _nmsg) >= 2
-    _force_human = _repeat or len(_cust) >= 6
+    # The AI decides a handover by INTENT (stuck, off-topic, needs their account - see the prompt);
+    # a repeated question hands over at once. The count is only a runaway ceiling: at 6 it handed
+    # over people whose every question was relevant (founder, 1 Oct).
+    _force_human = _repeat or len(_cust) >= SUPPORT_CHAT_CEILING
     import biz_ai as ai_mod
     _facts_block = nidaan.content_facts_block(await nidaan.get_content(), lang=(_lang or "en"))
     ai = await ai_mod.nidaan_support_reply(

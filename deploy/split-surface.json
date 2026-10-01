@@ -62,6 +62,7 @@
   "OpsSupportReplyReq",
   "OpsUpdateAccount",
   "OpsWaSettingsReq",
+  "SUPPORT_CHAT_CEILING",
   "UpdateStaffReq",
   "_AckReq",
   "_AdminPayLinkReq",
@@ -1812,6 +1813,7 @@
    "product": "nidaan",
    "reaches": [
     "NidaanSupportMsgReq",
+    "SUPPORT_CHAT_CEILING",
     "_derive_support_channel",
     "_is_nidaan_host",
     "_nidaan_account_from_payload",
@@ -1822,6 +1824,7 @@
    ],
    "uses": [
     "NidaanSupportMsgReq",
+    "SUPPORT_CHAT_CEILING",
     "_derive_support_channel",
     "_is_nidaan_host",
     "_nidaan_account_from_payload",
