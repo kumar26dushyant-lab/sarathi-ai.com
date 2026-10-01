@@ -11685,6 +11685,21 @@ async def ops_support_reply(thread_id: int, body: OpsSupportReplyReq, request: R
     meta = await nidaan.get_support_thread_meta(thread_id)
     if not meta:
         raise HTTPException(status_code=404, detail="Thread not found")
+    # A thread that CAME FROM WHATSAPP is answered ON WhatsApp. A reply typed here used to be
+    # saved to the thread and never sent: staff believed they had answered and the customer heard
+    # nothing (founder, 1 Oct). Same permission and same sender as the WhatsApp screen, and the
+    # reply is recorded only once WhatsApp has accepted it.
+    _wa_to = "".join(ch for ch in (meta.get("contact") or "") if ch.isdigit())         if (meta.get("channel") or "") == "whatsapp" else ""
+    if _wa_to:
+        _caller = await _require_wa_reply(request)
+        import biz_nidaan_wa_inbox as _inbox
+        _sent = await _inbox.send_human(_wa_number_or_400(_wa_to), body.message.strip(),
+                                        staff_id=str(_caller.get("staff_id") or ""),
+                                        staff_name=_actor_label(_caller))
+        if not _sent.get("ok"):
+            raise HTTPException(status_code=400, detail="Not sent to WhatsApp: %s" % (
+                _sent.get("error") or "WhatsApp did not accept it"))
+        await _ops_audit(request, "wa.reply", "wa_contact", _wa_to, body.message.strip()[:120])
     _staff_msg_id = await nidaan.add_support_message(thread_id, "staff", body.message.strip())
     # A staff reply takes the thread out of the escalation queue (mark handled = 'ai'
     # so it's no longer flagged as waiting; 'closed' is explicit via the close action).

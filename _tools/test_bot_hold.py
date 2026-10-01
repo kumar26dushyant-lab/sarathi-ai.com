@@ -205,6 +205,12 @@ async def main():
     check("...and no longer hard-codes the hours", "Mon–Fri, 10am–6pm IST" not in route, "hard-coded hours")
     check("...and while waiting for a person the AI is not asked",
           route.index('if _prev_status == "escalated":') < route.index("nidaan_support_reply("))
+    rep = src[src.index("async def ops_support_reply("):]
+    rep = rep[:rep.index("\n@app.")]
+    check("a Support reply on a WhatsApp chat is SENT on WhatsApp (it used to be saved only)",
+          "_inbox.send_human(" in rep and rep.index("_inbox.send_human(") < rep.index("add_support_message("))
+    check("...with the WhatsApp screen's permission, and not saved if WhatsApp refuses",
+          "_require_wa_reply(request)" in rep and 'raise HTTPException(status_code=400, detail="Not sent to WhatsApp' in rep)
 
 
 asyncio.run(main())

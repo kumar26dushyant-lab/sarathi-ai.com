@@ -835,6 +835,8 @@ _DOC_KEYS = {
     # forwarded and read on a phone - which is why it lives here behind the share key rather
     # than on the open web: it describes how we work, and it names our WhatsApp number.
     "sop-documents": "nidaan_sop_documents.html",
+    # What changed on 1 Oct, with an example for each - read by staff after the lunch deploy.
+    "sop-whats-new": "nidaan_sop_whats_new.html",
     # The Level-2 operating manual — how a paid claim travels through the buckets. Shared with
     # staff on an ordinary browser link so it can be forwarded and read on a phone; one page,
     # Hinglish and English, because the people doing the work do not read release notes.
@@ -1115,6 +1117,33 @@ async def ops_claim_cp_withdraw(req_id: int, request: Request):
         raise HTTPException(status_code=400, detail=str(e))
     await _ops_audit(request, "claim.cp_withdraw", "claim", claim_id, f"req={req_id}")
     return res
+
+
+class _UiOpenedReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    panel: str = Field(..., pattern=r"^[a-z0-9_]{1,24}$")
+
+
+@app.post("/nidaan/ops/api/ui/opened")
+@limiter.limit("120/minute")
+async def ops_ui_opened(body: _UiOpenedReq, request: Request):
+    """Count one screen open - so unused tabs are retired on evidence (biz_nidaan_usage)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "team_member")
+    import biz_nidaan_usage as _use
+    await _use.opened(int(staff.get("staff_id") or 0), body.panel)
+    return {"ok": True}
+
+
+@app.get("/nidaan/ops/api/ui/usage")
+async def ops_ui_usage(request: Request, days: int = 14):
+    """Which screens were opened, by how many people, and when last - super-admins only."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    import biz_nidaan_usage as _use
+    return {"days": max(1, min(int(days), 90)), "screens": await _use.report(max(1, min(int(days), 90)))}
 
 
 # ── The splitter, one file at a time, read in the background (29 Sep) ─────────
