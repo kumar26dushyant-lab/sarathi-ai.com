@@ -20747,10 +20747,33 @@ async function sendDocReminderEmail(cid){
 window.sendDocReminderEmail=sendDocReminderEmail;
 
 // Start (or continue) WhatsApp guided doc-collection for a claim's complainant.
+// Step 1 of 2 (founder, 2 Oct: never one click): show who, which number, what will be asked and
+// any warning - nothing is sent until the person presses Send.
 async function startWaCollection(cid){
   const m=document.getElementById('docReminderMsg_'+cid);
+  if(m){ m.style.color='var(--nd-text-faint)'; m.textContent='Checking…'; }
+  let r; try{ r=await API('/claims/'+cid+'/wa/start/preview'); }catch(e){ if(m){m.style.color='var(--nd-danger-text)';m.textContent='Network error';} return; }
+  const p=await r.json().catch(()=>({}));
+  if(!r.ok){ if(m){ m.style.color='var(--nd-danger-text)'; m.textContent='✕ ' + _l2Err(p, 'Cannot start WhatsApp collection.'); } return; }
+  if(m) m.textContent='';
+  const docs=(p.docs||[]).map(function(d,i){ return '<li'+(i===0?' style="font-weight:700"':'')+'>'+esc(d)+(i===0?' — asked first':'')+'</li>'; }).join('');
+  const how = p.mode==='template'
+    ? 'They have not written to us in the last 24 hours, so WhatsApp allows only our <b>approved first message</b>, asking for the first document. When they reply, the bot asks for the rest one by one.'
+    : 'They wrote to us in the last 24 hours, so the bot greets them (only if it never has) and asks for the first document, then the rest one by one as they reply.';
+  const warn=(p.warnings||[]).map(function(w){ return '<div style="background:var(--nd-warning-soft);border:1px solid var(--nd-border-warn);color:var(--nd-warning-text);border-radius:8px;padding:.45rem .6rem;margin:.35rem 0;font-size:.82rem">⚠️ '+esc(w)+'</div>'; }).join('');
+  openModal('Start WhatsApp collection?',
+    '<div style="font-size:.88rem">To <b>'+esc(p.who||'the complainant')+'</b> on WhatsApp <b>'+esc(p.to||'')+'</b> (only the complainant - nobody else on the claim).</div>'
+    + warn
+    + '<div style="font-size:.84rem;margin:.6rem 0 .3rem">'+how+'</div>'
+    + '<div style="font-size:.8rem;color:var(--nd-text-muted)">Documents still needed ('+(p.pending||0)+'):</div><ul style="font-size:.84rem;margin:.2rem 0 0 1.2rem">'+docs+'</ul>',
+    [{label:'Send', cls:'btn-primary', fn:function(){ closeModal(); _startWaSend(cid); }},
+     {label:'Cancel', cls:'btn-ghost', fn: closeModal}]);
+}
+// Step 2 of 2: really send.
+async function _startWaSend(cid){
+  const m=document.getElementById('docReminderMsg_'+cid);
   if(m){ m.style.color='var(--nd-text-faint)'; m.textContent='Starting…'; }
-  let r; try{ r=await API('/claims/'+cid+'/wa/start',{method:'POST'}); }catch(e){ if(m){m.style.color='var(--nd-danger-text)';m.textContent='Network error';} return; }
+  let r; try{ r=await API('/claims/'+cid+'/wa/start',{method:'POST', body: JSON.stringify({confirm:true})}); }catch(e){ if(m){m.style.color='var(--nd-danger-text)';m.textContent='Network error';} return; }
   const d=await r.json().catch(()=>({}));
   // Say who was asked, on which number, for what - so "sent" means something a person can check.
   if(r.ok && d.ok){

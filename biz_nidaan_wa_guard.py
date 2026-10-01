@@ -106,7 +106,9 @@ async def _contact(msisdn: str) -> dict:
 
 async def _counts(msisdn: str) -> dict:
     """What we have already started with this person. Only messages that actually went out
-    count — one we never managed to deliver did not use up their patience."""
+    count — one we never managed to deliver did not use up their patience. Delivered and read
+    are 'sent' that the webhook later confirmed; counting only 'sent' let the caps undercount
+    (1 Oct review)."""
     async with aiosqlite.connect(DB_PATH) as c:
         row = await (await c.execute(
             """SELECT
@@ -115,7 +117,8 @@ async def _counts(msisdn: str) -> dict:
                  COALESCE(SUM(send_class='conversation' AND created_at >= datetime('now','-1 day')),0) AS day_conv,
                  COALESCE(SUM(send_class='initiated'),0)                                               AS ever_init
                FROM nidaan_wa_messages
-               WHERE msisdn=? AND direction='out' AND status='sent'""", (msisdn,))).fetchone()
+               WHERE msisdn=? AND direction='out' AND status IN ('sent','delivered','read')""",
+            (msisdn,))).fetchone()
     return {"day_init": int(row[0] or 0), "week_init": int(row[1] or 0),
             "day_conv": int(row[2] or 0), "ever_init": int(row[3] or 0)}
 

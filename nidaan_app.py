@@ -9833,9 +9833,41 @@ async def ops_doc_window_called(claim_id: int, body: _DocCallReq, request: Reque
     return res
 
 
+@app.get("/nidaan/ops/api/claims/{claim_id}/wa/start/preview")
+@limiter.limit("60/minute")
+async def nidaan_ops_wa_start_preview(claim_id: int, request: Request):
+    """What "Start WhatsApp collection" WOULD send, to whom - sends nothing (founder, 2 Oct)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    import biz_nidaan_wa_orchestrator as _orch
+    res = await _orch.start_for_claim(claim_id, by=_actor_label(caller), preview=True)
+    if not res.get("ok"):
+        raise HTTPException(status_code=400, detail=_wa_start_why(res))
+    return res
+
+
+class _WaStartReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    confirm: bool = False
+
+
+def _wa_start_why(res: dict) -> str:
+    err = str(res.get("error") or "")
+    _m = {"no_phone": "This claim has no phone number for the complainant. Add one on the claim.",
+          "no_claim": "Claim not found.",
+          "opted_out": "The complainant replied STOP, so WhatsApp will not message them. Use email or call.",
+          "nothing_pending": "Every required document is already in — nothing to ask for.",
+          "human_takeover": "%s is handling this chat by hand, so the bot does not start talking."
+                            % (res.get("handler") or "A staff member"),
+          "journey_disabled": "Automatic WhatsApp messages are switched off in Workflow Settings."}
+    return _m.get(err) or ("WhatsApp refused the message to %s: %s"
+                           % (res.get("to") or "the complainant", err or "no reason given"))
+
+
 @app.post("/nidaan/ops/api/claims/{claim_id}/wa/start")
 @limiter.limit("30/minute")
-async def nidaan_ops_wa_start(claim_id: int, request: Request):
+async def nidaan_ops_wa_start(claim_id: int, request: Request, body: Optional[_WaStartReq] = None):
     """Start (or continue) the WhatsApp guided doc-collection for a claim's complainant. Free-form
     delivery needs an open 24h session (complainant messaged us recently); a cold start needs an
     approved template. sub_super_admin+."""
@@ -9843,25 +9875,20 @@ async def nidaan_ops_wa_start(claim_id: int, request: Request):
         raise HTTPException(status_code=404)
     # Intake work, so the same people who open the document window beside it.
     caller = _require_staff(request, "team_member")
+    # Nothing goes out in one click: the screen shows the preview and the person presses Send.
+    if not (body and body.confirm):
+        raise HTTPException(status_code=400, detail="Look at what will be sent first, then press Send.")
     import biz_nidaan_whatsapp as _nwa
     if not _nwa.is_configured():
         raise HTTPException(status_code=503, detail="WhatsApp is not connected yet.")
     import biz_nidaan_wa_orchestrator as _orch
     res = await _orch.start_for_claim(claim_id, by=_actor_label(caller))
+    await _ops_audit(request, "claim.wa_start", "claim", str(claim_id),
+                     "WhatsApp collection %s" % ("started" if res.get("ok") else "not started: %s" % res.get("error")))
     if not res.get("ok"):
         # Anything that was not delivered is a failure, said in words a staffer can act on.
         # This used to return 200 for a message Meta had refused, and the screen said "Sent".
-        err = str(res.get("error") or "")
-        _m = {"no_phone": "This claim has no phone number for the complainant. Add one on the claim.",
-              "no_claim": "Claim not found.",
-              "opted_out": "The complainant replied STOP, so WhatsApp will not message them. Use email or call.",
-              "nothing_pending": "Every required document is already in — nothing to ask for.",
-              "human_takeover": "A staff member is handling this chat by hand, so the bot is paused."}
-        detail = _m.get(err)
-        if not detail:
-            detail = ("WhatsApp refused the message to %s: %s"
-                      % (res.get("to") or "the complainant", err or "no reason given"))
-        raise HTTPException(status_code=400, detail=detail)
+        raise HTTPException(status_code=400, detail=_wa_start_why(res))
     return res
 
 

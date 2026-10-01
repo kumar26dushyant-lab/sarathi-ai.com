@@ -242,14 +242,30 @@ async def _set_takeover(claim_id: int, by: str = "support") -> None:
         pass
 
 
-async def _link_contact(msisdn: str, claim: dict) -> None:
+async def _link_contact(msisdn: str, claim: dict, *, they_wrote: bool = True) -> None:
+    """Tie a number to its claim. Consent is recorded only when THEY wrote to us - a staff member
+    starting a conversation is not the complainant agreeing to hear from us, and opted_in is what
+    puts a number in a campaign's audience (1 Oct review)."""
     try:
         import biz_nidaan_wa_flow as _flow
-        await _flow.upsert_contact(msisdn, claim_id=claim.get("claim_id"),
-                                   account_id=claim.get("account_id"), opted_in=True,
-                                   opt_source="claimant_msg")
+        if they_wrote:
+            await _flow.upsert_contact(msisdn, claim_id=claim.get("claim_id"),
+                                       account_id=claim.get("account_id"), opted_in=True,
+                                       opt_source="claimant_msg")
+        else:
+            await _flow.upsert_contact(msisdn, claim_id=claim.get("claim_id"),
+                                       account_id=claim.get("account_id"))
     except Exception:
         pass
+
+
+def _looks_like_junk(name: str) -> bool:
+    """A name nobody would answer to ("OLKL;L;L;L;L;L;", "asdf", "....") - worth a warning."""
+    n = (name or "").strip()
+    if len(n) < 2:
+        return True
+    letters = sum(ch.isalpha() for ch in n)
+    return letters < 0.7 * len(n.replace(" ", "")) or any(ch in n for ch in ";{}[]<>|\\/=_")
 
 
 def _doc_label(doc: dict, lang: str) -> str:
@@ -513,7 +529,7 @@ async def _wa_journey(claim_id: int, event: str, extra: dict | None = None,
         return {"ok": False, "error": str(e)[:120]}
 
 
-async def start_for_claim(claim_id: int, *, by: str = "system") -> dict:
+async def start_for_claim(claim_id: int, *, by: str = "system", preview: bool = False) -> dict:
     """Staff pressed "Start WhatsApp collection". Ask the COMPLAINANT for the first missing document.
 
     Two cases, because Meta allows two different kinds of message:
@@ -553,15 +569,45 @@ async def start_for_claim(claim_id: int, *, by: str = "system") -> dict:
     if not pending:
         return {"ok": False, "error": "nothing_pending", "to": masked, "who": who}
 
+    # A person is handling this chat by hand: the bot does not start talking over them - on
+    # EITHER path (the template path used to skip this check).
+    async with aiosqlite.connect(DB_PATH) as c:
+        bp = await (await c.execute(
+            "SELECT COALESCE(bot_paused,0), COALESCE(assigned_name,'') FROM nidaan_wa_contacts WHERE msisdn=?",
+            (msisdn,))).fetchone()
+    if bp and int(bp[0] or 0):
+        return {"ok": False, "error": "human_takeover", "to": masked, "who": who,
+                "handler": bp[1] or ""}
+
+    import biz_nidaan_wa_flow as _flow
+    in_session = await _flow.in_session_window(msisdn)
+    first = (pending[0].get("en") or pending[0]["key"])
+    if preview:
+        # What WOULD happen - nothing is sent and nothing is recorded.
+        try:
+            import biz_nidaan_contact_verify as _cv
+            st = (await _cv.status(await _cv._claim(claim_id))).get("phone") or {}
+            phone_ok = bool(st.get("verified"))
+        except Exception:  # noqa: BLE001
+            phone_ok = False
+        warn = []
+        if _looks_like_junk(who):
+            warn.append("The complainant's name looks wrong (\"%s\") - correct it on the claim first; "
+                        "the message greets them by it." % (who or "blank"))
+        if not phone_ok:
+            warn.append("This mobile number has not been confirmed by the complainant yet.")
+        return {"ok": True, "preview": True, "mode": "chat" if in_session else "template",
+                "to": masked, "who": who, "first_doc": first, "pending": len(pending),
+                "docs": [(d.get("en") or d["key"]) for d in pending], "warnings": warn}
+
     # Tie this number to THIS claim, so whatever they send back lands here - whichever of the
-    # claim's two phone numbers it was.
+    # claim's two phone numbers it was. A staff start is not their consent.
     try:
-        await _link_contact(msisdn, claim)
+        await _link_contact(msisdn, claim, they_wrote=in_session)
     except Exception:
         pass
 
-    import biz_nidaan_wa_flow as _flow
-    if await _flow.in_session_window(msisdn):
+    if in_session:
         res = await start_or_continue(msisdn, force_ask=True)
         mode = "chat"
     else:
@@ -575,7 +621,6 @@ async def start_for_claim(claim_id: int, *, by: str = "system") -> dict:
             await _mark_asked(claim_id)
 
     ok = bool((res or {}).get("ok"))
-    first = (pending[0].get("en") or pending[0]["key"])
     await _activity(claim_id, "doc_collection_start",
                     ("WhatsApp doc-collection started by %s — asked %s (%s) for: %s"
                      % (by, who or "the complainant", masked, first)) if ok else

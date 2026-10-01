@@ -199,6 +199,7 @@
   "_WaReplyReq",
   "_WaSortAsideReq",
   "_WaSortAttachReq",
+  "_WaStartReq",
   "_actor_label",
   "_as_viewable",
   "_attach_message_urls",
@@ -278,6 +279,7 @@
   "_task_visible_to_staff",
   "_upload_refusal",
   "_wa_number_or_400",
+  "_wa_start_why",
   "validate_upload",
   "validate_upload_scanned"
  ],
@@ -6255,9 +6257,9 @@
    ]
   },
   {
-   "func": "nidaan_ops_wa_start",
+   "func": "nidaan_ops_wa_start_preview",
    "paths": [
-    "/nidaan/ops/api/claims/{claim_id}/wa/start"
+    "/nidaan/ops/api/claims/{claim_id}/wa/start/preview"
    ],
    "product": "nidaan",
    "reaches": [
@@ -6267,6 +6269,7 @@
     "_require_staff",
     "_row_still_open",
     "_staff_still_active",
+    "_wa_start_why",
     "app",
     "limiter"
    ],
@@ -6274,6 +6277,37 @@
     "_actor_label",
     "_is_nidaan_host",
     "_require_staff",
+    "_wa_start_why",
+    "app",
+    "limiter"
+   ]
+  },
+  {
+   "func": "nidaan_ops_wa_start",
+   "paths": [
+    "/nidaan/ops/api/claims/{claim_id}/wa/start"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_WaStartReq",
+    "_actor_label",
+    "_get_staff_from_request",
+    "_is_nidaan_host",
+    "_ops_audit",
+    "_require_staff",
+    "_row_still_open",
+    "_staff_still_active",
+    "_wa_start_why",
+    "app",
+    "limiter"
+   ],
+   "uses": [
+    "_WaStartReq",
+    "_actor_label",
+    "_is_nidaan_host",
+    "_ops_audit",
+    "_require_staff",
+    "_wa_start_why",
     "app",
     "limiter"
    ]
@@ -18914,6 +18948,7 @@
   "nidaan_ops_wa_reply",
   "nidaan_ops_wa_settings",
   "nidaan_ops_wa_start",
+  "nidaan_ops_wa_start_preview",
   "nidaan_ops_wa_thread",
   "nidaan_ops_wa_unsorted",
   "nidaan_ops_wa_unsorted_aside",
