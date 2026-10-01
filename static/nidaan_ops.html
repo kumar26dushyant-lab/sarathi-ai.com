@@ -10433,13 +10433,19 @@ async function loadSupportReps(){
   // Who is answering each queue right now. The two channels are ALWAYS listed, empty or not,
   // because being on the WhatsApp rota is what OPENS that inbox for a team member. Stage buckets
   // are listed only once somebody is on them, so this stays a status line and not a wall of 13.
-  const shown = CHAN.concat(STAGE.filter(k=>reps.some(x=>x.on_duty && dutyOf(x)===k)));
-  const dutyLine = shown.map(k=>{
+  const shownStage = STAGE.filter(k=>reps.some(x=>x.on_duty && dutyOf(x)===k));
+  const lineFor = k=>{
     const on=reps.filter(x=>x.on_duty && dutyOf(x)===k);
     const names = on.length ? on.map(x=>esc(x.staff_name||('#'+x.staff_id))).join(', ')
       : `<span style="color:var(--nd-warning-text)">${k==='whatsapp'?'nobody rostered — only admins can open the inbox':'nobody rostered (alerts fall back to admins)'}</span>`;
     return `<div style="font-size:.82rem;margin-bottom:.3rem">${DUTY[k].icon} <b>${esc(DUTY[k].label)} — on duty now:</b> ${names}</div>`;
-  }).join('');
+  };
+  // ONE roster, two kinds of duty (founder, 1 Oct: "are the attached on duty different from bucket
+  // on duty?"). Said on the screen, in two labelled groups, instead of one mixed list.
+  const _hd = t=>`<div style="font-size:.68rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--nd-text-faint);margin:.4rem 0 .25rem">${t}</div>`;
+  const dutyLine = `<div style="font-size:.76rem;color:var(--nd-text-muted);margin-bottom:.4rem">One roster for both. A <b>conversation</b> duty means you answer that inbox; a <b>bucket</b> duty means claims arriving in that bucket come to you. On a full day of leave your alerts go to your cover.</div>`
+    + _hd('Conversations — answering customers') + CHAN.map(lineFor).join('')
+    + (shownStage.length ? _hd('Buckets — working the claims') + shownStage.map(lineFor).join('') : '');
   const optsFor=list=>list.map(k=>`<option value="${esc(k)}">${DUTY[k].icon} ${esc(DUTY[k].label)}</option>`).join('');
   const dutyOptions=`<optgroup label="Conversations">${optsFor(CHAN)}</optgroup>`
                    +`<optgroup label="Case stages">${optsFor(STAGE)}</optgroup>`;
@@ -10447,7 +10453,10 @@ async function loadSupportReps(){
      <td>${esc(x.staff_name||('#'+x.staff_id))} <span style="font-size:.68rem;color:var(--nd-text-faint)">${esc(x.staff_role||'')}</span></td>
      <td style="font-size:.8rem">${(DUTY[dutyOf(x)]||{}).icon||''} ${esc((DUTY[dutyOf(x)]||{}).label||dutyOf(x))}</td>
      <td style="font-size:.8rem">${esc(x.start_date)} → ${esc(x.end_date)}</td>
-     <td>${x.on_duty?'<span class="pill-status" style="background:rgba(52,211,153,.18);color:var(--nd-success-text)">on duty</span>':'<span style="color:var(--nd-text-faint);font-size:.75rem">scheduled</span>'}</td>
+     <td>${x.on_duty?'<span class="pill-status" style="background:rgba(52,211,153,.18);color:var(--nd-success-text)">on duty</span>'
+          : (x.staff_active===false ? '<span style="color:var(--nd-danger-text);font-size:.75rem">inactive — not on duty</span>'
+          : (x.on_leave ? '<span style="color:var(--nd-warning-text);font-size:.75rem">on leave today — cover takes it</span>'
+          : '<span style="color:var(--nd-text-faint);font-size:.75rem">scheduled</span>'))}</td>
      <td>${canEdit?`<button class="btn-icon" title="Remove" onclick="removeSupportRep(${x.rep_id})" style="color:var(--nd-danger-text)">🗑️</button>`:''}</td>
    </tr>`).join('');
   wrap.innerHTML=`<div style="background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:10px;padding:.7rem .85rem">
@@ -14892,7 +14901,7 @@ function l2Shell(){
     + '<div class="l2wrap">'
     +   '<div class="l2rail">'
     +     '<button class="l2b" aria-pressed="' + (_l2Sel === 'all') + '" onclick="l2Pick(\'all\')">'
-    +       '<span>🗂️</span><span class="nm">All open claims</span>'
+    +       '<span>🗂️</span><span class="nm" title="Every open claim on the line - the buckets below AND the ones not yet at Level-2">All open claims (whole line)</span>'
     +       '<span class="ct">' + (ln.open_total || 0) + '</span></button>'
     // Folded, and below the buckets - see the block further down. The line still carries the
     // total, so "how much is coming" is answerable without opening it.
@@ -14916,8 +14925,10 @@ function l2Shell(){
     // having - it answers "what is coming" - so it keeps its total on the summary line and
     // opens to exactly the buttons it had. One click away instead of nought.
     +     (preRail
-        ? '<details class="l2pre"><summary><span class="nm">Before Level-2</span>'
-          + '<span class="ct">' + preTotal + '</span></summary>' + preRail + '</details>'
+        ? '<details class="l2pre"><summary><span class="nm" title="Open claims still in intake, review or waiting for payment - they reach Live Cases when handed over">Not yet at Level-2 (coming)</span>'
+          + '<span class="ct">' + preTotal + '</span></summary>'
+          + '<div style="font-size:.7rem;color:var(--nd-text-faint);padding:.15rem .6rem .35rem">Still in intake, review or payment - counted in "All open claims", not in any bucket.</div>'
+          + preRail + '</details>'
         : '')
     +   '</div>'
     +   '<div class="l2main" id="l2Main"><div class="empty"><p>Loading…</p></div></div>'

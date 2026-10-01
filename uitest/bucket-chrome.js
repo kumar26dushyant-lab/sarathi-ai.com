@@ -94,7 +94,7 @@ t('no chips at all when there is nothing to say',
 const railSrc = OPS.slice(OPS.indexOf("'<div class=\"l2rh\">The buckets</div>'") - 1200,
                           OPS.indexOf("'<div class=\"l2main\"") + 40);
 const posBuckets = railSrc.indexOf('The buckets');
-const posPre = railSrc.indexOf('Before Level-2');
+const posPre = railSrc.indexOf('Not yet at Level-2');
 t('the buckets now come BEFORE the pre-Level-2 rail',
   posBuckets > -1 && posPre > -1 && posBuckets < posPre,
   `buckets@${posBuckets} pre@${posPre}`);
