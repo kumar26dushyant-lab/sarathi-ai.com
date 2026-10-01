@@ -3179,7 +3179,15 @@ async def add_support_message(thread_id: int, sender_type: str, body: str,
             "UPDATE nidaan_support_threads SET last_at=CURRENT_TIMESTAMP WHERE thread_id=?",
             (thread_id,))
         await conn.commit()
-        return cur.lastrowid
+        mid = cur.lastrowid
+    if sender_type == "staff":
+        # A person answered: the bot's "someone will reach out" count starts again for the next wait.
+        try:
+            import biz_nidaan_bot_hold as _hold
+            await _hold.reset("sup:%s" % thread_id)
+        except Exception:  # noqa: BLE001
+            pass
+    return mid
 
 
 async def get_support_messages(thread_id: int, limit: int = 200, after_id: int = 0) -> list[dict]:

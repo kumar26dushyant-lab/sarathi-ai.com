@@ -906,7 +906,11 @@ async def on_support_escalated(thread_id: int) -> None:
         who = ((dict(th).get("name") if th else "") or "A visitor").strip()
         contact = ((dict(th).get("contact") if th else "") or "").strip()
         q = ((dict(last).get("body") if last else "") or "").strip()
+        # The handover alert is this chat's FIRST of two notices (founder, 1 Oct). Out of office
+        # hours it waits: the customer has been told when we open, and the sweep raises it then.
         in_hours = await _nid.is_within_business_hours()
+        if not in_hours or not await chat_notice_allowed("chat:sup:%s" % thread_id):
+            return
         ids = await _nid.on_duty_rep_ids()          # on-duty reps first
         if not ids:                                  # nobody rostered → don't miss it
             ids = [a["staff_id"] for a in await _super_admin_staff()]
@@ -3673,7 +3677,7 @@ async def _unanswered_whatsapp(minutes: int) -> list:
             GROUP BY m.msisdn
             HAVING last_dir = 'in'
                AND last_at <= datetime('now', ?)
-               AND last_at >= datetime('now', '-2 days')
+               AND last_at >= datetime('now', '-4 days')
             ORDER BY last_at ASC LIMIT 25
             """, (cutoff,))).fetchall()]
     return rows
@@ -3692,7 +3696,7 @@ async def _unanswered_support(minutes: int) -> list:
             WHERE sa_escalated_at IS NOT NULL
               AND COALESCE(status,'') NOT IN ('closed','resolved')
               AND sa_escalated_at <= datetime('now', ?)
-              AND sa_escalated_at >= datetime('now', '-2 days')
+              AND sa_escalated_at >= datetime('now', '-4 days')
             ORDER BY sa_escalated_at ASC LIMIT 25
             """, (cutoff,))).fetchall()]
     return rows
@@ -3777,109 +3781,125 @@ async def _alert_clear_resolved(prefix: str, live_keys: set) -> int:
         return 0
 
 
-async def sweep_unanswered() -> dict:
-    """Chase unanswered conversations, then escalate the ones still unanswered.
+# ── Two notices per waiting chat, in office hours ─────────────────────────────
+# Founder, 1 Oct: "telegram notifications to staff or superadmin ... are only 2 times for pending
+# chats, not in every hour". Every notice about one waiting conversation - the alert when it was
+# handed over, the reminder, the escalation - counts against ONE number per chat, and the third
+# never goes. The first goes to whoever is on duty; the second to them and the super-admins. Out
+# of office hours nothing goes (the customer has already been told when we open); a night-time
+# message is first noticed at opening time. Answering the chat clears the count.
+CHAT_NOTICES_MAX = 2
+_FIRST_AFTER_MIN = 45         # nobody has picked it up after this long (office hours)
+_SECOND_AFTER_MIN = 180       # still nobody - now the super-admins hear too
+_LOOKBACK = "-4 days"         # a Friday-evening message is still remembered on Monday
 
-    Runs on the worker. Never raises into the loop — a notification failure must not be able to
+
+async def chat_notices(key: str) -> int:
+    try:
+        async with aiosqlite.connect(db.DB_PATH) as conn:
+            r = await (await conn.execute(
+                "SELECT sent_count FROM nidaan_alert_dedup WHERE alert_key=?", (key,))).fetchone()
+        return int(r[0]) if r else 0
+    except Exception:  # noqa: BLE001
+        return 0
+
+
+async def chat_notice_allowed(key: str) -> bool:
+    """Take one of this chat's two notices, atomically. False once both are used."""
+    try:
+        async with aiosqlite.connect(db.DB_PATH) as conn:
+            await conn.execute("INSERT OR IGNORE INTO nidaan_alert_dedup (alert_key, sent_count) "
+                               "VALUES (?, 0)", (key,))
+            cur = await conn.execute(
+                "UPDATE nidaan_alert_dedup SET sent_count=sent_count+1, last_at=CURRENT_TIMESTAMP "
+                "WHERE alert_key=? AND sent_count < ?", (key, CHAT_NOTICES_MAX))
+            await conn.commit()
+            return cur.rowcount == 1
+    except Exception as e:  # noqa: BLE001
+        logger.warning("chat notice count failed for %s: %s", key, e)
+        return False
+
+
+def _digits(x: str) -> str:
+    return "".join(ch for ch in (x or "") if ch.isdigit())[-10:]
+
+
+async def sweep_unanswered() -> dict:
+    """Waiting conversations: at most two notices each, in office hours only.
+
+    Runs on the worker. Never raises into the loop - a notification failure must not be able to
     stop the sweep that finds the next one.
     """
     import biz_nidaan as _nid
-    out = {"nudged": 0, "escalated": 0, "silenced": 0}
-
+    out = {"first": 0, "second": 0, "already_said": 0}
     try:
-        wa_old = await _unanswered_whatsapp(_ESCALATE_AGAIN_MIN)
-        sup_old = await _unanswered_support(_ESCALATE_AGAIN_MIN)
+        wa = await _unanswered_whatsapp(_FIRST_AFTER_MIN)
+        sup = await _unanswered_support(_FIRST_AFTER_MIN)
     except Exception as e:  # noqa: BLE001
-        logger.warning("unanswered sweep (escalate) query failed: %s", e)
-        wa_old, sup_old = [], []
+        logger.warning("unanswered sweep query failed: %s", e)
+        return out
+    # A WhatsApp chat handed to a person ALSO opens a support thread - one customer, not two.
+    wa_numbers = {_digits(r["msisdn"]) for r in wa}
+    sup = [r for r in sup if _digits(r.get("contact") or "") not in wa_numbers]
 
-    # Anything that WAS being chased and is no longer in the list has been answered. Forget it, so
-    # if the same number goes quiet again next month it is heard fresh rather than staying muted.
-    live = set(["esc:wa:" + r["msisdn"] for r in wa_old] +
-               ["esc:sup:%s" % r["thread_id"] for r in sup_old])
-    await _alert_clear_resolved("esc:", live)
-
-    # Keep the FULL old list: it is what stops a three-hour-old conversation being treated as a
-    # fresh 45-minute one further down. Filtering it for de-duplication and then reusing the
-    # filtered version would silence the escalation and start nudging instead - which is exactly
-    # the spam it was meant to prevent, wearing a different hat.
-    wa_old_all, sup_old_all = list(wa_old), list(sup_old)
-
-    _wa_old, _sup_old = [], []
-    for r in wa_old:
-        if await _alert_allowed("esc:wa:" + r["msisdn"]):
-            _wa_old.append(r)
-        else:
-            out["silenced"] += 1
-    for r in sup_old:
-        if await _alert_allowed("esc:sup:%s" % r["thread_id"]):
-            _sup_old.append(r)
-        else:
-            out["silenced"] += 1
-    wa_old, sup_old = _wa_old, _sup_old
-
-    if wa_old or sup_old:
-        try:
-            admins = [a["staff_id"] for a in await _super_admin_staff()]
-            lines = []
-            for r in wa_old:
-                lines.append(f"• WhatsApp {r['msisdn']} — waiting since {r['last_at']} UTC")
-            for r in sup_old:
-                lines.append(f"• Support #{r['thread_id']} {r['who']} — escalated {r['sa_escalated_at']} UTC")
-            n = len(wa_old) + len(sup_old)
-            await notify_staff_inapp(
-                admins,
-                f"🚨 {n} conversation(s) still unanswered after 3 hours",
-                "Somebody wrote in, it was flagged, and nobody has replied. Whoever is on duty has "
-                "already been reminded once.\n\n" + "\n".join(lines[:12]) +
-                "\n\nOpen ops → WhatsApp Automation / Customer Support.",
-                event_key="conversation.unanswered.escalated", email=True, require_ack=True)
-            out["escalated"] = n
-        except Exception as e:  # noqa: BLE001
-            logger.warning("unanswered escalation failed: %s", e)
-
-    # The gentler first pass: remind whoever is actually rostered.
-    try:
-        wa_new = [r for r in await _unanswered_whatsapp(_ESCALATE_AFTER_MIN)
-                  if r not in wa_old_all]
-        sup_new = [r for r in await _unanswered_support(_ESCALATE_AFTER_MIN)
-                   if r not in sup_old_all]
-    except Exception as e:  # noqa: BLE001
-        logger.warning("unanswered sweep (nudge) query failed: %s", e)
+    items = [("chat:wa:" + r["msisdn"], "WhatsApp %s" % r["msisdn"], r["last_at"], "whatsapp")
+             for r in wa] + \
+            [("chat:sup:%s" % r["thread_id"], "Support #%s %s" % (r["thread_id"], r.get("who") or ""),
+              r["sa_escalated_at"], "support") for r in sup]
+    # Answered since: forget the count, so a later wait is heard fresh.
+    await _alert_clear_resolved("chat:", {k for k, *_ in items})
+    if not items:
+        return out
+    if not await _nid.is_within_business_hours():
         return out
 
-    live_n = set(["nudge:wa:" + r["msisdn"] for r in wa_new] +
-                 ["nudge:sup:%s" % r["thread_id"] for r in sup_new])
-    await _alert_clear_resolved("nudge:", live_n)
-    wa_new = [r for r in wa_new if await _alert_allowed("nudge:wa:" + r["msisdn"])]
-    sup_new = [r for r in sup_new if await _alert_allowed("nudge:sup:%s" % r["thread_id"])]
+    from datetime import timedelta as _td
+    old_cut = (datetime.utcnow() - _td(minutes=_SECOND_AFTER_MIN)).strftime("%Y-%m-%d %H:%M:%S")
+    first, second = [], []
+    for key, label, since, duty in items:
+        n = await chat_notices(key)
+        if n >= CHAT_NOTICES_MAX:
+            out["already_said"] += 1
+            continue
+        if n == 0:
+            if await chat_notice_allowed(key):
+                first.append((label, since, duty))
+        elif str(since or "") <= old_cut:
+            if await chat_notice_allowed(key):
+                second.append((label, since))
 
-    if wa_new:
+    for duty in ("whatsapp", "support"):
+        rows = [r for r in first if r[2] == duty]
+        if not rows:
+            continue
         try:
-            ids = await _nid.on_duty_rep_ids("whatsapp") or [
-                a["staff_id"] for a in await _super_admin_staff()]
+            ids = await _nid.on_duty_rep_ids(duty) or [a["staff_id"] for a in await _super_admin_staff()]
             await notify_staff_inapp(
-                ids, f"💬 {len(wa_new)} WhatsApp message(s) waiting for a reply",
-                "\n".join(f"• {r['msisdn']} — since {r['last_at']} UTC" for r in wa_new[:12]),
+                ids, "\U0001f4ac %d conversation(s) waiting for a reply" % len(rows),
+                "\n".join("• %s — waiting since %s UTC" % (l, w) for l, w, _ in rows[:12]) +
+                "\n\nThe customer has been told our office hours and that we will reach out. "
+                "Answer from WhatsApp Automation (WhatsApp chats) or Customer Support (website chat).",
                 event_key="conversation.unanswered", email=False)
-            out["nudged"] += len(wa_new)
+            out["first"] += len(rows)
         except Exception as e:  # noqa: BLE001
-            logger.warning("wa nudge failed: %s", e)
+            logger.warning("first notice failed: %s", e)
 
-    if sup_new:
+    if second:
         try:
-            ids = await _nid.on_duty_rep_ids("support") or [
-                a["staff_id"] for a in await _super_admin_staff()]
+            ids = list({*(await _nid.on_duty_rep_ids("whatsapp")), *(await _nid.on_duty_rep_ids("support")),
+                        *[a["staff_id"] for a in await _super_admin_staff()]})
             await notify_staff_inapp(
-                ids, f"🎧 {len(sup_new)} support chat(s) waiting for a human",
-                "\n".join(f"• #{r['thread_id']} {r['who']}" for r in sup_new[:12]),
-                event_key="conversation.unanswered", email=False)
-            out["nudged"] += len(sup_new)
+                ids, "\U0001f6a8 %d conversation(s) still unanswered after 3 hours" % len(second),
+                "Last reminder - nobody has replied yet:\n\n" +
+                "\n".join("• %s — waiting since %s UTC" % (l, w) for l, w in second[:12]) +
+                "\n\nThis is the second and final notice for these chats.",
+                event_key="conversation.unanswered.escalated", email=True, require_ack=True)
+            out["second"] += len(second)
         except Exception as e:  # noqa: BLE001
-            logger.warning("support nudge failed: %s", e)
-
-    if out["nudged"] or out["escalated"] or out["silenced"]:
-        logger.info("unanswered sweep: nudged=%d escalated=%d already-said=%d",
-                    out["nudged"], out["escalated"], out["silenced"])
+            logger.warning("second notice failed: %s", e)
+    if out["first"] or out["second"]:
+        logger.info("unanswered sweep: first=%d second=%d already-said=%d",
+                    out["first"], out["second"], out["already_said"])
     return out
+
 

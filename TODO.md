@@ -14,6 +14,11 @@ Done overnight: NP-123 - Brajesh Gupta's 8 WhatsApp files (sent after his chat w
 
 | # | What | Founder's words / notes |
 |---|---|---|
+| A1 | **Out-of-hours rule for EVERY customer-facing bot** (homepage chat, dashboard chat, WhatsApp) - TODAY | Founder, 1 Oct: outside 10:00-18:00 IST (or when no person is free), the bot tells them our office hours and that someone from the team will reach out, then hands over - the LAST message is the bot's, never a silent handover. Repeated chatter: the same office-hours line at most 3 times, then silent. Staff Telegram about a waiting chat: only 2 notices per chat, not every hour |
+| A2 | **Deploy 1 Oct at 13:30 IST** (staff lunch) | Founder's time, not a hotfix window - build/test before |
+| A3 | **SOP page on nidaanpartner.com for everything that changed** - examples and scenarios | Before the 13:30 deploy so staff read it when they are back |
+| A4 | **CRM transformation and revamp** - think it through, then plan | Founder, 1 Oct. Earlier notes: memory "Project: Nidaan CRM" (reuse Tasks + leads pipeline, voice-first, bot-role daily assistant) |
+| A5 | **Working rule: capture every urgent interruption here before acting on it, then come back to this list** | "many time we off-track what we're doing due to urgent requests" |
 | M0 | **Someone must reply to Brajesh Gupta (NP-123)** - his chat is with a person (bot paused) since 30 Sep 18:12 IST; he asked "Apko kya chahiye clear kare" | The Telegram nudges were right |
 | M0b | One WhatsApp file lost on 18 Sep from the number on claims #114/#169 - ask them to send it again | Unrecoverable (sent before media ids were kept) |
 | M1 | **Evening summary must say WHAT was done on each claim**, not counts: moves from->to, documents received/checked, follow-ups made (messages, calls, reminders), queries raised/answered, handovers, notes - and not count trivial edits as achievement | "we need to capture actual work, movement, progress, followup" |

@@ -809,13 +809,16 @@ async def handle_inbound_text(msisdn: str, text: str) -> dict:
     verified = bool(sess)
     sc = await _ident.safe_context(ident, verified=verified)
 
-    # Under human takeover the bot must not talk over the staffer — but it must not go SILENT
-    # either; that is exactly what dead-ended the last conversation. Acknowledge, at most once
-    # every 2 hours, without touching the pending-document state.
+    # Under human takeover the bot must not talk over the staffer - but the customer must not be
+    # left talking to nobody either. Founder, 1 Oct: tell them our office hours and that someone
+    # will reach out; at most three times while they wait, then silent (biz_nidaan_bot_hold).
     if await _human_holds(msisdn, claim_id):
-        if await _reserve_reply(msisdn, 120):
-            await _wa.send_text(msisdn, _msg.compose("human_followup", lang, {}))
-            await _activity(claim_id, "wa_ack", "Acknowledged (case is with a human).")
+        import biz_nidaan_bot_hold as _hold
+        _n_hold, _txt = await _hold.message_for("wa:" + msisdn, lang)
+        if _txt:
+            await _wa.send_text(msisdn, _txt)
+            await _activity(claim_id, "wa_ack", "Told them our office hours and that our team will "
+                            "reach out (%d of %d) - the case is with a person." % (_n_hold, _hold.MAX_HOLDS))
         return {"ok": True, "action": "human_takeover_ack"}
 
     # ── identity verification ────────────────────────────────────────────────
@@ -887,11 +890,17 @@ async def handle_inbound_text(msisdn: str, text: str) -> dict:
         # Acknowledge and put a person on it rather than going silent - silence is what
         # dead-ended the conversation the founder complained about on 23 Sep.
         await _activity(claim_id, "wa_inbound", f"Customer: {(text or '')[:120]}", direction="in")
-        await _tell_staff_inbound(claim_id, msisdn, text)
-        if await _reserve_reply(msisdn, 120):
-            await _wa.send_text(msisdn, _msg.compose("human_followup", lang, {}))
-        await _handoff_to_support(claim, msisdn, text, lang,
-                                  reason=_st["reason"], identity=ident)
+        # Office hours, someone will reach out - at most three times, then silent. Staff hear about
+        # the wait ONCE, when it starts; the unanswered sweep says the rest (two notices in all).
+        import biz_nidaan_bot_hold as _hold
+        _n_hold, _txt = await _hold.message_for("wa:" + msisdn, lang)
+        if _n_hold == 1:
+            await _tell_staff_inbound(claim_id, msisdn, text)
+        await _handoff_to_support(claim, msisdn, text, lang, reason=_st["reason"], identity=ident,
+                                  alert=(_n_hold == 1))
+        if _txt:
+            # Last, so the bot's message is the last thing the customer reads.
+            await _wa.send_text(msisdn, _txt)
         await _activity(claim_id, "wa_charter", "The bot did not discuss the claim — %s" % _st["reason"])
         return {"ok": True, "action": "charter_quiet", "reason": _st["reason"]}
 
@@ -1012,7 +1021,7 @@ def _asks_private(text: str) -> bool:
 
 
 async def _handoff_to_support(claim, msisdn: str, text: str, lang: str, reason: str = "",
-                              identity: dict | None = None) -> None:
+                              identity: dict | None = None, alert: bool = True) -> None:
     """Open a Support thread in ops with the WhatsApp message, escalate it to a human, and (for a
     claim) mute the bot so it never talks over the person taking it. Works for a subscriber or
     branch too, where there is no single claim to attach."""
@@ -1048,11 +1057,12 @@ async def _handoff_to_support(claim, msisdn: str, text: str, lang: str, reason: 
         if claim_id:
             await _set_takeover(claim_id, by="support")
         await _activity(claim_id, "wa_handoff", f"Passed to the support team (chat #{tid}) for a person to answer — {reason or 'needs a person'}")
-        try:
-            import biz_nidaan_notifications as _nnot
-            await _nnot.on_support_escalated(tid)
-        except Exception:
-            pass
+        if alert:   # once per wait - every further message used to alert again
+            try:
+                import biz_nidaan_notifications as _nnot
+                await _nnot.on_support_escalated(tid)
+            except Exception:
+                pass
     except Exception as e:  # noqa: BLE001
         logger.warning("WhatsApp support handoff failed for claim %s: %s", claim_id, e)
 

@@ -2612,7 +2612,7 @@ async def nidaan_support_message(body: NidaanSupportMsgReq, request: Request):
     if body.hp:   # honeypot: bots fill hidden fields, humans never do → flag IP + benign no-op
         auth.record_failed_login(_ip)
         return {"thread_id": 0, "thread_key": "", "reply": "Thanks!", "escalated": False,
-                "support_hours": "Mon–Fri, 10am–6pm IST"}
+                "support_hours": __import__("biz_nidaan_bot_hold").hours_line(await nidaan.get_business_hours(), "en")}
     msg = body.message.strip()
     if not msg:
         raise HTTPException(status_code=400, detail="Empty message")
@@ -2675,6 +2675,18 @@ async def nidaan_support_message(body: NidaanSupportMsgReq, request: Request):
         raise HTTPException(status_code=429,
                             detail="This conversation is very long — please start a new chat or leave your details.")
     await nidaan.add_support_message(tid, "customer", msg)
+    import biz_nidaan_bot_hold as _hold
+    _hours = _hold.hours_line(await nidaan.get_business_hours(), "en")
+    # WAITING FOR A PERSON (founder, 1 Oct). Once a chat is handed over, the AI stops answering:
+    # the bot only tells them our office hours and that someone will reach out - at most three
+    # times while they wait, then silent. Staff are not pinged per message; the unanswered sweep
+    # sends its two notices. A staff reply sets the thread back to 'ai' and restarts the count.
+    if _prev_status == "escalated":
+        _n_hold, _txt = await _hold.message_for("sup:%s" % tid, _lang or "en")
+        if _txt:
+            await nidaan.add_support_message(tid, "ai", _txt)
+        return {"thread_id": tid, "thread_key": tkey, "visitor_token": _vtok, "reply": _txt,
+                "escalated": True, "support_hours": _hours}
     history = await nidaan.get_support_messages(tid)
     # Loop / anomaly guard: if the visitor repeats the same question or the chat drags on without
     # resolution, hand to a human instead of letting the AI re-explain in circles.
@@ -2690,14 +2702,21 @@ async def nidaan_support_message(body: NidaanSupportMsgReq, request: Request):
     ai = await ai_mod.nidaan_support_reply(
         msg, [{"sender_type": h["sender_type"], "body": h["body"]} for h in history],
         lang=_lang, mode=_mode, account_ctx=_acct_ctx, facts_block=_facts_block)
-    answer = (ai.get("answer") or "").strip() or (
-        "Thanks for reaching out! A member of our team will get back to you during support "
-        "hours (Mon–Fri, 10am–6pm IST).")
     escalated = bool(ai.get("escalate")) or _force_human
-    if _force_human and not bool(ai.get("escalate")):
-        answer += ("\n\nLet me connect you with a human teammate who can help further — "
-                   "they'll follow up during support hours (Mon–Fri, 10am–6pm IST).")
-    await nidaan.add_support_message(tid, "ai", answer)
+    answer = (ai.get("answer") or "").strip()
+    if answer:
+        await nidaan.add_support_message(tid, "ai", answer)
+    if escalated:
+        # Handing over is never silent: the LAST message is the bot's - our office hours (from the
+        # Support screen setting) and that someone from the team will reach out.
+        _n_hold, _txt = await _hold.message_for("sup:%s" % tid, _lang or "en")
+        if _txt:
+            await nidaan.add_support_message(tid, "ai", _txt)
+            answer = (answer + "\n\n" + _txt).strip()
+    elif not answer:
+        answer = ("Thanks for reaching out! A member of our team will get back to you during "
+                  "office hours (%s)." % _hours)
+        await nidaan.add_support_message(tid, "ai", answer)
     if escalated:
         await nidaan.set_support_status(tid, "escalated")
         try:
@@ -2721,7 +2740,7 @@ async def nidaan_support_message(body: NidaanSupportMsgReq, request: Request):
         except Exception:
             pass
     return {"thread_id": tid, "thread_key": tkey, "visitor_token": _vtok, "reply": answer,
-            "escalated": escalated, "support_hours": "Mon–Fri, 10am–6pm IST"}
+            "escalated": escalated, "support_hours": _hours}
 
 
 @app.get("/nidaan/api/support/thread")

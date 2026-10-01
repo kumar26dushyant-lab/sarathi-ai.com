@@ -41,6 +41,13 @@ async def log_message(*, direction: str, msisdn: str, claim_id: Optional[int] = 
     """
     if not sender:
         sender = "customer" if direction == "in" else "bot"
+    if direction == "out" and sender == "human":
+        # A person from our team answered: the bot's "someone will reach out" count starts again.
+        try:
+            import biz_nidaan_bot_hold as _hold
+            await _hold.reset("wa:" + (msisdn or ""))
+        except Exception:  # noqa: BLE001
+            pass
     try:
         async with aiosqlite.connect(DB_PATH) as conn:
             if wa_message_id:
