@@ -9,6 +9,20 @@ _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned ·
 _Anything raised and not finished lives here until it is done, so an interruption does not lose
 it. Newest first within each group._
 
+### ▶ 1 Oct AFTERNOON — the founder's list (after the 13:30 deploy), "we'll try to do it all today"
+Deployed 13:30 IST (`14b0f23`): outside checks all as expected, App Health 0 errors. Hotfix `4d233a4` (P1) deploys next.
+
+| # | What | Founder's words / notes |
+|---|---|---|
+| P1 | **Re-subscribed subscriber blocked from raising a claim** ("quota_exceeded_silver" on Raise for a subscriber - Deepika Yadav, acct 105) - FIXED `4d233a4` | Cause: the 30-day claim counter ignored that a NEW subscription had started (3 claims on 10 Sep under the old Silver, new Silver from 30 Sep). Now one rule (`quota_used`) for every door; a lapsed plan that renews also starts fresh (`active_since`); plain EN/HI words instead of codes |
+| P2 | **3-strike rule - confirmed understanding** | The 3 "office hours, someone will reach out" messages are ONLY for after the bot has handed the chat to a person and the customer keeps writing. Normal questions are answered by the bot, in or out of hours. Code checked 1 Oct: holds fire only on escalated / human-takeover / bot-cannot-discuss paths. GAP to fix: website chat force-hands-over after 6 customer messages even if every question was relevant (`_force_human = ... len(_cust) >= 6`) - let the AI judge intent (repeat/irrelevant/stuck), raise or remove the 6 |
+| P3 | **Authorized Partner identity**: capture AP person name, city and state; show the AP's name on every message for claims that came through them (welcome to the last update; email + WhatsApp; complainant, insured, subscriber, direct) - never on OTPs. Signature line e.g. "Rakesh Sharma, Authorized Partner of NidaanPartner.com" | Trust in Tier II/III towns and villages: people trust the local person. OTPs carry no names (correct - an OTP must be a bare code + warning) |
+| P4 | **Authorization letter**: add tentative fee calculation from the disputed amount; header with the Nidaan legal entity name + logo; proper footer details | New authorizations only - ones already taken stay as they are. Questions to settle first: exact legal entity name/address/CIN-GST for the header, which fee slab text |
+| P5 | **Doc 62 -> claim 50** (stranded review document) | Founder: "do it yourself and sort it out" |
+| P6 | **Sort the many .md files for NidaanPartner** systematically; update CLAUDE.md / CLAUDE.nidaan.md with the complete project in detail | |
+| P7 | **Put the short 1 Oct staff announcement inside the SOP page as a sample** (so he can walk the team through it); share the SOP link | nidaanpartner.com/sop-whats-new |
+| P8 | Explain the folder split: today ONE folder (`C:\sarathi-business`), two products served separately on the server; the two-folder move (M7/M7a) is not done yet | Needs his call: which product keeps this folder |
+
 ### ▶ 1 Oct MORNING — the founder's list (01:55 IST message), in order
 Done overnight: NP-123 - Brajesh Gupta's 8 WhatsApp files (sent after his chat went to a person) were being DROPPED; fixed (`39bd4f9`, files during a takeover are saved, bot silent, staff told once) and all 8 recovered onto the claim (11 -> 19 documents). Edit Advisor hidden on house accounts (`089edb9`).
 
