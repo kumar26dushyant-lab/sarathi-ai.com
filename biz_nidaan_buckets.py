@@ -923,13 +923,17 @@ async def set_field(claim_id: int, field_key: str, value: str, actor: str = "",
         # The escalation date cannot be before today (founder, 1 Oct: a past date picked by
         # mistake started the escalation clock days early). Only a CHANGED value is checked, so a
         # form that sends every field back (the gist) never fails on a date already on file.
-        if val and field_key == "escalation_date" and val < _today_ist().isoformat():
+        # A past date is the super admin's call (founder, 2 Oct): the escalation is recorded the
+        # day it happens - Lokpal opens 30 days after it - and back-dating needs their approval.
+        if (val and field_key == "escalation_date" and val < _today_ist().isoformat()
+                and (role or "").strip().lower() != "super_admin"):
             had = await (await c.execute(
                 "SELECT value FROM nidaan_claim_fields WHERE claim_id=? AND field_key=?",
                 (int(claim_id), field_key))).fetchone()
             if not had or (had[0] or "").strip() != val:
-                return {"ok": False, "error": "The escalation date cannot be before today (%s). "
-                        "Pick today's date or a later one." % _today_ist().strftime("%d-%m-%Y")}
+                return {"ok": False, "error": "Record the escalation on the day it happens (today, %s). "
+                        "A past date needs a super admin - ask one to record it."
+                        % _today_ist().strftime("%d-%m-%Y")}
 
         # A rejection cannot be dated before the admission it rejects (founder, 22 Sep). Same
         # shape and the same wording as the discharge rule below, because it is the same kind of

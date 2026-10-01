@@ -51,8 +51,12 @@ async def main():
 
     today = bk._today_ist()
     yesterday = (today - timedelta(days=1)).isoformat()
-    r = await bk.set_field(91, "escalation_date", yesterday, actor="t")
-    check("an escalation date before today is refused", not r.get("ok") and "before today" in (r.get("error") or ""), r)
+    r = await bk.set_field(91, "escalation_date", yesterday, actor="t", role="team_member")
+    check("a team member cannot record a past escalation date", not r.get("ok") and "super admin" in (r.get("error") or ""), r)
+    r = await bk.set_field(91, "escalation_date", yesterday, actor="t", role="sub_super_admin")
+    check("...nor a sub-super admin", not r.get("ok"), r)
+    r = await bk.set_field(91, "escalation_date", yesterday, actor="Founder", role="super_admin")
+    check("a super admin can back-date it (founder, 2 Oct)", r.get("ok"), r)
     r = await bk.set_field(91, "escalation_date", today.isoformat(), actor="t")
     check("today's date is accepted", r.get("ok"), r)
     # a past date already on file (recorded before the rule) still saves unchanged
