@@ -35,6 +35,8 @@ DB_PATH = db.DB_PATH
 IST = timezone(timedelta(hours=5, minutes=30))
 MAX_HOLDS = 3
 MIN_GAP_SECONDS = 60
+FRESH_AFTER_HOURS = 12        # a wait that started this long ago is over; a new message is a new wait
+HUMAN_QUIET_MINUTES = 120     # a person wrote on WhatsApp this recently: the bot does not talk over them
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS nidaan_bot_holds (
@@ -147,6 +149,11 @@ async def take(conv_key: str) -> int:
             await c.executescript(SCHEMA)
             await c.execute("INSERT OR IGNORE INTO nidaan_bot_holds (conv_key, sent) VALUES (?,0)",
                             (conv_key,))
+            # A count from an old wait never silences a new one: weeks later the customer writes
+            # again and must be answered (review, 1 Oct).
+            await c.execute("UPDATE nidaan_bot_holds SET sent=0, last_at=NULL WHERE conv_key=? "
+                            "AND last_at IS NOT NULL AND last_at <= datetime('now', ?)",
+                            (conv_key, "-%d hours" % FRESH_AFTER_HOURS))
             cur = await c.execute(
                 "UPDATE nidaan_bot_holds SET sent=sent+1, last_at=CURRENT_TIMESTAMP "
                 "WHERE conv_key=? AND sent<? AND (last_at IS NULL OR last_at <= datetime('now', ?))",
@@ -174,9 +181,25 @@ async def reset(conv_key: str) -> None:
         logger.warning("bot hold reset failed for %s: %s", conv_key, e)
 
 
+async def _person_wrote_recently(msisdn: str) -> bool:
+    """A person from our team wrote on this WhatsApp within HUMAN_QUIET_MINUTES - the customer's
+    reply is to THEM, and a bot "someone will reach out" would talk over the person who has."""
+    try:
+        async with aiosqlite.connect(DB_PATH) as c:
+            r = await (await c.execute(
+                "SELECT 1 FROM nidaan_wa_messages WHERE msisdn=? AND direction='out' AND sender='human' "
+                "AND created_at > datetime('now', ?) LIMIT 1",
+                (msisdn, "-%d minutes" % HUMAN_QUIET_MINUTES))).fetchone()
+        return bool(r)
+    except Exception:  # noqa: BLE001 - unsure: do not talk over anybody
+        return True
+
+
 async def message_for(conv_key: str, lang: str) -> tuple[int, str]:
     """(n, text): the n-th holding message this conversation may receive now, or (0, '') to stay
     silent. n == 1 is the start of a wait - the moment to tell staff, once."""
+    if conv_key.startswith("wa:") and await _person_wrote_recently(conv_key[3:]):
+        return 0, ""
     n = await take(conv_key)
     if not n:
         return 0, ""

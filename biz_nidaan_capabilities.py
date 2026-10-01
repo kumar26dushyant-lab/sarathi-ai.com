@@ -817,11 +817,11 @@ CAPABILITIES: list[dict] = [
     {
         "id": "wa_files_to_sort",
         "en": {"t": "WhatsApp files from any number are kept - and staff can forward a customer's papers",
-               "d": "A file sent to our WhatsApp from a number that is not on a claim (a subscriber, a partner, a stranger) used to be lost. Now it is virus-checked and kept in WhatsApp - Files to sort, with who sent it, until a person attaches it to the right claim or sets it aside. A staff member can forward a customer's papers from their own number: write the claim number in the caption (e.g. NP-123) and it is filed on that claim straight away, if you are on that claim.",
-               "u": "WhatsApp screen - Files to sort - Open, type the claim number, Attach. To forward: send the file to our WhatsApp number with NP-123 in the caption."},
+               "d": "A file sent to our WhatsApp from a number that is not on a claim (a subscriber, a partner, a stranger) used to be lost. Now it is virus-checked and kept in WhatsApp - Files to sort, with who sent it, until a person attaches it to the right claim or sets it aside. A staff member can forward a customer's papers from their own number: write the claim number in the caption (e.g. NP-1050) and it is filed on that claim straight away, if you are on that claim.",
+               "u": "WhatsApp screen - Files to sort - Open, type the claim number, Attach. To forward: send the file to our WhatsApp number with NP-1050 in the caption."},
         "hi": {"t": "किसी भी नंबर से आई WhatsApp फ़ाइलें सुरक्षित - और स्टाफ़ ग्राहक के काग़ज़ फ़ॉरवर्ड कर सकते हैं",
-               "d": "जो फ़ाइल किसी ऐसे नंबर से हमारे WhatsApp पर आती थी जो किसी क्लेम पर नहीं है (सब्सक्राइबर, पार्टनर, कोई अनजान), वह खो जाती थी। अब वह वायरस-जाँच के बाद WhatsApp - Files to sort में, भेजने वाले के नाम के साथ, रखी जाती है, जब तक कोई उसे सही क्लेम पर न लगा दे या कारण लिखकर अलग न रख दे। स्टाफ़ अपने नंबर से ग्राहक के काग़ज़ भेज सकते हैं: कैप्शन में क्लेम नंबर लिखिये (जैसे NP-123), और अगर आप उस क्लेम पर हैं तो फ़ाइल तुरंत उसी क्लेम पर लग जाएगी।",
-               "u": "WhatsApp स्क्रीन - Files to sort - Open, क्लेम नंबर लिखें, Attach। फ़ॉरवर्ड करने के लिए: फ़ाइल हमारे WhatsApp नंबर पर भेजें, कैप्शन में NP-123 लिखें।"},
+               "d": "जो फ़ाइल किसी ऐसे नंबर से हमारे WhatsApp पर आती थी जो किसी क्लेम पर नहीं है (सब्सक्राइबर, पार्टनर, कोई अनजान), वह खो जाती थी। अब वह वायरस-जाँच के बाद WhatsApp - Files to sort में, भेजने वाले के नाम के साथ, रखी जाती है, जब तक कोई उसे सही क्लेम पर न लगा दे या कारण लिखकर अलग न रख दे। स्टाफ़ अपने नंबर से ग्राहक के काग़ज़ भेज सकते हैं: कैप्शन में क्लेम नंबर लिखिये (जैसे NP-1050), और अगर आप उस क्लेम पर हैं तो फ़ाइल तुरंत उसी क्लेम पर लग जाएगी।",
+               "u": "WhatsApp स्क्रीन - Files to sort - Open, क्लेम नंबर लिखें, Attach। फ़ॉरवर्ड करने के लिए: फ़ाइल हमारे WhatsApp नंबर पर भेजें, कैप्शन में NP-1050 लिखें।"},
         "telegram": False, "web": True, "min_role": "team_member",
     },
     {

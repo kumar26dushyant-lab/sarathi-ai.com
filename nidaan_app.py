@@ -11797,6 +11797,11 @@ async def ops_support_close(thread_id: int, request: Request):
         raise HTTPException(status_code=404)
     _require_staff(request, "team_member")
     await nidaan.set_support_status(thread_id, "closed")
+    try:   # a closed conversation's count never silences the next one
+        import biz_nidaan_bot_hold as _hold
+        await _hold.reset("sup:%s" % thread_id)
+    except Exception:  # noqa: BLE001
+        pass
     return {"ok": True}
 
 

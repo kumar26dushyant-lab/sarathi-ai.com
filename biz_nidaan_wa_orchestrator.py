@@ -816,7 +816,8 @@ async def handle_inbound_text(msisdn: str, text: str) -> dict:
         import biz_nidaan_bot_hold as _hold
         _n_hold, _txt = await _hold.message_for("wa:" + msisdn, lang)
         if _txt:
-            await _wa.send_text(msisdn, _txt)
+            with _wa.sending_as("hold"):          # not an answer - the sweep still sees the wait
+                await _wa.send_text(msisdn, _txt)
             await _activity(claim_id, "wa_ack", "Told them our office hours and that our team will "
                             "reach out (%d of %d) - the case is with a person." % (_n_hold, _hold.MAX_HOLDS))
         return {"ok": True, "action": "human_takeover_ack"}
@@ -904,8 +905,10 @@ async def handle_inbound_text(msisdn: str, text: str) -> dict:
         await _handoff_to_support(claim, msisdn, text, lang, reason=_st["reason"], identity=ident,
                                   alert=(_n_hold == 1))
         if _txt:
-            # Last, so the bot's message is the last thing the customer reads.
-            await _wa.send_text(msisdn, _txt)
+            # Last, so the bot's message is the last thing the customer reads. Labelled 'hold': it
+            # is not an answer, so the unanswered sweep still sees that a person owes them one.
+            with _wa.sending_as("hold"):
+                await _wa.send_text(msisdn, _txt)
         await _activity(claim_id, "wa_charter", "The bot did not discuss the claim — %s" % _st["reason"])
         return {"ok": True, "action": "charter_quiet", "reason": _st["reason"]}
 

@@ -13747,14 +13747,17 @@ async function waSortLoad(){
     return '<div style="display:flex;flex-wrap:wrap;gap:.45rem;align-items:center;padding:.5rem 0;border-top:1px solid var(--nd-border)">'
       + '<div style="flex:1 1 220px;min-width:0"><div style="font-size:.84rem;font-weight:600;word-break:break-word">' + name + '</div>'
       + '<div style="font-size:.72rem;color:var(--nd-text-muted)">' + who + ' · ' + esc(String(it.received_at || '').slice(0, 16)) + ' UTC</div></div>'
-      + (it.url ? '<a class="btn-sm btn-ghost" href="' + esc(it.url) + '" target="_blank" rel="noopener">Open</a>' : '')
-      + '<input id="wsC_' + it.item_id + '" inputmode="numeric" placeholder="NP-…" aria-label="Claim number" style="width:6.5rem">'
-      + '<button class="btn-sm btn-primary" onclick="waSortAttach(' + it.item_id + ')">Attach</button>'
+      + (it.status === 'not_stored'
+          // Not stored (refused by the virus check, too large, too many): there is nothing to file.
+          ? '<span style="font-size:.74rem;color:var(--nd-danger-text)">Not stored: ' + esc(it.reason || '') + ' — ask them to send it again</span>'
+          : (it.url ? '<a class="btn-sm btn-ghost" href="' + esc(it.url) + '" target="_blank" rel="noopener">Open</a>' : '')
+            + '<input id="wsC_' + it.item_id + '" inputmode="numeric" placeholder="NP-…" aria-label="Claim number" style="width:6.5rem">'
+            + '<button class="btn-sm btn-primary" onclick="waSortAttach(' + it.item_id + ')">Attach</button>')
       + '<button class="btn-sm btn-ghost" onclick="waSortAside(' + it.item_id + ')">Set aside</button></div>';
   }).join('');
   box.innerHTML = '<div style="background:var(--nd-bg-surface);border:1px solid var(--nd-warning-text);border-radius:12px;padding:.75rem .9rem;margin-bottom:1rem">'
     + '<div style="font-weight:800;color:var(--nd-warning-text)">📎 Files to sort (' + (d.to_sort || items.length) + ')</div>'
-    + '<div style="font-size:.76rem;color:var(--nd-text-muted);margin:.15rem 0 .35rem">Sent to our WhatsApp from a number that is not on a claim. Open it, then attach it to the right claim — or set it aside with a reason. Nothing is deleted. Staff can file their own forwards directly by writing the claim number (e.g. NP-123) in the caption.</div>'
+    + '<div style="font-size:.76rem;color:var(--nd-text-muted);margin:.15rem 0 .35rem">Sent to our WhatsApp from a number that is not on a claim. Open it, then attach it to the right claim — or set it aside with a reason. Nothing is deleted. Staff can file their own forwards directly by writing the claim number (e.g. NP-1050) in the caption.</div>'
     + rows + '</div>';
 }
 async function waSortAttach(id){

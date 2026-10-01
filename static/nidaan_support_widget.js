@@ -535,7 +535,8 @@
       optimistic.remove();                 // replace optimistic bubble with server truth
       busy=false;                          // allow sync to run
       await syncMessages();                // pulls the stored customer msg + AI reply (with ids)
-      if(d.escalated) note('🔔 A team member will follow up during support hours (Mon–Fri, 10am–6pm IST).');
+      // The bot's own last message already says our office hours and that someone will reach out
+      // (biz_nidaan_bot_hold), in their language - no second, English-only note on every message.
       _touchSession();                     // keep this session alive + reset 30-min idle timer
       showRating();                        // offer 👍/👎 once the conversation is underway
       startPoll();

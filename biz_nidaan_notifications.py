@@ -898,7 +898,7 @@ async def on_support_escalated(thread_id: int) -> None:
         async with aiosqlite.connect(db.DB_PATH) as conn:
             conn.row_factory = aiosqlite.Row
             th = await (await conn.execute(
-                "SELECT name, contact FROM nidaan_support_threads WHERE thread_id=?",
+                "SELECT name, contact, channel FROM nidaan_support_threads WHERE thread_id=?",
                 (thread_id,))).fetchone()
             last = await (await conn.execute(
                 "SELECT body FROM nidaan_support_messages WHERE thread_id=? AND sender_type='customer' "
@@ -909,9 +909,11 @@ async def on_support_escalated(thread_id: int) -> None:
         # The handover alert is this chat's FIRST of two notices (founder, 1 Oct). Out of office
         # hours it waits: the customer has been told when we open, and the sweep raises it then.
         in_hours = await _nid.is_within_business_hours()
-        if not in_hours or not await chat_notice_allowed("chat:sup:%s" % thread_id):
+        _ch = (dict(th).get("channel") if th else "") or ""
+        if not in_hours or not await chat_notice_allowed(chat_key_for_thread(thread_id, _ch, contact)):
             return
-        ids = await _nid.on_duty_rep_ids()          # on-duty reps first
+        # A WhatsApp chat is answered by whoever may reply on WhatsApp - not the website-chat duty.
+        ids = await _nid.on_duty_rep_ids("whatsapp" if _ch == "whatsapp" else "support")
         if not ids:                                  # nobody rostered → don't miss it
             ids = [a["staff_id"] for a in await _super_admin_staff()]
         if not ids:
@@ -940,7 +942,7 @@ async def on_support_customer_reply(thread_id: int) -> None:
         async with aiosqlite.connect(db.DB_PATH) as conn:
             conn.row_factory = aiosqlite.Row
             th = await (await conn.execute(
-                "SELECT name, contact FROM nidaan_support_threads WHERE thread_id=?",
+                "SELECT name, contact, channel FROM nidaan_support_threads WHERE thread_id=?",
                 (thread_id,))).fetchone()
             last = await (await conn.execute(
                 "SELECT body FROM nidaan_support_messages WHERE thread_id=? AND sender_type='customer' "
@@ -974,7 +976,7 @@ async def run_support_sla_escalation(minutes: int = 30) -> int:
         async with aiosqlite.connect(db.DB_PATH) as conn:
             conn.row_factory = aiosqlite.Row
             rows = [dict(r) for r in await (await conn.execute(
-                """SELECT t.thread_id, t.name, t.contact,
+                """SELECT t.thread_id, t.name, t.contact, t.channel,
                           (SELECT MAX(m.created_at) FROM nidaan_support_messages m
                              WHERE m.thread_id=t.thread_id AND m.sender_type='customer') AS last_cust,
                           (SELECT MAX(m.created_at) FROM nidaan_support_messages m
@@ -1006,8 +1008,11 @@ async def run_support_sla_escalation(minutes: int = 30) -> int:
             subject = f"⏰ Support SLA breach — Ticket #{tid} unanswered {minutes}+ min"
             body = (f"{who}'s support chat has had NO human reply for over {minutes} minutes during "
                     f"office hours.{cline}\n\nPlease step in or reassign. Open the Support inbox in ops.")
-            await notify_staff_inapp(sa_ids, subject, body,
-                                     event_key="support.sla_escalation", email=True)
+            # Counts against the chat's two notices (founder, 1 Oct). The thread is marked either
+            # way - the unanswered sweep reads that mark.
+            if await chat_notice_allowed(chat_key_for_thread(tid, r.get("channel") or "", contact)):
+                await notify_staff_inapp(sa_ids, subject, body,
+                                         event_key="support.sla_escalation", email=True)
             async with aiosqlite.connect(db.DB_PATH) as conn:
                 await conn.execute(
                     "UPDATE nidaan_support_threads SET sa_escalated_at=CURRENT_TIMESTAMP WHERE thread_id=?",
@@ -3665,6 +3670,8 @@ async def _unanswered_whatsapp(minutes: int) -> list:
                 FROM nidaan_wa_messages
                 WHERE COALESCE(msg_type,'') NOT IN
                       ('sticker','reaction','system','unsupported','ephemeral','order')
+                  -- the bot's "someone will reach out" is not an answer (1 Oct)
+                  AND NOT (direction='out' AND COALESCE(sender,'')='hold')
                   AND (TRIM(COALESCE(body,'')) != '' OR COALESCE(media_id,'') != '')
             )
             SELECT m.msisdn,
@@ -3824,6 +3831,13 @@ def _digits(x: str) -> str:
     return "".join(ch for ch in (x or "") if ch.isdigit())[-10:]
 
 
+def chat_key_for_thread(thread_id, channel: str = "", contact: str = "") -> str:
+    """A support thread opened FROM WhatsApp is the same customer as the WhatsApp chat - one count."""
+    if (channel or "") == "whatsapp" and "".join(ch for ch in (contact or "") if ch.isdigit()):
+        return "chat:wa:" + "".join(ch for ch in contact if ch.isdigit())
+    return "chat:sup:%s" % thread_id
+
+
 async def sweep_unanswered() -> dict:
     """Waiting conversations: at most two notices each, in office hours only.
 
@@ -3842,12 +3856,24 @@ async def sweep_unanswered() -> dict:
     wa_numbers = {_digits(r["msisdn"]) for r in wa}
     sup = [r for r in sup if _digits(r.get("contact") or "") not in wa_numbers]
 
-    items = [("chat:wa:" + r["msisdn"], "WhatsApp %s" % r["msisdn"], r["last_at"], "whatsapp")
-             for r in wa] + \
-            [("chat:sup:%s" % r["thread_id"], "Support #%s %s" % (r["thread_id"], r.get("who") or ""),
-              r["sa_escalated_at"], "support") for r in sup]
-    # Answered since: forget the count, so a later wait is heard fresh.
-    await _alert_clear_resolved("chat:", {k for k, *_ in items})
+    items = [("chat:wa:" + "".join(ch for ch in r["msisdn"] if ch.isdigit()), "WhatsApp %s" % r["msisdn"],
+              r["last_at"], "whatsapp") for r in wa] + \
+            [(chat_key_for_thread(r["thread_id"], "", r.get("contact") or ""),
+              "Support #%s %s" % (r["thread_id"], r.get("who") or ""), r["sa_escalated_at"], "support")
+             for r in sup]
+    # Forget a count only when the chat has been ANSWERED - a chat still waiting but younger than
+    # 45 minutes is not in `items`, and clearing it would hand it two more notices (review, 1 Oct).
+    try:
+        still = {"chat:wa:" + "".join(ch for ch in r["msisdn"] if ch.isdigit())
+                 for r in await _unanswered_whatsapp(0)}
+        async with aiosqlite.connect(db.DB_PATH) as _c:
+            for (tid, ch, ct) in await (await _c.execute(
+                    "SELECT thread_id, COALESCE(channel,''), COALESCE(contact,'') FROM nidaan_support_threads "
+                    "WHERE status='escalated'")).fetchall():
+                still.add(chat_key_for_thread(tid, ch, ct))
+        await _alert_clear_resolved("chat:", still)
+    except Exception as e:  # noqa: BLE001 - when unsure, keep the counts (stay quiet, never spam)
+        logger.info("chat-notice clear skipped: %s", e)
     if not items:
         return out
     if not await _nid.is_within_business_hours():

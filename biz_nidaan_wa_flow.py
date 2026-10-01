@@ -230,7 +230,11 @@ async def _on_inbound_media(msisdn: str, media_id: str, mime: str, wamid: str,
     # A STAFF member forwarding a customer's papers, with the claim number in the caption
     # (founder, 1 Oct: forwarding allowed from any staff number). Filed on that claim if they may
     # work on it; otherwise kept to sort. Without a claim number it goes the normal way below.
-    staff = await _sort.staff_for(msisdn)
+    try:
+        staff = await _sort.staff_for(msisdn)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("staff lookup failed: %s", e)
+        staff = None
     if staff and _sort.claim_number(caption):
         try:
             res = await _sort.staff_forward(staff, msisdn, media_id, mime, filename=filename,
@@ -252,9 +256,13 @@ async def _on_inbound_media(msisdn: str, media_id: str, mime: str, wamid: str,
         who = await _ident.resolve(msisdn)
     except Exception:  # noqa: BLE001
         who = {}
-    kept = await _sort.keep(msisdn, media_id, mime, filename=filename, caption=caption, wamid=wamid,
-                            sender_role=("staff" if staff else (who.get("role") or "unknown")),
-                            sender_name=((staff or {}).get("name") or who.get("name") or ""))
+    try:
+        kept = await _sort.keep(msisdn, media_id, mime, filename=filename, caption=caption, wamid=wamid,
+                                sender_role=("staff" if staff else (who.get("role") or "unknown")),
+                                sender_name=((staff or {}).get("name") or who.get("name") or ""))
+    except Exception as e:  # noqa: BLE001 - never stop the rest of the webhook batch
+        logger.error("could not keep a WhatsApp file from %s: %s", msisdn[-4:], e)
+        kept = {"status": "not_stored", "reason": "could not be kept - see the logs"}
     try:
         import biz_nidaan_wa_orchestrator as _orch
         if await _orch._reserve_reply(msisdn, 30):

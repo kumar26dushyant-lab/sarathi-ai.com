@@ -10,7 +10,7 @@ A person with WhatsApp duty attaches it to the right claim (one tap) or sets it 
 deletes it.
 
 Staff forwarding (founder, 1 Oct: "forwarding should be allowed from any staff number"): a staff
-member's own number sends the customer's file with the claim number in the caption - "NP-123" -
+member's own number sends the customer's file with the claim number in the caption - "NP-1050" -
 and it is filed on that claim straight away, IF that staff member may work on that claim (the
 same rule as the claim screen). Anything else from a staff number goes to "to sort" like the rest.
 
@@ -120,9 +120,31 @@ async def _download_and_scan(media_id: str) -> tuple[Optional[bytes], str, str]:
     return data, dl.get("mime") or "", ""
 
 
+DAILY_PER_NUMBER = 30
+
+
+async def _kept_today(msisdn: str) -> int:
+    c = await _conn()
+    try:
+        r = await (await c.execute("SELECT COUNT(*) FROM nidaan_wa_unsorted WHERE msisdn=? AND stored_name<>'' "
+                                   "AND received_at >= datetime('now','-1 day')", (msisdn,))).fetchone()
+        return int(r[0]) if r else 0
+    finally:
+        await c.close()
+
+
 async def keep(msisdn: str, media_id: str, mime: str, *, filename: str = "", caption: str = "",
                wamid: str = "", sender_role: str = "", sender_name: str = "") -> dict:
     """Keep a file nobody matched. Returns {item_id, status, reason}."""
+    if await _kept_today(msisdn) >= DAILY_PER_NUMBER:
+        # A number sending more than this in a day is not filing a claim; the Meta id is kept
+        # so a person can still fetch any of them.
+        why = "more than %d files from this number today - not stored" % DAILY_PER_NUMBER
+        item = await _insert(msisdn=msisdn, sender_role=sender_role[:20], sender_name=sender_name[:80],
+                             wamid=wamid[:120], media_id=media_id[:120], mime=(mime or "")[:80],
+                             filename=_safe_name(filename), caption=(caption or "")[:300],
+                             status="not_stored", reason=why)
+        return {"item_id": item, "status": "not_stored", "reason": why}
     data, real_mime, why = await _download_and_scan(media_id)
     mime = real_mime or mime
     base = dict(msisdn=msisdn, sender_role=sender_role[:20], sender_name=sender_name[:80],
@@ -159,7 +181,7 @@ async def _attach_bytes(claim_id: int, name: str, data: bytes, source: str) -> d
 
 async def staff_forward(staff: dict, msisdn: str, media_id: str, mime: str, *, filename: str = "",
                         caption: str = "", wamid: str = "") -> dict:
-    """A staff member forwarded a customer's file. With 'NP-123' in the caption and the right to
+    """A staff member forwarded a customer's file. With 'NP-1050' in the caption and the right to
     work on that claim, it is filed there; otherwise it waits in 'to sort'."""
     cid = claim_number(caption)
     who = staff.get("name") or "staff"
@@ -177,7 +199,19 @@ async def staff_forward(staff: dict, msisdn: str, media_id: str, mime: str, *, f
             name = _safe_name(filename)
             if "." not in name:
                 name += _ext(real_mime or mime, filename)
-            await _attach_bytes(cid, name, data, "whatsapp_staff")
+            try:
+                await _attach_bytes(cid, name, data, "whatsapp_staff")
+            except SortError as e:
+                # Not a readable document (a voice note, a video): keep it to sort, never lose it.
+                from biz_nidaan_doc_intake import DOCS_DIR
+                DOCS_DIR.mkdir(parents=True, exist_ok=True)
+                stored = uuid.uuid4().hex + _ext(real_mime or mime, filename)
+                (DOCS_DIR / stored).write_bytes(data)
+                item = await _insert(msisdn=msisdn, sender_role="staff", sender_name=who[:80],
+                                     wamid=wamid[:120], media_id=media_id[:120], mime=(real_mime or mime)[:80],
+                                     filename=name, caption=(caption or "")[:300], stored_name=stored,
+                                     size=len(data), status="to_sort", reason=str(e)[:200])
+                return {"status": "to_sort", "reason": str(e), "item_id": item, "claim_id": cid}
             try:
                 import biz_nidaan as _n
                 await _n.record_claim_activity(
@@ -208,19 +242,39 @@ async def attach(item_id: int, claim_id: int, *, staff: dict) -> dict:
     item = dict(r)
     if item["status"] != "to_sort" or not item["stored_name"]:
         raise SortError("That file has already been sorted.")
+    who = (staff.get("name") or "staff")[:80]
+    # Claim the row FIRST: of two people pressing Attach at once, exactly one files it.
+    c = await _conn()
+    try:
+        cur = await c.execute(
+            "UPDATE nidaan_wa_unsorted SET status='attaching', claim_id=?, decided_by=?, decided_name=?, "
+            "decided_at=CURRENT_TIMESTAMP WHERE item_id=? AND status='to_sort'",
+            (int(claim_id), staff.get("staff_id"), who, int(item_id)))
+        await c.commit()
+    finally:
+        await c.close()
+    if cur.rowcount != 1:
+        raise SortError("That file has already been sorted.")
     from biz_nidaan_doc_intake import DOCS_DIR
     data = (DOCS_DIR / item["stored_name"]).read_bytes()
     name = item["filename"] or "document"
     if "." not in name:
         name += _ext(item["mime"], "")
-    await _attach_bytes(int(claim_id), name, data, "whatsapp")
-    who = (staff.get("name") or "staff")[:80]
+    try:
+        await _attach_bytes(int(claim_id), name, data, "whatsapp")
+    except Exception:
+        c = await _conn()      # could not file it: back to the list, nothing lost
+        try:
+            await c.execute("UPDATE nidaan_wa_unsorted SET status='to_sort', claim_id=NULL WHERE item_id=?",
+                            (int(item_id),))
+            await c.commit()
+        finally:
+            await c.close()
+        raise
     c = await _conn()
     try:
-        cur = await c.execute(
-            "UPDATE nidaan_wa_unsorted SET status='attached', claim_id=?, decided_by=?, decided_name=?, "
-            "decided_at=CURRENT_TIMESTAMP WHERE item_id=? AND status='to_sort'",
-            (int(claim_id), staff.get("staff_id"), who, int(item_id)))
+        cur = await c.execute("UPDATE nidaan_wa_unsorted SET status='attached' WHERE item_id=?",
+                              (int(item_id),))
         await c.commit()
     finally:
         await c.close()
@@ -256,12 +310,15 @@ async def set_aside(item_id: int, *, staff: dict, reason: str) -> dict:
 
 async def listing(status: str = "to_sort", limit: int = 100) -> list[dict]:
     status = status if status in ("to_sort", "attached", "set_aside", "not_stored") else "to_sort"
+    # "to sort" includes the files that could not be stored - a person has to see those too.
+    wanted = ("to_sort", "not_stored") if status == "to_sort" else (status,)
     c = await _conn()
     try:
         return [dict(r) for r in await (await c.execute(
             "SELECT item_id, msisdn, sender_role, sender_name, mime, filename, caption, stored_name, size, "
             "status, reason, claim_id, decided_name, decided_at, received_at FROM nidaan_wa_unsorted "
-            "WHERE status=? ORDER BY item_id DESC LIMIT ?", (status, int(limit)))).fetchall()]
+            "WHERE status IN (%s) ORDER BY item_id DESC LIMIT ?" % ",".join("?" * len(wanted)),
+            (*wanted, int(limit)))).fetchall()]
     finally:
         await c.close()
 
@@ -305,7 +362,7 @@ def staff_reply(res: dict) -> str:
 def sender_ack(*, staff: bool, lang: str = "hinglish") -> str:
     if staff:
         return ("\U0001f4ce Kept in Files to sort. To file it straight away, write the claim number in "
-                "the caption, e.g. NP-123.")
+                "the caption, e.g. NP-1050.")
     return {
         "en": "\U0001f64f Thank you - we have received your file. Our team will add it to the right "
               "case and contact you if anything else is needed.",

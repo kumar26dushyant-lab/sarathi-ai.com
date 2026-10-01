@@ -3126,7 +3126,11 @@ async def find_open_support_thread(*, account_id=None, contact: str = "",
     where, params = ["status IN ('ai','escalated')",
                      "last_at > datetime('now', ?)"], [f"-{int(max_age_hours)} hours"]
     if account_id:
-        where.append("account_id=?")
+        # A logged-in visitor's chat is never joined to a WhatsApp thread. A WhatsApp thread carries
+        # the account that OWNS the claim (the subscriber), while the person on it is the
+        # complainant - joining them let the subscriber read the complainant's messages, and since
+        # 1 Oct a staff reply there is SENT to that complainant's WhatsApp (review, 1 Oct).
+        where.append("account_id=? AND COALESCE(channel,'')<>'whatsapp'")
         params.append(account_id)
     else:
         where.append("contact=? AND channel='whatsapp'")
@@ -8648,8 +8652,10 @@ async def save_claim_document(
         # A Rs 499 review file uploaded AFTER the review became a claim belongs on that claim too
         # - otherwise the claim screen, the subscriber and the complainant never see it.
         if purchase_id and not claim_id:
+            # converted_to_claim_id is set only when THIS purchase became the claim; linked_claim_id
+            # alone can point at another purchase's claim (submit_claim links "the latest paid one").
             _r = await (await conn.execute(
-                "SELECT linked_claim_id FROM nidaan_per_claim_purchase WHERE purchase_id=?",
+                "SELECT converted_to_claim_id FROM nidaan_per_claim_purchase WHERE purchase_id=?",
                 (int(purchase_id),))).fetchone()
             if _r and _r[0]:
                 claim_id = int(_r[0])
