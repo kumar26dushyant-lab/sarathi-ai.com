@@ -9881,16 +9881,30 @@ async def crm_create_lead(body: _CrmLeadReq, request: Request):
     return {"ok": True, "lead_id": lead_id}
 
 
-@app.get("/nidaan/ops/api/crm/leads/{lead_id}")
-async def crm_get_lead(lead_id: int, request: Request):
-    if not _is_nidaan_host(request):
-        raise HTTPException(status_code=404)
-    _require_staff(request, "team_member")
+async def _crm_lead_for(staff: dict, lead_id: int) -> dict:
+    """The lead, if this person may see it - else 404, the same answer as no such lead.
+
+    The list was filtered by owner but the record routes were not: any team member could read,
+    edit, comment on or mark won ANY lead by its number (found 1 Oct). Admins see every lead; a
+    team member sees the leads they own or created - exactly what their list already shows."""
     import biz_nidaan_crm as _crm
     lead = await _crm.get_lead(lead_id)
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
-    return lead
+    if (staff.get("role") or "") in ("super_admin", "sub_super_admin"):
+        return lead
+    me = staff.get("staff_id")
+    if me and me in (lead.get("owner_staff_id"), lead.get("created_by_staff_id")):
+        return lead
+    raise HTTPException(status_code=404, detail="Lead not found")
+
+
+@app.get("/nidaan/ops/api/crm/leads/{lead_id}")
+async def crm_get_lead(lead_id: int, request: Request):
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "team_member")
+    return await _crm_lead_for(staff, lead_id)
 
 
 @app.patch("/nidaan/ops/api/crm/leads/{lead_id}")
@@ -9900,9 +9914,7 @@ async def crm_update_lead(lead_id: int, body: _CrmUpdateReq, request: Request):
     staff = _require_staff(request, "team_member")
     import biz_nidaan_crm as _crm
     fields = body.model_dump(exclude_none=True)
-    prev = await _crm.get_lead(lead_id)
-    if not prev:
-        raise HTTPException(status_code=404, detail="Lead not found")
+    prev = await _crm_lead_for(staff, lead_id)
     ok = await _crm.update_lead(lead_id, by_staff_id=staff["staff_id"], by_name=_actor_label(staff), **fields)
     if not ok:
         raise HTTPException(status_code=404, detail="Lead not found")
@@ -9918,6 +9930,7 @@ async def crm_add_comment(lead_id: int, body: _CrmCommentReq, request: Request):
         raise HTTPException(status_code=404)
     staff = _require_staff(request, "team_member")
     import biz_nidaan_crm as _crm
+    await _crm_lead_for(staff, lead_id)
     cid = await _crm.add_comment(lead_id, body.body, by_staff_id=staff["staff_id"], by_name=_actor_label(staff))
     return {"ok": True, "act_id": cid}
 
@@ -9928,6 +9941,7 @@ async def crm_convert_lead(lead_id: int, request: Request):
         raise HTTPException(status_code=404)
     staff = _require_staff(request, "team_member")
     import biz_nidaan_crm as _crm
+    await _crm_lead_for(staff, lead_id)
     await _crm.convert_lead(lead_id, by_staff_id=staff["staff_id"], by_name=_actor_label(staff))
     await _ops_audit(request, "crm.lead_won", "crm_lead", str(lead_id), "marked won")
     return {"ok": True}
