@@ -10,7 +10,7 @@
 
 ## 🏗️ A88 ARCHITECTURE & WIRING (Aug 25 2026) — key systems, flows, decisions
 
-**WhatsApp Business (Cloud API) — LIVE.** Sender = GoLuQ WABA `1942085573135209`, number +91 83495 04400 (Phone Number ID `1259819740549744`), VERIFIED+GREEN, business-verified. Secrets in `/opt/sarathi/biz.env`: `WA_ACCESS_TOKEN` (permanent System User token), `WA_APP_SECRET`, `WA_APP_ID=839673715804540`, `WA_PHONE_NUMBER_ID`, `WA_WABA_ID`. Module `biz_sarathi_whatsapp.py` (isolated): `send_template`(business-initiated), `send_text`(24h session), `number_health`, `body_params`, `normalize_msisdn` (10-digit→+91). Graph v22.0. Message rules: template = only way to open a chat; text = only inside 24h after user replies. **6 templates created (3×EN/HI: policy_renewal_reminder / emi_reminder / policy_lapse_warning)** — awaiting Meta approval. NEXT: `wa_messages` send-log + opt-in table + Sarathi manual "send reminder" test UI + data-driven sends. Registration gotcha: number must be OFF the consumer WhatsApp app + 2-step PIN needs old PIN or 7-day wait. Two-app strategy + Nidaan branch reseller model: WHATSAPP_SUBSCRIBERS_PLAN.md §9.
+**WhatsApp Business (Cloud API) — LIVE.** Sender = GoLuQ WABA `1942085573135209`, number +91 83495 04400 (Phone Number ID `1259819740549744`), VERIFIED+GREEN, business-verified. Secrets in `/opt/sarathi/biz.env`: `WA_ACCESS_TOKEN` (permanent System User token), `WA_APP_SECRET`, `WA_APP_ID=839673715804540`, `WA_PHONE_NUMBER_ID`, `WA_WABA_ID`. Module `biz_sarathi_whatsapp.py` (isolated): `send_template`(business-initiated), `send_text`(24h session), `number_health`, `body_params`, `normalize_msisdn` (10-digit→+91). Graph v22.0. Message rules: template = only way to open a chat; text = only inside 24h after user replies. **6 templates created (3×EN/HI: policy_renewal_reminder / emi_reminder / policy_lapse_warning)** — awaiting Meta approval. NEXT: `wa_messages` send-log + opt-in table + Sarathi manual "send reminder" test UI + data-driven sends. Registration gotcha: number must be OFF the consumer WhatsApp app + 2-step PIN needs old PIN or 7-day wait. Two-app strategy + Nidaan branch reseller model: docs/sarathi/WHATSAPP_SUBSCRIBERS_PLAN.md §9.
 
 **L2 POLICY SHIFT (Aug 29) — ClaimShield PAUSED, in-house L2 model at NidaanPartner.** Founder: stop routing L2 claims to ClaimShield.in temporarily; build a robust in-house L2 handling model at NidaanPartner centered on strong claimant document collection via WhatsApp+email. IMPLEMENTED: master switch `claimshield_routing_enabled` (default ON, set to **0** now) — when OFF, `auto_send_if_eligible` returns `routing_paused` AND the manual `/send-to-claimshield` endpoint refuses (409); Workflow Settings has a "⚖️ ClaimShield (Level-2) routing" ON/PAUSED toggle (super_admin, audited). `claimshield_auto_send` also 0. Resume anytime via the toggle. CONTACT CAPTURE for nudging: claimant email+mobile already mandatory on NEW claims (Phase 2) — but audit found **48/58 existing claims have no `insured_email`** (predate the rule) and **50/85 accounts have no phone**. New claims are fine; existing ones need contacts filled (ops can edit `insured_email` on the claim) before email/WA doc-collection can reach them. NEXT: surface a "needs claimant contact" flag on L2 claims + gate doc-collection start on a reachable claimant; then the doc-collection engine (WA blocked on SIM; **email path buildable now — SMTP live**). "what processes after docs collected" = founder to discuss later.
 
@@ -61,7 +61,7 @@
 
 **PHASE 4 — WhatsApp Business (foundation LIVE — commit f28822d).**
 - OWNER: submit 3 Utility templates (renewal/EMI/lapse EN+HI) in WhatsApp Manager.
-- Build: `wa_messages` send-log + opt-in tracking; Sarathi manual "send reminder" test UI; data-driven renewal/EMI/lapse sends; later Embedded Signup multi-number + Nidaan branch reseller + two-way webhook. Strategy: WHATSAPP_SUBSCRIBERS_PLAN.md §9.
+- Build: `wa_messages` send-log + opt-in tracking; Sarathi manual "send reminder" test UI; data-driven renewal/EMI/lapse sends; later Embedded Signup multi-number + Nidaan branch reseller + two-way webhook. Strategy: docs/sarathi/WHATSAPP_SUBSCRIBERS_PLAN.md §9.
 
 **PHASE 5 — Old pending (interrupted by WhatsApp config).**
 - Views engine: roll Table/Board/Cards switcher to Tasks/Accounts (proper shared-component refactor).
@@ -2262,8 +2262,8 @@ ssh -i ~/Downloads/ssh-key-2026-03-03.key ubuntu@140.238.246.0
 
 ## 30. NIDAAN PARTNER — UPCOMING SEPARATE PRODUCT (PLAN LOCKED, MAY 2, 2026)
 
-> **Status:** Architecture v2 (plug-and-play) **LOCKED**. Detailed build plan lives in `NIDAAN_BUILD_PLAN.md`. **Phase 1a COMPLETE (May 3, 2026)** — homepage live at https://nidaanpartner.com, SSL active, host-header routing deployed. **Phase 1b COMPLETE (May 3, 2026)** — DB tables, biz_nidaan.py skeleton deployed. **Phase 2 COMPLETE (May 4, 2026)** — Auth (signup/login), all 5 page routes, review-request endpoint, Razorpay subscriptions, admin panel, signup email, webhook. Current server commit: `0a27a5b`.
-> **Companion doc:** [NIDAAN_BUILD_PLAN.md](NIDAAN_BUILD_PLAN.md) — table DDLs, route specs, phased acceptance criteria.
+> **Status:** Architecture v2 (plug-and-play) **LOCKED**. Detailed build plan lives in `docs/nidaan/NIDAAN_BUILD_PLAN.md`. **Phase 1a COMPLETE (May 3, 2026)** — homepage live at https://nidaanpartner.com, SSL active, host-header routing deployed. **Phase 1b COMPLETE (May 3, 2026)** — DB tables, biz_nidaan.py skeleton deployed. **Phase 2 COMPLETE (May 4, 2026)** — Auth (signup/login), all 5 page routes, review-request endpoint, Razorpay subscriptions, admin panel, signup email, webhook. Current server commit: `0a27a5b`.
+> **Companion doc:** [docs/nidaan/NIDAAN_BUILD_PLAN.md](docs/nidaan/NIDAAN_BUILD_PLAN.md) — table DDLs, route specs, phased acceptance criteria.
 
 ### 30.1 Product overview
 
@@ -2357,7 +2357,7 @@ Sender ID: register `NIDAAN` (6-char transactional). DLT entity ID + per-templat
 
 `biz_sms.py` (currently a stub) gets a `Fast2SMSProvider` class + `send_nidaan(template_id, to, vars)` helper in Phase 3.
 
-### 30.9 Phased build (acceptance criteria in `NIDAAN_BUILD_PLAN.md`)
+### 30.9 Phased build (acceptance criteria in `docs/nidaan/NIDAAN_BUILD_PLAN.md`)
 
 - **Phase 1a — Domain + bilingual homepage** ✅ COMPLETE (May 3, 2026) — homepage live, SSL, host-header routing.
 - **Phase 1b — DB schema + `biz_nidaan.py` skeleton** ✅ COMPLETE (May 3, 2026) — 9 Nidaan tables, all helpers.
@@ -3020,7 +3020,7 @@ Prevents accidental auto-replies inside group chats.
 - `biz_nidaan.py` — DB `INSERT amount_paid=499` (2 sites)
 - `sarathi_biz.py` — Razorpay `amount=49900` (4 sites: review_pay, review_pay_create_order, etc.) + email subject/body strings
 - `static/nidaan_review.html`, `nidaan_dashboard.html`, `nidaan_index.html`, `nidaan_admin.html`, `nidaan_ops.html`, `nidaan_start.html`, `index.html` (Sarathi homepage Nidaan banner)
-- `NIDAAN_BUILD_PLAN.md`, `PROJECT_MASTER_CONTEXT.md`
+- `docs/nidaan/NIDAAN_BUILD_PLAN.md`, `PROJECT_MASTER_CONTEXT.md`
 - Internal identifier strings kept unchanged for DB compat: `review_type="per_claim_999"`, Razorpay notes `product="nidaan_review_999"` (purely labels — DB rows reference these)
 
 ### 36.6 Marketing pages bug fixes
@@ -4988,7 +4988,7 @@ apkLoadStatus() call.
     reassign) — verified (team_member reassigned a claim → 200, was 403). **ONLY item 9 (ClaimShield) remains,
     BLOCKED on founder:** API key part-2 (out-of-band, into biz.env) + ClaimShield's answers on HTTPS endpoint
     (currently http://), full status vocabulary, webhook/callback, extra create fields (insurer/policy/type/
-    rejection-letter/our-claim-ref), idempotency. See WHATSAPP_CLOUD_API_SETUP.md is unrelated;
+    rejection-letter/our-claim-ref), idempotency. See docs/nidaan/setup/WHATSAPP_CLOUD_API_SETUP.md is unrelated;
     ClaimShield contract lives in this §. When ready: build biz_claimshield.py client + 2-way sync (L1↔L2).
   - **★★ NEW 3-ITEM BATCH (Aug 5 2026, phased, discuss-first, careful):**
     **(1) Razorpay SEPARATION — Nidaan gets its OWN Razorpay account (Sarathi keeps existing).** FOUNDER has
@@ -5161,7 +5161,7 @@ apkLoadStatus() call.
     Policyholder". NO short timeout (rejected — nags committed users, doesn't stop mis-clicks). Both
     nidaan_index.html + _sample.html. Note: ONE page, body.aud-advisor/.aud-policyholder + .only-adv/.only-ph
     (no duplicate pages); neutral = no body class = both ribbons.
-  - **★ PHONE-AS-SERVER DESIGN WRITTEN Jul 31 → see `WHATSAPP_PHONE_BRIDGE_DESIGN.md` (root).** Key finding:
+  - **★ PHONE-AS-SERVER DESIGN WRITTEN Jul 31 → see `docs/sarathi/WHATSAPP_PHONE_BRIDGE_DESIGN.md` (root).** Key finding:
     the APK-Bridge ("phone-as-CLIENT") is already ~80% built — `biz_wa_agent.py` (1514 lines: HMAC device
     auth, rate-limits, business-hours, takeover/quiet-if-manual, Gemini AI reply w/ policy+CRM context,
     conv logging), Android app `apk/` (~650 lines Kotlin: WANotificationService reads WA notifications +
@@ -5181,7 +5181,7 @@ apkLoadStatus() call.
     is ALREADY BUILT in the app** — `biz_whatsapp.py` (graph.facebook.com/v21.0, multi-tenant send), per-tenant
     `wa_phone_id`/`wa_access_token`/`wa_verify_token` columns, `/webhook` GET+POST (verify+receive), and
     `/api/onboarding/whatsapp` (validates creds vs Meta + stores per-tenant) — but the onboarding endpoint is
-    currently DISABLED (`return _WA_DISABLED_RESPONSE`). Full guide: `WHATSAPP_CLOUD_API_SETUP.md`. Gates:
+    currently DISABLED (`return _WA_DISABLED_RESPONSE`). Full guide: `docs/nidaan/setup/WHATSAPP_CLOUD_API_SETUP.md`. Gates:
     Meta Business Verification (SUBMITTED Aug 2026), App Review for whatsapp_business_messaging+management
     (Advanced Access — main extra gate, ~1 wk), Embedded Signup build (token exchange; per-tenant storage
     already exists). Per-subscriber realities: connected number becomes API-only, display name Meta-reviewed,
@@ -6245,7 +6245,7 @@ Founder wants Kanban / friendlier views that work on mobile, + per-staff view/fi
 Map of run-the-office-from-Telegram: **[LIVE]** tasks (see/create review-gated/pings), claim-activity notify + reply-to-customer, leave/requests, announcements+👍, AI (memory/confirm-to-act/voice/calculators). **[BUILDABLE next]** claims lookup+stage-move+note → radar read/reply in bot → analytics questions per role → payments (create ₹499/link, check paid) → staff mgmt (super_admin). Brand it as each staffer's **personal AI assistant**; add an in-bot "**what do you want to manage from Telegram?**" feedback capture. Announcement updated to motivate adoption.
 
 ### A88 BUILD LOG (Aug 22 2026)
-- **WHATSAPP CLOUD API LIVE — Phase 0 foundation SHIPPED (Aug 25, commit f28822d):** founder set up Meta WABA **GoLuQ – Digital Consultancy** (WABA `1942085573135209`) + number **+91 83495 04400** (Phone Number ID `1259819740549744`) — now **VERIFIED, quality GREEN, Cloud API**. Business verification done. Permanent System User token + App Secret + App ID stored in `/opt/sarathi/biz.env` (`WA_ACCESS_TOKEN`/`WA_APP_SECRET`/`WA_APP_ID`/`WA_PHONE_NUMBER_ID`/`WA_WABA_ID`; sarathi:sarathi 600, both sites health-checked 200). New isolated module **`biz_sarathi_whatsapp.py`**: `send_template` (business-initiated), `send_text` (24h session), `number_health`, `body_params`, `normalize_msisdn` — all env-configured, best-effort. **Verified end-to-end:** hello_world sent to a real number both via Meta UI AND via our module using the stored token (`ok:True`, message_id returned). **Reminder templates drafted** (renewal/EMI/lapse EN+HI, Utility category) — founder to create+submit in WhatsApp Manager. **NEXT:** send-log table (`wa_messages`) + opt-in tracking + a Sarathi "send reminder" UI (test button first) + data-driven renewal/EMI/lapse sends. Registration gotcha learned: number with 2-step PIN needs old PIN or 7-day wait; number must be off the consumer WhatsApp app first. Strategy (two-app + Nidaan branch reseller) in WHATSAPP_SUBSCRIBERS_PLAN.md §9.
+- **WHATSAPP CLOUD API LIVE — Phase 0 foundation SHIPPED (Aug 25, commit f28822d):** founder set up Meta WABA **GoLuQ – Digital Consultancy** (WABA `1942085573135209`) + number **+91 83495 04400** (Phone Number ID `1259819740549744`) — now **VERIFIED, quality GREEN, Cloud API**. Business verification done. Permanent System User token + App Secret + App ID stored in `/opt/sarathi/biz.env` (`WA_ACCESS_TOKEN`/`WA_APP_SECRET`/`WA_APP_ID`/`WA_PHONE_NUMBER_ID`/`WA_WABA_ID`; sarathi:sarathi 600, both sites health-checked 200). New isolated module **`biz_sarathi_whatsapp.py`**: `send_template` (business-initiated), `send_text` (24h session), `number_health`, `body_params`, `normalize_msisdn` — all env-configured, best-effort. **Verified end-to-end:** hello_world sent to a real number both via Meta UI AND via our module using the stored token (`ok:True`, message_id returned). **Reminder templates drafted** (renewal/EMI/lapse EN+HI, Utility category) — founder to create+submit in WhatsApp Manager. **NEXT:** send-log table (`wa_messages`) + opt-in tracking + a Sarathi "send reminder" UI (test button first) + data-driven renewal/EMI/lapse sends. Registration gotcha learned: number with 2-step PIN needs old PIN or 7-day wait; number must be off the consumer WhatsApp app first. Strategy (two-app + Nidaan branch reseller) in docs/sarathi/WHATSAPP_SUBSCRIBERS_PLAN.md §9.
 - **TELEGRAM claim WRITES SHIPPED (Aug 24, commit 07f1f86):** from a claim card in the bot (admin+): **💬 Add note** (type/voice → confirm → `add_claim_note` source='telegram') and **➡️ Move stage** (pick from `_TG_STAGES` pipeline → confirm → `update_claim_status`, audited via changed_by_id=staff). Both confirm-gated + role-checked each step; bilingual. CAPABILITIES `tg_claim_actions`. Verified (note add + cleanup, stage move + revert). Customer-facing notify on bot stage-moves = follow-up.
 - **TELEGRAM office assistant — claim lookup SHIPPED (Aug 24, commit 8f41de7):** new **"🔎 Find a claim"** menu button (admin+) in @NidaanOpsBot → prompts for claim number/name/phone → `_claim_search` → tap-to-view matches → read-only claim card (`_fmt_claim_card`: status, type, disputed, ClaimShield ref+status, handler), bilingual, voice-compatible. Role-gated server-side each step, NO writes. `_claim_detail`/`_claim_search` helpers. Added CAPABILITIES entry `tg_find_claim` (registry convention). Verified: search→detail→card. **Stage-move (write) deferred to a careful follow-up** (confirm-to-act).
 - **CLAIMANT AUTHORIZATION FLOW SHIPPED (Aug 24, commit 9c26aa6):** redesigned per founder. (1) Claimant dashboard shows **NOTHING about fees until the claim is at L2** (`review_outcome='can_fight'` → `is_l2` in api/me); then an **"Authorization"** card with a prominent **"you do NOT need to pay anything now — just Accept"** banner (EN+HI) + the auto-calc + Accept. (2) Ops claim card split: the portal link (status/docs) is available any time; a separate **"⚖️ Fee authorization"** section appears **only at L2** showing the auto-calc (**dispute × 15% + GST**) and a **"📤 Push authorization"** button that **confirm-prompts staff to VERIFY the dispute amount** first, records **who pushed + when** (`consent_pushed_by/at`), and **emails the claimant if not yet accepted**. States shown: *pushed by X · <time>* / *accepted by claimant · <time>*. (3) Endpoint `POST /nidaan/ops/api/claims/{id}/portal/push-authorization` (sub_super_admin+, audited). Accept works on dashboard OR via emailed link → recorded + the tamper-evident **consent-proof PDF** (super-admin download) stays. Verified full push→accept→proof cycle. Auto-send toggle + manual email path from before still apply.
@@ -6323,7 +6323,7 @@ Customers send a big MIXED file (discharge summary + bills + lab reports + polic
 
 Big multi-feature session. All shipped + deployed; both sites 200.
 
-**WhatsApp complainant journey (commits d1f564c, c0d6e50).** `wa_journey(claim_id, event, extra, skip_phones)` in `biz_nidaan_wa_orchestrator.py` — one safe notifier to the **complainant** (`complainant_phone`, fallback insured): in-session → free-form composer; cold → approved template (`JOURNEY_TEMPLATES`, all `""` until Meta approves); records to the claim timeline. **Consent+dedup rails:** skips `nidaan_wa_contacts.status='stopped'`; `skip_phones` prevents a 2nd WhatsApp to a number the subscriber dispatch already messages. Wired: **claim_registered** (branch/ops `on_ops_claim_raised` + subscriber `on_claim_filed`); **payment success** (`on_branch_l2_paid`; `on_funnel_paid` guarded → self-service skips); **payment failed** (webhook resolves `claim_id` from Razorpay notes → "no money deducted" reassurance). Composer added `intro_value` + `payment_failed`. **Templates handoff:** `WA_META_SETUP_PROMPT.md` (self-contained, 6 bilingual templates for the Claude extension to create on Meta) + `WA_TEMPLATES_TO_SUBMIT.md`.
+**WhatsApp complainant journey (commits d1f564c, c0d6e50).** `wa_journey(claim_id, event, extra, skip_phones)` in `biz_nidaan_wa_orchestrator.py` — one safe notifier to the **complainant** (`complainant_phone`, fallback insured): in-session → free-form composer; cold → approved template (`JOURNEY_TEMPLATES`, all `""` until Meta approves); records to the claim timeline. **Consent+dedup rails:** skips `nidaan_wa_contacts.status='stopped'`; `skip_phones` prevents a 2nd WhatsApp to a number the subscriber dispatch already messages. Wired: **claim_registered** (branch/ops `on_ops_claim_raised` + subscriber `on_claim_filed`); **payment success** (`on_branch_l2_paid`; `on_funnel_paid` guarded → self-service skips); **payment failed** (webhook resolves `claim_id` from Razorpay notes → "no money deducted" reassurance). Composer added `intro_value` + `payment_failed`. **Templates handoff:** `docs/nidaan/setup/WA_META_SETUP_PROMPT.md` (self-contained, 6 bilingual templates for the Claude extension to create on Meta) + `docs/nidaan/setup/WA_TEMPLATES_TO_SUBMIT.md`.
 
 **WhatsApp campaigns + lead-capture (commit 537f574).** `biz_nidaan_wa_campaigns.py`: audience = opted-in & non-stopped `nidaan_wa_contacts` (filters language + has-claim/no-claim); each send reuses the `wa_journey` gate (in-session free-form / cold template / STOP always skipped); `nidaan_wa_campaigns` summary + live stats; background send with 0.4s pacing; test-send to one number. Endpoints (super_admin): `/wa/campaign/preview`, `/wa/campaign` (+test), `/wa/campaigns`, `/wa/contacts/{msisdn}/lead`. UI: 📣 Bulk campaign composer + campaigns table in the 💬 panel; **auto lead-capture** (`maybe_capture_lead` in the inbound flow → unknown WhatsApp numbers become CRM leads `source='whatsapp'`, deduped; toggle `wa_lead_capture_enabled`). Cold bulk sends need approved templates.
 
@@ -8141,7 +8141,7 @@ charged and re-activated on the next cycle); inactive staff receive no Telegram 
 no longer recognises suspended accounts or disabled APs.
 
 **Found and written up, not built** (draft 3, https://claude.ai/artifact/AvFK6bxXWtmRGPr8XH9FQC and
-`docs/WHATSAPP_CLAIMS_DESIGN.md`): the six web intake doors check different things around the one
+`docs/nidaan/WHATSAPP_CLAIMS_DESIGN.md`): the six web intake doors check different things around the one
 `submit_claim` (Phase 0 = one intake module for all doors, WhatsApp the seventh); Rs 499 review
 documents never reach the claim; complainant page hides WhatsApp files; staff logins never expire.
 Five decisions are with the founder (see TODO "Waiting on the founder" 3f).

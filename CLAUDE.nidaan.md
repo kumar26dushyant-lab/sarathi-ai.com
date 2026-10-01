@@ -367,23 +367,61 @@ py -3.14 _tools/test_*.py                      # behaviour
 
 ---
 
-## Where the work is
+### The monthly claim cap (1 Oct)
 
-**Done and live:** notification controller · Telegram document upload + splitter + Hinglish ·
-claim authorisation · bot rate limits + audit · payment idempotency (₹11,776 corrected) · DPDP
-legal pages with the right entity · Grievance Officer editable from ops · Lokpal bucket completed.
+`biz_nidaan.quota_used(quota_row, subscription)` is the ONE answer to "how many claims has this
+subscriber used this month" - the claim check (`can_submit_claim`), the counter
+(`_increment_quota`) and the accounts list all call it. The count is a rolling 30 days, AND it only
+includes claims raised under the subscription that is running now: a subscriber who cancels and
+subscribes again starts fresh (Deepika Yadav, 1 Oct - blocked by three claims from her previous
+Silver plan). `nidaan_subscriptions.active_since` is stamped when a renewal brings a lapsed plan
+back; NULL means `started_at`. A refusal reaches a screen as words (`claim_block_message`), never
+as a code like `quota_exceeded_silver`. Every claim door goes through `submit_claim`.
 
-**Done, awaiting deploy:** documents read on our own server, nothing filed automatically (see
-**Claim documents** above). The staff-facing half - the set-builder inbox, the review screen and the
-screen where a correction becomes a rule - is **still to build**; `biz_nidaan_doc_sets` has the sets
-and the rule matching, and `biz_doc_splitter._learned_rules()` is the single seam where stored rules
-will arrive.
+### WhatsApp files nobody matched, and staff forwarding (1 Oct)
+
+`biz_nidaan_wa_unsorted` keeps every file that arrives on our WhatsApp number from a number not on
+a claim (virus-scanned, 25 MB, 30 a day per number) in **WhatsApp -> Files to sort**, where staff
+attach it to a claim or set it aside with a reason. Nothing is deleted. A staff member may forward a
+customer's papers from ANY staff number with `NP-<claim>` in the caption: filed on that claim if
+they may work on it, otherwise kept to sort.
+
+### The ops menu (1 Oct)
+
+The left menu is an office: foldable groups (My work, Consolidation with every bucket inside it,
+Claims, Talk to customers, People, Insights, Settings) built by `buildSidebar` in
+`static/nidaan_ops.html`. Every screen opened is counted (`/nidaan/ops/api/ui/opened`, table
+`nidaan_ui_opens`) so unused tabs can be retired on evidence (~8 Oct), archived never deleted.
+
+---
+
+## Where the work is (1 Oct 2026)
+
+Everything on `master` is live. The day-by-day state - what was asked, what is done, what waits on
+the founder - is **`TODO.md`**; read its top section first.
+
+**Live:** the claim line Level-2 -> Settlement with every bucket defined in one place · the payment
+ledger and one-price guard · documents read on our own server, nothing filed automatically · the
+document splitter and claim-level sets · the complainant's WhatsApp (reminders, the 24-hour rule,
+files during a human takeover) · office-hours holding messages and two staff notices per waiting
+chat · Files to sort · the evening summary per claim · Channel Partner change requests · duty that
+follows leave · App Health per person · the office menu · the monthly cap that resets on a new
+subscription · the staff SOP at `/sop-whats-new` (with the 1 Oct staff message as a sample).
+
+**Still to build on the documents side:** the staff set-builder inbox, the review screen and the
+screen where a correction becomes a rule; `biz_nidaan_doc_sets` has the sets and the rule matching,
+and `biz_doc_splitter._learned_rules()` is the single seam where stored rules will arrive.
+
+**Next (1 Oct afternoon list, `TODO.md` P2-P8):** Authorized Partner identity (name, city, state)
+and the AP's name + signature on every message about their claims, never on an OTP · the
+authorization letter with a tentative fee calculation, letterhead and footer, for new letters only ·
+the website chat's forced handover after 6 messages (let the AI judge intent) · the folder split.
 
 **Still sends data out, and it is the founder's call:** the bot's 🤖 Ask AI reads task
 records to Gemini - titles, staff names and up to 220 characters of a description, which here
 routinely name a claimant. No documents. Raised 28 Sep, undecided.
 
-**In flight — the split (`SPLIT_PLAN.md`):** stages 0–5 done. Both products run on their own
+**In flight — the split (`docs/split/SPLIT_PLAN.md`):** stages 0–5 done. Both products run on their own
 apps. **Stage 6, the worker, is mapped but not executed** — `main()` launches 26 loops and both
 app files still contain all of them, so starting two workers would double-run 19 Nidaan loops.
 `deploy/loop-ownership.json` has the ownership. Then stage 7 (databases — `leads` and
@@ -396,10 +434,11 @@ app files still contain all of them, so starting two workers would double-run 19
    app.
 4. **A team of monitoring bots** watching each department — logins, payments, the L2 queue —
    alerting only when a person is actually needed.
-5. **DPDP**, from `COMPLIANCE_DPDP.md`: retention (nothing is ever deleted today), the Gemini
+5. **DPDP**, from `docs/nidaan/COMPLIANCE_DPDP.md`: retention (nothing is ever deleted today), the Gemini
    transfer is undisclosed, 47 portal links with no consent record, claimants have no route to
    request anything, no breach procedure, no cookie policy.
 
 **Living documents:** `TODO.md` (per-conversation), `PROJECT_MASTER_CONTEXT.md` (the long
-history), `SPLIT_PLAN.md`, `SPLIT_DECISIONS.md`, `COMPLIANCE_DPDP.md`, `ANNOUNCEMENTS.md`
-(bilingual staff drafts — the founder sends them, never automatically).
+history), `docs/split/SPLIT_PLAN.md`, `docs/split/SPLIT_DECISIONS.md`, `docs/nidaan/COMPLIANCE_DPDP.md`, `ANNOUNCEMENTS.md`
+(bilingual staff drafts — the founder sends them, never automatically). Every other document:
+`docs/README.md`.

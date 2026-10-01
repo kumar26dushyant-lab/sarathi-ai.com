@@ -10,6 +10,9 @@
 >   risky changes are rehearsed first.
 >
 > They shared one codebase until 27 September 2026. They no longer do.
+>
+> **Every other document** has a place in `docs/` — see **[docs/README.md](docs/README.md)** for
+> the map (one folder per product, so each moves with its product when the folders split).
 
 
 These are the founder's own standing rules, in his words where it matters. They sit in the repo

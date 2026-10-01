@@ -109,4 +109,4 @@ end to end. Sarathi's near-term work is only what the split requires:
    Nidaan is the one that moves out.
 4. A **working bot token** from a company-owned account.
 
-See `SPLIT_PLAN.md` for the staged plan and `SPLIT_DECISIONS.md` for the per-route ownership.
+See `docs/split/SPLIT_PLAN.md` for the staged plan and `docs/split/SPLIT_DECISIONS.md` for the per-route ownership.

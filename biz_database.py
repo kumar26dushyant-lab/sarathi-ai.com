@@ -1051,7 +1051,7 @@ async def init_db():
             -- Required-document checklist per claim (₹499 funnel spine).
             -- One row per required/optional document; drives cross-channel
             -- de-dup (dashboard + WhatsApp) and the pay-gate. See
-            -- biz_nidaan_doc_checklist.py + NIDAAN_499_FUNNEL_SPEC.md §8.
+            -- biz_nidaan_doc_checklist.py + docs/nidaan/NIDAAN_499_FUNNEL_SPEC.md §8.
             CREATE TABLE IF NOT EXISTS nidaan_claim_doc_checklist (
                 claim_id          INTEGER NOT NULL REFERENCES nidaan_claims(claim_id),
                 doc_key           TEXT NOT NULL,

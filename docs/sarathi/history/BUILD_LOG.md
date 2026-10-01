@@ -515,7 +515,7 @@ Bot changes (biz_bot.py):
 - Owner/Admin sees all data within their tenant only
 
 ## HOW TO USE THIS FILE
-1. **New session**: Read BUILD_LOG.md FIRST before any work
+1. **New session**: Read docs/sarathi/history/BUILD_LOG.md FIRST before any work
 2. **After changes**: Append to CHANGE LOG section with: date, files changed, what, why, wire impact
 3. **Never delete**: Only append — full history preserved
 4. **Key principle**: Anyone reading just this file can understand the entire project state
