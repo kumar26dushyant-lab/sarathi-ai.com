@@ -1375,6 +1375,22 @@ async def init_db():
             CREATE INDEX IF NOT EXISTS idx_cpreq_claim ON nidaan_claim_cp_requests(claim_id, req_id);
             CREATE INDEX IF NOT EXISTS idx_cpreq_status ON nidaan_claim_cp_requests(status);
 
+            -- Which ops screens are opened, per person per day (biz_nidaan_usage) - the evidence
+            -- before any tab is retired. A count only: no claim, no customer, no time of day.
+            CREATE TABLE IF NOT EXISTS nidaan_ui_opens (
+                day       TEXT NOT NULL,
+                staff_id  INTEGER NOT NULL,
+                panel     TEXT NOT NULL,
+                n         INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (day, staff_id, panel)
+            );
+            -- The bot's "someone will reach out" count per waiting conversation (biz_nidaan_bot_hold).
+            CREATE TABLE IF NOT EXISTS nidaan_bot_holds (
+                conv_key  TEXT PRIMARY KEY,
+                sent      INTEGER NOT NULL DEFAULT 0,
+                last_at   TIMESTAMP
+            );
+
             -- Per-claim doc-collection schedule/state. Claim-level values OVERRIDE the dashboard
             -- defaults (ops_settings wa_* keys). Precedence: claim-level when set, else global.
             CREATE TABLE IF NOT EXISTS nidaan_wa_claim_settings (

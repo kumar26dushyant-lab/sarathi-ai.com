@@ -64,6 +64,13 @@ details>summary{cursor:pointer}
 .nav-item:hover{background:var(--nd-bg-surface-2);color:var(--nd-text-primary)}
 .nav-item.active{background:rgba(6,182,212,.09);color:var(--nd-cyan-text);border-left-color:#22d3ee}
 .nav-zone{font-size:.64rem;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--nd-text-faint);padding:.85rem 1.25rem .3rem;user-select:none;opacity:.75}
+.nav-fold{display:flex;align-items:center;justify-content:space-between;cursor:pointer}
+.nav-fold:hover,.nav-fold:focus-visible{color:var(--nd-text-secondary);opacity:1;outline:none}
+.nav-chev{font-size:.7rem}
+.nav-group.collapsed{display:none}
+.nav-item.nav-sub{padding-left:2.1rem;font-size:.8rem;font-weight:500}
+.nav-cnt{margin-left:auto;font-size:.7rem;font-weight:700;color:var(--nd-text-faint);background:var(--nd-bg-surface-2);border-radius:10px;padding:.05rem .45rem;min-width:1.4rem;text-align:center}
+.nav-item:focus-visible{outline:2px solid var(--nd-cyan-text);outline-offset:-2px}
 .nav-item .badge{margin-left:auto;background:rgba(220,38,38,.25);color:var(--nd-danger-text);border-radius:10px;font-size:.68rem;font-weight:700;padding:.1rem .4rem;min-width:18px;text-align:center}
 .nav-divider{height:1px;background:var(--nd-bg-surface-2);margin:.5rem 1.25rem}
 .main{flex:1;overflow-y:auto;padding:1.5rem 1.75rem}
@@ -1249,71 +1256,161 @@ async function annRevert(announceId){
 function buildSidebar() {
   const roleRank = {team_member:0, sub_super_admin:1, super_admin:2};
   const myRank = roleRank[_role] ?? 0;
-  // Grouped into clear zones. A zone header shows only if it has ≥1 visible item.
+  // An office, not a list (founder, 1 Oct): groups that fold, the work first, the buckets inside
+  // Consolidation. Every screen keeps its id, so old links, bookmarks and notifications still land.
   const zones = [
-    {h:'Work', items:[
-      {id:'l2',       label:'⚖️ Consolidation', minRank:0},
-      // My Desk and Case Board folded into Level-2 -> Settlement (founder, 14 Sep). Old links to
-      // them still work - showPanel() sends them here.
+    {k:'work', h:'My work', items:[
       {id:'tasks',    label:'✅ Tasks',            minRank:0},
-      {id:'crm',      label:'🎯 CRM',              minRank:0},
-      {id:'overview', label:'📊 Claims Dashboard', minRank:0},
-      {id:'claims',   label:'📋 All Claims',       minRank:1},
-      {id:'l2claims', label:'⚖️ L2 Claims',        minRank:1},
       {id:'docdesk',  label:'📄 Waiting on documents', minRank:0},
-      {id:'archived', label:'🗄️ Archived',         minRank:1},
-      {id:'accounts', label:'👥 Accounts',         minRank:1},
       {id:'mybiz',    label:'🚀 My Business',      minRank:0},
       {id:'onbehalf', label:'🧾 Raise for a Subscriber', minRank:0},
-      {id:'payfollow',label:'📞 Payment Follow-up', minRank:1},
       {id:'docsplit', label:'📄 Doc Splitter',     minRank:0},
     ]},
-    {h:'People', items:[
-      {id:'branches', label:'🏢 Authorized Partners',         minRank:1},
+    {k:'line', h:'⚖️ Consolidation', buckets:true, items:[
+      {id:'l2claims', label:'📥 L2 Claims — waiting for handover', minRank:1},
+      {id:'l2',       label:'⚖️ All open claims',  minRank:0, bucket:'all'},
+    ]},
+    {k:'claims', h:'Claims', items:[
+      {id:'claims',   label:'📋 All Claims',       minRank:1},
+      {id:'overview', label:'📊 Claims Dashboard', minRank:0},
+      {id:'accounts', label:'👥 Accounts',         minRank:1},
+      {id:'payfollow',label:'📞 Payment Follow-up', minRank:1},
+      {id:'archived', label:'🗄️ Archived',         minRank:1},
+    ]},
+    {k:'talk', h:'Customers & conversations', items:[
+      {id:'whatsapp', label:'💬 WhatsApp',          minRank:1},
+      {id:'support',  label:'🎧 Support chat',      minRank:0},
+      {id:'radar',    label:'📨 Email Updates',     minRank:1},
+      {id:'crm',      label:'🎯 CRM',               minRank:0},
+    ]},
+    {k:'people', h:'People', items:[
+      {id:'branches', label:'🏢 Authorized Partners', minRank:1},
       {id:'cp',       label:'🤝 Channel Partners', minRank:0},
       {id:'staff',    label:'👤 Staff',            minRank:2},
-    ]},
-    {h:'HR', items:[
       {id:'leave',        label:'🌴 Leave & WFH',   minRank:0},
       {id:'leavehistory', label:'📅 Leave History', minRank:2},
     ]},
-    {h:'Communication', items:[
-      {id:'whatsapp', label:'💬 WhatsApp Automation', minRank:1},
-      {id:'telegram', label:'✈️ Telegram Bot',     minRank:0},
-      {id:'radar',    label:'📨 Email Updates',     minRank:1},
-      {id:'support',  label:'💬 Support',           minRank:0},
-    ]},
-    {h:'Insights', items:[
+    {k:'insights', h:'Insights', items:[
       {id:'analytics',label:'📊 Business Analytics',minRank:2},
       {id:'revenue',  label:'💰 Revenue',           minRank:2, ownerOnly:true},
     ]},
-    {h:'Configuration', items:[
+    {k:'settings', h:'Settings & tools', items:[
       {id:'settings', label:'⚙️ Workflow Settings', minRank:2},
       {id:'bdesign',  label:'🧩 Bucket Designer',  minRank:2},
       {id:'plans',    label:'💳 Plans & Billing',   minRank:2},
       {id:'content',  label:'📝 Content',           minRank:2},
-      {id:'guide',    label:'✨ All Features (Listen)', minRank:0},
+      {id:'telegram', label:'✈️ Telegram Bot',     minRank:0},
       {id:'health',   label:'🖥️ App Health',        minRank:2},
+      {id:'guide',    label:'✨ All Features (Listen)', minRank:0},
     ]},
   ];
   const sb = document.getElementById('sidebar');
   sb.innerHTML = '';
   const isOwner = (_staffEmail||'').toLowerCase() === NIDAAN_OWNER_EMAIL.toLowerCase();
   const visible = (it) => (myRank >= it.minRank) && !(it.ownerOnly && !isOwner);
+  const folded = _navFolded();
   zones.forEach(zone => {
     const vis = zone.items.filter(visible);
     if (!vis.length) return;
-    const hdr = document.createElement('div'); hdr.className = 'nav-zone'; hdr.textContent = zone.h;
+    const holdsActive = vis.some(it => it.id === _currentPanel);
+    const closed = folded[zone.k] === true && !holdsActive;
+    const hdr = document.createElement('div');
+    hdr.className = 'nav-zone nav-fold';
+    hdr.setAttribute('role', 'button');
+    hdr.setAttribute('tabindex', '0');
+    hdr.setAttribute('aria-expanded', closed ? 'false' : 'true');
+    hdr.innerHTML = '<span>' + esc(zone.h) + '</span><span class="nav-chev">' + (closed ? '▸' : '▾') + '</span>';
+    const grp = document.createElement('div');
+    grp.className = 'nav-group' + (closed ? ' collapsed' : '');
+    grp.dataset.zone = zone.k;
+    const toggle = () => {
+      const nowClosed = !grp.classList.contains('collapsed');
+      grp.classList.toggle('collapsed', nowClosed);
+      hdr.setAttribute('aria-expanded', nowClosed ? 'false' : 'true');
+      hdr.querySelector('.nav-chev').textContent = nowClosed ? '▸' : '▾';
+      const f = _navFolded(); f[zone.k] = nowClosed; _navFoldedSave(f);
+    };
+    hdr.onclick = toggle;
+    hdr.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } };
     sb.appendChild(hdr);
-    vis.forEach(item => {
-      const el = document.createElement('div');
-      el.className = 'nav-item' + (item.id===_currentPanel?' active':'');
-      el.dataset.panel = item.id;
-      el.textContent = item.label;
-      el.onclick = () => showPanel(item.id);
-      sb.appendChild(el);
-    });
+    sb.appendChild(grp);
+    vis.forEach(item => grp.appendChild(_navItem(item)));
+    if (zone.buckets) {
+      const holder = document.createElement('div');
+      holder.id = 'navBuckets';
+      grp.appendChild(holder);
+      _navLoadBuckets();
+    }
   });
+  _navMark();
+}
+
+function _navItem(item){
+  const el = document.createElement('div');
+  el.className = 'nav-item' + (item.bucket && item.bucket !== 'all' ? ' nav-sub' : '');
+  el.dataset.panel = item.id;
+  if (item.bucket) el.dataset.bucket = item.bucket;
+  el.setAttribute('role', 'button');
+  el.setAttribute('tabindex', '0');
+  el.innerHTML = '<span>' + esc(item.label) + '</span>'
+    + (item.count != null ? '<span class="nav-cnt">' + item.count + '</span>' : '');
+  const go = () => item.bucket ? navBucket(item.bucket) : showPanel(item.id);
+  el.onclick = go;
+  el.onkeydown = (e) => { if (e.key === 'Enter') go(); };
+  return el;
+}
+
+// The buckets live inside Consolidation, each with its own count - the same counts the
+// workspace shows, from the same call.
+async function _navLoadBuckets(){
+  const holder = document.getElementById('navBuckets'); if (!holder) return;
+  try{
+    const [cf, ct] = await Promise.all([
+      API('/buckets/config').then(r => r.ok ? r.json() : null),
+      API('/buckets/counts').then(r => r.ok ? r.json() : null)]);
+    if (!cf) return;
+    const counts = (ct && ct.counts) || {};
+    holder.innerHTML = '';
+    (cf.buckets || []).forEach(b => {
+      const c = counts[b.bucket_key] || {};
+      holder.appendChild(_navItem({id:'l2', bucket:b.bucket_key,
+        label: ((b.icon || '') + ' ' + (b.name_en || b.bucket_key)).trim(), count: (c.total || 0)}));
+    });
+    _navMark();
+  }catch(e){ /* the menu never fails because a count did */ }
+}
+
+function navBucket(key){
+  if (_currentPanel === 'l2' && typeof l2Pick === 'function'){ l2Pick(key); closeMobileNav(); }
+  else { _l2Sel = key; showPanel('l2'); }
+  _navMark();
+}
+window.navBucket = navBucket;
+
+function _navMark(){
+  document.querySelectorAll('.nav-item').forEach(n => {
+    const b = n.dataset.bucket;
+    const on = b ? (_currentPanel === 'l2' && (_l2Sel || 'all') === b) : (n.dataset.panel === _currentPanel);
+    n.classList.toggle('active', !!on);
+  });
+}
+window._navMark = _navMark;
+
+function _navFolded(){
+  try{ return JSON.parse(localStorage.getItem('nd_nav_folded') || '{}') || {}; }catch(e){ return {}; }
+}
+function _navFoldedSave(f){
+  try{ localStorage.setItem('nd_nav_folded', JSON.stringify(f)); }catch(e){}
+}
+
+// Which screens are really used - counted per person per day, so a tab is archived on evidence,
+// never on a guess (founder, 1 Oct: "check twice or thrice to be sure"). Never blocks anything.
+function _navTrack(id){
+  try{
+    fetch('/nidaan/ops/api/ui/opened', {method:'POST', keepalive:true,
+      headers: Object.assign({'Content-Type':'application/json'}, hdrs()),
+      body: JSON.stringify({panel: String(id || '').slice(0, 24)})}).catch(function(){});
+  }catch(e){}
 }
 
 function showPanel(id, fromHistory) {
@@ -1334,9 +1431,8 @@ function showPanel(id, fromHistory) {
   document.querySelectorAll('.panel').forEach(p=>p.style.display='none');
   const el = document.getElementById('panel-'+id);
   if (el) el.style.display = '';
-  document.querySelectorAll('.nav-item').forEach(n=>{
-    n.classList.toggle('active', n.dataset.panel===id);
-  });
+  _navMark();
+  if (!fromHistory) _navTrack(id);
   const loaders = {
     overview: loadOverview,
     pipeline: loadPipeline,
@@ -14884,6 +14980,7 @@ function l2TodayToggle(){ _l2TodayOpen = !_l2TodayOpen; l2Shell(); l2Load(); }
 window.l2TodayToggle = l2TodayToggle;
 
 function l2Pick(key){
+  setTimeout(function(){ try{ _navMark(); }catch(e){} }, 0);
   if (_l2Sel !== key){
     _l2Sel = key; _l2Sub = ''; _l2Q = '';
     // Each entry keeps its own chip filters until they are cleared; a stage entry pins its stage.

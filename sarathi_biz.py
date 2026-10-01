@@ -11751,6 +11751,33 @@ async def ops_support_reps_get(request: Request):
             "duty_labels": {k: _cs.stage_label(k, "en") for k in keys}}
 
 
+class _UiOpenedReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    panel: str = Field(..., pattern=r"^[a-z0-9_]{1,24}$")
+
+
+@app.post("/nidaan/ops/api/ui/opened")
+@limiter.limit("120/minute")
+async def ops_ui_opened(body: _UiOpenedReq, request: Request):
+    """Count one screen open - so unused tabs are retired on evidence (biz_nidaan_usage)."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    staff = _require_staff(request, "team_member")
+    import biz_nidaan_usage as _use
+    await _use.opened(int(staff.get("staff_id") or 0), body.panel)
+    return {"ok": True}
+
+
+@app.get("/nidaan/ops/api/ui/usage")
+async def ops_ui_usage(request: Request, days: int = 14):
+    """Which screens were opened, by how many people, and when last - super-admins only."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "super_admin")
+    import biz_nidaan_usage as _use
+    return {"days": max(1, min(int(days), 90)), "screens": await _use.report(max(1, min(int(days), 90)))}
+
+
 class OpsSupportRepReq(BaseModel):
     model_config = ConfigDict(extra="forbid")
     staff_id: int
