@@ -201,6 +201,34 @@ async def main():
     check("...and b@x.com is still unverified", not (await cv.status(await cv._claim(201)))["email"]["verified"])
     check("a made-up token is refused", not (await cv.confirm_link("nope"))["ok"])
 
+    print("\nA resend does not void the email they are holding (claim #202, 1 Oct)\n")
+    await q("INSERT INTO nidaan_claims (claim_id, account_id, complainant_email, complainant_phone) "
+            "VALUES (205, 61, 'held@x.com', '9555555555')")
+    await q("INSERT INTO nidaan_claims (claim_id, account_id, complainant_email, complainant_phone) "
+            "VALUES (206, 62, 'held2@x.com', '9555555556')")
+    SENT.clear()
+    for _ in range(3):
+        await cv.send_confirm(205, "email")
+    first_tok = SENT[0][2]
+    r = await cv.confirm_link(first_tok)
+    check("the FIRST email's link still confirms after two resends", r.get("ok") and not r.get("expired"), r)
+    check("...and the email shows verified", (await cv.status(await cv._claim(205)))["email"]["verified"])
+    SENT.clear()
+    for _ in range(3):
+        await cv.send_confirm(206, "email")
+    r2 = await cv.confirm_email_code(206, SENT[0][3])
+    check("the FIRST email's code still works on the claim page after resends", r2.get("ok"), r2)
+    await q("INSERT INTO nidaan_claims (claim_id, account_id, complainant_email, complainant_phone) "
+            "VALUES (207, 63, 'old@x.com', '9555555557')")
+    SENT.clear()
+    await cv.send_confirm(207, "email")
+    old_tok, old_code = SENT[-1][2], SENT[-1][3]
+    await q("UPDATE nidaan_claims SET complainant_email='new@x.com' WHERE claim_id=207")
+    await cv.send_confirm(207, "email")
+    check("an email sent to an OLD address still proves nothing", not (await cv.confirm_link(old_tok)).get("ok"))
+    check("...nor does its code", not (await cv.confirm_email_code(207, old_code)).get("ok"))
+    check("...and the new address is still unverified", not (await cv.status(await cv._claim(207)))["email"]["verified"])
+
     print("\nNobody is flooded\n")
     for _ in range(4):
         last = await cv.send_confirm(201, "email")

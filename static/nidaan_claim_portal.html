@@ -145,7 +145,7 @@ var T = {
     vOther:"Try the other way instead",
     eTitle:"Please confirm your email",
     eWhy:"We send your case letters and updates to this email. Is it yours?",
-    eYes:"Yes, send me a code", eNo:"No, change it", eSkip:"Not now",
+    eYes:"Yes, send me a code", eHave:"I already have a code", eNo:"No, change it", eSkip:"Not now",
     eSent:"We sent a 6-digit code to your email. Type it here:",
     eConfirm:"Confirm", eNew:"Your correct email", eSave:"Save and send me a code",
     eDone:"\u2705 Email confirmed. Thank you!", eFail:"That did not work. Please try again.",
@@ -202,7 +202,7 @@ var T = {
     vOther:"दूसरा तरीका आज़माइए",
     eTitle:"कृपया अपना ईमेल कन्फ़र्म करें",
     eWhy:"आपके केस के पत्र और अपडेट हम इसी ईमेल पर भेजते हैं। क्या यह आपका है?",
-    eYes:"हाँ, मुझे कोड भेजिए", eNo:"नहीं, बदलना है", eSkip:"अभी नहीं",
+    eYes:"हाँ, मुझे कोड भेजिए", eHave:"मेरे पास कोड है", eNo:"नहीं, बदलना है", eSkip:"अभी नहीं",
     eSent:"हमने आपके ईमेल पर 6 अंकों का कोड भेजा है। यहाँ डालिए:",
     eConfirm:"कन्फ़र्म करें", eNew:"आपका सही ईमेल", eSave:"सेव करें और कोड भेजें",
     eDone:"\u2705 ईमेल कन्फ़र्म हो गया। धन्यवाद!", eFail:"नहीं हो पाया। कृपया दोबारा कोशिश कीजिए।",
@@ -643,6 +643,8 @@ function render(){
       + '<div style="font-weight:700;margin:.4rem 0 .7rem;word-break:break-all">'+esc(ct.email)+'</div>'
       + '<div id="emailStep" style="display:flex;flex-wrap:wrap;gap:.5rem">'
       +   '<button class="btn btn-primary" onclick="emailCode(this)">'+esc(t("eYes"))+'</button>'
+      // The email our team sent already has a code: typing it must not first send a new one.
+      +   '<button class="btn" onclick="_emailCodeBox()">'+esc(t("eHave"))+'</button>'
       +   '<button class="btn" onclick="emailChangeShow()">'+esc(t("eNo"))+'</button>'
       +   '<button class="btn" onclick="emailSkip()">'+esc(t("eSkip"))+'</button>'
       + '</div><div id="emailMsg" class="note" style="margin-top:.5rem"></div></div>';

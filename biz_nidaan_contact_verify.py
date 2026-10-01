@@ -244,9 +244,11 @@ async def send_confirm(claim_id: int, kind: str, *, actor: str = "staff", base_u
     token = secrets.token_urlsafe(24)
     exp = (datetime.utcnow() + timedelta(hours=CONFIRM_TTL_H)).strftime("%Y-%m-%d %H:%M:%S")
     async with aiosqlite.connect(_db()) as c:
-        # One live confirmation per claim and contact: a new one retires the old.
+        # A new confirmation retires only those sent to a DIFFERENT (old) address. Earlier ones to
+        # this same address stay good until they expire: the person may be holding any of them
+        # (claim #202, 1 Oct - three sends in 90 seconds made the first two say "expired").
         await c.execute("UPDATE nidaan_contact_confirm SET used_at='superseded' WHERE claim_id=? "
-                        "AND kind=? AND used_at IS NULL", (int(claim_id), kind))
+                        "AND kind=? AND used_at IS NULL AND value<>?", (int(claim_id), kind, value))
         await c.execute(
             "INSERT INTO nidaan_contact_confirm (claim_id, kind, value, code_hash, token_hash, "
             "expires_at, sent_by) VALUES (?,?,?,?,?,?,?)",
@@ -326,7 +328,9 @@ async def confirm_link(token: str) -> dict:
         r = dict(r)
         if r.get("used_at") and r["used_at"] != "superseded":
             return {"ok": True, "already": True, "claim_id": r["claim_id"]}
-        if r.get("used_at") == "superseded" or str(r["expires_at"]) < now:
+        # 'superseded' is not 'expired': whether it still proves anything is decided below - it
+        # does only if this is still the claim's email (rows for an old address never pass).
+        if str(r["expires_at"]) < now:
             return {"ok": False, "expired": True}
         await c.execute("UPDATE nidaan_contact_confirm SET used_at=? WHERE cid=?", (now, r["cid"]))
         await c.commit()
@@ -344,20 +348,24 @@ async def confirm_email_code(claim_id: int, code: str) -> dict:
     if len(code) != CODE_DIGITS:
         return {"ok": False, "why": "Enter the 6-digit code from the email."}
     now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    cur_email = current(await _claim(claim_id)).get("email") or ""
     async with aiosqlite.connect(_db()) as c:
         c.row_factory = aiosqlite.Row
-        r = await (await c.execute(
-            "SELECT * FROM nidaan_contact_confirm WHERE claim_id=? AND kind='email' AND "
-            "used_at IS NULL AND expires_at > ? ORDER BY cid DESC LIMIT 1",
-            (int(claim_id), now))).fetchone()
-        if not r:
+        # ANY code still live for the claim's current email works - not only the newest, so the
+        # code in an earlier email still works after a resend (at most 3 a day).
+        live = [dict(x) for x in await (await c.execute(
+            "SELECT * FROM nidaan_contact_confirm WHERE claim_id=? AND kind='email' AND value=? AND "
+            "(used_at IS NULL OR used_at='superseded') AND expires_at > ? ORDER BY cid DESC",
+            (int(claim_id), cur_email, now))).fetchall()]
+        if not live:
             return {"ok": False, "why": "Ask for a code first."}
-        r = dict(r)
-        if int(r.get("attempts") or 0) >= 5:
+        # Wrong tries count across all of them together: 5 in all, never 5 each.
+        if sum(int(x.get("attempts") or 0) for x in live) >= 5:
             return {"ok": False, "why": "Too many wrong tries. Ask for a new code."}
-        if not hmac.compare_digest(r["code_hash"], _hash(code)):
+        r = next((x for x in live if hmac.compare_digest(x["code_hash"], _hash(code))), None)
+        if not r:
             await c.execute("UPDATE nidaan_contact_confirm SET attempts=attempts+1 WHERE cid=?",
-                            (r["cid"],))
+                            (live[0]["cid"],))
             await c.commit()
             return {"ok": False, "why": "That code is not right."}
         await c.execute("UPDATE nidaan_contact_confirm SET used_at=? WHERE cid=?", (now, r["cid"]))
