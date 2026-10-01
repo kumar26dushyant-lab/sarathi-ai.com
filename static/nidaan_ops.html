@@ -20464,7 +20464,10 @@ function _waiName(c){
 }
 // Plain words, not icons alone — anyone on the team must be able to read who spoke.
 const _WAI_SENDER = {
-  bot:      {label:'AI assistant', cls:'wai-out-bot'},
+  // The bot is NidaanMitra everywhere a customer meets it (founder, 2 Oct).
+  bot:      {label:'NidaanMitra', cls:'wai-out-bot'},
+  hold:     {label:'NidaanMitra', cls:'wai-out-bot'},
+  critical: {label:'Automatic update', cls:'wai-out-sys'},
   human:    {label:'Team member',  cls:'wai-out-hum'},
   campaign: {label:'Campaign',     cls:'wai-out-sys'},
   journey:  {label:'Automatic update', cls:'wai-out-sys'},
@@ -20528,7 +20531,7 @@ async function waiLoadList(keepSel){
     const nm = _waiName(c);
     const owner = c.bot_paused
       ? '<span class="wai-badge wai-b-hum">With '+esc((c.assigned_name||'a person').split(' ')[0])+'</span>'
-      : '<span class="wai-badge wai-b-bot">AI is replying</span>';
+      : '<span class="wai-badge wai-b-bot">NidaanMitra is replying</span>';
     const stop = c.status==='stopped' ? ' <span class="wai-badge wai-b-stop">Opted out</span>' : '';
     const ver = (c.verified && c.verified.ok)
       ? '<span class="wai-badge wai-b-ver">Verified '+esc(c.verified.role||'')+'</span>'
@@ -20603,8 +20606,8 @@ async function waiOpen(msisdn, quiet){
     : '<div style="background:rgba(148,163,184,.12);border:1px solid rgba(148,163,184,.32);color:var(--nd-text-secondary);padding:.5rem .7rem;border-radius:10px;font-size:.78rem">🔒 <b>Not verified</b> — this number has not proved who it belongs to, so the AI only shares public information about NidaanPartner. <b>Do not send claim, payment, document or account details until they verify.</b> Ask them to send the word <b>CODE</b> — we email a 6-digit code to the address on their record.</div>';
   const ownerBar = isHuman
     ? '<span class="wai-badge wai-b-hum" style="padding:.25rem .6rem">'+esc(c.assigned_name||'A person')+' is handling this</span>'
-      + '<button class="btn-sm btn-ghost" onclick="waiOwner(false)">Give back to the AI</button>'
-    : '<span class="wai-badge wai-b-bot" style="padding:.25rem .6rem">The AI is replying</span>'
+      + '<button class="btn-sm btn-ghost" onclick="waiOwner(false)">Give back to NidaanMitra</button>'
+    : '<span class="wai-badge wai-b-bot" style="padding:.25rem .6rem">NidaanMitra is replying</span>'
       + '<button class="btn-sm btn-ghost" style="color:var(--nd-purple-text)" onclick="waiOwner(true)">I will take over</button>';
 
   const typed = same ? ((document.getElementById('waiBox') || {}).value || '') : '';

@@ -123,6 +123,10 @@ def intro_value(ctx: dict, lang: str = "hinglish") -> str:
                f"tell us — what is your claim for, and what went wrong? We'll show you the way forward. A "
                f"rejection isn't the end — your claim still has a fighting chance. 💪"),
     }[l]
+    if not name:
+        # "…, hum samajhte hain" with no name before it read as a stray comma (2 Oct).
+        hi_ = hi_.lstrip(", ")
+        hi_ = hi_[:1].upper() + hi_[1:]
     return hi_ + _SIGN[l]
 
 

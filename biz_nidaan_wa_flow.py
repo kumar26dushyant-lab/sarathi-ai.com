@@ -192,6 +192,46 @@ async def _on_inbound_text(msisdn: str, text: str) -> None:
     return
 
 
+async def _lead_reply(msisdn: str, lang: str) -> str:
+    """NidaanMitra's reply to a stranger, checked by the public leak guard; '' to fall back."""
+    try:
+        import biz_nidaan_wa_brain as _brain
+        import biz_nidaan_wa_orchestrator as _orch
+        import biz_nidaan_wa_auth as _auth
+        async with aiosqlite.connect(DB_PATH) as conn:
+            row = await (await conn.execute(
+                "SELECT body FROM nidaan_wa_messages WHERE msisdn=? AND direction='in' "
+                "ORDER BY wam_row_id DESC LIMIT 1", (msisdn,))).fetchone()
+        text = (row[0] if row else "") or ""
+        if not text.strip():
+            return ""
+        d = await _brain.decide(text, lang, history=await _orch._recent_history(msisdn), lead_mode=True)
+        if d.get("set_lang"):
+            await upsert_contact(msisdn, language=d["set_lang"])
+            lang = d["set_lang"]
+        if d.get("action") == "handoff":
+            return ""                                 # the human follow-up text + staff alert
+        reply, blocked = await _auth.guard_public_reply(msisdn, d.get("reply") or "", lang)
+        if d.get("lead_name") or d.get("lead_need"):
+            try:
+                import biz_nidaan_crm as _crm
+                found = await _crm.list_leads(search=msisdn, limit=1)
+                if found:
+                    upd = {}
+                    if d.get("lead_name") and str(found[0].get("name") or "").startswith("WhatsApp "):
+                        upd["name"] = d["lead_name"]
+                    if d.get("lead_need"):
+                        upd["interest"] = d["lead_need"]
+                    if upd:
+                        await _crm.update_lead(found[0]["lead_id"], by_name="NidaanMitra (WhatsApp)", **upd)
+            except Exception:  # noqa: BLE001
+                pass
+        return reply
+    except Exception as e:  # noqa: BLE001 - the canned text is the fallback
+        logger.info("lead reply skipped for %s: %s", msisdn, e)
+        return ""
+
+
 async def _reply_unlinked(msisdn: str) -> None:
     """Reply to an inbound from a number we have no claim for, and alert ops on first contact."""
     try:
@@ -199,7 +239,12 @@ async def _reply_unlinked(msisdn: str) -> None:
         c = await get_contact(msisdn) or {}
         lang = (c.get("language") or "hinglish")
         first_touch = not (c.get("last_outbound_at") or "")
-        body = _msg.compose("intro_value" if first_touch else "human_followup", lang, {"name": ""})
+        # A stranger is a LEAD (founder, 2 Oct): NidaanMitra talks with them - why they came, what
+        # happened - and ends with where to start and what other customers say. The canned text
+        # stays only as the fallback when the AI cannot answer.
+        body = await _lead_reply(msisdn, lang)
+        if not body:
+            body = _msg.compose("intro_value" if first_touch else "human_followup", lang, {"name": ""})
         if body:
             await wa.send_text(msisdn, body)
             await upsert_contact(msisdn, mark_outbound=True)

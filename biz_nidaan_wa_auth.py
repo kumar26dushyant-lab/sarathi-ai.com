@@ -293,7 +293,8 @@ async def try_verify(msisdn: str, code: str, lang: str = "hinglish") -> dict:
 
 # ── the outbound inspector ───────────────────────────────────────────────────
 # Public pricing may be quoted freely; anything else with a rupee sign is somebody's money.
-_PUBLIC_AMOUNTS = {"99", "199", "299", "499", "999", "1999", "2000", "2999", "4999"}
+# 2000 and 5000 are also the published track record (2,000+ cases, 5,000+ policyholders).
+_PUBLIC_AMOUNTS = {"99", "199", "299", "499", "999", "1999", "2000", "2999", "4999", "5000"}
 
 _LEAK_PATTERNS = [
     ("claim reference", re.compile(r"\bNP[-\s]?\d{2,}\b", re.I)),

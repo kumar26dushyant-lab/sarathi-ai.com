@@ -145,6 +145,17 @@ DEFAULT_CONTENT = {
     "audience":          {"label": "Who it's for",
         "en": "For policyholders without an advisor, and for insurance advisors/agents.",
         "hi": "बिना सलाहकार वाले पॉलिसीधारकों और बीमा सलाहकारों/एजेंटों के लिए।"},
+    # 2 Oct: what the homepage says, so BOTH bots quote the same thing (founder: "both should be
+    # in sync ... not conflicting"). Edit them under Content and every place follows.
+    "track_record":      {"label": "Track record (as on the homepage)",
+        "en": "95%+ success rate · 5,000+ policyholders helped · 2,000+ cases resolved",
+        "hi": "95%+ सफलता दर · 5,000+ पॉलिसीधारकों की मदद · 2,000+ मामले सुलझाए"},
+    "testimonials_link": {"label": "What our customers say (link)",
+        "en": "https://nidaanpartner.com/#testimonials",
+        "hi": "https://nidaanpartner.com/#testimonials"},
+    "start_link":        {"label": "Where to start (link)",
+        "en": "https://nidaanpartner.com/nidaan/start",
+        "hi": "https://nidaanpartner.com/nidaan/start"},
     "go_no_go":          {"label": "Go / no-go framing",
         "en": "We provide an expert review — a clear go/no-go on whether a claim can be fought. We never guarantee an outcome.",
         "hi": "हम विशेषज्ञ समीक्षा देते हैं — क्लेम लड़ा जा सकता है या नहीं, स्पष्ट go/no-go। हम कभी परिणाम की गारंटी नहीं देते।"},
