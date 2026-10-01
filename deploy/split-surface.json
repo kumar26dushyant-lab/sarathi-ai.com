@@ -5405,6 +5405,54 @@
    ]
   },
   {
+   "func": "ops_wa_search",
+   "paths": [
+    "/nidaan/ops/api/wa/search"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_get_staff_from_request",
+    "_is_nidaan_host",
+    "_require_staff",
+    "_require_wa_inbox",
+    "_row_still_open",
+    "_staff_still_active",
+    "app",
+    "limiter"
+   ],
+   "uses": [
+    "_is_nidaan_host",
+    "_require_staff",
+    "_require_wa_inbox",
+    "app",
+    "limiter"
+   ]
+  },
+  {
+   "func": "ops_claim_wa",
+   "paths": [
+    "/nidaan/ops/api/claims/{claim_id}/wa"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_get_staff_from_request",
+    "_is_nidaan_host",
+    "_require_staff",
+    "_require_wa_inbox",
+    "_require_wa_reply",
+    "_row_still_open",
+    "_staff_still_active",
+    "app"
+   ],
+   "uses": [
+    "_is_nidaan_host",
+    "_require_staff",
+    "_require_wa_inbox",
+    "_require_wa_reply",
+    "app"
+   ]
+  },
+  {
    "func": "nidaan_ops_wa_conversations",
    "paths": [
     "/nidaan/ops/api/wa/conversations"
@@ -19129,6 +19177,7 @@
   "ops_claim_reminder_create",
   "ops_claim_reminder_status",
   "ops_claim_reminders",
+  "ops_claim_wa",
   "ops_claim_waiting",
   "ops_claim_waiting_set",
   "ops_claim_watchers",
@@ -19368,6 +19417,7 @@
   "ops_update_review_status",
   "ops_update_staff",
   "ops_upload_any_claim_doc",
+  "ops_wa_search",
   "partner_page",
   "pdf_dir",
   "privacy_page",

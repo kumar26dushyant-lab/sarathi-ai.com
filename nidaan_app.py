@@ -9100,6 +9100,53 @@ async def _require_wa_inbox(request: Request) -> dict:
                                "Ask a super-admin to add you to the roster.")
 
 
+@app.get("/nidaan/ops/api/wa/search")
+@limiter.limit("40/minute")
+async def ops_wa_search(request: Request, q: str = ""):
+    """Search every WhatsApp conversation - names, numbers and the words in any message."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    _require_staff(request, "team_member")
+    await _require_wa_inbox(request)
+    import biz_nidaan_wa_inbox as _inbox
+    return {"results": await _inbox.search((q or "")[:60])}
+
+
+@app.get("/nidaan/ops/api/claims/{claim_id}/wa")
+async def ops_claim_wa(claim_id: int, request: Request):
+    """This claim's WhatsApp conversation - the same messages as the inbox. Readable by anyone
+    who may work on the claim, or who is on WhatsApp duty; replying stays with the duty roster."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    caller = _require_staff(request, "team_member")
+    allowed = False
+    try:
+        import biz_nidaan_claim_authz as _authz
+        allowed = bool((await _authz.assert_claim_access(caller, claim_id)).get("allowed"))
+    except Exception:  # noqa: BLE001
+        allowed = False
+    if not allowed:
+        try:
+            await _require_wa_inbox(request)
+            allowed = True
+        except HTTPException:
+            allowed = False
+    if not allowed:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    import biz_nidaan_wa_inbox as _inbox
+    res = await _inbox.claim_thread(claim_id)
+    if not res.get("ok"):
+        raise HTTPException(status_code=404, detail="Claim not found")
+    may_reply = False
+    try:
+        await _require_wa_reply(request)
+        may_reply = True
+    except HTTPException:
+        may_reply = False
+    res["may_reply"] = may_reply
+    return res
+
+
 async def _require_wa_reply(request: Request) -> dict:
     """READING the inbox and REPLYING in it are different privileges.
 

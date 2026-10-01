@@ -133,6 +133,81 @@ async def conversations(*, limit: int = 60, scope: str = "all") -> list[dict]:
     return out
 
 
+def _like(q: str) -> str:
+    """A LIKE pattern for what a person typed, with % and _ taken literally."""
+    return "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+
+
+async def search(q: str, *, limit: int = 40) -> list:
+    """Every conversation where the name, the number or ANY message matches (founder, 2 Oct:
+    "search bar on all messages"). Newest match first, one row per conversation."""
+    q = (q or "").strip()[:60]
+    if len(q) < 2:
+        return []
+    pat = _like(q)
+    digits = "".join(ch for ch in q if ch.isdigit())
+    async with aiosqlite.connect(DB_PATH) as c:
+        c.row_factory = aiosqlite.Row
+        rows = await (await c.execute(
+            "SELECT m.msisdn, m.body, m.created_at, m.direction, COALESCE(ct.display_name,'') AS display_name "
+            "FROM nidaan_wa_messages m LEFT JOIN nidaan_wa_contacts ct ON ct.msisdn=m.msisdn "
+            "WHERE m.body LIKE ? ESCAPE '\\' OR ct.display_name LIKE ? ESCAPE '\\' "
+            + ("OR m.msisdn LIKE ? " if len(digits) >= 4 else "") +
+            "ORDER BY m.wam_row_id DESC LIMIT 400",
+            (pat, pat) + (("%" + digits + "%",) if len(digits) >= 4 else ()))).fetchall()
+    out, seen = [], set()
+    for r in rows:
+        if r["msisdn"] in seen:
+            continue
+        seen.add(r["msisdn"])
+        body = r["body"] or ""
+        i = body.lower().find(q.lower())
+        snippet = (("…" if i > 30 else "") + body[max(0, i - 30): i + 70]) if i >= 0 else body[:100]
+        out.append({"msisdn": r["msisdn"], "display_name": r["display_name"], "snippet": snippet,
+                    "at": str(r["created_at"] or ""), "dir": r["direction"]})
+        if len(out) >= limit:
+            break
+    return out
+
+
+async def claim_thread(claim_id: int, *, limit: int = 300) -> dict:
+    """ONE claim's WhatsApp conversation (founder, 2 Oct: "claim level whatsapp chat box, fully
+    loaded ... in sync"): the messages with the claim's own numbers - the very rows the inbox
+    shows, so the two can never disagree. A number shared with another claim shows only messages
+    not tagged to that other claim."""
+    async with aiosqlite.connect(DB_PATH) as c:
+        c.row_factory = aiosqlite.Row
+        cl = await (await c.execute(
+            "SELECT claim_id, complainant_name, complainant_phone, insured_name, insured_phone "
+            "FROM nidaan_claims WHERE claim_id=?", (int(claim_id),))).fetchone()
+        if not cl:
+            return {"ok": False}
+        cl = dict(cl)
+        import biz_nidaan_whatsapp as _wa
+        nums = []
+        for p in (cl.get("complainant_phone"), cl.get("insured_phone")):
+            p = (p or "").strip()
+            if p:
+                n = _wa.normalize_msisdn(p)
+                if n and n not in nums:
+                    nums.append(n)
+        if not nums:
+            return {"ok": True, "numbers": [], "messages": [], "contact": {}}
+        ph = ",".join("?" * len(nums))
+        rows = await (await c.execute(
+            "SELECT wam_row_id, msisdn, direction, msg_type, template_name, body, media_id, status, "
+            "error, sender, sender_name, claim_id, created_at FROM nidaan_wa_messages "
+            "WHERE msisdn IN (%s) AND (claim_id IS NULL OR claim_id=?) "
+            "ORDER BY wam_row_id DESC LIMIT ?" % ph, (*nums, int(claim_id), max(1, min(int(limit), 500))))).fetchall()
+        ct = await (await c.execute("SELECT * FROM nidaan_wa_contacts WHERE msisdn=?", (nums[0],))).fetchone()
+    contact = dict(ct) if ct else {"msisdn": nums[0]}
+    contact["window"] = _window(contact.get("last_inbound_at"))
+    contact["owner"] = "human" if contact.get("bot_paused") else "bot"
+    contact["verified"] = _verified_now(contact.get("verified_role"), contact.get("verified_until"))
+    return {"ok": True, "numbers": nums, "messages": [dict(r) for r in rows][::-1], "contact": contact,
+            "name": (cl.get("complainant_name") or cl.get("insured_name") or "").strip()}
+
+
 async def thread(msisdn: str, *, limit: int = 200) -> dict:
     """Full conversation with one number: contact state + messages oldest-first."""
     msisdn = (msisdn or "").strip()
