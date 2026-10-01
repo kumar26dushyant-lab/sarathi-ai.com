@@ -2365,6 +2365,12 @@ async def ensure_claim_for_paid_purchase(purchase_id: int) -> Optional[int]:
             "UPDATE nidaan_per_claim_purchase "
             "SET linked_claim_id=?, converted_to_claim_id=? WHERE purchase_id=?",
             (claim_id, claim_id, purchase_id))
+        # The papers uploaded with the review come with it. They used to stay on the purchase, so
+        # the new claim showed no documents and the "arrived with no documents" alarm fired.
+        # Only rows not already on a claim; nothing is moved off another claim.
+        await conn.execute(
+            "UPDATE nidaan_claim_documents SET claim_id=? "
+            "WHERE purchase_id=? AND COALESCE(claim_id,0)=0", (claim_id, purchase_id))
         await conn.commit()
     logger.info("ensure_claim_for_paid_purchase: purchase=%s → claim=%s (account=%s)",
                 purchase_id, claim_id, account_id)
@@ -8639,6 +8645,14 @@ async def save_claim_document(
     """
     await ensure_claim_documents_table()
     async with aiosqlite.connect(DB_PATH) as conn:
+        # A Rs 499 review file uploaded AFTER the review became a claim belongs on that claim too
+        # - otherwise the claim screen, the subscriber and the complainant never see it.
+        if purchase_id and not claim_id:
+            _r = await (await conn.execute(
+                "SELECT linked_claim_id FROM nidaan_per_claim_purchase WHERE purchase_id=?",
+                (int(purchase_id),))).fetchone()
+            if _r and _r[0]:
+                claim_id = int(_r[0])
         cur = await conn.execute(
             """INSERT INTO nidaan_claim_documents
                (account_id, purchase_id, claim_id, stored_name, original_name, file_size,
