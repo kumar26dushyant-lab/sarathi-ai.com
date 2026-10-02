@@ -6445,15 +6445,10 @@ async def nidaan_razorpay_webhook(request: Request):
                                                        ref_code=(_notes.get("ref", "") or "")))
         except Exception as _fe:
             logger.warning("payment.failed alert dispatch failed: %s", _fe)
-        # Complainant-facing reassurance on WhatsApp ("no money was deducted, try again") —
-        # only for claim-linked payments, where the order notes carry the claim_id.
+        # The complainant is NOT told: on an AP or staff case they did not pay, and our message
+        # once showed a complainant what their AP / staff had charged (founder, 3 Oct). The PAYER
+        # is told below - and only if the order is still unpaid after a while.
         _cid_note = str(_notes.get("claim_id", "") or "").strip()
-        if _cid_note.isdigit():
-            try:
-                import biz_nidaan_wa_orchestrator as _worch
-                _asyncio.create_task(_worch.wa_journey(int(_cid_note), "payment_failed"))
-            except Exception as _we:
-                logger.warning("payment.failed wa_journey dispatch failed: %s", _we)
         # Persist for the analytics dashboard (failures-by-channel + trend). Best-effort.
         try:
             _purpose = {"nidaan": "subscription", "nidaan_claim_499": "review499",
@@ -6473,15 +6468,26 @@ async def nidaan_razorpay_webhook(request: Request):
         # three carry an id that leads to one. A UPI payment carries no email on the Razorpay
         # entity, so the notes were the only route and the only route was looking in the wrong
         # place. Every route each product actually provides is tried here, most direct first.
+        # The PAYER - and only the payer - hears it, once per order, and only if the order is still
+        # unpaid after biz_nidaan_pay_notify.FAILED_WAIT_S (a UPI retry a minute later is common).
+        # Someone who paid a link gets a fresh link; everyone else tries again where they paid.
         try:
-            _cust_email, _cust_name = await _retry_contact(_pe, _notes, _kind)
-            if _cust_email:
-                _asyncio.create_task(_send_customer_retry_link(
-                    email=_cust_email, phone=(_pe.get("contact") or ""), name=_cust_name,
-                    amount_paise=int(_pe.get("amount", 0) or 0), kind=_kind,
-                    notes=_notes, reason=_reason))
+            import biz_nidaan_pay_notify as _pn
+
+            async def _retry(_em, _ph, _nm, _pe=_pe, _notes=_notes, _kind=_kind, _reason=_reason):
+                await _send_customer_retry_link(email=_em, phone=_ph, name=_nm,
+                                                amount_paise=int(_pe.get("amount", 0) or 0), kind=_kind,
+                                                notes=_notes, reason=_reason)
+            _acct_note = str(_notes.get("nidaan_account_id", "") or "")
+            _asyncio.create_task(_pn.failed_later(
+                key="order:" + (_pe.get("order_id") or _pe.get("id") or ""), order_id=_pe.get("order_id") or "",
+                source=_prod, amount_paise=int(_pe.get("amount", 0) or 0),
+                claim_id=int(_cid_note) if _cid_note.isdigit() else None,
+                account_id=int(_acct_note) if _acct_note.isdigit() else None,
+                branch_code=_notes.get("branch", "") or "", pay_email=(_pe.get("email") or ""),
+                pay_phone=(_pe.get("contact") or ""), retry=_retry))
         except Exception as _rle:
-            logger.warning("payment.failed customer retry link failed: %s", _rle)
+            logger.warning("payment.failed payer notice failed: %s", _rle)
         return {"status": "ok", "event": event}
 
     # ── Refund events (refund.processed / refund.failed) ─────────────────────────
@@ -6508,6 +6514,14 @@ async def nidaan_razorpay_webhook(request: Request):
         else:
             logger.info("Nidaan refund webhook unmatched: rzp_refund=%s payment=%s",
                         rzp_refund_id, rzp_payment_id)
+            # A refund we did not start (made in the Razorpay dashboard, say): its PAYER is told.
+            # The ones we start already tell them, so they are not told twice.
+            if event == "refund.processed":
+                try:
+                    import biz_nidaan_pay_notify as _pn
+                    _asyncio.create_task(_pn.refund_notice(refund_entity))
+                except Exception as _rne:
+                    logger.warning("refund notice failed: %s", _rne)
         return {"status": "ok", "event": event}
 
     # ── Payment Link paid (branch L2 share-link / super-admin generated link) ───

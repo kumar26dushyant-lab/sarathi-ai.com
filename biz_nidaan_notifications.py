@@ -3413,7 +3413,9 @@ async def on_funnel_paid(claim_id: int, account_id: int, sla_due_iso: str = ""):
                 f"Your detailed report arrives within *24-48 business hours* — here on WhatsApp and on your dashboard.\n\n"
                 f"— Nidaan – The Legal Consultants LLP")
 
-    wa_phone = (claim.get("insured_phone") or claim.get("account_phone") or "") if prefs.get("wa_opt_in") else ""
+    # The account holder paid - their phone, never the patient's (founder, 3 Oct: payment messages
+    # go only to the person who paid).
+    wa_phone = (claim.get("account_phone") or "") if prefs.get("wa_opt_in") else ""
     await dispatch(
         event_key="funnel.paid", priority=PRIORITY_P1,
         recipient_type=RECIPIENT_SUBSCRIBER, recipient_id=account_id,

@@ -7003,6 +7003,16 @@ async def record_payment(*, source: str, total_paise: int, dedup_key: str = "",
                 actor_name=actor_name, dedup_key=_key, ref_code=ref_code or ""))
             _nnp._BG_TASKS.add(_t)
             _t.add_done_callback(_nnp._BG_TASKS.discard)
+            # ...and the PERSON WHO PAID is thanked - only them, only once Razorpay has confirmed it
+            # (biz_nidaan_pay_notify; founder, 3 Oct: never the complainant for an AP / staff payment).
+            if verified and (razorpay_payment_id or "").strip():
+                import biz_nidaan_pay_notify as _pn
+                _t2 = _aio.create_task(_pn.paid(
+                    source=source, payment_id=razorpay_payment_id, dedup_key=_key,
+                    amount_paise=int(total_paise or 0), claim_id=claim_id, account_id=account_id,
+                    branch_code=branch_code or ""))
+                _nnp._BG_TASKS.add(_t2)
+                _t2.add_done_callback(_nnp._BG_TASKS.discard)
         except Exception:
             pass
         return True
