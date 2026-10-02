@@ -6832,7 +6832,8 @@ async def gst_config() -> dict:
     except (TypeError, ValueError):
         rate = 18.0
     home_state = (await get_ops_setting("gst_home_state", "") or "").strip()
-    return {"enabled": enabled, "rate": rate, "home_state": home_state}
+    gstin = (await get_ops_setting("gst_gstin", "") or "").strip()
+    return {"enabled": enabled, "rate": rate, "home_state": home_state, "gstin": gstin}
 
 
 async def charge_with_gst(base_rupees: float, customer_state: str = "") -> dict:

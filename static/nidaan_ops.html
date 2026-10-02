@@ -12365,6 +12365,7 @@ async function loadWorkflowSettings(){
   const _gstOn = (((_opsSettingsCache||{}).settings||{}).gst_enabled || '0') === '1';
   const _gstRate = ((_opsSettingsCache||{}).settings||{}).gst_rate || '18';
   const _gstState = ((_opsSettingsCache||{}).settings||{}).gst_home_state || '';
+  const _gstIn = ((_opsSettingsCache||{}).settings||{}).gst_gstin || '';
   const _csRouting = ((_opsSettingsCache||{}).settings||{}).claimshield_routing_enabled !== '0';
 
   let html = `
@@ -12433,7 +12434,7 @@ async function loadWorkflowSettings(){
 
       <h2 style="font-size:1rem;font-weight:700;margin-bottom:.6rem">🧾 GST</h2>
       <div class="card" style="background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:12px;padding:1rem;margin-bottom:1.5rem">
-        <div style="font-size:.82rem;color:var(--nd-text-muted);margin-bottom:.8rem">GST is added on top of every fee (exclusive) when enabled. Keep OFF until your GST registration is active. Home state drives CGST+SGST (same state) vs IGST (other state); leave blank to collect flat GST + store the customer's state for later.</div>
+        <div style="font-size:.82rem;color:var(--nd-text-muted);margin-bottom:.8rem">GST is added on top of every fee (exclusive) when enabled - by us, once, at every checkout (plans, review fee, Level-2 fee, payment links). Razorpay never adds GST by itself: it charges exactly what we send, and a GSTIN saved in Razorpay only prints on its invoices - so nothing is charged twice. Keep OFF until your GST registration is active. Home state drives CGST+SGST (same state) vs IGST (other state); leave blank to collect flat GST + store the customer's state for later.</div>
         <div style="display:flex;flex-wrap:wrap;gap:1rem;align-items:end">
           <div>
             <label style="font-size:.75rem;color:var(--nd-text-muted);display:block;margin-bottom:.25rem">Charge GST</label>
@@ -12449,6 +12450,10 @@ async function loadWorkflowSettings(){
           <div>
             <label style="font-size:.75rem;color:var(--nd-text-muted);display:block;margin-bottom:.25rem">Our registered state (optional)</label>
             <input id="gstState" type="text" value="${esc(_gstState)}" placeholder="e.g. Madhya Pradesh" style="background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);padding:.5rem .6rem;border-radius:8px;width:180px">
+          </div>
+          <div>
+            <label style="font-size:.75rem;color:var(--nd-text-muted);display:block;margin-bottom:.25rem">Our GSTIN</label>
+            <input id="gstIn" type="text" maxlength="15" value="${esc(_gstIn)}" placeholder="15 characters" style="background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);padding:.5rem .6rem;border-radius:8px;width:180px;text-transform:uppercase">
           </div>
           <button class="nd-btn nd-btn-sm nd-btn-primary" onclick="saveGst()">Save</button>
         </div>
@@ -21233,12 +21238,14 @@ async function saveGst(){
   const enabled = document.getElementById('gstEnabled').value === '1';
   const rate = parseFloat(document.getElementById('gstRate').value)||0;
   const state = (document.getElementById('gstState').value||'').trim();
+  const gstin = (document.getElementById('gstIn').value||'').trim().toUpperCase();
   const msg = document.getElementById('gstMsg');
+  if (gstin && !/^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(gstin)){ if(msg){msg.style.color='var(--nd-danger-text)';msg.textContent='That GSTIN does not look right - 15 characters, e.g. 23ABCDE1234F1Z5';} return; }
   if (rate < 0 || rate > 100){ if(msg){msg.style.color='#f87171';msg.textContent='Rate must be 0–100';} return; }
   if (enabled && !confirm('Turn GST ON? It will be added on top of every fee immediately. Only enable once your GST registration is active.')) return;
   const r = await fetch('/nidaan/ops/api/gst', {
     method:'PUT', headers:{...hdrs(),'Content-Type':'application/json'},
-    body: JSON.stringify({gst_enabled: enabled, gst_rate: rate, gst_home_state: state})
+    body: JSON.stringify({gst_enabled: enabled, gst_rate: rate, gst_home_state: state, gst_gstin: gstin})
   });
   if (r.ok){ _opsSettingsCache = null; if(msg){msg.style.color='#22c55e'; msg.textContent='Saved ✓';} ndUI.toast('GST settings updated','success'); }
   else { const d = await r.json().catch(()=>({})); if(msg){msg.style.color='#f87171'; msg.textContent=_extractErr(d,'Failed');} }

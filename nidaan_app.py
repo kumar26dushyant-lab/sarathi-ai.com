@@ -16141,6 +16141,8 @@ class _GstReq(BaseModel):
     gst_enabled: bool
     gst_rate: float = Field(ge=0, le=100)
     gst_home_state: str = Field("", max_length=60)
+    # Our GST registration number - printed on receipts / invoices. Optional; checked for shape.
+    gst_gstin: str = Field("", max_length=15)
 
 
 @app.put("/nidaan/ops/api/gst")
@@ -16149,11 +16151,15 @@ async def ops_gst_update(body: _GstReq, request: Request):
     home state (drives CGST/SGST vs IGST). GST is exclusive (added on top). Item: GST."""
     if not _is_nidaan_host(request): raise HTTPException(404)
     staff = _require_staff(request, "super_admin")
+    _gstin = (body.gst_gstin or "").strip().upper()
+    if _gstin and not re.fullmatch(r"\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]", _gstin):
+        raise HTTPException(400, "That GSTIN does not look right - it is 15 characters, e.g. 23ABCDE1234F1Z5.")
+    await nidaan.set_ops_setting("gst_gstin", _gstin, updated_by=staff["staff_id"])
     await nidaan.set_ops_setting("gst_enabled", "1" if body.gst_enabled else "0", updated_by=staff["staff_id"])
     await nidaan.set_ops_setting("gst_rate", str(body.gst_rate), updated_by=staff["staff_id"])
     await nidaan.set_ops_setting("gst_home_state", body.gst_home_state.strip(), updated_by=staff["staff_id"])
     await _ops_audit(request, "gst.update", "settings", 0,
-                     f"enabled={body.gst_enabled} rate={body.gst_rate} home={body.gst_home_state}")
+                     f"enabled={body.gst_enabled} rate={body.gst_rate} home={body.gst_home_state} gstin={_gstin or '-'}")
     return {"ok": True, "settings": await nidaan.get_all_ops_settings()}
 
 
