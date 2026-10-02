@@ -238,6 +238,9 @@ const TOKEN_KEY = 'nidaan_branch_token';
 let _email = '';
 
 function $(id){ return document.getElementById(id); }
+// The insurance-company picker: since 13 Sep the box was left empty, so APs never saw the field.
+function bcMountInsurer(){ try{ NidaanInsurers.mount('bcInsurerBox', {style:'background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);padding:.55rem .7rem;border-radius:8px;font-size:.85rem;width:100%'}); }catch(e){} }
+bcMountInsurer();
 function msg(t, cls){ const m=$('loginMsg'); m.textContent=t||''; m.className='msg'+(cls?' '+cls:''); }
 function esc(s){ return String(s==null?'':s).replace(/[<>&"]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c])); }
 function inr(n){ return '₹'+(Number(n)||0).toLocaleString('en-IN'); }
@@ -634,6 +637,7 @@ async function raiseBranchClaim(){
       : 'Claim #'+d.claim_id+' submitted ✓ — Nidaan will review it.', !extraFailed.length);
     ['bcCompName','bcCompPhone','bcCompEmail','bcInsName','bcInsPhone','bcAmount','bcPolicy','bcNotes'].forEach(id=>$(id).value='');
     $('bcType').value=''; $('bcRejFile').value=''; $('bcDocs').value='';
+    bcMountInsurer();
     ['bcRejList','bcDocsList'].forEach(function(i){ const e=$(i); if(e) e.innerHTML=''; });
     try{ $('bcInsDiff').checked=false; $('bcInsRow').style.display='none'; }catch(_){}
     loadBranchClaims();
