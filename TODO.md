@@ -24,7 +24,7 @@ it. Newest first within each group._
 | J4 | **Payments end to end**: a thank-you page after every payment and the right next screen for the plan bought - on every device and browser (UPI app switching, popups, reloads, slow networks) | 🟢 Audit, then fix |
 | J5 | **Every login and code**: email OTP, Google, WhatsApp, AP, staff; email + WhatsApp templates (content, format, routing); a clear "please wait" wherever we make someone wait (Google sign-in buffers) | 🟢 Audit, then fix |
 | J6 | **No double tap, anywhere - built in, not remembered**: one shared guard every page loads + a check that FAILS the build if a page does not; buttons say what they are doing while they work | 🟢 First |
-| J7 | Deploy tonight (after 6 pm): the intake work `44fbc2a..8369acb` | Waiting for 6 pm |
+| J7 | ✅ **Deployed 2 Oct 18:02 IST (`c1cb233`)**: one intake at every door, confirm-then-welcome, one person one message, WhatsApp in their language, the old Rs 499 door retired, one-tap guard on every page, the Rs 499 credit fix, K1 payment security, K3 plan checkout. Verified from outside: both sites, new routes served, retired routes 410, scripts served, schema present, services active. Pre-existing (since 1 Oct, not this deploy): the legacy SARATHI Telegram bot's token is rejected at every worker start - Sarathi side to fix or retire | Send the staff announcement |
 
 **Audits of 2 Oct (payments, sign-in, homepage -> plan, the claim journey) - what they found, in order:**
 
