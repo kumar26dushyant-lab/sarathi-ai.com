@@ -209,6 +209,16 @@ async def routes():
         s = await stage("/nidaan/api/intake/letter", {})
         check("nobody signed in cannot upload a letter", s.status_code == 401, s.status_code)
 
+        print("\n-- the old Rs 499 page --")
+        r = await cl.get("/nidaan/get-reviewed?ref=SP-RAVI", follow_redirects=False)
+        check("the old page leads to Get started, keeping the referral code",
+              r.status_code == 302 and r.headers.get("location") == "/nidaan/start?ref=SP-RAVI#get-reviewed",
+              (r.status_code, r.headers.get("location")))
+        r = await cl.post("/nidaan/api/review-signup", json={"name": "A", "phone": "9876543210",
+                          "email": "a@example.com", "otp": "123456", "claim_type": "health"})
+        check("its sign-up no longer makes a purchase with no complainant and no letter", r.status_code == 410,
+              r.status_code)
+
         print("\n-- Raise for a Subscriber --")
         r = await cl.post("/nidaan/ops/api/subscribers/raise-claim", headers=staff,
                           json={"account_id": 1, "claim_type": "health", "insured_name": "Kamla Devi",

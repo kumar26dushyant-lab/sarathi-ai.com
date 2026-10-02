@@ -3113,11 +3113,15 @@ async def nidaan_dashboard_page(request: Request):
     return _nidaan_page("nidaan_dashboard.html", request)
 
 
-@app.get("/nidaan/get-reviewed", response_class=HTMLResponse)
+@app.get("/nidaan/get-reviewed")
 async def nidaan_review_page(request: Request):
+    # The old Rs 499 page asked for no complainant and no letter. Every Rs 499 button already
+    # goes to Get started, which asks the same as every door (biz_nidaan_intake, 2 Oct) - so
+    # this address now leads there too, keeping any ?ref= on the way.
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    return _nidaan_page("nidaan_review.html", request)
+    q = request.url.query
+    return RedirectResponse(url="/nidaan/start" + (f"?{q}" if q else "") + "#get-reviewed", status_code=302)
 
 
 @app.get("/nidaan/logout")
@@ -4550,71 +4554,15 @@ class NidaanReviewVerifyByIdReq(BaseModel):
 @app.post("/nidaan/api/review-signup")
 @limiter.limit("5/minute")
 async def nidaan_review_signup(body: NidaanReviewSignupReq, request: Request):
-    """Direct-insured signup: verify email OTP → create account + pending purchase → issue JWT."""
+    """RETIRED 2 Oct 2026. This public door created an account and a Rs 499 purchase with no
+    complainant and no rejection letter, and nothing links to it any more. A claim now starts
+    on Get started, which applies the one intake (biz_nidaan_intake). Purchases already made
+    this way can still be paid from the dashboard."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    if not body.name.strip() or not body.phone.strip() or not body.email.strip():
-        raise HTTPException(status_code=400, detail="name, phone, email are required")
-    if not body.claim_type:
-        raise HTTPException(status_code=400, detail="claim_type is required")
-    email = auth.sanitize_email(body.email)
-    if not email:
-        raise HTTPException(status_code=400, detail="Invalid email address")
-    # Verify OTP before creating account — prevents fake email submissions
-    if not auth.verify_email_otp(email, body.otp):
-        raise HTTPException(status_code=401, detail="Invalid or expired verification code. Please request a new OTP.")
-    result = await nidaan.create_review_signup(
-        name=body.name,
-        phone=body.phone,
-        email=body.email,
-        claim_type=body.claim_type,
-        insurer_name=body.insurer_name,
-        disputed_amount=body.disputed_amount,
-        notes=body.notes,
-        intermediary_code=body.intermediary_code,
-        intermediary_name=body.intermediary_name,
-        ref_code=body.ref_code,
-    )
-    token = nidaan.create_nidaan_token(result["account_id"], body.email.strip().lower(), "per_claim")
-    import asyncio as _asyncio_rs
-    # Notify ops team of new pending review lead
-    admin_email = os.getenv("NIDAAN_ADMIN_EMAIL", "")
-    if admin_email:
-        _asyncio_rs.create_task(email_svc.send_email(
-            to_email=admin_email,
-            subject=f"[Nidaan] New ₹499 Review Lead #{result['purchase_id']} — Pending Payment",
-            html_body=(
-                f"<p><b>Name:</b> {body.name} | <b>Phone:</b> {body.phone} | <b>Email:</b> {body.email}</p>"
-                f"<p><b>Claim type:</b> {body.claim_type} | <b>Insurer:</b> {body.insurer_name or 'N/A'}</p>"
-                f"<p><b>Disputed amount:</b> ₹{body.disputed_amount or 'N/A'}</p>"
-                f"<p><b>Description:</b> {body.notes or '—'}</p>"
-                f"<p><b>Status:</b> PENDING PAYMENT — follow up in 2–3 days if not paid.</p>"
-                f"<p>Purchase ID: #{result['purchase_id']} | New account: {'Yes' if result['is_new'] else 'No'}</p>"
-            ),
-            from_name="Nidaan Partner",
-        ))
-    # Send welcome/login instructions email to the new user
-    login_url = "https://nidaanpartner.com/nidaan/login"
-    _asyncio_rs.create_task(email_svc.send_email(
-        to_email=email,
-        subject="Your Nidaan Claim Dashboard is Ready — How to Log Back In",
-        html_body=(
-            f"<p>Hi {body.name},</p>"
-            f"<p>Your claim has been submitted successfully! You can view your dashboard and complete the ₹499 payment at any time.</p>"
-            f"<p><b>How to log back in:</b><br>"
-            f"Visit <a href='{login_url}'>{login_url}</a> and use <b>Email OTP</b> — "
-            f"enter your email ({email}), click 'Send OTP', and use the code sent to your inbox. No password needed.</p>"
-            f"<p>Your dashboard: <a href='https://nidaanpartner.com/nidaan/dashboard'>https://nidaanpartner.com/nidaan/dashboard</a></p>"
-            f"<p>— Nidaan Team</p>"
-        ),
-    ))
-    return {
-        "token": token,
-        "purchase_id": result["purchase_id"],
-        "account_id": result["account_id"],
-        "is_new_account": result["is_new"],
-        "dashboard_url": "/nidaan/dashboard",
-    }
+    raise HTTPException(status_code=410, detail=(
+        "Please start your claim at nidaanpartner.com/nidaan/start - it takes two minutes. / "
+        "कृपया अपना क्लेम nidaanpartner.com/nidaan/start पर शुरू करें - दो मिनट लगते हैं।"))
 
 
 @app.post("/nidaan/api/review/{purchase_id}/pay")

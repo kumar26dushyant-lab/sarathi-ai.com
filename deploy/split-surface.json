@@ -2183,17 +2183,11 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_PAGE_ETAG",
-    "_etag_matches",
     "_is_nidaan_host",
-    "_nidaan_page",
-    "_page_etag",
-    "app",
-    "static_dir"
+    "app"
    ],
    "uses": [
     "_is_nidaan_host",
-    "_nidaan_page",
     "app"
    ]
   },
