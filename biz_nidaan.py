@@ -2086,13 +2086,17 @@ def _ent_words(out: dict) -> dict:
 
 
 async def can_submit_claim(account_id: int) -> tuple[bool, str]:
-    """(allowed, reason) - a thin wrapper over claim_entitlement, kept for older callers."""
+    """(allowed, reason): may a claim go in as INCLUDED - on a live plan within its cap, or on an
+    unused paid review? A thin wrapper over claim_entitlement for submit_claim and older callers.
+    A pay-per-review or first free claim is not "included" (the caller marks those unpaid_lead and
+    skips this check), so it answers no for them - an at-cap plan must never get a plan claim."""
     e = await claim_entitlement(account_id)
-    if e["can_raise"]:
+    if e["can_raise"] and e.get("pay_status") in ("subscription", "paid"):
         return True, ("ok_per_claim" if e["reason"] == "ok_per_claim_credit" else "ok")
-    return False, ("quota_exceeded_%s" % e["plan"] if e["reason"] == "sub_quota_exhausted" else
-                   "per_claim_balance_exhausted" if e["reason"] == "one_time_used" else
-                   "no_active_subscription" if e["reason"] == "sub_expired" else e["reason"])
+    why = e.get("why") or e["reason"]
+    return False, ("quota_exceeded_%s" % e["plan"] if why == "sub_quota_exhausted" else
+                   "per_claim_balance_exhausted" if why == "one_time_used" else
+                   "no_active_subscription" if why in ("sub_expired", "ok_first_review") else e["reason"])
 
 
 async def _increment_quota(account_id: int, conn: aiosqlite.Connection, sub: Optional[dict] = None):
