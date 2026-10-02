@@ -773,6 +773,66 @@ async def _nidaan_payment_captured(payment_id: str) -> bool:
         return False
 
 
+async def _nidaan_payment_check(payment_id: str, order_id: str, *, product: str, key: str = "",
+                                value=None) -> str:
+    """Is this payment REALLY for what the caller is about to unlock? 'captured' | 'pending' | 'mismatch'.
+
+    A valid signature proves only that Razorpay saw SOME payment on SOME order of ours. Until 2 Oct
+    the verify routes stopped there, so a payment made for one claim could be presented for
+    another, and one product's payment for another product. Here: the payment must belong to the
+    order named, and that order must be one we created for this product and this claim / purchase
+    (the notes are written by our server when the order is made, never by the browser).
+    Anything we cannot confirm is 'pending' - nothing is unlocked; the webhook, which reads the
+    same notes, finishes a genuine payment a minute later."""
+    pid, oid = (payment_id or "").strip(), (order_id or "").strip()
+    if not pid or not oid or len(pid) > 60 or len(oid) > 60:
+        return "mismatch"
+    rzp_id, rzp_secret = _nidaan_rzp_id(), _nidaan_rzp_secret()
+    if not rzp_id or not rzp_secret:
+        return "pending"
+    import httpx as _hxc
+    try:
+        async with _hxc.AsyncClient() as _cl:
+            pr = await _cl.get(f"https://api.razorpay.com/v1/payments/{pid}", auth=(rzp_id, rzp_secret), timeout=15.0)
+            if pr.status_code != 200:
+                return "pending"
+            pay = pr.json() or {}
+            if (pay.get("order_id") or "") != oid:
+                return "mismatch"
+            orr = await _cl.get(f"https://api.razorpay.com/v1/orders/{oid}", auth=(rzp_id, rzp_secret), timeout=15.0)
+            if orr.status_code != 200:
+                return "pending"
+            notes = (orr.json() or {}).get("notes") or {}
+    except Exception as _e:  # noqa: BLE001
+        logger.warning("payment check failed for %s: %s", pid, type(_e).__name__)
+        return "pending"
+    if not isinstance(notes, dict) or (notes.get("product") or "") != product:
+        return "mismatch"
+    if key and str(notes.get(key) or "") != str(value):
+        return "mismatch"
+    return "captured" if pay.get("status") == "captured" else "pending"
+
+
+async def _payment_mismatch(request: Request, where: str, ref, order_id: str, payment_id: str) -> HTTPException:
+    """Someone presented a payment for something it was not made for. Refuse, and tell the founder
+    - an attempt nobody hears about teaches us nothing."""
+    ip = (request.headers.get("cf-connecting-ip") or (request.client.host if request.client else "") or "")[:64]
+    logger.warning("PAYMENT MISMATCH at %s ref=%s order=%s payment=%s ip=%s", where, ref, order_id, payment_id, ip)
+    try:
+        import biz_nidaan_notifications as _nn
+        ids = [a["staff_id"] for a in await _nn._super_admin_staff()]
+        await _nn.notify_staff_inapp(
+            ids, "🛡️ A payment was presented for the wrong thing - refused",
+            "Where: %s\nFor: %s\nOrder: %s\nPayment: %s\nFrom IP: %s\n\nNothing was unlocked. If this was a "
+            "customer's honest mistake, their real payment is still finished by the webhook. If not, "
+            "somebody is probing our payment checks." % (where, ref, order_id, payment_id, ip),
+            event_key="security.payment_mismatch", email=True)
+    except Exception as _e:  # noqa: BLE001 - the refusal stands even if the alert fails
+        logger.warning("payment mismatch alert failed: %s", _e)
+    return HTTPException(status_code=400, detail="This payment does not belong to this item. "
+                                                 "If you paid, it will show here within a few minutes.")
+
+
 async def _nidaan_account_from_payload(payload: Optional[dict]) -> Optional[dict]:
     """Resolve the Nidaan account from a verified token payload. Prefers the account_id
     (`sub`) so accounts WITHOUT an email still resolve; falls back to the token email for
@@ -1521,7 +1581,10 @@ async def nidaan_branch_l2_pay_verify(claim_id: int, body: _BranchL2VerifyReq, r
         raise HTTPException(400, "Invalid payment signature")
     # Confirm the L2 fee was actually CAPTURED (not just authorized) before queuing for legal —
     # the webhook (nidaan_branch_l2 payment.captured) finalizes a genuine late capture.
-    if not await _nidaan_payment_captured(body.razorpay_payment_id):
+    _chk = await _nidaan_payment_check(body.razorpay_payment_id, body.razorpay_order_id, product="nidaan_branch_l2", key="claim_id", value=claim_id)
+    if _chk == "mismatch":
+        raise await _payment_mismatch(request, "Branch L2 verify", claim_id, body.razorpay_order_id, body.razorpay_payment_id)
+    if _chk != "captured":
         return {"status": "pending", "claim_id": claim_id,
                 "message": "Payment is still processing — we'll confirm it shortly. No need to pay again."}
     pricing = await nidaan.branch_l2_fee_for_claim(claim_id)
@@ -4222,7 +4285,10 @@ async def nidaan_claim_pay_verify(claim_id: int, body: NidaanClaimPayVerifyReq, 
         return {"status": "paid", "message": "Already processed", "claim_id": claim_id}
     # Confirm the money was actually CAPTURED (not just authorized/pending) before we flip the
     # claim to paid — otherwise a pending/failed payment would wrongly hit the dashboard as paid.
-    if not await _nidaan_payment_captured(body.razorpay_payment_id):
+    _chk = await _nidaan_payment_check(body.razorpay_payment_id, body.razorpay_order_id, product="nidaan_claim_499", key="claim_id", value=claim_id)
+    if _chk == "mismatch":
+        raise await _payment_mismatch(request, "Rs 499 claim verify", claim_id, body.razorpay_order_id, body.razorpay_payment_id)
+    if _chk != "captured":
         return {"status": "pending", "claim_id": claim_id,
                 "message": "Payment is still processing — we'll confirm it shortly. "
                            "You don't need to pay again; your dashboard will update automatically."}
@@ -4268,7 +4334,8 @@ async def nidaan_claim_pay_status(claim_id: int, request: Request, order_id: str
                     _order = _r.json() or {}
                 _notes = _order.get("notes", {}) or {}
                 # Bind: the order must be THIS claim's ₹499 order, and fully paid (captured).
-                if _notes.get("claim_id") == str(claim_id) and _order.get("status") == "paid":
+                if (_notes.get("claim_id") == str(claim_id) and _notes.get("product") == "nidaan_claim_499"
+                        and _order.get("status") == "paid"):
                     _pid = ""
                     try:
                         async with _hx.AsyncClient() as _cl2:
@@ -4657,7 +4724,10 @@ async def nidaan_review_pay_verify(purchase_id: int, body: NidaanReviewVerifyByI
         if purchase["status"] != "pending_payment":
             return {"status": purchase["status"], "message": "Already processed"}
     # Confirm the payment was actually CAPTURED before marking paid (signature ≠ captured).
-    if not await _nidaan_payment_captured(body.razorpay_payment_id):
+    _chk = await _nidaan_payment_check(body.razorpay_payment_id, body.razorpay_order_id, product="nidaan_review_999", key="purchase_id", value=purchase_id)
+    if _chk == "mismatch":
+        raise await _payment_mismatch(request, "Rs 499 review verify", purchase_id, body.razorpay_order_id, body.razorpay_payment_id)
+    if _chk != "captured":
         return {"status": "pending", "purchase_id": purchase_id,
                 "message": "Payment is still processing — we'll confirm it shortly. No need to pay again."}
     async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _conn:
@@ -5777,7 +5847,10 @@ async def nidaan_review_verify(body: NidaanReviewVerifyReq, request: Request):
     if not _hmac_mod.compare_digest(expected, body.razorpay_signature):
         raise HTTPException(status_code=400, detail="Invalid payment signature")
     # Never create a paid review on an uncaptured (pending/authorized) payment.
-    if not await _nidaan_payment_captured(body.razorpay_payment_id):
+    _chk = await _nidaan_payment_check(body.razorpay_payment_id, body.razorpay_order_id, product="nidaan_review")
+    if _chk == "mismatch":
+        raise await _payment_mismatch(request, "legacy review verify", "", body.razorpay_order_id, body.razorpay_payment_id)
+    if _chk != "captured":
         return {"status": "pending",
                 "message": "Payment is still processing — we'll confirm it shortly. No need to pay again."}
     # Find or create Nidaan account → gives this advisor dashboard access.
@@ -5946,44 +6019,16 @@ class NidaanSubscribeReq(BaseModel):
 
 @app.post("/nidaan/api/subscribe")
 @limiter.limit("5/minute")
-async def nidaan_api_subscribe(body: NidaanSubscribeReq, request: Request):
-    """Create a Razorpay ORDER (one-time) for an authenticated Nidaan account.
-    Orders support UPI, cards, wallets, net banking — unlike subscriptions which block UPI.
-    """
+async def nidaan_api_subscribe(request: Request):
+    """RETIRED 2 Oct 2026: one-time plan orders. Every plan is recurring (the dashboard's one-time
+    branch cannot run), and its verify trusted the plan the browser named - any valid payment of
+    ours could have activated any plan. Plans are bought at /nidaan/api/subscribe/recurring."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    payload = _nidaan_bearer(request)
-    if not payload:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    _valid_nidaan_plans = ("silver", "gold", "platinum", "silver_annual", "gold_annual", "platinum_annual")
-    if body.plan not in _valid_nidaan_plans:
-        raise HTTPException(status_code=400, detail="Invalid plan")
-    account = await _nidaan_account_from_payload(payload)
-    if not account:
-        raise HTTPException(status_code=404, detail="Account not found")
-    # 1d — already-subscribed guide: detect + guide (never error / double-charge).
-    _guide = await _nidaan_resub_guard(account["account_id"], body.plan)
-    if _guide:
-        return _guide
-    rzp_key_id = _nidaan_rzp_id()
-    rzp_key_secret = _nidaan_rzp_secret()
-    if not rzp_key_id or not rzp_key_secret:
-        raise HTTPException(status_code=503, detail="Payments not configured")
-    result = await nidaan.create_nidaan_razorpay_order(
-        account_id=account["account_id"],
-        plan=body.plan,
-        rzp_key_id=rzp_key_id,
-        rzp_key_secret=rzp_key_secret,
-        email=account["email"],
-        phone=account["phone"] or "",
-    )
-    if "error" in result:
-        raise HTTPException(status_code=502, detail=result["error"])
-    return result
+    raise HTTPException(status_code=410, detail="Please choose your plan again from your dashboard.")
 
 
 # ── Nidaan → Sarathi Magic Link ───────────────────────────────────────────────
-
 @app.post("/nidaan/api/sarathi/access")
 async def nidaan_sarathi_access(request: Request):
     """Magic link: Nidaan JWT → Sarathi JWT.
@@ -6891,63 +6936,12 @@ class NidaanVerifyPaymentReq(BaseModel):
 
 @app.post("/nidaan/api/subscribe/verify")
 @limiter.limit("10/minute")
-async def nidaan_subscribe_verify(body: NidaanVerifyPaymentReq, request: Request):
-    """Verify Razorpay order payment signature, activate 90-day subscription, return new JWT."""
-    import hmac as _hmac_mod, hashlib as _hs
+async def nidaan_subscribe_verify(request: Request):
+    """RETIRED 2 Oct 2026 - see /nidaan/api/subscribe. It activated whatever plan the request named
+    for any valid Nidaan payment signature (a Rs 499 payment could have become Platinum Annual)."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    payload = _nidaan_bearer(request)
-    if not payload:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-
-    rzp_key_id = _nidaan_rzp_id()
-    rzp_secret = _nidaan_rzp_secret()
-    if not rzp_secret:
-        raise HTTPException(status_code=503, detail="Payments not configured")
-
-    # Razorpay order payment signature: HMAC-SHA256(order_id + "|" + payment_id)
-    msg = f"{body.razorpay_order_id}|{body.razorpay_payment_id}".encode()
-    expected = _hmac_mod.new(rzp_secret.encode(), msg, _hs.sha256).hexdigest()
-    if not _hmac_mod.compare_digest(expected, body.razorpay_signature):
-        raise HTTPException(status_code=400, detail="Invalid payment signature")
-
-    # Plan comes from client body (already validated when order was created server-side)
-    plan = body.plan or ""
-    _valid = ("silver", "gold", "platinum", "silver_annual", "gold_annual", "platinum_annual")
-    if plan not in _valid:
-        raise HTTPException(status_code=400, detail=f"Invalid plan '{plan}'")
-
-    account = await _nidaan_account_from_payload(payload)
-    if not account:
-        raise HTTPException(status_code=404, detail="Account not found")
-
-    # Amount comes from our own plan config — no need to hit Razorpay again
-    plan_info = nidaan.NIDAAN_RAZORPAY_PLANS.get(plan, {})
-    amount_paise = plan_info.get("amount_paise", 0)
-
-    try:
-        await nidaan.activate_from_order_payment(
-            body.razorpay_order_id, account["account_id"], plan, amount_paise,
-            razorpay_payment_id=body.razorpay_payment_id,
-        )
-    except Exception as exc:
-        logger.error("Nidaan activate_from_order_payment failed: order=%s plan=%s err=%s",
-                     body.razorpay_order_id, plan, exc)
-        raise HTTPException(status_code=500, detail="Subscription activation failed — contact support with payment ID: " + body.razorpay_payment_id)
-
-    # Send subscription confirmation email (non-blocking)
-    sub = await nidaan.get_active_subscription(account["account_id"])
-    renewal_date = sub["current_period_end"][:10] if sub else ""
-    import asyncio as _asyncio
-    _asyncio.create_task(email_svc.send_nidaan_subscription_email(
-        account["email"], account["owner_name"], plan,
-        amount_paise // 100, renewal_date
-    ))
-
-    new_token = nidaan.create_nidaan_token(account["account_id"], account["email"], plan)
-    logger.info("✅ Nidaan payment verified: account=%d plan=%s payment=%s",
-                account["account_id"], plan, body.razorpay_payment_id)
-    return {"token": new_token, "plan": plan, "status": "active"}
+    raise HTTPException(status_code=410, detail="Please choose your plan again from your dashboard.")
 
 
 # ── Nidaan: Create recurring subscription (quarterly auto-renew) ───────────────
@@ -7071,7 +7065,15 @@ async def nidaan_subscribe_recurring_verify(body: NidaanVerifySubscriptionReq, r
         razorpay_subscription_id=body.razorpay_subscription_id,
         razorpay_signature=body.razorpay_signature,
         rzp_key_secret=rzp_secret,
+        rzp_key_id=_nidaan_rzp_id(),
     )
+    if result.get("mismatch"):
+        raise await _payment_mismatch(request, "plan verify", account["account_id"],
+                                      body.razorpay_subscription_id, body.razorpay_payment_id)
+    if result.get("pending"):
+        return {"status": "pending", "plan": "",
+                "message": "We are confirming your payment - your plan will be active in a minute. "
+                           "You do not need to pay again."}
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
     if result.get("already_processed"):
@@ -11450,7 +11452,10 @@ async def ops_my_l2_pay_verify(claim_id: int, body: _BranchL2VerifyReq, request:
         raise HTTPException(400, "Invalid payment signature")
     # Confirm the L2 fee was actually CAPTURED (not just authorized) before queuing for legal —
     # the webhook (nidaan_branch_l2 payment.captured) finalizes a genuine late capture.
-    if not await _nidaan_payment_captured(body.razorpay_payment_id):
+    _chk = await _nidaan_payment_check(body.razorpay_payment_id, body.razorpay_order_id, product="nidaan_branch_l2", key="claim_id", value=claim_id)
+    if _chk == "mismatch":
+        raise await _payment_mismatch(request, "My Business L2 verify", claim_id, body.razorpay_order_id, body.razorpay_payment_id)
+    if _chk != "captured":
         return {"status": "pending", "claim_id": claim_id,
                 "message": "Payment is still processing — we'll confirm it shortly. No need to pay again."}
     pricing = await nidaan.branch_l2_fee_for_claim(claim_id)

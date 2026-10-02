@@ -75,6 +75,8 @@ EVENTS = [
        "Razorpay से छूटा भुगतान हमने ख़ुद दर्ज कर लिया", "Super admins", locked=True),
     _e("payment.guardian", "money", "The payment guardian found something wrong",
        "पेमेंट गार्जियन को कोई गड़बड़ी मिली", "Super admins", locked=True),
+    _e("security.payment_mismatch", "money", "A payment was presented for the wrong thing (refused)",
+       "किसी भुगतान को गलत चीज़ के लिए दिखाया गया (मना किया)", "The founder", locked=True),
     _e("payment.guardian_ok", "money", "The payment problem is resolved",
        "भुगतान की समस्या हल हो गई", "The founder", locked=True),
     _e("payment.watchdog", "money", "The payment watchdog found an anomaly",

@@ -5835,16 +5835,36 @@ async def verify_nidaan_subscription_and_activate(
     razorpay_subscription_id: str,
     razorpay_signature: str,
     rzp_key_secret: str,
+    rzp_key_id: str = "",
 ) -> dict:
     """
     Verify Razorpay subscription payment for NidaanPartner and immediately activate.
     Subscription signature: HMAC-SHA256(payment_id + '|' + subscription_id)
+
+    The PLAN and the ACCOUNT come from Razorpay's own record of the subscription (the notes our
+    server wrote when it created it), never from the request: until 2 Oct a Silver payment could
+    be presented as Platinum. {"mismatch": True} - it was not this account's / this plan's;
+    {"pending": True} - Razorpay could not be asked; the webhook (same notes) finishes it.
     """
     import hmac as _hmac, hashlib as _hs
     msg = f"{razorpay_payment_id}|{razorpay_subscription_id}".encode()
     expected = _hmac.new(rzp_key_secret.encode(), msg, _hs.sha256).hexdigest()
     if not _hmac.compare_digest(expected, razorpay_signature):
         return {"error": "Invalid payment signature"}
+    try:
+        import httpx
+        async with httpx.AsyncClient() as c:
+            r = await c.get(f"https://api.razorpay.com/v1/subscriptions/{razorpay_subscription_id}",
+                            auth=(rzp_key_id, rzp_key_secret), timeout=15)
+        if r.status_code != 200:
+            return {"pending": True}
+        notes = (r.json() or {}).get("notes") or {}
+    except Exception:  # noqa: BLE001
+        return {"pending": True}
+    if (not isinstance(notes, dict) or (notes.get("product") or "") != "nidaan"
+            or str(notes.get("nidaan_account_id") or "") != str(account_id)
+            or (notes.get("nidaan_plan") or "") != plan):
+        return {"mismatch": True}
 
     # Idempotency check
     async with aiosqlite.connect(DB_PATH) as conn:

@@ -76,6 +76,7 @@ ALARM_EVENTS = {
     "radar.mailbox_down",
     "payment.watchdog",
     "payment.guardian",
+    "security.payment_mismatch",          # a payment presented for something it was not made for
     "payment.guardian_ok",
     "wa.line.down",
     "wa.line.recovered",

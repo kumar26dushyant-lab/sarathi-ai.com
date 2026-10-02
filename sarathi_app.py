@@ -689,6 +689,41 @@ def _row_still_open(kind: str, key) -> bool:
     return _acc.still_open(kind, key)
 
 
+# ── Nidaan Razorpay credentials (SEPARATE account from Sarathi) ──────────────
+# Nidaan money settles to its own bank via its own Razorpay account. These helpers
+# return the Nidaan-specific keys, FALLING BACK to the shared RAZORPAY_* keys until
+# NIDAAN_RAZORPAY_* are set in biz.env — so this is a zero-change staged rollout:
+# Nidaan flips to its own account the moment those keys are added. Sarathi payments
+# (biz_payments.py + Sarathi endpoints) always use RAZORPAY_* and are unaffected.
+def _nidaan_rzp_id() -> str:
+    return os.getenv("NIDAAN_RAZORPAY_KEY_ID") or os.getenv("RAZORPAY_KEY_ID", "")
+def _nidaan_rzp_secret() -> str:
+    return os.getenv("NIDAAN_RAZORPAY_KEY_SECRET") or os.getenv("RAZORPAY_KEY_SECRET", "")
+
+
+async def _nidaan_payment_captured(payment_id: str) -> bool:
+    """Authoritative payment check: a valid Razorpay SIGNATURE only proves the payment was
+    created/authorized — NOT that money was actually collected. A UPI/pending payment can carry
+    a valid signature yet never capture. So before we mark anything paid on a dashboard, confirm
+    the payment status is 'captured' straight from Razorpay. Fail-CLOSED (return False on any
+    doubt) — the webhook (payment.captured) + recovery poll will finalize a genuine late capture."""
+    pid = (payment_id or "").strip()
+    if not pid or len(pid) > 60:
+        return False
+    rzp_id, rzp_secret = _nidaan_rzp_id(), _nidaan_rzp_secret()
+    if not rzp_id or not rzp_secret:
+        return False
+    import httpx as _hxc
+    try:
+        async with _hxc.AsyncClient() as _cl:
+            r = await _cl.get(f"https://api.razorpay.com/v1/payments/{pid}",
+                              auth=(rzp_id, rzp_secret), timeout=15.0)
+        return (r.json() or {}).get("status") == "captured"
+    except Exception as _e:
+        logger.warning("payment capture-check failed for %s: %s", pid, _e)
+        return False
+
+
 # ── Page routes ───────────────────────────────────────────────────────────────
 
 @app.get("/google3df0c6b7c9115ee9.html", response_class=PlainTextResponse, include_in_schema=False)
@@ -830,6 +865,16 @@ _IMAGE_EXTS = (".jpg", ".png", ".webp", ".heic", ".heif", ".gif", ".bmp", ".tiff
 class _NidaanMsgReq(BaseModel):
     model_config = ConfigDict(extra="forbid")
     content: str = Field(min_length=1, max_length=4000)
+
+
+# ── Nidaan: Verify inline-checkout payment ─────────────────────────────────────
+
+class NidaanVerifyPaymentReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # Sprint E.3
+    razorpay_payment_id: str
+    razorpay_order_id: str          # Razorpay order_id (for one-time order flow)
+    razorpay_signature: str
+    plan: Optional[str] = None      # plan passed from frontend as fallback
 
 
 @app.get("/admin", response_class=HTMLResponse)
