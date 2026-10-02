@@ -15167,22 +15167,37 @@ async def main():
                     e = await nnot.sweep_empty_claims()
                     if e:
                         logger.warning("Flagged %d claim(s) that arrived with no documents", e)
-                    # WhatsApp messages still without their English copy (a restart, the AI down).
-                    try:
-                        import biz_nidaan_wa_lang as _wl
-                        await _wl.fill_missing()
-                    except Exception as _te:  # noqa: BLE001
-                        logger.info("translation fill failed: %s", _te)
-                    # Raised without the rejection letter: daily reminder, archive on day 7.
-                    lt = await _intake.sweep_letters()
-                    if lt.get("archived") or lt.get("reminded"):
-                        logger.info("Letter sweep: %s", lt)
                 except asyncio.CancelledError:
                     break
                 except Exception as e:
                     logger.error("Claim-alert sweep error: %s", e)
+                # Raised without the rejection letter: daily reminder, archive on day 7. Its own try,
+                # so a failure in the sweeps above can never skip it.
+                try:
+                    lt = await _intake.sweep_letters()
+                    if lt.get("archived") or lt.get("reminded") or lt.get("cleared"):
+                        logger.info("Letter sweep: %s", lt)
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    logger.error("Letter sweep error: %s", e)
                 await asyncio.sleep(1200)
         asyncio.create_task(claim_alert_sweep_loop())
+
+        # WhatsApp messages still without their English copy (a restart, the AI down). Its own loop
+        # with a time budget, so a slow AI can never hold up the claim sweeps.
+        async def wa_english_fill_loop():
+            await asyncio.sleep(540)
+            while True:
+                try:
+                    import biz_nidaan_wa_lang as _wl
+                    await asyncio.wait_for(_wl.fill_missing(limit=20), timeout=180)
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:  # noqa: BLE001 - a timeout included: next round picks it up
+                    logger.info("translation fill: %s", type(e).__name__)
+                await asyncio.sleep(600)
+        asyncio.create_task(wa_english_fill_loop())
 
         # Step 6g1a2: PROACTIVE health watchdog. App Health only speaks when someone looks at it,
         # which is how the WhatsApp number sat dead for days. This runs the SAME checks and alerts

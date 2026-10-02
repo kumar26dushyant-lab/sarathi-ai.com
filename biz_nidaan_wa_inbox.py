@@ -215,7 +215,7 @@ async def claim_thread(claim_id: int, *, limit: int = 300) -> dict:
             args += list(shared) + [int(claim_id)]
         rows = await (await c.execute(
             "SELECT wam_row_id, msisdn, direction, msg_type, template_name, body, media_id, status, "
-            "error, sender, sender_name, claim_id, created_at, lang, body_en FROM nidaan_wa_messages "
+            "error, sender, sender_name, claim_id, created_at, lang, body_en, en_src FROM nidaan_wa_messages "
             "WHERE " + " OR ".join(cond) + " ORDER BY wam_row_id DESC LIMIT ?",
             (*args, max(1, min(int(limit), 500))))).fetchall()
         ct = await (await c.execute("SELECT * FROM nidaan_wa_contacts WHERE msisdn=?", (nums[0],))).fetchone()
@@ -251,7 +251,7 @@ async def thread(msisdn: str, *, limit: int = 200) -> dict:
             "SELECT * FROM nidaan_wa_contacts WHERE msisdn=?", (msisdn,))).fetchone()
         rows = await (await c.execute(
             "SELECT wam_row_id, direction, msg_type, template_name, body, media_id, status, "
-            "error, sender, sender_name, claim_id, created_at, lang, body_en "
+            "error, sender, sender_name, claim_id, created_at, lang, body_en, en_src "
             "FROM nidaan_wa_messages WHERE msisdn=? ORDER BY wam_row_id DESC LIMIT ?",
             (msisdn, limit))).fetchall()
     ct = dict(contact) if contact else {"msisdn": msisdn}

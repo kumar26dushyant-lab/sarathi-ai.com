@@ -1873,6 +1873,7 @@ async def sweep_empty_claims(hours: int = 48) -> int:
                 WHERE c.created_at >= datetime('now', ?)
                   AND c.created_at <= datetime('now', '-20 minutes')
                   AND COALESCE(c.archived,0)=0
+                  AND c.letter_due_at IS NULL          -- raised without it on purpose: its own clock
                   AND COALESCE(c.status,'') NOT IN ('closed','withdrawn')
                   AND NOT EXISTS (SELECT 1 FROM nidaan_claim_documents d
                                    WHERE d.claim_id = c.claim_id)

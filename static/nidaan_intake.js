@@ -91,8 +91,9 @@
     v = String(v || '').trim().toLowerCase();
     return (v.length <= 254 && /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/.test(v) && v.indexOf('..') < 0) ? v : '';
   }
-  var NAME_OK = /^[\p{L}\p{M} .'\-]+$/u, LETTER = /\p{L}/gu;
-  function nameOk(v) { v = String(v || '').trim(); return v.length <= 120 && NAME_OK.test(v) && (v.match(LETTER) || []).length >= 2; }
+  var NAME_OK = /^[\p{L}\p{M} .'\-]+$/u, FIRM_OK = /^[\p{L}\p{M}\d .'\-&\/(),]+$/u, LETTER = /\p{L}/gu;
+  // The insured can be a firm (M/S SHARMA TRADERS); the complainant is always a person.
+  function nameOk(v, firm) { v = String(v || '').trim(); return v.length <= 120 && (firm ? FIRM_OK : NAME_OK).test(v) && (v.match(LETTER) || []).length >= 2; }
   function amountOf(v) { var n = parseInt(String(v || '').replace(/[^\d]/g, ''), 10); return isFinite(n) ? n : 0; }
 
   // ── styles (theme variables only, both themes) ─────────────────────────────────────────
@@ -319,7 +320,7 @@
   function collect(box) {
     var st = S[box]; if (!st) return { ok: false, msg: 'form missing' };
     var v = read(box), bad = function (f, en, hi) { mark(box, f); return { ok: false, field: f, msg: L(st, en, hi) }; };
-    if (!nameOk(v.insured_name)) return bad('insured_name', "Enter the patient's full name (letters only).", 'मरीज़ का पूरा नाम लिखें (सिर्फ़ अक्षर)।');
+    if (!nameOk(v.insured_name, true)) return bad('insured_name', "Enter the patient's / insured's full name.", 'मरीज़ / बीमित का पूरा नाम लिखें।');
     if (v.insured_phone && !mobile(v.insured_phone)) return bad('insured_phone', "The patient's mobile is not a valid 10-digit number - or leave it blank.", 'मरीज़ का मोबाइल सही नहीं - या खाली छोड़ें।');
     if (v.insured_email && !email(v.insured_email)) return bad('insured_email', "The patient's email does not look right - or leave it blank.", 'मरीज़ का ईमेल सही नहीं - या खाली छोड़ें।');
     if (!nameOk(v.complainant_name)) return bad('complainant_name', "Enter the complainant's full name (letters only).", 'शिकायतकर्ता का पूरा नाम लिखें (सिर्फ़ अक्षर)।');

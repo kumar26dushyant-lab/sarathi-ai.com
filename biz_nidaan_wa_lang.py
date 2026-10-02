@@ -53,7 +53,7 @@ LANGS = {
 # For the fixed lines: Marathi and Gujarati readers read Devanagari Hindi; Punjabi speakers read
 # Roman Hindi more easily than Devanagari; everyone else gets English.
 _BASE = {"en": "en", "hi": "hi", "hinglish": "hinglish", "mr": "hi", "gu": "hi", "pa": "hinglish"}
-MAX_CHARS = 1500
+MAX_CHARS = 4000            # the longest WhatsApp text we send; nothing is cut silently
 _SEM = asyncio.Semaphore(3)
 
 
@@ -161,8 +161,8 @@ async def note_message(row_id: int) -> None:
         if res is None:
             return                     # left NULL: fill_missing() tries again later
         async with aiosqlite.connect(db.DB_PATH) as c:
-            await c.execute("UPDATE nidaan_wa_messages SET lang=?, body_en=? WHERE wam_row_id=? AND body_en IS NULL",
-                            (res["lang"], res["en"], int(row_id)))
+            await c.execute("UPDATE nidaan_wa_messages SET lang=?, body_en=?, en_src=? WHERE wam_row_id=?"
+                            " AND body_en IS NULL", (res["lang"], res["en"], "machine" if res["en"] else "", int(row_id)))
             await c.commit()
     except Exception as e:  # noqa: BLE001
         logger.info("note_message %s failed: %s", row_id, e)
@@ -181,8 +181,13 @@ async def fill_missing(limit: int = 40) -> int:
     """Messages from the last two days still without an English copy (a restart, the AI down)."""
     async with aiosqlite.connect(db.DB_PATH) as c:
         rows = await (await c.execute(
-            "SELECT wam_row_id FROM nidaan_wa_messages WHERE body_en IS NULL AND COALESCE(body,'')<>''"
-            " AND created_at > datetime('now','-2 days') ORDER BY wam_row_id DESC LIMIT ?", (int(limit),))).fetchall()
-    for (rid,) in rows:
-        await note_message(rid)
-    return len(rows)
+            "SELECT wam_row_id, direction, sender, template_name, body FROM nidaan_wa_messages WHERE body_en IS NULL"
+            " AND COALESCE(body,'')<>'' AND created_at > datetime('now','-2 days') ORDER BY wam_row_id DESC LIMIT ?",
+            (int(limit),))).fetchall()
+    import biz_nidaan_wa_flow as _flow
+    done = 0
+    for rid, direction, sender, tmpl, body in rows:
+        if _flow._wants_english(direction, sender, tmpl, body):
+            await note_message(rid)
+            done += 1
+    return done

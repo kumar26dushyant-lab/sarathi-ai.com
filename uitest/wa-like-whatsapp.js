@@ -66,13 +66,18 @@ check('...and it refreshes quietly while open, never while someone types',
 // In their language, recorded in English (founder, 2 Oct).
 const trHtml = _waiBubbles([
   { direction: 'in', body: 'माझा क्लेम नाकारला', body_en: 'My claim was rejected', lang: 'mr', lang_name: 'Marathi', created_at: '2026-10-02 05:00:00' },
-  { direction: 'out', sender: 'human', sender_name: 'Ravi', body: 'कृपया पाठवा', body_en: 'Please send it', created_at: '2026-10-02 05:01:00' },
+  { direction: 'out', sender: 'human', sender_name: 'Ravi', body: 'कृपया पाठवा', body_en: 'Please send it', en_src: 'staff', created_at: '2026-10-02 05:01:00' },
+  { direction: 'out', sender: 'human', sender_name: 'Ravi', body: 'kal tak bhej dijiye', body_en: 'Please send by tomorrow', en_src: 'machine', created_at: '2026-10-02 05:02:00' },
 ], 'Ramesh');
 check('a Marathi message shows its English copy, labelled as a machine translation from Marathi',
   trHtml.includes('class="wai-tr"') && trHtml.includes('machine translation from Marathi') && trHtml.includes('My claim was rejected'));
 check("a staff reply sent in their language shows the staff member's own English",
   trHtml.includes('as our team wrote it') && trHtml.includes('Please send it'));
 check('searching a chat finds a message by its English too', trHtml.includes('my claim was rejected'));
+check("a staff reply translated by machine later is labelled machine, not 'as our team wrote it'",
+  (trHtml.match(/as our team wrote it/g) || []).length === 1 && (trHtml.match(/machine translation/g) || []).length === 2);
+check('Hinglish is offered, not ticked - the team writes it already',
+  _waLangTick('t', 'hinglish', 'Hinglish').includes('Send in their language') && !_waLangTick('t', 'hinglish', 'Hinglish').includes('checked'));
 check('"Send in their language" is offered for a Marathi speaker, not for an English one',
   _waLangTick('t', 'mr', 'Marathi').includes('Send in their language (Marathi)') && _waLangTick('t', 'en', 'English') === '');
 check('the switch hides the English copy without redrawing', h.includes('body.wa-tr-off .wai-tr{display:none}'));

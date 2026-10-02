@@ -90,11 +90,18 @@ def unit():
           all(t["en"] and t["hi"] for t in intake.types_public()) and len(intake.CODES) >= 10)
     keys = {c: intake.letter_key(c) for c in intake.CODES}
     check("every type knows which checklist line is the rejection letter",
-          all(("reject" in k or "refus" in k) for k in keys.values()), keys)
+          all(k in [d["key"] for d in __import__("biz_nidaan_doc_checklist").doc_template_for(intake.template_for(c))]
+              for c, k in keys.items()), keys)
     check("the subscriber door cannot go without the letter",
           raises(intake.no_letter_reason, "subscriber", "insurer never replied") == "rejection_letter")
     check("the AP door needs a real reason", raises(intake.no_letter_reason, "ap", "na") == "no_letter_reason")
     check("...and accepts one", intake.no_letter_reason("ap", "Insurer has not replied yet") != "")
+    d = dict(GOOD, insured_name="M/S SHARMA TRADERS (24 CARAT) & CO")
+    check("an insured that is a firm is accepted (fire, marine, business claims)",
+          intake.check_core(d)["insured_name"].startswith("M/S"))
+    d = dict(GOOD, complainant_name="M/S SHARMA TRADERS")
+    check("...but the complainant is a person", raises(intake.check_core, d) == "complainant_name")
+    check("a life claim's letter is its 'decision letter'", intake.letter_key("life") == "decision_letter")
     check("same person: same name or same mobile",
           intake.same_person({"insured_name": "A B", "complainant_name": "a  b"})
           and not intake.same_person({"insured_name": "A", "complainant_name": "B"}))
@@ -230,11 +237,17 @@ async def routes():
     print("\n-- the 7-day clock --")
     sent = []
 
-    async def _tell(r, *, archived):
+    async def _tell(r, *, archived, kept=""):
         sent.append((r["claim_id"], archived))
     intake._tell = _tell
     res = await intake.sweep_letters()
-    check("day 1: the raisers are reminded, nothing archived", res["reminded"] == 2 and res["archived"] == 0, res)
+    check("not reminded in the first minutes - the raiser has just been told", res["reminded"] == 0, res)
+    async with aiosqlite.connect(DBP) as c:
+        await c.execute("UPDATE nidaan_claims SET letter_reminded_at=datetime('now','-21 hours')"
+                        " WHERE letter_due_at IS NOT NULL")
+        await c.commit()
+    res = await intake.sweep_letters()
+    check("a day later: the raisers are reminded, nothing archived", res["reminded"] == 2 and res["archived"] == 0, res)
     res = await intake.sweep_letters()
     check("...once a day, not every sweep", res["reminded"] == 0, res)
     async with aiosqlite.connect(DBP) as c:
@@ -254,6 +267,27 @@ async def routes():
     await ck.mark_doc_received(cid3, intake.letter_key("health"), via="staff tick")
     res = await intake.sweep_letters()
     check("a letter ticked by staff stops the clock", res["cleared"] == 1, res)
+
+    # A LIFE claim raised without its letter, the letter then ticked by hand (review, 2 Oct): the
+    # life checklist calls it "decision_letter" - it used to be archived anyway.
+    async with aiosqlite.connect(DBP) as c:
+        await c.execute("INSERT INTO nidaan_claims (claim_id, account_id, claim_type, insured_name, insured_phone, complainant_name,"
+                        " status, letter_due_at) VALUES (901, 1, 'life', 'A', '', 'B', 'intimated', datetime('now','-1 minute'))")
+        # ...and one whose papers arrived as a plain document, never ticked
+        await c.execute("INSERT INTO nidaan_claims (claim_id, account_id, claim_type, insured_name, insured_phone, complainant_name,"
+                        " status, letter_due_at) VALUES (902, 1, 'health', 'A', '', 'B', 'intimated', datetime('now','-1 minute'))")
+        await c.execute("INSERT INTO nidaan_claim_documents (account_id, claim_id, stored_name, original_name, file_size)"
+                        " VALUES (1, 902, 'x.pdf', 'scan.pdf', 10)")
+        await c.commit()
+    await ck.mark_doc_received(901, "decision_letter", via="staff tick")
+    sent.clear()
+    res = await intake.sweep_letters()
+    async with aiosqlite.connect(DBP) as c:
+        a901 = (await (await c.execute("SELECT archived FROM nidaan_claims WHERE claim_id=901")).fetchone())[0]
+        a902 = (await (await c.execute("SELECT archived FROM nidaan_claims WHERE claim_id=902")).fetchone())[0]
+    check("a life claim whose decision letter is ticked is NOT archived", not a901, a901)
+    check("a claim whose papers arrived (unticked) is NOT archived - the raiser is asked to tick it",
+          not a902 and res["archived"] == 0, (a902, res))
 
 
 async def main():

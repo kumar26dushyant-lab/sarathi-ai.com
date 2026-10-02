@@ -127,7 +127,7 @@ def template_for(code: str) -> str:
 
 
 # ── single fields ───────────────────────────────────────────────────────────────────────────
-def _name(raw, field: str, who_en: str, who_hi: str) -> str:
+def _name(raw, field: str, who_en: str, who_hi: str, *, firm_ok: bool = False) -> str:
     v = " ".join(str(raw or "").split())
     if not v:
         raise IntakeError(field, f"Enter the {who_en}'s full name.", f"{who_hi} का पूरा नाम लिखें।")
@@ -138,7 +138,7 @@ def _name(raw, field: str, who_en: str, who_hi: str) -> str:
         cat = unicodedata.category(ch)
         if cat.startswith("L"):
             letters += 1
-        elif cat.startswith("M") or ch in " .'-":
+        elif cat.startswith("M") or ch in " .'-" or (firm_ok and (ch.isdigit() or ch in "&/(),")):
             continue
         else:
             raise IntakeError(field, f"The {who_en}'s name can have letters only - no numbers or symbols.",
@@ -194,7 +194,10 @@ def check_core(d: dict) -> dict:
     """Every door's seven core details, checked the same way. Returns the cleaned values or raises
     IntakeError for the first thing that is wrong."""
     out = {}
-    out["insured_name"] = _name(d.get("insured_name"), "insured_name", "patient / insured", "मरीज़ / बीमित व्यक्ति")
+    # The insured can be a firm ("M/S SHARMA TRADERS", "24 CARAT JEWELLERS") on fire, marine and
+    # business claims; the complainant is always a person.
+    out["insured_name"] = _name(d.get("insured_name"), "insured_name", "patient / insured", "मरीज़ / बीमित व्यक्ति",
+                                firm_ok=True)
     ip = str(d.get("insured_phone") or "").strip()
     out["insured_phone"] = mobile(ip) if ip else ""
     if ip and not out["insured_phone"]:
@@ -341,15 +344,21 @@ async def release_letter(letter_id: int) -> None:
         await c.close()
 
 
-def letter_key(claim_type: str) -> str:
-    """The checklist line that IS the rejection letter for this type (each template names it a
-    little differently: rejection_letter, rejection_or_survey_letter, refusal_letter)."""
+_LETTER_WORDS = ("reject", "refus", "decision", "repudiat")
+
+
+def letter_keys(claim_type: str) -> list:
+    """Every checklist line that IS the insurer's letter for this type - each template names it
+    differently: rejection_letter, rejection_or_survey_letter, refusal_letter, and life's
+    decision_letter (missed until the pre-deploy review, 2 Oct)."""
     import biz_nidaan_doc_checklist as ck
-    for d in ck.doc_template_for(template_for(claim_type)):
-        k = d["key"]
-        if "reject" in k or "refus" in k:
-            return k
-    return "rejection_letter"
+    return [d["key"] for d in ck.doc_template_for(template_for(claim_type))
+            if any(w in d["key"] for w in _LETTER_WORDS)]
+
+
+def letter_key(claim_type: str) -> str:
+    """The one line the attached letter is ticked against."""
+    return (letter_keys(claim_type) or ["rejection_letter"])[0]
 
 
 async def attach_letter(letter: dict, *, claim_id: int, account_id: int, claim_type: str,
@@ -387,7 +396,8 @@ async def attach_letter(letter: dict, *, claim_id: int, account_id: int, claim_t
 async def set_letter_due(claim_id: int, reason: str, by: str) -> None:
     async with aiosqlite.connect(db.DB_PATH) as c:
         await c.execute(
-            "UPDATE nidaan_claims SET letter_due_at=datetime('now', ?), letter_reminded_at=NULL WHERE claim_id=?",
+            "UPDATE nidaan_claims SET letter_due_at=datetime('now', ?), letter_reminded_at=CURRENT_TIMESTAMP"
+            " WHERE claim_id=?",
             (f"+{LETTER_GRACE_DAYS} days", int(claim_id)))
         await c.commit()
     import biz_nidaan as nidaan
@@ -413,10 +423,26 @@ async def letter_arrived(claim_id: int, by: str = "") -> bool:
 
 
 async def _letter_ticked(conn, claim_id: int, claim_type: str) -> bool:
+    keys = letter_keys(claim_type) or ["rejection_letter"]
     r = await (await conn.execute(
-        "SELECT received FROM nidaan_claim_doc_checklist WHERE claim_id=? AND doc_key=?",
-        (claim_id, letter_key(claim_type)))).fetchone()
+        "SELECT MAX(received) FROM nidaan_claim_doc_checklist WHERE claim_id=? AND doc_key IN (%s)"
+        % ",".join("?" * len(keys)), (claim_id, *keys))).fetchone()
     return bool(r and r[0])
+
+
+async def _moved_on(conn, claim_id: int) -> str:
+    """Why archiving would be wrong even without a tick: papers arrived, or the claim has gone
+    further than intake. '' when none of that is true."""
+    n = (await (await conn.execute(
+        "SELECT COUNT(*) FROM nidaan_claim_documents WHERE claim_id=?", (claim_id,))).fetchone())[0]
+    if n:
+        return "%d document(s) have arrived - one may be the letter" % n
+    r = await (await conn.execute(
+        "SELECT COALESCE(review_outcome,''), COALESCE(l2_payment_status,'') FROM nidaan_claims WHERE claim_id=?",
+        (claim_id,))).fetchone()
+    if r and (r[0] or r[1] == "paid"):
+        return "the claim has already been reviewed" if r[0] else "the Level-2 fee is paid"
+    return ""
 
 
 async def sweep_letters() -> dict:
@@ -440,6 +466,15 @@ async def sweep_letters() -> dict:
                 out["cleared"] += 1
                 continue
             if (r.get("days_left") or 0) <= 0:
+                why = await _moved_on(c, cid)
+                if why:
+                    cur = await c.execute("UPDATE nidaan_claims SET letter_due_at=NULL WHERE claim_id=?"
+                                          " AND letter_due_at IS NOT NULL", (cid,))
+                    await c.commit()
+                    if cur.rowcount == 1:
+                        out["cleared"] += 1
+                        await _tell(r, archived=False, kept=why)
+                    continue
                 cur = await c.execute(
                     "UPDATE nidaan_claims SET archived=1, archived_at=CURRENT_TIMESTAMP,"
                     " archived_by='no rejection letter in 7 days', letter_due_at=NULL"
@@ -463,13 +498,18 @@ def _who(r: dict) -> str:
     return (r.get("complainant_name") or r.get("insured_name") or "the customer").strip()
 
 
-async def _tell(r: dict, *, archived: bool) -> None:
+async def _tell(r: dict, *, archived: bool, kept: str = "") -> None:
     """The raiser hears it where they live: an AP on WhatsApp/email, a staff member on Telegram."""
     import biz_nidaan as nidaan
     import biz_nidaan_notifications as nnot
     cid = r["claim_id"]
     days = max(1, int(round(r.get("days_left") or 0))) if not archived else 0
-    if archived:
+    if kept:
+        subj = f"Claim #{nnot._cn(cid)} - is the rejection letter in?"
+        body = (f"Claim #{nnot._cn(cid)} ({_who(r)}) reached its 7-day letter date, but it was NOT "
+                f"archived: {kept}. Open it and tick the rejection letter on the checklist if it is "
+                f"there - if it is not, ask for it.")
+    elif archived:
         subj = f"Claim #{nnot._cn(cid)} archived - no rejection letter"
         body = (f"Claim #{nnot._cn(cid)} ({_who(r)}) was raised without the insurer's rejection letter "
                 f"and it did not arrive within {LETTER_GRACE_DAYS} days, so the claim is now ARCHIVED. "
@@ -480,7 +520,8 @@ async def _tell(r: dict, *, archived: bool) -> None:
                 f"{days} day(s) left before the claim is archived.")
     try:
         await nidaan.record_claim_activity(
-            cid, "letter_archived" if archived else "letter_reminder", actor="system", summary=body[:300])
+            cid, "letter_archived" if archived else ("letter_kept" if kept else "letter_reminder"),
+            actor="system", summary=body[:300])
     except Exception:  # noqa: BLE001
         pass
     sid = r.get("raised_by_staff_id")

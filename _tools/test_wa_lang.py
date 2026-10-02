@@ -101,7 +101,22 @@ async def main():
     r = await row(await last_id())
     check("the staff member's own English is the record, with the language it went in",
           r == ("mr", "Please send the discharge summary"), r)
+    async with aiosqlite.connect(DBP) as c:
+        src = (await (await c.execute("SELECT en_src FROM nidaan_wa_messages WHERE wam_row_id=?",
+                                      (await last_id(),))).fetchone())[0]
+    check("...marked as the staff member's words, not a machine translation", src == "staff", src)
     check("...and it is NOT machine-translated again", len(calls) == before, calls[before:])
+
+    print("\n-- what never goes to the translator --")
+    before = len(calls)
+    await flow.log_message(direction="in", msisdn="919876543210", body="482913")
+    await flow.log_message(direction="out", msisdn="919876543210", body="482913 is your verification code.",
+                           template_name="np_login_code", sender="system")
+    await flow.log_message(direction="out", msisdn="919876543210", body="Namaste, your claim is registered",
+                           sender="journey")
+    await asyncio.sleep(0.2)
+    check("a code, a template and a fixed journey message are never sent to the AI", len(calls) == before,
+          calls[before:])
 
     print("\n-- languages --")
     check("Marathi and Gujarati fall back to the Hindi lines, Punjabi to Hinglish, Tamil to English",

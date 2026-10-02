@@ -2058,7 +2058,7 @@ async def list_branch_claims(branch_code: str, limit: int = 100) -> list[dict]:
             "SELECT claim_id, insured_name, insured_phone, complainant_name, claim_type, insurer_name, "
             "       disputed_amount, status, review_outcome, l2_payment_status, l2_fee_paid, "
             "       review_delivered_at, created_at, letter_due_at, COALESCE(archived,0) AS db_archived, "
-            "       COALESCE(archived_by,'') AS archived_by "
+            "       (COALESCE(archived_by,'') = 'no rejection letter in 7 days') AS archived_no_letter "
             "FROM nidaan_claims WHERE origin='branch' AND UPPER(branch_code)=? "
             "ORDER BY claim_id DESC LIMIT ?", (code, limit))).fetchall()
         out = []

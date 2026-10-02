@@ -24,8 +24,8 @@ try { if (localStorage.getItem('nidaan_ops_token')) document.documentElement.cla
 <link rel="apple-touch-icon" href="/static/nidaan_logo.png">
 <script src="/static/_err.js?v=1"></script>
 <script src="/static/nidaan_insurers.js?v=1"></script>
-<script src="/static/nidaan_intake.js?v=1"></script>
-<script src="/static/nidaan_partner_claims.js?v=6"></script>
+<script src="/static/nidaan_intake.js?v=2"></script>
+<script src="/static/nidaan_partner_claims.js?v=7"></script>
 <script src="/static/nidaan_theme.js?v=2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -20486,7 +20486,7 @@ function _waiBubbles(messages, nm){
     // The English copy for the team (founder, 2 Oct): a machine translation is labelled as one; a
     // staff reply sent in their language shows the staff member's own words.
     const tr = m.body_en
-      ? '<div class="wai-tr"><i>🌐 ' + (m.sender === 'human' && m.direction !== 'in'
+      ? '<div class="wai-tr"><i>🌐 ' + (m.en_src === 'staff'
           ? 'In English, as our team wrote it'
           : 'English - machine translation' + (m.lang_name ? ' from ' + esc(m.lang_name) : ''))
         + '</i>' + esc(m.body_en) + '</div>' : '';
@@ -20509,8 +20509,10 @@ function _waTrToggle(){ try{ localStorage.setItem('nd_wa_tr', _waTrOn() ? '0' : 
 function _waTrBtn(){ return '<button type="button" class="btn-sm btn-ghost wa-trbtn" onclick="_waTrToggle()" title="Show an English copy under every message">' + _waTrLabel() + '</button>'; }
 // "Send in their language": shown when the person does not write in English. On by default.
 function _waLangTick(id, lang, langName){
+  // English: nothing to translate. Hinglish: the team writes it already - offered, not ticked.
   if (!lang || lang === 'en') return '';
-  return '<label class="wa-tick"><input type="checkbox" id="' + id + '" checked> Send in their language (' + esc(langName || lang) + ') - you will see it before it goes</label>';
+  return '<label class="wa-tick"><input type="checkbox" id="' + id + '"' + (lang === 'hinglish' ? '' : ' checked')
+    + '> Send in their language (' + esc(langName || lang) + ') - you will see it before it goes</label>';
 }
 // Nothing machine-translated is sent unseen: the staff member reads (and may edit) the text first.
 function _waTrPreview(original, translated, langName){

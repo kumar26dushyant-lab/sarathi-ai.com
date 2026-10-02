@@ -454,7 +454,7 @@ def _strip_money(ctx: dict) -> dict:
 # The welcome and "your claim is registered" are said ONCE per claim. The 20-minute alert sweep
 # re-ran the claim-raised path and every Rs 499 website claim got "claim registered" twice
 # (found 2 Oct). A failed attempt may be retried; a send stuck for 10 minutes may be retaken.
-JOURNEY_ONCE = {"welcome", "intro_value", "claim_registered", "thank_you_payment"}
+JOURNEY_ONCE = {"welcome", "intro_value", "claim_registered", "thank_you_payment", "welcome_email"}
 JOURNEY_WINDOW_MIN = {"payment_failed": 15}     # two failed UPI tries in a minute: one message
 
 

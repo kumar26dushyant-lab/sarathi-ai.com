@@ -1820,7 +1820,8 @@ async def init_db():
             # The language a message is in, and its English copy for the team (biz_nidaan_wa_lang).
             # body_en NULL = not looked at yet; '' = it was English already.
             "ALTER TABLE nidaan_wa_messages ADD COLUMN lang TEXT DEFAULT ''",
-            "ALTER TABLE nidaan_wa_messages ADD COLUMN body_en TEXT",  # initiated|conversation|human|consent|critical|business
+            "ALTER TABLE nidaan_wa_messages ADD COLUMN body_en TEXT",
+            "ALTER TABLE nidaan_wa_messages ADD COLUMN en_src TEXT DEFAULT ''",   # staff | machine  # initiated|conversation|human|consent|critical|business
             "CREATE INDEX IF NOT EXISTS idx_wamsg_cap ON nidaan_wa_messages(msisdn, send_class, created_at)",
             # When and how someone stopped hearing from us — so a screen can say it plainly
             # instead of a bare status word.

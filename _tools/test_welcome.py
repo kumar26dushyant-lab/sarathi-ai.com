@@ -85,16 +85,20 @@ async def main():
     check("the sweep running it again sends nothing", confirms == [] and welcomes == [], (confirms, welcomes))
 
     await cv.note_inbound("919876543210")    # they WhatsApp "Hi" from that mobile
-    check("they write to us from that mobile: the welcome goes, WhatsApp + email",
-          welcomes == [(10, "claim_registered")] and emails == [10], (welcomes, emails))
+    check("they write to us from that mobile: the WhatsApp welcome goes - and ONLY there",
+          welcomes == [(10, "claim_registered")] and emails == [], (welcomes, emails))
     await cv.record("email", "ramesh@example.com", "email_link", claim_id=10, actor="complainant")
     await cv._note(10, "email", "ramesh@example.com", "email_link")
-    check("...and only once - the email confirmed later sends nothing more", len(welcomes) == 1 and len(emails) == 1,
-          (welcomes, emails))
+    check("the email, once THAT is proven, gets its own welcome", emails == [10], emails)
+    await cv._note(10, "email", "ramesh@example.com", "email_link")
+    check("...each channel once", emails == [10], emails)
 
     await wel.on_claim_created(11)
-    check("a complainant who already proved the email (signed in with it) is welcomed at once",
-          (11, "claim_registered") in welcomes and not any(c[0] == 11 for c in confirms), (welcomes, confirms))
+    check("a complainant who already proved the email (signed in with it) is welcomed there at once",
+          emails.count(11) == 1, emails)
+    check("...not on a WhatsApp number nobody has proven - that gets a confirmation code instead",
+          (11, "claim_registered") not in welcomes and (11, "phone") in confirms and (11, "email") not in confirms,
+          (welcomes, confirms))
 
     before = (len(welcomes), len(confirms))
     await wel.on_claim_created(12)

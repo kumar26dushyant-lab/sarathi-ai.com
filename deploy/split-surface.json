@@ -1119,7 +1119,8 @@
     "_is_nidaan_host",
     "_row_still_open",
     "app",
-    "limiter"
+    "limiter",
+    "logger"
    ],
    "uses": [
     "_BranchClaimReq",
@@ -5429,7 +5430,8 @@
     "_row_still_open",
     "_staff_still_active",
     "app",
-    "limiter"
+    "limiter",
+    "logger"
    ],
    "uses": [
     "_RaiseForSubReq",
@@ -7809,7 +7811,8 @@
     "_staff_claim_code",
     "_staff_still_active",
     "app",
-    "limiter"
+    "limiter",
+    "logger"
    ],
    "uses": [
     "_BranchClaimReq",

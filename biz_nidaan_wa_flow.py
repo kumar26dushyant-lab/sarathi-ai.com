@@ -10,6 +10,7 @@ the marked handoff (`_on_inbound_media`). Never raises to the webhook.
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime
 from typing import Optional
 
@@ -71,17 +72,21 @@ async def log_message(*, direction: str, msisdn: str, claim_id: Optional[int] = 
                 """INSERT INTO nidaan_wa_messages
                    (direction, msisdn, claim_id, wa_message_id, msg_type, template_name,
                     body, media_id, status, error, sender, sender_name, staff_id, send_class,
-                    lang, body_en)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    lang, body_en, en_src)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (direction, msisdn, claim_id, wa_message_id or "", msg_type or "", template_name or "",
                  (body or "")[:4000], media_id or "", status or "", (error or "")[:300],
                  sender[:20], (sender_name or "")[:80], str(staff_id or "")[:20],
                  (send_class or "")[:16], (lang or "")[:12],
-                 (body_en[:4000] if body_en is not None else None)))
+                 (body_en[:4000] if body_en is not None else None),
+                 ("staff" if body_en else "")))
             await conn.commit()
             row_id = cur.lastrowid
-        # Every message gets an English copy for the team, in the background (biz_nidaan_wa_lang).
-        if body_en is None and (body or "").strip():
+        # An English copy for the team, in the background (biz_nidaan_wa_lang) - for what a PERSON
+        # wrote: the customer, our staff, the bot's own reply. Never a template, a campaign, a
+        # system message or anything shaped like a code: those are fixed texts, and a one-time
+        # code must never leave us for a third party (review, 2 Oct).
+        if body_en is None and _wants_english(direction, sender, template_name, body):
             try:
                 import biz_nidaan_wa_lang as _wl
                 _wl.schedule(row_id)
@@ -91,6 +96,16 @@ async def log_message(*, direction: str, msisdn: str, claim_id: Optional[int] = 
     except Exception as e:  # noqa: BLE001
         logger.warning("log_message failed: %s", e)
         return False
+
+
+_CODE_LIKE = re.compile(r"^\W*\d{4,8}\W*$")
+
+
+def _wants_english(direction: str, sender: str, template_name: str, body: str) -> bool:
+    t = (body or "").strip()
+    if not t or template_name or _CODE_LIKE.match(t) or "code" in t.lower() and any(ch.isdigit() for ch in t):
+        return False
+    return direction == "in" or (sender or "") in ("human", "bot")
 
 
 async def get_contact(msisdn: str) -> Optional[dict]:

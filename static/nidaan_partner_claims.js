@@ -65,7 +65,7 @@
         due = `<div style="margin-top:.3rem;color:var(--nd-danger-text,#b91c1c);font-size:.76rem;font-weight:700">⚠️ ${h ? ('रिजेक्शन लेटर ' + left + ' दिन में चाहिए, नहीं तो क्लेम आर्काइव होगा') : ('Rejection letter due in ' + left + ' day(s), or the claim is archived')}</div>`
           + `<input type="file" id="npLetter_${c.claim_id}" accept="application/pdf,image/*,.docx" style="display:none" onchange="NidaanPartnerClaims.letter(${c.claim_id}, this)">`
           + `<button class="btn btn-primary btn-cyan" style="${bs}" onclick="document.getElementById('npLetter_${c.claim_id}').click()">📄 ${h ? 'लेटर लगाएँ' : 'Attach the letter'}</button>`;
-      } else if (c.archived && c.archived_by === 'no rejection letter in 7 days') {
+      } else if (c.archived && c.archived_no_letter) {
         due = `<div style="margin-top:.3rem;color:var(--nd-text-muted);font-size:.74rem">${h ? 'आर्काइव: 7 दिन में रिजेक्शन लेटर नहीं आया' : 'Archived: no rejection letter within 7 days'}</div>`;
       }
       return `<tr>

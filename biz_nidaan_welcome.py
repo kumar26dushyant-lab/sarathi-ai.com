@@ -43,8 +43,8 @@ async def _claim(claim_id: int) -> dict:
 
 
 async def on_claim_created(claim_id: int) -> dict:
-    """Every door calls this once its claim exists. Welcome now if a contact is already proven;
-    otherwise send the confirmations and wait."""
+    """Every door calls this once its claim exists. Welcome on whatever is already proven; ask
+    for a confirmation on whatever is not."""
     import biz_nidaan_contact_verify as cv
     async with aiosqlite.connect(db.DB_PATH) as c:
         cur = await c.execute(
@@ -56,43 +56,53 @@ async def on_claim_created(claim_id: int) -> dict:
             return {"ok": True, "skipped": "already started"}
     claim = await _claim(claim_id)
     st = await cv.status(claim)
-    if (st.get("phone") or {}).get("verified") or (st.get("email") or {}).get("verified"):
-        return await welcome(claim_id)
+    out = await _welcome_proven(claim_id, st)
     sent = {}
     for kind in ("phone", "email"):
-        if (st.get(kind) or {}).get("present"):
+        e = st.get(kind) or {}
+        if e.get("present") and not e.get("verified"):
             try:
                 sent[kind] = await cv.send_confirm(claim_id, kind, actor="system (new claim)")
-            except Exception as e:  # noqa: BLE001 - one channel failing must not stop the other
-                logger.warning("confirmation %s failed for claim %s: %s", kind, claim_id, e)
+            except Exception as ex:  # noqa: BLE001 - one channel failing must not stop the other
+                logger.warning("confirmation %s failed for claim %s: %s", kind, claim_id, ex)
                 sent[kind] = {"ok": False}
-    return {"ok": True, "waiting": True, "sent": sent}
+    return {"ok": True, "welcomed": out, "confirm_sent": sent}
 
 
 async def on_verified(claim_id: int) -> dict:
-    """A contact on this claim was just proven. If its welcome is waiting, send it now."""
-    return await welcome(claim_id, only_if_waiting=True)
+    """A contact on this claim was just proven. Welcome on THAT channel, if its welcome waits."""
+    import biz_nidaan_contact_verify as cv
+    claim = await _claim(claim_id)
+    if not claim or (claim.get("welcome_state") or "") not in ("waiting", "sent") or claim.get("archived"):
+        return {"ok": True, "skipped": "not a new claim"}
+    return {"ok": True, "welcomed": await _welcome_proven(claim_id, await cv.status(claim))}
 
 
-async def welcome(claim_id: int, *, only_if_waiting: bool = False) -> dict:
-    cond = "welcome_state='waiting'" if only_if_waiting else "COALESCE(welcome_state,'') IN ('','waiting')"
-    async with aiosqlite.connect(db.DB_PATH) as c:
-        cur = await c.execute(f"UPDATE nidaan_claims SET welcome_state='sent' WHERE claim_id=? AND {cond}"
-                              " AND COALESCE(archived,0)=0", (int(claim_id),))
-        await c.commit()
-        if cur.rowcount != 1:
-            return {"ok": True, "skipped": "not waiting"}
+async def _welcome_proven(claim_id: int, st: dict) -> dict:
+    """The welcome names the claim and the patient, so it goes ONLY to a number or address the
+    person has proven (review, 2 Oct: either proof used to release both channels). Each channel is
+    welcomed once (nidaan_journey_sends)."""
+    import biz_nidaan_wa_orchestrator as orch
     out = {}
-    try:
-        import biz_nidaan_wa_orchestrator as orch
-        out["whatsapp"] = await orch.wa_journey(claim_id, "claim_registered")
-    except Exception as e:  # noqa: BLE001
-        logger.warning("welcome WhatsApp failed for claim %s: %s", claim_id, e)
-    try:
-        out["email"] = await _welcome_email(claim_id)
-    except Exception as e:  # noqa: BLE001
-        logger.warning("welcome email failed for claim %s: %s", claim_id, e)
-    return {"ok": True, **out}
+    if (st.get("phone") or {}).get("verified"):
+        try:
+            out["whatsapp"] = await orch.wa_journey(claim_id, "claim_registered")
+        except Exception as e:  # noqa: BLE001
+            logger.warning("welcome WhatsApp failed for claim %s: %s", claim_id, e)
+    if (st.get("email") or {}).get("verified") and await orch._journey_reserve(claim_id, "welcome_email"):
+        ok = False
+        try:
+            ok = bool((await _welcome_email(claim_id) or {}).get("ok"))
+            out["email"] = {"ok": ok}
+        except Exception as e:  # noqa: BLE001
+            logger.warning("welcome email failed for claim %s: %s", claim_id, e)
+        await orch._journey_done(claim_id, "welcome_email", ok)
+    if out:
+        async with aiosqlite.connect(db.DB_PATH) as c:
+            await c.execute("UPDATE nidaan_claims SET welcome_state='sent' WHERE claim_id=? AND welcome_state='waiting'",
+                            (int(claim_id),))
+            await c.commit()
+    return out
 
 
 async def _welcome_email(claim_id: int) -> dict:
@@ -109,14 +119,14 @@ async def _welcome_email(claim_id: int) -> dict:
     esc = lambda s: str(s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")  # noqa: E731
     html = ("<div style='font-family:Arial,sans-serif;font-size:15px;line-height:1.6;color:#1a1a1a'>"
             "<p>Namaste %s,</p>"
-            "<p>Thank you for confirming. Your claim <b>NP-%s</b> for <b>%s</b> is registered with "
+            "<p>Thank you for confirming. Your claim <b>NP-%04d</b> for <b>%s</b> is registered with "
             "NidaanPartner. Our team will review it and keep you updated here and on WhatsApp at "
             "<b>+91 91836 86384</b>.</p>"
             "<p>Please save that number - every message about your claim comes from it. We will never "
             "ask you for a code or a password on a call.</p></div>") % (
-        esc(name), claim_id, esc((claim.get("insured_name") or "").title()))
+        esc(name), int(claim_id), esc((claim.get("insured_name") or "").title()))
     with aps.about(claim_id=claim_id):
-        r = await em.send_email(to_email=to, subject="Your claim NP-%s is registered" % claim_id,
+        r = await em.send_email(to_email=to, subject="Your claim NP-%04d is registered" % int(claim_id),
                                 html_body=html, from_name="Nidaan Partner")
     ok = bool(r.get("ok")) if isinstance(r, dict) else bool(r)
     try:
