@@ -26,6 +26,20 @@ it. Newest first within each group._
 | J6 | **No double tap, anywhere - built in, not remembered**: one shared guard every page loads + a check that FAILS the build if a page does not; buttons say what they are doing while they work | 🟢 First |
 | J7 | Deploy tonight (after 6 pm): the intake work `44fbc2a..8369acb` | Waiting for 6 pm |
 
+**Audits of 2 Oct (payments, sign-in, homepage -> plan, the claim journey) - what they found, in order:**
+
+| # | What | Status |
+|---|---|---|
+| K1 | 🔴 SECURITY - payment verify routes trust the browser: the old one-time subscribe verify activates ANY plan for any valid Nidaan signature (pay Rs 499 -> Platinum Annual); the recurring verify trusts body.plan; claim / L2 / review verifies do not check the order was for THIS claim (one payment can unlock several). Fix: one check binding payment -> order -> product -> claim; retire the dead one-time routes; recurring plan read from Razorpay's own subscription notes; a mismatch is refused and reported | 🟡 now |
+| K2 | 🔴 SECURITY - the one-tap pay link (/nidaan/pay/{id}) gives a FULL dashboard session; Telegram one-tap staff login can be phished (no "approve this browser?"); staff tokens never expire; /nidaan/confirm-email confirms on a GET (mail scanners click it); subscriber passwords are salted SHA-256 with no lockout; rate limits may key on Cloudflare's IP, not the visitor's (check nginx) | next |
+| K3 | 🔴 BROKEN - a new person who clicks "Choose Silver" signs up and the checkout NEVER opens (switchPlan compares against a plan we stored before payment); Google sign-up stores "silver" for everyone and the welcome email says "Silver Plan"; subscription messages are written into a hidden window (dismiss / failure / pay-by-link fallback invisible); dead /nidaan/start#plans links | next |
+| K4 | 🔴 BROKEN - the claim-page code email's button opens "link invalid/expired"; the claim page's identity step has no "I already have a code" (WhatsApp in-app browser loop); the WhatsApp bot says "code sent" when the email failed (and sends a complainant's code to the advisor's email) | next |
+| K5 | Sign-in polish: Google sign-in never gives up when blocked (polls every 0.8 s, "Loading..." forever), nothing for in-app browsers; registration uses the code before checking referral / duplicate phone and then wipes the form ("Email already registered" for a duplicate phone); Enter key skips the double-tap guard; English-only server errors on Hindi pages; 429s shown as "Failed"; silent session expiry; /nidaan/logout does not log out; legacy login/signup/review pages still served | after K1-K4 |
+| K6 | One thank-you page `/nidaan/paid` for every payment: re-verifies with Razorpay, says what was bought and shows the next step for THAT plan; pending -> "confirming"; every path (checkout, UPI app switch, killed tab, payment links) lands there; no alert(); pay buttons held for the whole flow; no new order while one is unpaid; retry emails only if still unpaid after 15 min; guardian recovers Rs 499 claim payments too; ops L2 order missing payment_capture | after K3 |
+| K7 | "Is this you?" before any payment (who the plan is for, what they get, refund rule) + the advisor/policyholder choice saved on the account + a super-admin "correct this account's choice" (money-safe: owner-approved refund/credit, ledger never edited, customer told) | design ready; money rules to confirm with founder |
+| K8 | Journey watchdog (J2): 20 conflict checks mapped (fee not covered in a bucket, closed but on the board, lost in Hold, archived with live chases, duplicates, paid-but-no-ledger ...); auto-fix only the provably safe ones; the rest flagged once to the founder + App Health | after K6 |
+| K9 | Templates + email routing: one brand spelling, one code-email builder with Hindi, Sarathi headers off Nidaan mail, "Branch Portal" wording, contact-confirm by "reply YES" not a do-not-share code | with K5 |
+
 ### ▶ 2 Oct — URGENT: one claim intake standard at every door (founder)
 
 | # | What | Notes |
