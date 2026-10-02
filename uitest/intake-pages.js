@@ -53,6 +53,7 @@ async function serve(page, pagePath, file) {
   await page.goto('https://nidaanpartner.com/nidaan/branch');
   await page.waitForSelector('#bcCore_claim_type option[value="health"]', { state: 'attached', timeout: 15000 }).catch(() => {});
   check('AP portal: the claim form is the shared block', !!(await page.$('#bcCore_complainant_email')));
+  check('AP portal: the one-tap guard is on', await page.evaluate(() => window.__ndOneTap === true));
   check('AP portal: Hindi by default for partners', ((await page.textContent('#bcTitle')) || '').includes('क्लेम'));
   await page.click('#bcLangBtn');
   check('AP portal: one tap switches the form to English', ((await page.textContent('#bcCore')) || '').includes('Complainant'));
@@ -68,6 +69,7 @@ async function serve(page, pagePath, file) {
   await page.waitForSelector('#claimCore_claim_type option[value="health"]', { state: 'attached', timeout: 15000 }).catch(() => {});
   check('Dashboard: "Raise a claim" opens the shared block', !!(await page.$('#claimCore_complainant_email')),
     await page.evaluate(() => window.__err || ''));
+  check('Dashboard: the one-tap guard is on', await page.evaluate(() => window.__ndOneTap === true));
   check('Dashboard: a subscriber cannot skip the letter', !(await page.$('#claimCore [data-act="noletter"]')));
   await page.fill('#claimCore_disputed_amount', '150000');
   check('Dashboard: the amount shows in words, in Hindi',
@@ -83,6 +85,7 @@ async function serve(page, pagePath, file) {
   await page.waitForSelector('#rvCore_claim_type option[value="health"]', { state: 'attached', timeout: 15000 }).catch(() => {});
   check('Get started: the first claim uses the shared block', !!(await page.$('#rvCore_complainant_email')),
     await page.evaluate(() => window.__err || ''));
+  check('Get started: the one-tap guard is on', await page.evaluate(() => window.__ndOneTap === true));
   check('Get started: the old optional-letter slot is gone', !(await page.$('#rev-doc-slots')));
   await page.close();
 
