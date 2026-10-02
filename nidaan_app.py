@@ -267,6 +267,16 @@ async def _protected_document_handler(request: Request, exc: Exception):
         "This is the complainant's signed authorization. It is kept as a record and cannot be "
         "removed. / यह शिकायतकर्ता की हस्ताक्षरित अनुमति है - रिकॉर्ड के रूप में रखी जाती है, हटाई नहीं जा सकती।")})
 app.add_exception_handler(nidaan.ProtectedDocument, _protected_document_handler)
+
+
+async def _intake_error_handler(request: Request, exc: Exception):
+    # A claim detail that is missing or wrong (biz_nidaan_intake) - one answer for every door.
+    # `detail` stays a plain string so any page reading it shows a sentence, never an object.
+    return JSONResponse(status_code=400, content={
+        "detail": getattr(exc, "en", "Please check the claim details."),
+        "detail_hi": getattr(exc, "hi", ""), "field": getattr(exc, "field", "")})
+import biz_nidaan_intake as _intake
+app.add_exception_handler(_intake.IntakeError, _intake_error_handler)
 app.add_middleware(SlowAPIMiddleware)
 
 # ── CORS ─────────────────────────────────────────────────────────────────────
@@ -1151,6 +1161,105 @@ def _clean_complainant_contact(phone_in: str, email_in: str):
     return phone, email
 
 
+def _intake_core(body, door: str) -> tuple:
+    """The seven core details, checked the same at every door (biz_nidaan_intake). Returns
+    (core, no_letter_reason). Raises IntakeError - including when there is neither a letter nor,
+    at a door that allows it, a reason."""
+    core = _intake.check_core(body.model_dump())
+    reason = _intake.no_letter_reason(door, getattr(body, "no_letter_reason", ""))
+    if (getattr(body, "letter_token", "") or "").strip():
+        reason = ""
+    elif not reason:
+        raise _intake.IntakeError(
+            "rejection_letter", "Attach the insurer's rejection letter - a claim cannot be raised without it.",
+            "बीमा कंपनी का रिजेक्शन लेटर लगाएँ - इसके बिना क्लेम दर्ज नहीं होता।")
+    return core, reason
+
+
+async def _intake_letter(body, owner: str):
+    """Reserve the uploaded letter for this claim - only its uploader can. None when going without."""
+    token = (getattr(body, "letter_token", "") or "").strip()
+    return await _intake.reserve_letter(token, owner) if token else None
+
+
+async def _intake_finish(claim_id: int, letter, reason: str, *, account_id: int, claim_type: str,
+                         by: str) -> None:
+    if letter:
+        await _intake.attach_letter(letter, claim_id=claim_id, account_id=account_id,
+                                    claim_type=claim_type, by=by)
+    elif reason:
+        await _intake.set_letter_due(claim_id, reason, by)
+
+
+async def _stage_intake_letter(request: Request, owner: str, file: UploadFile) -> dict:
+    """The rejection letter, before the claim exists: the same checks as every upload (size, real
+    file type, virus scan), then a single-use token for the form. One file; a person staging
+    letters without raising claims is capped per day."""
+    _guard_upload_batch([file])
+    async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+        try:
+            n = (await (await _c.execute(
+                "SELECT COUNT(*) FROM nidaan_intake_letters WHERE owner=? "
+                "AND created_at > datetime('now','-1 day')", (owner,))).fetchone())[0]
+        except Exception:  # noqa: BLE001 - table made on first stage
+            n = 0
+    if n >= 60:
+        raise HTTPException(429, "Too many uploads today. Please try again tomorrow, or call us.")
+    content = await file.read()
+    if len(content) > _MAX_DOC_SIZE:
+        raise HTTPException(413, f"{file.filename} is over the {_MAX_DOC_SIZE // (1024*1024)} MB limit")
+    if not _doc_magic_ok(content):
+        raise HTTPException(415, _upload_refusal(file.filename, content))
+    ext = await validate_upload_scanned(content, (file.content_type or ""), what="document")
+    content, ext = _as_viewable(content, ext)
+    stored = f"{uuid.uuid4().hex}{ext}"
+    (_NIDAAN_DOCS_DIR / stored).write_bytes(content)
+    token = await _intake.stage_letter(owner, stored_name=stored,
+                                       original_name=(file.filename or stored)[:200],
+                                       file_size=len(content), mime_type=file.content_type or "")
+    return {"token": token, "name": file.filename or stored, "size": len(content)}
+
+
+@app.get("/nidaan/api/intake/types")
+@limiter.limit("60/minute")
+async def nidaan_intake_types(request: Request):
+    """The one list of insurance types every claim form shows."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(404)
+    return {"types": _intake.types_public()}
+
+
+@app.post("/nidaan/api/intake/letter")
+@limiter.limit("20/minute")
+async def nidaan_intake_letter_subscriber(request: Request, file: UploadFile = File(...)):
+    if not _is_nidaan_host(request):
+        raise HTTPException(404)
+    payload = _nidaan_bearer(request)
+    if not payload:
+        raise HTTPException(401, "Unauthorized")
+    return await _stage_intake_letter(request, _intake.owner_key("acct", payload["sub"]), file)
+
+
+@app.post("/nidaan/branch/api/intake/letter")
+@limiter.limit("20/minute")
+async def nidaan_intake_letter_branch(request: Request, file: UploadFile = File(...)):
+    if not _is_nidaan_host(request):
+        raise HTTPException(404)
+    code = _branch_bearer(request)
+    if not code:
+        raise HTTPException(401, "Unauthorized")
+    return await _stage_intake_letter(request, _intake.owner_key("branch", code), file)
+
+
+@app.post("/nidaan/ops/api/intake/letter")
+@limiter.limit("20/minute")
+async def nidaan_intake_letter_staff(request: Request, file: UploadFile = File(...)):
+    if not _is_nidaan_host(request):
+        raise HTTPException(404)
+    caller = _require_staff(request, "team_member")
+    return await _stage_intake_letter(request, _intake.owner_key("staff", caller.get("staff_id")), file)
+
+
 # ── Branch raises a claim on behalf of a customer (Item 3.2) ──────────────────
 class _BranchClaimReq(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -1167,9 +1276,13 @@ class _BranchClaimReq(BaseModel):
     claim_type: str = Field(..., max_length=40)
     insurer_name: str = Field("", max_length=120)
     policy_no: str = Field("", max_length=80)
-    disputed_amount: Optional[int] = Field(None, ge=0, le=100000000)
+    disputed_amount: Optional[int] = Field(None, ge=0, le=1000000000)
     notes: str = Field("", max_length=2000)
     channel_partner_id: Optional[int] = None   # approved CP credited on a My Business claim
+    # The rejection letter, uploaded first (biz_nidaan_intake) - or, at this door only, the reason
+    # it is not attached yet (then it is due within 7 days or the claim is archived).
+    letter_token: str = Field("", max_length=100)
+    no_letter_reason: str = Field("", max_length=300)
 
 
 class _ReferrerNoteReq(BaseModel):
@@ -1219,32 +1332,39 @@ async def nidaan_branch_referred_claim_note(claim_id: int, body: _ReferrerNoteRe
 
 
 @app.post("/nidaan/branch/api/claims")
+@limiter.limit("20/minute")
 async def nidaan_branch_raise_claim(body: _BranchClaimReq, request: Request):
     """A branch raises a claim FOR a customer. Attaches to the branch's house account,
     origin='branch', free at intake — the L2 fee (if any) is charged later per policy."""
     if not _is_nidaan_host(request): raise HTTPException(404)
     code = _branch_bearer(request)
     if not code: raise HTTPException(401, "Unauthorized")
-    # Complainant = the contact who provides documents (mandatory). Falls back to the insured
-    # fields when a form doesn't split them (keeps older callers working).
-    _cname = (body.complainant_name or body.insured_name or "").strip()
-    cphone, cemail = _clean_complainant_contact(body.complainant_phone or body.insured_phone,
-                                                body.complainant_email or body.insured_email)
-    # Insured (patient): name from the patient field (or the complainant); phone optional.
-    _iname = (body.insured_name or _cname).strip()
-    _iphone = "".join(ch for ch in (body.insured_phone or "") if ch.isdigit()) or cphone
+    # The same seven core details as every other door - patient and complainant are two people
+    # in the record even when they are one in life (biz_nidaan_intake).
+    core, reason = _intake_core(body, "ap")
     house_account = await nidaan.get_or_create_branch_house_account(code)
-    claim_id, msg = await nidaan.submit_claim(
-        account_id=house_account, user_id=None,
-        claim_type=(body.claim_type or "").strip(), insured_name=_iname,
-        insured_phone=_iphone, insured_email=cemail, insurer_name=(body.insurer_name or "").strip(),
-        policy_no=(body.policy_no or "").strip(), disputed_amount=body.disputed_amount,
-        notes_from_agent=(body.notes or "").strip(), branch_code=code,
-        payment_status="unpaid_lead", skip_eligibility=True, origin="branch",
-        complainant_name=_cname, complainant_phone=cphone, complainant_email=cemail,
-        complainant_role="branch")
+    letter = await _intake_letter(body, _intake.owner_key("branch", code))
+    try:
+        claim_id, msg = await nidaan.submit_claim(
+            account_id=house_account, user_id=None,
+            claim_type=core["claim_type"], insured_name=core["insured_name"],
+            insured_phone=core["insured_phone"], insured_email=core["insured_email"],
+            insurer_name=core["insurer_name"], policy_no=core["policy_no"],
+            disputed_amount=core["disputed_amount"],
+            notes_from_agent=(body.notes or "").strip(), branch_code=code,
+            payment_status="unpaid_lead", skip_eligibility=True, origin="branch",
+            complainant_name=core["complainant_name"], complainant_phone=core["complainant_phone"],
+            complainant_email=core["complainant_email"], complainant_role="branch")
+    except Exception:
+        if letter:
+            await _intake.release_letter(letter["letter_id"])
+        raise
     if not claim_id:
+        if letter:
+            await _intake.release_letter(letter["letter_id"])
         raise HTTPException(400, nidaan.claim_block_message(msg, for_staff=True))
+    await _intake_finish(claim_id, letter, reason, account_id=house_account,
+                         claim_type=core["claim_type"], by=f"Authorized Partner {code}")
     try:
         import biz_nidaan_notifications as _nnot
         # Reliable all-channel ops alert (bell + email + Telegram) for branch-raised claims.
@@ -1267,7 +1387,8 @@ async def nidaan_branch_list_claims(request: Request):
 @app.post("/nidaan/branch/api/claims/{claim_id}/documents/upload")
 @limiter.limit("20/minute")
 async def nidaan_branch_upload_claim_doc(claim_id: int, request: Request,
-                                         files: list[UploadFile] = File(...)):
+                                         files: list[UploadFile] = File(...),
+                                         is_letter: str = Form("")):
     """Branch uploads documents (e.g. the rejection letter) for one of ITS claims."""
     if not _is_nidaan_host(request): raise HTTPException(404)
     code = _branch_bearer(request)
@@ -1295,7 +1416,23 @@ async def nidaan_branch_upload_claim_doc(claim_id: int, request: Request,
             account_id=account_id, stored_name=stored, original_name=f.filename or stored,
             file_size=len(content), mime_type=f.content_type or "", claim_id=claim_id)
         saved.append({"doc_id": doc_id, "original_name": f.filename})
+    if is_letter == "1" and saved:
+        await _intake_letter_later(claim_id, saved[0]["doc_id"])
     return {"uploaded": saved, "count": len(saved)}
+
+
+async def _intake_letter_later(claim_id: int, doc_id: int) -> None:
+    """A claim raised without its letter: the letter has come. Tick it, stop the 7-day clock."""
+    try:
+        import biz_nidaan_doc_checklist as _ck
+        async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:
+            r = await (await _c.execute("SELECT claim_type FROM nidaan_claims WHERE claim_id=?",
+                                        (claim_id,))).fetchone()
+        ct = (r[0] if r else "") or ""
+        await _ck.mark_doc_received(claim_id, _intake.letter_key(ct), via="upload", doc_id=doc_id)
+        await _intake.letter_arrived(claim_id, by="upload")
+    except Exception as e:  # noqa: BLE001 - the file is saved; the sweep reads the tick later
+        logger.warning("letter-later tick failed for claim %s: %s", claim_id, e)
 
 
 # ── Branch Level-2 payment gate (Item 3.3) ───────────────────────────────────
@@ -3030,9 +3167,9 @@ class NidaanLoginReq(BaseModel):
 
 class NidaanClaimReq(BaseModel):
     model_config = ConfigDict(extra="forbid")  # Sprint E.3
-    claim_type: str
-    insured_name: str
-    insured_phone: str
+    claim_type: str = Field("", max_length=40)
+    insured_name: str = Field("", max_length=120)
+    insured_phone: str = Field("", max_length=20)    # the patient's - optional (biz_nidaan_intake)
     insured_email: str = ""
     insurer_name: str = ""
     policy_no: str = ""
@@ -3048,9 +3185,10 @@ class NidaanClaimReq(BaseModel):
     branch_code: str = ""        # optional affiliate branch (captured here too; covers Google-signup)
     # Who will actually deal with us — often not the patient (a son for his mother, a wife for her
     # husband). Blank means they are the same person; every message and document ask goes here.
-    complainant_name: str = ""
-    complainant_phone: str = ""
-    complainant_email: str = ""
+    complainant_name: str = Field("", max_length=120)
+    complainant_phone: str = Field("", max_length=20)
+    complainant_email: str = Field("", max_length=160)
+    letter_token: str = Field("", max_length=100)      # the rejection letter, uploaded first
 
 
 class NidaanSendOTPReq(BaseModel):
@@ -4196,10 +4334,8 @@ async def nidaan_api_submit_claim(body: NidaanClaimReq, request: Request):
     payload = _nidaan_bearer(request)
     if not payload:
         raise HTTPException(status_code=401, detail="Unauthorized")
-    if not body.claim_type or not body.insured_name or not body.insured_phone:
-        raise HTTPException(status_code=400, detail="claim_type, insured_name, insured_phone are required")
-    # Phase 2: complainant mobile + email mandatory (email verified later via the L2 magic-link).
-    _ins_phone, _ins_email = _clean_complainant_contact(body.insured_phone, body.insured_email)
+    # The same seven core details as every door, the letter included (biz_nidaan_intake).
+    core, _reason = _intake_core(body, "subscriber")
     # ₹499 value-first funnel: determine the payment path.
     #   • Active subscription  → 'subscription' (consumes quota, review starts now)
     #   • Paid ₹499 per-claim  → 'paid'         (review starts now)
@@ -4221,32 +4357,41 @@ async def nidaan_api_submit_claim(body: NidaanClaimReq, request: Request):
     if _bc and not await nidaan.is_valid_ref_code(_bc):
         raise HTTPException(status_code=400,
             detail=f"Referral code '{_bc}' is not valid or active — please leave it blank if you don't have one.")
-    claim_id, reason = await nidaan.submit_claim(
-        account_id=payload["sub"],
-        user_id=None,
-        claim_type=body.claim_type,
-        insured_name=body.insured_name,
-        insured_phone=_ins_phone,
-        insured_email=_ins_email,
-        insurer_name=body.insurer_name,
-        policy_no=body.policy_no,
-        disputed_amount=body.disputed_amount,
-        claim_event_date=body.claim_event_date,
-        policy_inception_date=body.policy_inception_date,
-        tpa_name=body.tpa_name,
-        notes_from_agent=body.notes_from_agent,
-        intermediary_code=body.intermediary_code,
-        intermediary_name=body.intermediary_name,
-        branch_code=_bc,
-        payment_status=_pay_status,
-        skip_eligibility=_skip_elig,
-        # Blank falls back to the insured, which is right when they are the same person.
-        complainant_name=(body.complainant_name or "").strip(),
-        complainant_phone=(body.complainant_phone or "").strip(),
-        complainant_email=(body.complainant_email or "").strip(),
-    )
+    letter = await _intake_letter(body, _intake.owner_key("acct", payload["sub"]))
+    try:
+        claim_id, reason = await nidaan.submit_claim(
+            account_id=payload["sub"],
+            user_id=None,
+            claim_type=core["claim_type"],
+            insured_name=core["insured_name"],
+            insured_phone=core["insured_phone"],
+            insured_email=core["insured_email"],
+            insurer_name=core["insurer_name"],
+            policy_no=core["policy_no"],
+            disputed_amount=core["disputed_amount"],
+            claim_event_date=body.claim_event_date,
+            policy_inception_date=body.policy_inception_date,
+            tpa_name=body.tpa_name,
+            notes_from_agent=body.notes_from_agent,
+            intermediary_code=body.intermediary_code,
+            intermediary_name=body.intermediary_name,
+            branch_code=_bc,
+            payment_status=_pay_status,
+            skip_eligibility=_skip_elig,
+            complainant_name=core["complainant_name"],
+            complainant_phone=core["complainant_phone"],
+            complainant_email=core["complainant_email"],
+        )
+    except Exception:
+        if letter:
+            await _intake.release_letter(letter["letter_id"])
+        raise
     if claim_id is None:
+        if letter:
+            await _intake.release_letter(letter["letter_id"])
         raise HTTPException(status_code=402, detail=nidaan.claim_block_message(reason))
+    await _intake_finish(claim_id, letter, "", account_id=payload["sub"],
+                         claim_type=core["claim_type"], by="the subscriber")
     # Auto-assign to the least-loaded handler if enabled + this is a real (payable) claim, not an
     # unpaid lead. Fire-and-forget so it never blocks or breaks claim submission; notifies the
     # chosen handler by email exactly like a manual assignment.
@@ -4290,7 +4435,7 @@ async def nidaan_api_submit_claim(body: NidaanClaimReq, request: Request):
     # of the de-dup + pay-gate. Non-fatal if it fails.
     try:
         import biz_nidaan_doc_checklist as _ck
-        await _ck.seed_checklist_for_claim(claim_id, body.claim_type)
+        await _ck.seed_checklist_for_claim(claim_id, core["claim_type"])
     except Exception as _ce:
         logger.warning("checklist seed failed for claim %s: %s", claim_id, _ce)
     # Unpaid leads: stop here. No review task, no legal notification — the review
@@ -4313,7 +4458,7 @@ async def nidaan_api_submit_claim(body: NidaanClaimReq, request: Request):
         if ntasks._flag_truthy(_create_flag):
             new_task_id = await ntasks.create_task(
                 claim_id=claim_id,
-                title=f"Initial review of {body.insured_name}'s {body.claim_type} claim",
+                title=f"Initial review of {core["insured_name"]}'s {core["claim_type"]} claim",
                 description=(body.notes_from_agent or "")[:400],
                 status_slug="initial_review",
                 priority="normal",
@@ -4344,10 +4489,10 @@ async def nidaan_api_submit_claim(body: NidaanClaimReq, request: Request):
                 claim_id=claim_id,
                 advisor_name=account["owner_name"] if account else payload.get("email", ""),
                 advisor_email=(account["email"] if account else "") or payload.get("email", ""),
-                insured_name=body.insured_name,
-                claim_type=body.claim_type,
-                insurer_name=body.insurer_name or "",
-                disputed_amount=body.disputed_amount,
+                insured_name=core["insured_name"],
+                claim_type=core["claim_type"],
+                insurer_name=core["insurer_name"],
+                disputed_amount=core["disputed_amount"],
                 notes=body.notes_from_agent or "",
             )
         )
@@ -8746,6 +8891,7 @@ class _RaiseForSubReq(BaseModel):
     # so the reason is a field of its own and lands on the timeline with the raiser's name —
     # buried in a notes blob it is neither findable nor attributable.
     no_letter_reason: str = Field("", max_length=300)
+    letter_token: str = Field("", max_length=100)      # the rejection letter, uploaded first
 
 
 @app.post("/nidaan/ops/api/subscribers/raise-claim")
@@ -8763,41 +8909,44 @@ async def nidaan_ops_raise_for_subscriber(body: _RaiseForSubReq, request: Reques
         raise HTTPException(
             status_code=400,
             detail="That account has no live subscription, so a claim cannot be raised against it.")
-
-    claim_id, msg = await nidaan.submit_claim(
-        account_id=body.account_id,
-        user_id=None,
-        claim_type=body.claim_type,
-        insured_name=body.insured_name,
-        insured_phone=(body.insured_phone or "").strip(),
-        insured_email=(body.insured_email or "").strip(),
-        insurer_name=body.insurer_name,
-        policy_no=body.policy_no,
-        disputed_amount=body.disputed_amount,
-        notes_from_agent=body.notes_from_agent,
-        payment_status="subscription",
-        origin="ops_on_behalf",
-        # Who we deal with. Left blank it falls back to the patient, which is right when they are
-        # the same person and wrong - silently - when they are not.
-        complainant_name=(body.complainant_name or "").strip(),
-        complainant_phone=(body.complainant_phone or "").strip(),
-        complainant_email=(body.complainant_email or "").strip(),
-        raised_by_staff_id=caller.get("staff_id"),
-        raised_by_name=_actor_label(caller),
-        raised_via="on_behalf",
-    )
+    # The same seven core details as every door. This route used to accept a claim with no phone
+    # and no email at all, so the complainant had nowhere to hear from us.
+    core, _why = _intake_core(body, "on_behalf")
+    letter = await _intake_letter(body, _intake.owner_key("staff", caller.get("staff_id")))
+    try:
+        claim_id, msg = await nidaan.submit_claim(
+            account_id=body.account_id,
+            user_id=None,
+            claim_type=core["claim_type"],
+            insured_name=core["insured_name"],
+            insured_phone=core["insured_phone"],
+            insured_email=core["insured_email"],
+            insurer_name=core["insurer_name"],
+            policy_no=core["policy_no"],
+            disputed_amount=core["disputed_amount"],
+            notes_from_agent=body.notes_from_agent,
+            payment_status="subscription",
+            origin="ops_on_behalf",
+            complainant_name=core["complainant_name"],
+            complainant_phone=core["complainant_phone"],
+            complainant_email=core["complainant_email"],
+            raised_by_staff_id=caller.get("staff_id"),
+            raised_by_name=_actor_label(caller),
+            raised_via="on_behalf",
+        )
+    except Exception:
+        if letter:
+            await _intake.release_letter(letter["letter_id"])
+        raise
     if not claim_id:
+        if letter:
+            await _intake.release_letter(letter["letter_id"])
         raise HTTPException(status_code=400, detail=nidaan.claim_block_message(msg, for_staff=True))
-    _why = (body.no_letter_reason or "").strip()
+    await _intake_finish(claim_id, letter, _why, account_id=body.account_id,
+                         claim_type=core["claim_type"], by=_actor_label(caller))
     await _ops_audit(request, "claim.raised_on_behalf", "claim", claim_id,
                      (f"for account {body.account_id} ({acct.get('owner_name') or ''})"
                       + (f" — NO rejection letter: {_why}" if _why else ""))[:160])
-    if _why:
-        # On the timeline, with a name against it. The whole case is built on the rejection
-        # letter, so a claim that starts without one must say who decided that and why.
-        await nidaan.record_claim_activity(
-            claim_id, "raised_without_letter", actor=_actor_label(caller),
-            summary=f"Raised without the rejection letter by {_actor_label(caller)} — {_why}")
     # The complainant hears from us whichever door their claim came through — this one used to
     # be silent. Fire-and-forget: a WhatsApp hiccup must not fail the staff member's request.
     try:
@@ -11113,16 +11262,15 @@ async def _staff_claim_code(request: Request) -> tuple[dict, str]:
 
 
 @app.post("/nidaan/ops/api/my-claims")
+@limiter.limit("20/minute")
 async def ops_my_raise_claim(body: _BranchClaimReq, request: Request):
     """A staffer raises a claim FOR a customer (free at intake) — attributed to their own code,
     exactly like a branch. The L2 fee (if any) is charged later only on a GO review."""
     if not _is_nidaan_host(request): raise HTTPException(404)
     _staff, code = await _staff_claim_code(request)
-    _cname = (body.complainant_name or body.insured_name or "").strip()
-    cphone, cemail = _clean_complainant_contact(body.complainant_phone or body.insured_phone,
-                                                body.complainant_email or body.insured_email)
-    _iname = (body.insured_name or _cname).strip()
-    _iphone = "".join(ch for ch in (body.insured_phone or "") if ch.isdigit()) or cphone
+    # It asked for one "customer" from 10 Aug and stored that person as both patient and
+    # complainant. Now the same seven core details as every door (founder, 2 Oct).
+    core, reason = _intake_core(body, "my_business")
     house_account = await nidaan.get_or_create_branch_house_account(code)
     # Resolve the credited Channel Partner SERVER-SIDE. The client sends only an id, and we
     # accept it only if that CP is APPROVED - otherwise a staffer could type any name and
@@ -11135,21 +11283,32 @@ async def ops_my_raise_claim(body: _BranchClaimReq, request: Request):
             raise HTTPException(status_code=400,
                                 detail="That channel partner is not approved for selection")
         _cp_id, _cp_name = _cp["cp_id"], _cp["name"]
-    claim_id, msg = await nidaan.submit_claim(
-        account_id=house_account, user_id=None,
-        claim_type=(body.claim_type or "").strip(), insured_name=_iname,
-        insured_phone=_iphone, insured_email=cemail, insurer_name=(body.insurer_name or "").strip(),
-        policy_no=(body.policy_no or "").strip(), disputed_amount=body.disputed_amount,
-        notes_from_agent=(body.notes or "").strip(), branch_code=code,
-        payment_status="unpaid_lead", skip_eligibility=True, origin="branch",
-        associate_referrer=_cp_name, channel_partner_id=_cp_id,
-        complainant_name=_cname, complainant_phone=cphone, complainant_email=cemail,
-        complainant_role="staff",
-        # Who raised it, so the claim's first line says so (claim #245 read "submitted by advisor").
-        raised_by_staff_id=(_staff or {}).get("staff_id"), raised_by_name=_actor_label(_staff or {}),
-        raised_via="my_business")
+    letter = await _intake_letter(body, _intake.owner_key("staff", (_staff or {}).get("staff_id")))
+    try:
+        claim_id, msg = await nidaan.submit_claim(
+            account_id=house_account, user_id=None,
+            claim_type=core["claim_type"], insured_name=core["insured_name"],
+            insured_phone=core["insured_phone"], insured_email=core["insured_email"],
+            insurer_name=core["insurer_name"], policy_no=core["policy_no"],
+            disputed_amount=core["disputed_amount"],
+            notes_from_agent=(body.notes or "").strip(), branch_code=code,
+            payment_status="unpaid_lead", skip_eligibility=True, origin="branch",
+            associate_referrer=_cp_name, channel_partner_id=_cp_id,
+            complainant_name=core["complainant_name"], complainant_phone=core["complainant_phone"],
+            complainant_email=core["complainant_email"], complainant_role="staff",
+            # Who raised it, so the claim's first line says so (claim #245 read "submitted by advisor").
+            raised_by_staff_id=(_staff or {}).get("staff_id"), raised_by_name=_actor_label(_staff or {}),
+            raised_via="my_business")
+    except Exception:
+        if letter:
+            await _intake.release_letter(letter["letter_id"])
+        raise
     if not claim_id:
+        if letter:
+            await _intake.release_letter(letter["letter_id"])
         raise HTTPException(400, nidaan.claim_block_message(msg, for_staff=True))
+    await _intake_finish(claim_id, letter, reason, account_id=house_account,
+                         claim_type=core["claim_type"], by=_actor_label(_staff or {}))
     try:
         import biz_nidaan_notifications as _nnot
         _rb = (_staff or {}).get("name") or "A staff member"
@@ -11176,7 +11335,8 @@ async def ops_my_list_claims(request: Request):
 @app.post("/nidaan/ops/api/my-claims/{claim_id}/documents/upload")
 @limiter.limit("20/minute")
 async def ops_my_upload_claim_doc(claim_id: int, request: Request,
-                                  files: list[UploadFile] = File(...)):
+                                  files: list[UploadFile] = File(...),
+                                  is_letter: str = Form("")):
     """Staffer attaches documents (e.g. the rejection letter) to a claim THEY raised —
     same rules/limits as the branch upload, scoped to the staffer's own claim code."""
     if not _is_nidaan_host(request): raise HTTPException(404)
@@ -11204,6 +11364,8 @@ async def ops_my_upload_claim_doc(claim_id: int, request: Request,
             account_id=account_id, stored_name=stored, original_name=f.filename or stored,
             file_size=len(content), mime_type=f.content_type or "", claim_id=claim_id)
         saved.append({"doc_id": doc_id, "original_name": f.filename})
+    if is_letter == "1" and saved:
+        await _intake_letter_later(claim_id, saved[0]["doc_id"])
     return {"uploaded": saved, "count": len(saved)}
 
 
@@ -12649,7 +12811,9 @@ async def ops_update_claim_status(claim_id: int, body: OpsClaimStatusUpdate, req
             body=(f"The claim #{_claim_no(claim_id)}{_who} has moved to: {_st}."
                   + (f"\n\nNote: {body.note}" if body.note else "")
                   + "\n\nOpen it on your dashboard for the full trail."),
-            roles=["complainant", "branch", "staff"]))
+            roles=["complainant", "branch", "staff"],
+            # the account holder was emailed just above; the same inbox does not get it twice
+            skip_emails=[(claim or {}).get("email") or ""]))
     except Exception as _pe:
         logger.info("claim-party fan-out failed for claim %s: %s", claim_id, _pe)
     return {"claim_id": claim_id, "status": body.new_status}
@@ -19049,6 +19213,10 @@ async def main():
                     e = await nnot.sweep_empty_claims()
                     if e:
                         logger.warning("Flagged %d claim(s) that arrived with no documents", e)
+                    # Raised without the rejection letter: daily reminder, archive on day 7.
+                    lt = await _intake.sweep_letters()
+                    if lt.get("archived") or lt.get("reminded"):
+                        logger.info("Letter sweep: %s", lt)
                 except asyncio.CancelledError:
                     break
                 except Exception as e:

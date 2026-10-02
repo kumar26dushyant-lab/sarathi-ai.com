@@ -466,6 +466,12 @@ async def _note(claim_id: int, kind: str, value: str, method: str) -> None:
                 METHOD_WORDS.get(method, method)))
     except Exception:  # noqa: BLE001
         pass
+    # A new claim's welcome waits for exactly this (biz_nidaan_welcome).
+    try:
+        import biz_nidaan_welcome as _w
+        await _w.on_verified(claim_id)
+    except Exception as e:  # noqa: BLE001 - the proof is recorded; the welcome can be sent by hand
+        logger.warning("welcome after confirmation failed for claim %s: %s", claim_id, e)
 
 
 # ── the daily nudge to the people handling the claims ────────────────────────

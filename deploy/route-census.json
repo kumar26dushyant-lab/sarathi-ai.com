@@ -1,4421 +1,4531 @@
 {
  "DELETE /api/admin/leads/{lead_id}": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_admin_delete_lead",
   "guard": "rate-limited"
  },
  "DELETE /api/admin/policies/{policy_id}": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_admin_delete_policy",
   "guard": "rate-limited"
  },
  "DELETE /api/agent/{agent_id}/photo": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_delete_agent_photo",
   "guard": "open"
  },
  "DELETE /api/campaigns/{campaign_id}": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_delete_campaign",
   "guard": "open"
  },
  "DELETE /api/marketing/schedule/{schedule_id}": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_marketing_schedule_delete",
   "guard": "open"
  },
  "DELETE /api/marketing/segments/{segment_id}": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_marketing_segments_delete",
   "guard": "open"
  },
  "DELETE /api/marketing/upload-logo": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_marketing_remove_logo",
   "guard": "open"
  },
  "DELETE /api/nurture/sequences/{sequence_id}": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_nurture_delete_sequence",
   "guard": "rate-limited"
  },
  "DELETE /api/nurture/steps/{step_id}": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_nurture_delete_step",
   "guard": "rate-limited"
  },
  "DELETE /api/quotes/ratecards/{ratecard_id}": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_quotes_delete_ratecard",
   "guard": "open"
  },
  "DELETE /api/roles/{role_id}": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_delete_role",
   "guard": "rate-limited"
  },
  "DELETE /api/sa/affiliates/bulk": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_bulk_delete_affiliates",
   "guard": "open"
  },
  "DELETE /api/sa/affiliates/{affiliate_id}": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_delete_affiliate",
   "guard": "open"
  },
  "DELETE /api/sa/tenant/{tenant_id}": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_delete_tenant",
   "guard": "rate-limited"
  },
  "DELETE /api/sa/tenant/{tenant_id}/pending-plan-change": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_cancel_pending_plan_change",
   "guard": "open"
  },
  "DELETE /api/subscription/pending-change": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_cancel_pending_change",
   "guard": "rate-limited"
  },
  "DELETE /api/tenant/logo": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_delete_tenant_logo",
   "guard": "open"
  },
  "DELETE /api/wa-agent/disconnect": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "wa_agent_disconnect",
   "guard": "open"
  },
  "DELETE /nidaan/api/claims/{claim_id}/documents/{doc_id}": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_delete_claim_doc",
   "guard": "nidaan-host"
  },
  "DELETE /nidaan/api/review/{purchase_id}/documents/{doc_id}": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_delete_review_doc",
   "guard": "nidaan-host"
  },
  "DELETE /nidaan/branch/api/claims/{claim_id}/documents/{doc_id}": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_branch_delete_claim_doc",
   "guard": "nidaan-host"
  },
- "POST /nidaan/claim/api/email/change": {
-  "file": "sarathi_biz.py",
-  "func": "nidaan_claim_email_change",
-  "guard": "nidaan-host,rate-limited"
- },
- "POST /nidaan/claim/api/email/check": {
-  "file": "sarathi_biz.py",
-  "func": "nidaan_claim_email_check",
-  "guard": "nidaan-host,rate-limited"
- },
- "POST /nidaan/claim/api/email/code": {
-  "file": "sarathi_biz.py",
-  "func": "nidaan_claim_email_code",
-  "guard": "nidaan-host,rate-limited"
- },
- "POST /nidaan/claim/api/email/skip": {
-  "file": "sarathi_biz.py",
-  "func": "nidaan_claim_email_skip",
-  "guard": "nidaan-host,rate-limited"
- },
  "DELETE /nidaan/claim/api/documents/{doc_id}": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_claim_delete_doc",
   "guard": "nidaan-host,rate-limited"
  },
  "DELETE /nidaan/ops/api/accounts/{account_id}": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_delete_account",
   "guard": "nidaan-host,staff:super_admin"
  },
  "DELETE /nidaan/ops/api/claims/{claim_id}/documents/{doc_id}": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_ops_delete_claim_doc",
   "guard": "nidaan-host,staff:team_member"
  },
  "DELETE /nidaan/ops/api/claims/{claim_id}/messages/{message_id}": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_claim_message_unsend",
   "guard": "nidaan-host,staff:any"
  },
  "DELETE /nidaan/ops/api/claims/{claim_id}/notes/attachments/{attachment_id}": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_claim_note_attachment_delete",
   "guard": "nidaan-host,staff:any"
  },
  "DELETE /nidaan/ops/api/claims/{claim_id}/notes/{note_id}": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_claim_note_delete",
   "guard": "nidaan-host,staff:any"
  },
  "DELETE /nidaan/ops/api/my-claims/{claim_id}/documents/{doc_id}": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_my_claim_doc_delete",
   "guard": "nidaan-host"
  },
  "DELETE /nidaan/ops/api/notifications/prefs": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_notify_pref_clear",
   "guard": "nidaan-host,staff:super_admin,rate-limited"
  },
  "DELETE /nidaan/ops/api/official-numbers/{slot}": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_official_delete",
   "guard": "nidaan-host,staff:super_admin"
  },
  "DELETE /nidaan/ops/api/quick-tasks/{qid}": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_quick_task_delete",
   "guard": "nidaan-host,staff:any"
  },
  "DELETE /nidaan/ops/api/quick-tasks/{qid}/attachments/{attachment_id}": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_quick_task_attachment_delete",
   "guard": "nidaan-host,staff:any"
  },
  "DELETE /nidaan/ops/api/radar/mailboxes/{mailbox_id}": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_radar_mailbox_delete",
   "guard": "nidaan-host,staff:sub_super_admin"
  },
  "DELETE /nidaan/ops/api/review-templates/{template_id}": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_review_template_delete",
   "guard": "nidaan-host,staff:super_admin"
  },
  "DELETE /nidaan/ops/api/staff/{staff_id}": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_delete_staff",
   "guard": "nidaan-host,staff:super_admin"
  },
  "DELETE /nidaan/ops/api/status-config/{slug}": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_status_config_delete",
   "guard": "nidaan-host,staff:super_admin"
  },
  "DELETE /nidaan/ops/api/support/reps/{rep_id}": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_support_reps_remove",
   "guard": "nidaan-host,staff:super_admin"
  },
  "DELETE /nidaan/ops/api/task-categories/{category_id}": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_task_category_delete",
   "guard": "nidaan-host,staff:super_admin"
  },
  "GET /": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "home",
   "guard": "nidaan-host"
  },
  "GET /about": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "about_page",
   "guard": "open"
  },
  "GET /admin": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "admin_page",
   "guard": "open"
  },
  "GET /admins": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "nidaan_admins_page",
   "guard": "nidaan-host"
  },
  "GET /api/admin/bots": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_admin_bots",
   "guard": "open"
  },
  "GET /api/admin/customers": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_admin_customers",
   "guard": "open"
  },
  "GET /api/admin/customers/{customer_id}/portfolio": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_admin_customer_portfolio",
   "guard": "open"
  },
  "GET /api/admin/followup-digest": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_admin_followup_digest",
   "guard": "open"
  },
  "GET /api/admin/leads": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_admin_leads",
   "guard": "open"
  },
  "GET /api/admin/leads/{lead_id}/policies": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_admin_lead_policies",
   "guard": "open"
  },
  "GET /api/admin/message-queue/dead-letters": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_dead_letters",
   "guard": "open"
  },
  "GET /api/admin/message-queue/stats": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_queue_stats",
   "guard": "open"
  },
  "GET /api/admin/overview": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_admin_overview",
   "guard": "open"
  },
  "GET /api/admin/policies": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_admin_policies",
   "guard": "open"
  },
  "GET /api/admin/policies/{policy_id}/members": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_admin_policy_members",
   "guard": "open"
  },
  "GET /api/admin/stats": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_admin_stats",
   "guard": "open"
  },
  "GET /api/admin/tenants": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_admin_tenants",
   "guard": "open"
  },
  "GET /api/affiliate/check/{code}": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "affiliate_check_code",
   "guard": "open"
  },
  "GET /api/affiliate/dashboard": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "affiliate_dashboard",
   "guard": "rate-limited"
  },
  "GET /api/affiliate/me": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "affiliate_me",
   "guard": "open"
  },
  "GET /api/affiliate/payouts": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "affiliate_get_payouts",
   "guard": "open"
  },
  "GET /api/affiliate/tickets": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "affiliate_list_tickets",
   "guard": "open"
  },
  "GET /api/affiliate/tickets/{ticket_id}": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "affiliate_get_ticket",
   "guard": "open"
  },
  "GET /api/agents": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_list_agents",
   "guard": "open"
  },
  "GET /api/ai-usage": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_ai_usage",
   "guard": "open"
  },
  "GET /api/ai/verify": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_ai_verify",
   "guard": "rate-limited"
  },
  "GET /api/ai/voice-suggestions": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_ai_voice_suggestions",
   "guard": "rate-limited"
  },
  "GET /api/auth/csrf-token": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_csrf_token",
   "guard": "open"
  },
  "GET /api/auth/me": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_auth_me",
   "guard": "open"
  },
  "GET /api/auth/telegram-login": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_telegram_login",
   "guard": "rate-limited"
  },
  "GET /api/bot-setup/guide": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_bot_setup_guide",
   "guard": "open"
  },
  "GET /api/calc/delay": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_delay",
   "guard": "open"
  },
  "GET /api/calc/emi": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_emi",
   "guard": "open"
  },
  "GET /api/calc/health": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_health",
   "guard": "open"
  },
  "GET /api/calc/hlv": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_hlv",
   "guard": "open"
  },
  "GET /api/calc/inflation": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_inflation",
   "guard": "open"
  },
  "GET /api/calc/mfsip": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_mfsip",
   "guard": "open"
  },
  "GET /api/calc/nps": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_nps",
   "guard": "open"
  },
  "GET /api/calc/retirement": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_retirement",
   "guard": "open"
  },
  "GET /api/calc/sip": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_sip",
   "guard": "open"
  },
  "GET /api/calc/stepup": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_stepup",
   "guard": "open"
  },
  "GET /api/calc/swp": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_swp",
   "guard": "open"
  },
  "GET /api/calc/ulip": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_ulip",
   "guard": "open"
  },
  "GET /api/campaigns": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_list_campaigns",
   "guard": "open"
  },
  "GET /api/campaigns/types": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_campaign_types",
   "guard": "open"
  },
  "GET /api/campaigns/{campaign_id}": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_get_campaign",
   "guard": "open"
  },
  "GET /api/campaigns/{campaign_id}/recipients": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_campaign_recipients",
   "guard": "open"
  },
  "GET /api/dashboard": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_dashboard",
   "guard": "open"
  },
  "GET /api/founding-spots": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "founding_spots",
   "guard": "rate-limited"
  },
  "GET /api/gdrive/callback": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_gdrive_callback",
   "guard": "open"
  },
  "GET /api/gdrive/connect": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_gdrive_connect",
   "guard": "open"
  },
  "GET /api/gdrive/files": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_gdrive_files",
   "guard": "open"
  },
  "GET /api/gdrive/sheets": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_gdrive_list_sheets",
   "guard": "open"
  },
  "GET /api/gdrive/sheets/{sheet_id}/preview": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_gdrive_sheet_preview",
   "guard": "open"
  },
  "GET /api/gdrive/status": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_gdrive_status",
   "guard": "open"
  },
  "GET /api/guide/thread": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sarathi_guide_thread",
   "guard": "nidaan-host,rate-limited"
  },
  "GET /api/import/template": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_import_template",
   "guard": "open"
  },
  "GET /api/invite/validate/{code}": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_invite_validate",
   "guard": "rate-limited"
  },
  "GET /api/lapse/policy/{policy_id}": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_lapse_policy_detail",
   "guard": "rate-limited"
  },
  "GET /api/lapse/predictions": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_lapse_predictions",
   "guard": "rate-limited"
  },
  "GET /api/lapse/summary": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_lapse_summary",
   "guard": "rate-limited"
  },
  "GET /api/leads/{lead_id}/contact-pref": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_get_contact_pref",
   "guard": "open"
  },
  "GET /api/leads/{lead_id}/followups": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_lead_followups",
   "guard": "open"
  },
  "GET /api/leads/{lead_id}/timeline": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_lead_timeline",
   "guard": "open"
  },
  "GET /api/marketing/detect-religion": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_marketing_detect_religion",
   "guard": "open"
  },
  "GET /api/marketing/festivals": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_marketing_festivals",
   "guard": "open"
  },
  "GET /api/marketing/library": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_marketing_library",
   "guard": "open"
  },
  "GET /api/marketing/quota": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_marketing_quota",
   "guard": "open"
  },
  "GET /api/marketing/schedule": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_marketing_schedule_list",
   "guard": "open"
  },
  "GET /api/marketing/segments": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_marketing_segments_list",
   "guard": "open"
  },
  "GET /api/marketing/segments/{segment_id}/preview": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_marketing_segment_preview",
   "guard": "open"
  },
  "GET /api/marketing/settings": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_marketing_settings_get",
   "guard": "open"
  },
  "GET /api/marketing/stats": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_marketing_stats",
   "guard": "open"
  },
  "GET /api/marketing/templates": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_marketing_templates",
   "guard": "open"
  },
  "GET /api/microsite/check-slug": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_microsite_check_slug",
   "guard": "rate-limited"
  },
  "GET /api/microsite/qr": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_microsite_qr",
   "guard": "open"
  },
  "GET /api/microsite/settings": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_microsite_settings_get",
   "guard": "open"
  },
  "GET /api/nudge/history": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_nudge_history",
   "guard": "open"
  },
  "GET /api/nudge/suggestions": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_nudge_suggestions",
   "guard": "rate-limited"
  },
  "GET /api/nurture/enrollments": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_nurture_list_enrollments",
   "guard": "rate-limited"
  },
  "GET /api/nurture/sequences": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_nurture_list_sequences",
   "guard": "rate-limited"
  },
  "GET /api/nurture/sequences/{sequence_id}": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_nurture_get_sequence",
   "guard": "rate-limited"
  },
  "GET /api/onboarding/status": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_onboarding_status",
   "guard": "open"
  },
  "GET /api/payments/check-order": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_check_order",
   "guard": "rate-limited"
  },
  "GET /api/payments/plans": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_payment_plans",
   "guard": "open"
  },
  "GET /api/payments/status": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_payment_status",
   "guard": "rate-limited"
  },
  "GET /api/portfolio/{token}": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_public_portfolio",
   "guard": "rate-limited"
  },
  "GET /api/profile": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_get_profile",
   "guard": "open"
  },
  "GET /api/public/branding/{tenant_id}": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_public_branding",
   "guard": "open"
  },
  "GET /api/quotes/providers": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_quotes_providers",
   "guard": "open"
  },
  "GET /api/quotes/ratecards": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_quotes_ratecards",
   "guard": "open"
  },
  "GET /api/report/delay": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "report_delay",
   "guard": "open"
  },
  "GET /api/report/emi": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "report_emi",
   "guard": "open"
  },
  "GET /api/report/health": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "report_health",
   "guard": "open"
  },
  "GET /api/report/hlv": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "report_hlv",
   "guard": "open"
  },
  "GET /api/report/inflation": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "report_inflation",
   "guard": "open"
  },
  "GET /api/report/mfsip": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "report_mfsip",
   "guard": "open"
  },
  "GET /api/report/nps": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "report_nps",
   "guard": "open"
  },
  "GET /api/report/retirement": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "report_retirement",
   "guard": "open"
  },
  "GET /api/report/sip": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "report_sip",
   "guard": "open"
  },
  "GET /api/report/stepup": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "report_stepup",
   "guard": "open"
  },
  "GET /api/report/swp": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "report_swp",
   "guard": "open"
  },
  "GET /api/report/ulip": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "report_ulip",
   "guard": "open"
  },
  "GET /api/roles": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_list_roles",
   "guard": "rate-limited"
  },
  "GET /api/roles/meta": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_roles_meta",
   "guard": "open"
  },
  "GET /api/sa/affiliate-tickets": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_list_affiliate_tickets",
   "guard": "open"
  },
  "GET /api/sa/affiliate-tickets/{ticket_id}": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_get_affiliate_ticket",
   "guard": "open"
  },
  "GET /api/sa/affiliates": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_list_affiliates",
   "guard": "open"
  },
  "GET /api/sa/affiliates/clawbacks": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_affiliate_clawbacks_list",
   "guard": "open"
  },
  "GET /api/sa/affiliates/payout-queue": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_payout_queue",
   "guard": "open"
  },
  "GET /api/sa/affiliates/payouts": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_list_payouts",
   "guard": "open"
  },
  "GET /api/sa/affiliates/stats": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_affiliate_stats",
   "guard": "open"
  },
  "GET /api/sa/affiliates/{affiliate_id}/referrals": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_affiliate_referrals",
   "guard": "open"
  },
  "GET /api/sa/agents/activity": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_agent_activity",
   "guard": "open"
  },
  "GET /api/sa/ai-costs": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_ai_costs",
   "guard": "open"
  },
  "GET /api/sa/audit": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_audit_log",
   "guard": "open"
  },
  "GET /api/sa/bots": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_bots",
   "guard": "open"
  },
  "GET /api/sa/dashboard": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_dashboard",
   "guard": "open"
  },
  "GET /api/sa/duplicates": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_duplicate_report",
   "guard": "open"
  },
  "GET /api/sa/events": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_get_events",
   "guard": "open"
  },
  "GET /api/sa/export/affiliates": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_export_affiliates",
   "guard": "rate-limited"
  },
  "GET /api/sa/export/leads": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_export_leads",
   "guard": "rate-limited"
  },
  "GET /api/sa/export/tenants": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_export_tenants",
   "guard": "rate-limited"
  },
  "GET /api/sa/health-monitor": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_health_monitor_latest",
   "guard": "open"
  },
  "GET /api/sa/health-monitor/alerts": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_health_monitor_alerts",
   "guard": "open"
  },
  "GET /api/sa/health-monitor/history": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_health_monitor_history",
   "guard": "open"
  },
  "GET /api/sa/me": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_me",
   "guard": "open"
  },
  "GET /api/sa/notifications": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_get_notifications",
   "guard": "open"
  },
  "GET /api/sa/refunds": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_refunds_list",
   "guard": "open"
  },
  "GET /api/sa/retail-chats": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_retail_chats",
   "guard": "open"
  },
  "GET /api/sa/retail-chats/{thread_id}": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_retail_chat_detail",
   "guard": "open"
  },
  "GET /api/sa/revenue": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_revenue",
   "guard": "open"
  },
  "GET /api/sa/system-status": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_system_status",
   "guard": "open"
  },
  "GET /api/sa/tenant/{tenant_id}": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_tenant_detail",
   "guard": "open"
  },
  "GET /api/sa/tenant/{tenant_id}/errors": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_tenant_errors",
   "guard": "open"
  },
  "GET /api/sa/tenant/{tenant_id}/features": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_get_tenant_features",
   "guard": "open"
  },
  "GET /api/sa/tenants": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_tenants",
   "guard": "open"
  },
  "GET /api/sa/tickets": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_list_tickets",
   "guard": "open"
  },
  "GET /api/sa/tickets/stats": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_ticket_stats",
   "guard": "open"
  },
  "GET /api/sa/tickets/{ticket_id}": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_get_ticket",
   "guard": "open"
  },
  "GET /api/subscription/pending-change": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_pending_plan_change",
   "guard": "open"
  },
  "GET /api/subscription/status": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_subscription_status",
   "guard": "open"
  },
  "GET /api/support/tickets": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "list_support_tickets",
   "guard": "open"
  },
  "GET /api/support/tickets/{ticket_id}": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "get_support_ticket",
   "guard": "open"
  },
  "GET /api/tasks": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_get_tasks",
   "guard": "open"
  },
  "GET /api/tg/status": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_tg_status",
   "guard": "open"
  },
  "GET /api/video/file/{filename}": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_video_file",
   "guard": "open"
  },
  "GET /api/video/status/{job_id}": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_video_status",
   "guard": "open"
  },
  "GET /api/video/themes": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_video_themes",
   "guard": "open"
  },
  "GET /api/wa-agent/conversations": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "wa_agent_conversations",
   "guard": "open"
  },
  "GET /api/wa-agent/status": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "wa_agent_status",
   "guard": "open"
  },
  "GET /api/wa/setup-guide": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_wa_setup_guide",
   "guard": "open"
  },
  "GET /api/wa/status": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_wa_status",
   "guard": "open"
  },
  "GET /api/whatsapp/v2/pairing-code/poll": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_wa_v2_pairing_poll",
   "guard": "open"
  },
  "GET /api/whatsapp/v2/qr": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_wa_v2_qr",
   "guard": "open"
  },
  "GET /api/whatsapp/v2/status": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_wa_v2_status",
   "guard": "open"
  },
  "GET /associate": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "nidaan_associate_page",
   "guard": "nidaan-host"
  },
  "GET /calculators": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "calculators_page",
   "guard": "open"
  },
  "GET /dashboard": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "dashboard_page",
   "guard": "open"
  },
  "GET /demo": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "demo_page",
   "guard": "open"
  },
  "GET /features": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "features_page",
   "guard": "open"
  },
  "GET /getting-started": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "getting_started_page",
   "guard": "open"
  },
  "GET /google3df0c6b7c9115ee9.html": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "google_search_console_verify",
   "guard": "nidaan-host"
  },
  "GET /health": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "health",
   "guard": "open"
  },
  "GET /help": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "help_page",
   "guard": "open"
  },
  "GET /invite": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "invite_page",
   "guard": "open"
  },
  "GET /llms.txt": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "llms_txt",
   "guard": "open"
  },
  "GET /login": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sarathi_login_page",
   "guard": "nidaan-host"
  },
  "GET /m/{slug}": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "microsite_public",
   "guard": "rate-limited"
  },
  "GET /manifest.json": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "manifest",
   "guard": "nidaan-host"
  },
  "GET /nidaan-sw.js": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_service_worker",
   "guard": "open"
  },
  "GET /nidaan/about": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_about_page",
   "guard": "nidaan-host"
  },
  "GET /nidaan/admin": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_admin_page",
   "guard": "nidaan-host"
  },
  "GET /nidaan/api/admin/accounts": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_api_admin_accounts",
   "guard": "nidaan-host"
  },
  "GET /nidaan/api/admin/claims": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_api_admin_claims",
   "guard": "nidaan-host"
  },
  "GET /nidaan/api/admin/review-requests": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_api_admin_reviews",
   "guard": "nidaan-host"
  },
  "GET /nidaan/api/admin/stats": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_api_admin_stats",
   "guard": "nidaan-host"
  },
  "GET /nidaan/api/branches": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_api_list_branches",
   "guard": "nidaan-host,rate-limited"
  },
  "GET /nidaan/api/claims": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_api_claims",
   "guard": "open"
  },
  "GET /nidaan/api/claims/{claim_id}": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_api_claim_detail",
   "guard": "open"
  },
  "GET /nidaan/api/claims/{claim_id}/checklist": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_api_claim_checklist",
   "guard": "open"
  },
  "GET /nidaan/api/claims/{claim_id}/documents": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_get_claim_docs",
   "guard": "nidaan-host"
  },
  "GET /nidaan/api/claims/{claim_id}/messages": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_claim_messages",
   "guard": "nidaan-host"
  },
  "GET /nidaan/api/claims/{claim_id}/pay-status": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_claim_pay_status",
   "guard": "nidaan-host,rate-limited"
  },
  "GET /nidaan/api/claimshield/case/{claim_id}/documents": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "claimshield_case_documents",
   "guard": "nidaan-host,rate-limited"
  },
  "GET /nidaan/api/content": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_public_content",
   "guard": "nidaan-host,rate-limited"
  },
  "GET /nidaan/api/doc-checklist": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_api_doc_checklist_for_type",
   "guard": "nidaan-host"
  },
  "GET /nidaan/api/doc/feedback": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_doc_feedback_get",
   "guard": "nidaan-host"
  },
  "GET /nidaan/api/features": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_api_features",
   "guard": "open"
  },
  "GET /nidaan/api/features/audio": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_api_features_audio",
   "guard": "open"
  },
  "GET /nidaan/api/google-client-id": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_google_client_id",
   "guard": "nidaan-host"
  },
  "GET /nidaan/api/gst-config": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_gst_config",
   "guard": "nidaan-host"
  },
  "GET /nidaan/api/guide": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_guide_content",
   "guard": "nidaan-host"
  },
+ "GET /nidaan/api/intake/types": {
+  "file": "nidaan_app.py",
+  "func": "nidaan_intake_types",
+  "guard": "nidaan-host,rate-limited"
+ },
  "GET /nidaan/api/me": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_api_me",
   "guard": "open"
  },
  "GET /nidaan/api/my/notifications": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_my_notifications",
   "guard": "nidaan-host"
  },
  "GET /nidaan/api/offices": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_public_offices",
   "guard": "nidaan-host,rate-limited"
  },
  "GET /nidaan/api/official-vcard": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_vcard",
   "guard": "open"
  },
  "GET /nidaan/api/paylink/verify": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_paylink_verify",
   "guard": "nidaan-host,rate-limited"
  },
  "GET /nidaan/api/payment/confirm-check": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_payment_confirm_check",
   "guard": "nidaan-host"
  },
  "GET /nidaan/api/plans": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_api_plans",
   "guard": "nidaan-host,rate-limited"
  },
  "GET /nidaan/api/prefs": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_get_prefs",
   "guard": "nidaan-host"
  },
  "GET /nidaan/api/ref-info": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_ref_info",
   "guard": "nidaan-host,rate-limited"
  },
  "GET /nidaan/api/review-fee-config": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_review_fee_config",
   "guard": "nidaan-host"
  },
  "GET /nidaan/api/review/{purchase_id}/documents": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_get_review_docs",
   "guard": "nidaan-host"
  },
  "GET /nidaan/api/subscribe/check": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_subscribe_check",
   "guard": "nidaan-host"
  },
  "GET /nidaan/api/support/status": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_support_status",
   "guard": "nidaan-host,rate-limited"
  },
  "GET /nidaan/api/support/thread": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_support_thread",
   "guard": "nidaan-host,rate-limited"
  },
  "GET /nidaan/api/wa/webhook": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_wa_webhook_verify",
   "guard": "nidaan-host"
  },
  "GET /nidaan/branch": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_branch_page",
   "guard": "nidaan-host"
  },
  "GET /nidaan/branch/api/account/{account_id}": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_branch_account_detail",
   "guard": "nidaan-host"
  },
- "GET /nidaan/branch/api/referred-claims": {
-  "file": "sarathi_biz.py",
-  "func": "nidaan_branch_referred_claims",
-  "guard": "nidaan-host"
- },
- "POST /nidaan/branch/api/referred-claims/{claim_id}/note": {
-  "file": "sarathi_biz.py",
-  "func": "nidaan_branch_referred_claim_note",
-  "guard": "nidaan-host,rate-limited"
- },
- "GET /nidaan/ops/api/my-business/claims": {
-  "file": "sarathi_biz.py",
-  "func": "ops_my_business_claims",
-  "guard": "nidaan-host,staff:any"
- },
- "POST /nidaan/ops/api/my-business/claims/{claim_id}/note": {
-  "file": "sarathi_biz.py",
-  "func": "ops_my_business_claim_note",
-  "guard": "nidaan-host,staff:any,rate-limited"
- },
  "GET /nidaan/branch/api/accounts": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_branch_accounts",
   "guard": "nidaan-host"
  },
  "GET /nidaan/branch/api/claims": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_branch_list_claims",
   "guard": "nidaan-host"
  },
  "GET /nidaan/branch/api/claims/{claim_id}/documents": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_branch_list_claim_docs",
   "guard": "nidaan-host"
  },
  "GET /nidaan/branch/api/features": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_branch_features",
   "guard": "nidaan-host"
  },
  "GET /nidaan/branch/api/features/audio": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_branch_features_audio",
   "guard": "nidaan-host"
  },
  "GET /nidaan/branch/api/me": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_branch_me",
   "guard": "nidaan-host"
  },
+ "GET /nidaan/branch/api/referred-claims": {
+  "file": "nidaan_app.py",
+  "func": "nidaan_branch_referred_claims",
+  "guard": "nidaan-host"
+ },
  "GET /nidaan/branch/magic": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_branch_magic",
   "guard": "nidaan-host,rate-limited"
  },
  "GET /nidaan/claim": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_claim_portal_page",
   "guard": "nidaan-host"
  },
  "GET /nidaan/claim/api/me": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_claim_me",
   "guard": "nidaan-host"
  },
  "GET /nidaan/claim/api/verify/where": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_claim_verify_where",
   "guard": "nidaan-host,rate-limited"
  },
  "GET /nidaan/claim/icon.svg": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_claim_icon",
   "guard": "open"
  },
  "GET /nidaan/claim/magic": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_claim_magic",
   "guard": "nidaan-host,rate-limited"
  },
  "GET /nidaan/claim/manifest.webmanifest": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_claim_manifest",
   "guard": "nidaan-host"
  },
  "GET /nidaan/claim/sw.js": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_claim_sw",
   "guard": "open"
  },
+ "GET /nidaan/confirm-email": {
+  "file": "nidaan_app.py",
+  "func": "nidaan_confirm_email",
+  "guard": "nidaan-host,rate-limited"
+ },
  "GET /nidaan/cookies": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_cookies_page",
   "guard": "nidaan-host"
  },
  "GET /nidaan/dashboard": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_dashboard_page",
   "guard": "nidaan-host"
  },
  "GET /nidaan/get-reviewed": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_review_page",
   "guard": "nidaan-host"
  },
  "GET /nidaan/login": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_login_page",
   "guard": "nidaan-host"
  },
  "GET /nidaan/logout": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_logout",
   "guard": "nidaan-host"
  },
  "GET /nidaan/ops": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_ops_page",
   "guard": "nidaan-host"
  },
  "GET /nidaan/ops/api/accounts": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_list_accounts",
   "guard": "nidaan-host,staff:sub_super_admin"
  },
  "GET /nidaan/ops/api/accounts/duplicates": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_account_duplicates",
   "guard": "nidaan-host,staff:sub_super_admin"
  },
  "GET /nidaan/ops/api/accounts/{account_id}/birds-eye": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_account_birds_eye",
   "guard": "nidaan-host,staff:team_member"
  },
  "GET /nidaan/ops/api/accounts/{account_id}/detail": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_account_detail",
   "guard": "nidaan-host,staff:sub_super_admin"
  },
  "GET /nidaan/ops/api/accounts/{account_id}/payments": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_ops_account_payments",
   "guard": "nidaan-host,staff:sub_super_admin"
  },
  "GET /nidaan/ops/api/accounts/{account_id}/sarathi-link": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_account_sarathi_link",
   "guard": "nidaan-host,staff:super_admin"
  },
  "GET /nidaan/ops/api/activity": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_activity",
   "guard": "nidaan-host,staff:sub_super_admin"
  },
  "GET /nidaan/ops/api/analytics": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_analytics",
   "guard": "nidaan-host,staff:sub_super_admin"
  },
  "GET /nidaan/ops/api/assignees": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_assignees",
   "guard": "nidaan-host,staff:any"
  },
  "GET /nidaan/ops/api/branches": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_list_branches",
   "guard": "nidaan-host,staff:sub_super_admin"
  },
  "GET /nidaan/ops/api/branches/{branch_code}/unpaid-leads": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_branch_unpaid_leads",
   "guard": "nidaan-host,staff:sub_super_admin"
  },
  "GET /nidaan/ops/api/broadcasts": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_broadcasts",
   "guard": "nidaan-host,staff:any"
  },
  "GET /nidaan/ops/api/buckets/config": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_buckets_config",
   "guard": "nidaan-host,staff:team_member"
  },
  "GET /nidaan/ops/api/buckets/counts": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_buckets_counts",
   "guard": "nidaan-host,staff:team_member"
  },
  "GET /nidaan/ops/api/buckets/designer": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_bucket_designer",
   "guard": "nidaan-host,staff:super_admin"
  },
  "GET /nidaan/ops/api/buckets/waiting-to-start": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_bucket_waiting",
   "guard": "nidaan-host,staff:team_member"
  },
  "GET /nidaan/ops/api/buckets/{bucket_key}/claims": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_bucket_claims",
   "guard": "nidaan-host,staff:team_member"
  },
  "GET /nidaan/ops/api/capabilities": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_capabilities",
   "guard": "nidaan-host,staff:any"
  },
  "GET /nidaan/ops/api/capabilities/audio": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_capabilities_audio",
   "guard": "nidaan-host,staff:any"
  },
  "GET /nidaan/ops/api/cases/board": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_ops_case_board",
   "guard": "nidaan-host,staff:team_member"
  },
  "GET /nidaan/ops/api/cases/{claim_id}/bucket": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_case_bucket",
   "guard": "nidaan-host,staff:team_member"
  },
  "GET /nidaan/ops/api/cases/{claim_id}/handover-questions": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_case_handover_questions",
   "guard": "nidaan-host,staff:team_member"
  },
  "GET /nidaan/ops/api/cases/{claim_id}/query/contact": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_case_query_contact_info",
   "guard": "nidaan-host,staff:team_member"
  },
  "GET /nidaan/ops/api/cases/{claim_id}/readiness": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_case_readiness",
   "guard": "nidaan-host,staff:team_member"
  },
  "GET /nidaan/ops/api/cases/{claim_id}/report": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_case_report",
   "guard": "nidaan-host,staff:team_member"
  },
  "GET /nidaan/ops/api/cases/{claim_id}/secret/{field_key}": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_case_secret",
   "guard": "nidaan-host,staff:sub_super_admin,rate-limited"
  },
  "GET /nidaan/ops/api/cases/{claim_id}/state": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_ops_case_state",
   "guard": "nidaan-host,staff:team_member"
  },
  "GET /nidaan/ops/api/changes": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_ops_changes",
   "guard": "nidaan-host,staff:team_member"
  },
  "GET /nidaan/ops/api/channel-partners": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_cp_list",
   "guard": "nidaan-host,staff:any"
  },
  "GET /nidaan/ops/api/claim-search": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_claims_search",
   "guard": "nidaan-host,staff:any"
  },
  "GET /nidaan/ops/api/claimant-terms": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_claimant_terms_get",
   "guard": "nidaan-host,staff:team_member"
  },
  "GET /nidaan/ops/api/claims": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_list_claims",
   "guard": "nidaan-host,staff:team_member"
  },
  "GET /nidaan/ops/api/claims-auto-assign": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_claims_auto_assign_get",
   "guard": "nidaan-host,staff:team_member"
  },
  "GET /nidaan/ops/api/claims/awaiting-fee": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_claims_awaiting_fee",
   "guard": "nidaan-host,staff:team_member,rate-limited"
  },
- "GET /nidaan/confirm-email": {
-  "file": "sarathi_biz.py",
-  "func": "nidaan_confirm_email",
-  "guard": "nidaan-host,rate-limited"
- },
- "POST /nidaan/ops/api/claims/{claim_id}/contacts/confirm": {
-  "file": "sarathi_biz.py",
-  "func": "ops_claim_contact_confirm",
-  "guard": "nidaan-host,staff:any,rate-limited"
- },
  "GET /nidaan/ops/api/claims/{claim_id}": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_get_claim",
   "guard": "nidaan-host,staff:team_member"
  },
  "GET /nidaan/ops/api/claims/{claim_id}/activity": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_ops_claim_activity",
   "guard": "nidaan-host,staff:team_member"
  },
  "GET /nidaan/ops/api/claims/{claim_id}/consent-proof": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_claim_consent_proof",
   "guard": "nidaan-host,staff:super_admin"
  },
+ "GET /nidaan/ops/api/claims/{claim_id}/cp": {
+  "file": "nidaan_app.py",
+  "func": "ops_claim_cp_state",
+  "guard": "nidaan-host,staff:team_member"
+ },
  "GET /nidaan/ops/api/claims/{claim_id}/doc-sets": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_claim_doc_sets",
   "guard": "nidaan-host,staff:any"
  },
- "GET /nidaan/ops/api/claims/{claim_id}/doc-sets/{set_key}/parts": {
-  "file": "sarathi_biz.py",
-  "func": "ops_claim_doc_set_parts",
-  "guard": "nidaan-host,staff:any"
- },
  "GET /nidaan/ops/api/claims/{claim_id}/doc-sets/{set_key}": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_claim_doc_set_pdf",
   "guard": "nidaan-host,staff:any"
  },
+ "GET /nidaan/ops/api/claims/{claim_id}/doc-sets/{set_key}/parts": {
+  "file": "nidaan_app.py",
+  "func": "ops_claim_doc_set_parts",
+  "guard": "nidaan-host,staff:any"
+ },
  "GET /nidaan/ops/api/claims/{claim_id}/doc-window": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_doc_window",
   "guard": "nidaan-host,staff:team_member"
  },
  "GET /nidaan/ops/api/claims/{claim_id}/documents": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_get_claim_docs",
   "guard": "nidaan-host,staff:team_member"
  },
  "GET /nidaan/ops/api/claims/{claim_id}/documents/{doc_id}/preview": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_ops_doc_preview",
   "guard": "nidaan-host,staff:team_member"
  },
  "GET /nidaan/ops/api/claims/{claim_id}/last-ask": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_claim_last_ask",
   "guard": "nidaan-host,staff:team_member,rate-limited"
  },
  "GET /nidaan/ops/api/claims/{claim_id}/mention-candidates": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_claim_mention_candidates",
   "guard": "nidaan-host,staff:team_member"
  },
  "GET /nidaan/ops/api/claims/{claim_id}/messages": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_claim_messages",
   "guard": "nidaan-host,staff:any"
  },
  "GET /nidaan/ops/api/claims/{claim_id}/notes": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_get_notes",
   "guard": "nidaan-host,staff:team_member"
  },
  "GET /nidaan/ops/api/claims/{claim_id}/parties": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_ops_claim_parties",
   "guard": "nidaan-host,staff:team_member"
  },
  "GET /nidaan/ops/api/claims/{claim_id}/payment-attempts": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_claim_payment_attempts",
   "guard": "nidaan-host,staff:team_member"
  },
  "GET /nidaan/ops/api/claims/{claim_id}/payments": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_ops_claim_payments",
   "guard": "nidaan-host,staff:sub_super_admin"
  },
  "GET /nidaan/ops/api/claims/{claim_id}/portal": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_claim_portal_state",
   "guard": "nidaan-host,staff:team_member"
  },
  "GET /nidaan/ops/api/claims/{claim_id}/portal/preview": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_claim_portal_preview",
   "guard": "nidaan-host,staff:team_member,rate-limited"
  },
  "GET /nidaan/ops/api/claims/{claim_id}/reminders": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_claim_reminders",
   "guard": "nidaan-host,staff:team_member"
  },
+ "GET /nidaan/ops/api/claims/{claim_id}/wa": {
+  "file": "nidaan_app.py",
+  "func": "ops_claim_wa",
+  "guard": "nidaan-host,staff:team_member"
+ },
+ "GET /nidaan/ops/api/claims/{claim_id}/wa/start/preview": {
+  "file": "nidaan_app.py",
+  "func": "nidaan_ops_wa_start_preview",
+  "guard": "nidaan-host,staff:team_member,rate-limited"
+ },
+ "GET /nidaan/ops/api/claims/{claim_id}/waiting": {
+  "file": "nidaan_app.py",
+  "func": "ops_claim_waiting",
+  "guard": "nidaan-host,staff:team_member"
+ },
  "GET /nidaan/ops/api/claims/{claim_id}/watchers": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_claim_watchers",
   "guard": "nidaan-host,staff:any"
  },
  "GET /nidaan/ops/api/content": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_content_get",
   "guard": "nidaan-host,staff:team_member"
  },
  "GET /nidaan/ops/api/crm/leads": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "crm_list_leads",
   "guard": "nidaan-host,staff:team_member"
  },
  "GET /nidaan/ops/api/crm/leads/{lead_id}": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "crm_get_lead",
   "guard": "nidaan-host,staff:team_member"
  },
  "GET /nidaan/ops/api/desk": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_ops_desk",
   "guard": "nidaan-host,staff:team_member"
  },
  "GET /nidaan/ops/api/doc-desk": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_doc_desk",
   "guard": "nidaan-host,staff:team_member,rate-limited"
  },
  "GET /nidaan/ops/api/doc/readers": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_doc_readers",
   "guard": "nidaan-host,staff:sub_super_admin"
  },
  "GET /nidaan/ops/api/doc/{slug}": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_doc_content",
   "guard": "nidaan-host,staff:any"
  },
- "GET /nidaan/ops/api/docsplit/settings": {
-  "file": "sarathi_biz.py",
-  "func": "ops_docsplit_settings",
-  "guard": "nidaan-host,staff:any"
- },
- "GET /nidaan/ops/api/docsplit/{job}/status": {
-  "file": "sarathi_biz.py",
-  "func": "ops_docsplit_status",
-  "guard": "nidaan-host,staff:any"
- },
- "POST /nidaan/ops/api/docsplit/batch": {
-  "file": "sarathi_biz.py",
-  "func": "ops_docsplit_batch",
-  "guard": "nidaan-host,staff:any,rate-limited"
- },
- "POST /nidaan/ops/api/docsplit/batch/{job}/file": {
-  "file": "sarathi_biz.py",
-  "func": "ops_docsplit_batch_file",
-  "guard": "nidaan-host,staff:any,rate-limited"
- },
- "POST /nidaan/ops/api/docsplit/batch/{job}/start": {
-  "file": "sarathi_biz.py",
-  "func": "ops_docsplit_batch_start",
-  "guard": "nidaan-host,staff:any,rate-limited"
- },
- "POST /nidaan/ops/api/docsplit/settings": {
-  "file": "sarathi_biz.py",
-  "func": "ops_docsplit_settings_save",
-  "guard": "nidaan-host,staff:super_admin,rate-limited"
- },
  "GET /nidaan/ops/api/docsplit/jobs": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_docsplit_jobs",
   "guard": "nidaan-host,staff:any"
  },
  "GET /nidaan/ops/api/docsplit/rules": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_docsplit_rules",
   "guard": "nidaan-host,staff:any"
  },
+ "GET /nidaan/ops/api/docsplit/settings": {
+  "file": "nidaan_app.py",
+  "func": "ops_docsplit_settings",
+  "guard": "nidaan-host,staff:any"
+ },
  "GET /nidaan/ops/api/docsplit/{job}/pages": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_docsplit_pages",
   "guard": "nidaan-host,staff:any"
  },
  "GET /nidaan/ops/api/docsplit/{job}/pdf": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_docsplit_collate",
   "guard": "nidaan-host,staff:any"
  },
  "GET /nidaan/ops/api/docsplit/{job}/set/{set_key}": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_docsplit_set",
   "guard": "nidaan-host,staff:any"
  },
+ "GET /nidaan/ops/api/docsplit/{job}/status": {
+  "file": "nidaan_app.py",
+  "func": "ops_docsplit_status",
+  "guard": "nidaan-host,staff:any"
+ },
  "GET /nidaan/ops/api/docsplit/{job}/thumb/{page}": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_docsplit_thumb",
   "guard": "nidaan-host,staff:any"
  },
  "GET /nidaan/ops/api/errors": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_errors",
   "guard": "nidaan-host,staff:super_admin"
  },
  "GET /nidaan/ops/api/escalation/due": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_escalation_due",
   "guard": "nidaan-host,staff:team_member,rate-limited"
  },
  "GET /nidaan/ops/api/escalations": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_escalations",
   "guard": "nidaan-host,staff:sub_super_admin"
  },
  "GET /nidaan/ops/api/export/{table}.csv": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_export_csv",
   "guard": "nidaan-host,staff:super_admin"
  },
  "GET /nidaan/ops/api/grievance-officer": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_grievance_get",
   "guard": "nidaan-host,staff:super_admin"
  },
  "GET /nidaan/ops/api/health": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_health",
   "guard": "nidaan-host,staff:super_admin"
  },
  "GET /nidaan/ops/api/health/flags": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_health_flags",
   "guard": "nidaan-host,staff:super_admin"
  },
  "GET /nidaan/ops/api/l2/pending-handover": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_l2_pending_handover",
   "guard": "nidaan-host,staff:team_member"
  },
+ "GET /nidaan/ops/api/layout": {
+  "file": "nidaan_app.py",
+  "func": "ops_layout_get",
+  "guard": "nidaan-host,staff:team_member"
+ },
  "GET /nidaan/ops/api/leave": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_leave_list",
   "guard": "nidaan-host,staff:any"
  },
  "GET /nidaan/ops/api/leave/history": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_leave_history",
   "guard": "nidaan-host,staff:super_admin"
  },
  "GET /nidaan/ops/api/me": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_me",
   "guard": "nidaan-host,staff:any"
  },
  "GET /nidaan/ops/api/me/profile": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_me_profile",
   "guard": "nidaan-host,staff:any"
  },
  "GET /nidaan/ops/api/my-business": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_my_business",
   "guard": "nidaan-host,staff:any"
  },
  "GET /nidaan/ops/api/my-business/account/{account_id}": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_my_business_account",
   "guard": "nidaan-host,staff:any"
  },
+ "GET /nidaan/ops/api/my-business/claims": {
+  "file": "nidaan_app.py",
+  "func": "ops_my_business_claims",
+  "guard": "nidaan-host,staff:any"
+ },
  "GET /nidaan/ops/api/my-claims": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_my_list_claims",
   "guard": "nidaan-host"
  },
  "GET /nidaan/ops/api/my-claims/{claim_id}/documents": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_my_claim_docs",
   "guard": "nidaan-host"
  },
  "GET /nidaan/ops/api/my-followups": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_my_followups",
   "guard": "nidaan-host,staff:team_member"
  },
  "GET /nidaan/ops/api/notifications": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_notifications",
   "guard": "nidaan-host,staff:any"
  },
  "GET /nidaan/ops/api/notifications/explain": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_notify_explain",
   "guard": "nidaan-host,staff:super_admin"
  },
  "GET /nidaan/ops/api/notifications/pending-ack": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_notifications_pending_ack",
   "guard": "nidaan-host,staff:any"
  },
  "GET /nidaan/ops/api/notifications/registry": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_notification_registry",
   "guard": "nidaan-host,staff:super_admin"
  },
  "GET /nidaan/ops/api/offices": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_offices_get",
   "guard": "nidaan-host,staff:team_member"
  },
  "GET /nidaan/ops/api/official-numbers": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_official_list",
   "guard": "nidaan-host,staff:any"
  },
  "GET /nidaan/ops/api/official-numbers/{slot}/qr": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_official_qr",
   "guard": "nidaan-host,staff:super_admin"
  },
  "GET /nidaan/ops/api/ops-settings": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_settings_get",
   "guard": "nidaan-host,staff:any"
  },
  "GET /nidaan/ops/api/overview-widgets": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_overview_widgets",
   "guard": "nidaan-host,staff:team_member"
  },
  "GET /nidaan/ops/api/payment-links": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_ops_list_payment_links",
   "guard": "nidaan-host,staff:super_admin"
  },
  "GET /nidaan/ops/api/payments": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_ops_payments_ledger",
   "guard": "nidaan-host,staff:super_admin"
  },
  "GET /nidaan/ops/api/payments/followups": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_payment_followups",
   "guard": "nidaan-host,staff:sub_super_admin"
  },
  "GET /nidaan/ops/api/payments/health": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_ops_payment_health",
   "guard": "nidaan-host,staff:super_admin"
  },
  "GET /nidaan/ops/api/payments/incidents": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_payment_incidents",
   "guard": "nidaan-host,staff:super_admin"
  },
  "GET /nidaan/ops/api/plans-config": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_plans_config",
   "guard": "nidaan-host,staff:super_admin"
  },
  "GET /nidaan/ops/api/pulse": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_ops_pulse",
   "guard": "nidaan-host,staff:team_member"
  },
  "GET /nidaan/ops/api/push/vapid-key": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_push_vapid_key",
   "guard": "nidaan-host,staff:any"
  },
  "GET /nidaan/ops/api/quick-tasks": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_quick_tasks_list",
   "guard": "nidaan-host,staff:any"
  },
  "GET /nidaan/ops/api/quick-tasks/priorities": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_quick_task_priorities",
   "guard": "nidaan-host,staff:any"
  },
  "GET /nidaan/ops/api/quick-tasks/{qid}": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_quick_task_get",
   "guard": "nidaan-host,staff:any"
  },
  "GET /nidaan/ops/api/quick-tasks/{qid}/history": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_quick_task_history",
   "guard": "nidaan-host,staff:any"
  },
  "GET /nidaan/ops/api/radar/config": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_radar_config_get",
   "guard": "nidaan-host,staff:sub_super_admin"
  },
  "GET /nidaan/ops/api/radar/items": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_radar_items",
   "guard": "nidaan-host,staff:sub_super_admin"
  },
  "GET /nidaan/ops/api/radar/items/{item_id}/attachments": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_radar_attachments",
   "guard": "nidaan-host,staff:sub_super_admin"
  },
  "GET /nidaan/ops/api/radar/items/{item_id}/email": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_radar_read_email",
   "guard": "nidaan-host,staff:sub_super_admin"
  },
  "GET /nidaan/ops/api/radar/mailboxes": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_radar_mailboxes",
   "guard": "nidaan-host,staff:sub_super_admin"
  },
  "GET /nidaan/ops/api/radar/metrics": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_radar_metrics",
   "guard": "nidaan-host,staff:sub_super_admin"
  },
  "GET /nidaan/ops/api/refunds": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_refunds_list",
   "guard": "nidaan-host"
  },
  "GET /nidaan/ops/api/revenue": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_revenue",
   "guard": "nidaan-host"
  },
  "GET /nidaan/ops/api/review-requests": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_list_review_requests",
   "guard": "nidaan-host,staff:sub_super_admin"
  },
  "GET /nidaan/ops/api/review-requests/{purchase_id}/documents": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_get_review_docs",
   "guard": "nidaan-host,staff:team_member"
  },
  "GET /nidaan/ops/api/review-templates": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_review_templates_list",
   "guard": "nidaan-host,staff:team_member"
  },
  "GET /nidaan/ops/api/staff": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_list_staff",
   "guard": "nidaan-host,staff:super_admin"
  },
  "GET /nidaan/ops/api/staff-business": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_staff_business",
   "guard": "nidaan-host,staff:sub_super_admin"
  },
  "GET /nidaan/ops/api/stats": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_stats",
   "guard": "nidaan-host,staff:team_member"
  },
  "GET /nidaan/ops/api/stats/line": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_ops_line_stats",
   "guard": "nidaan-host,staff:team_member,rate-limited"
  },
  "GET /nidaan/ops/api/status-config": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_status_config_list",
   "guard": "nidaan-host,staff:any"
  },
  "GET /nidaan/ops/api/subscribers/pick": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_ops_subscriber_pick",
   "guard": "nidaan-host,staff:team_member"
  },
  "GET /nidaan/ops/api/support/analytics": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_support_analytics",
   "guard": "nidaan-host,staff:team_member"
  },
  "GET /nidaan/ops/api/support/hours": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_support_hours_get",
   "guard": "nidaan-host,staff:team_member"
  },
  "GET /nidaan/ops/api/support/reps": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_support_reps_get",
   "guard": "nidaan-host,staff:team_member"
  },
  "GET /nidaan/ops/api/support/threads": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_support_threads",
   "guard": "nidaan-host,staff:team_member"
  },
  "GET /nidaan/ops/api/support/threads/{thread_id}": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_support_thread",
   "guard": "nidaan-host,staff:team_member"
  },
  "GET /nidaan/ops/api/system-flags": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_flags_list",
   "guard": "nidaan-host,staff:any"
  },
  "GET /nidaan/ops/api/task-categories": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_task_categories_list",
   "guard": "nidaan-host,staff:any"
  },
  "GET /nidaan/ops/api/tasks": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_tasks_list",
   "guard": "nidaan-host,staff:any"
  },
  "GET /nidaan/ops/api/tasks/kanban": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_tasks_kanban",
   "guard": "nidaan-host,staff:any"
  },
  "GET /nidaan/ops/api/tasks/{task_id}": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_task_detail",
   "guard": "nidaan-host,staff:any"
  },
  "GET /nidaan/ops/api/tasks/{task_id}/notes": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_task_notes_list",
   "guard": "nidaan-host,staff:any"
  },
  "GET /nidaan/ops/api/telegram/config": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_telegram_config",
   "guard": "nidaan-host,staff:any"
  },
  "GET /nidaan/ops/api/telegram/pending-count": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_telegram_pending_count",
   "guard": "nidaan-host,staff:super_admin"
  },
  "GET /nidaan/ops/api/telegram/staff-status": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_telegram_staff_status",
   "guard": "nidaan-host,staff:super_admin"
  },
  "GET /nidaan/ops/api/tg-login/status": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_tg_login_status",
   "guard": "nidaan-host,rate-limited"
  },
+ "GET /nidaan/ops/api/ui/usage": {
+  "file": "nidaan_app.py",
+  "func": "ops_ui_usage",
+  "guard": "nidaan-host,staff:super_admin"
+ },
  "GET /nidaan/ops/api/wa/campaigns": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_ops_wa_campaigns_list",
   "guard": "nidaan-host,staff:super_admin"
  },
  "GET /nidaan/ops/api/wa/conversations": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_ops_wa_conversations",
   "guard": "nidaan-host"
  },
  "GET /nidaan/ops/api/wa/overview": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_ops_wa_overview",
   "guard": "nidaan-host"
  },
+ "GET /nidaan/ops/api/wa/search": {
+  "file": "nidaan_app.py",
+  "func": "ops_wa_search",
+  "guard": "nidaan-host,staff:team_member,rate-limited"
+ },
  "GET /nidaan/ops/api/wa/thread/{msisdn}": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_ops_wa_thread",
   "guard": "nidaan-host"
  },
+ "GET /nidaan/ops/api/wa/unsorted": {
+  "file": "nidaan_app.py",
+  "func": "nidaan_ops_wa_unsorted",
+  "guard": "nidaan-host,staff:team_member"
+ },
+ "GET /nidaan/ops/layout-planner": {
+  "file": "nidaan_app.py",
+  "func": "ops_layout_planner_page",
+  "guard": "nidaan-host"
+ },
  "GET /nidaan/pay/{claim_id}": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_one_tap_pay",
   "guard": "nidaan-host"
  },
  "GET /nidaan/privacy": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_privacy_page",
   "guard": "nidaan-host"
  },
  "GET /nidaan/signup": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_signup_page",
   "guard": "nidaan-host"
  },
  "GET /nidaan/start": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_start_page",
   "guard": "nidaan-host"
  },
  "GET /nidaan/success": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_success_page",
   "guard": "nidaan-host"
  },
  "GET /nidaan/terms": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_terms_page",
   "guard": "nidaan-host"
  },
  "GET /onboarding": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "onboarding_page",
   "guard": "open"
  },
  "GET /partner": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "partner_page",
   "guard": "open"
  },
  "GET /pay-success": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sarathi_pay_success_page",
   "guard": "open"
  },
  "GET /portfolio/{token}": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "customer_portfolio_page",
   "guard": "open"
  },
  "GET /preview": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "nidaan_home_preview",
   "guard": "nidaan-host"
  },
  "GET /privacy": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "privacy_page",
   "guard": "nidaan-host"
  },
  "GET /robots.txt": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "robots_txt",
   "guard": "nidaan-host"
  },
  "GET /sitemap.xml": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sitemap_xml",
   "guard": "nidaan-host"
  },
  "GET /subadmin": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "nidaan_subadmin_page",
   "guard": "nidaan-host"
  },
  "GET /superadmin": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "superadmin_page",
   "guard": "nidaan-host"
  },
  "GET /support": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "support_page",
   "guard": "open"
  },
  "GET /sw.js": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "service_worker",
   "guard": "open"
  },
  "GET /telegram-guide": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "telegram_guide_page",
   "guard": "open"
  },
  "GET /terms": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "terms_page",
   "guard": "nidaan-host"
  },
  "GET /webhook": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "webhook_verify",
   "guard": "open"
  },
  "PATCH /api/nurture/sequences/{sequence_id}": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_nurture_update_sequence",
   "guard": "rate-limited"
  },
  "PATCH /api/wa-agent/settings": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "wa_agent_settings",
   "guard": "open"
  },
  "PATCH /nidaan/api/admin/claims/{claim_id}/status": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_api_admin_update_claim",
   "guard": "nidaan-host"
  },
  "PATCH /nidaan/api/admin/review-requests/{purchase_id}/status": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_api_admin_update_review",
   "guard": "nidaan-host"
  },
  "PATCH /nidaan/api/profile": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_profile_update",
   "guard": "nidaan-host"
  },
  "PATCH /nidaan/ops/api/accounts/{account_id}": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_update_account",
   "guard": "nidaan-host,staff:super_admin"
  },
  "PATCH /nidaan/ops/api/branches/{branch_code}": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_update_branch",
   "guard": "nidaan-host,staff:super_admin"
  },
  "PATCH /nidaan/ops/api/channel-partners/{cp_id}": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_cp_update",
   "guard": "nidaan-host,staff:sub_super_admin"
  },
  "PATCH /nidaan/ops/api/channel-partners/{cp_id}/status": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_cp_status",
   "guard": "nidaan-host,staff:super_admin"
  },
  "PATCH /nidaan/ops/api/claims-auto-assign": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_claims_auto_assign_set",
   "guard": "nidaan-host,staff:super_admin"
  },
  "PATCH /nidaan/ops/api/claims/{claim_id}/advisor": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_update_claim_advisor",
   "guard": "nidaan-host,staff:sub_super_admin"
  },
  "PATCH /nidaan/ops/api/claims/{claim_id}/documents/{doc_id}": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_ops_rename_claim_doc",
   "guard": "nidaan-host,staff:team_member,rate-limited"
  },
  "PATCH /nidaan/ops/api/claims/{claim_id}/info": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_update_claim_info",
   "guard": "nidaan-host,staff:sub_super_admin"
  },
  "PATCH /nidaan/ops/api/claims/{claim_id}/status": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_update_claim_status",
   "guard": "nidaan-host,staff:team_member"
  },
  "PATCH /nidaan/ops/api/content/{content_key}": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_content_set",
   "guard": "nidaan-host,staff:super_admin,rate-limited"
  },
  "PATCH /nidaan/ops/api/crm/leads/{lead_id}": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "crm_update_lead",
   "guard": "nidaan-host,staff:team_member"
  },
  "PATCH /nidaan/ops/api/followups/{followup_id}/done": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_complete_followup",
   "guard": "nidaan-host,staff:team_member"
  },
  "PATCH /nidaan/ops/api/plans-config/{plan_key}": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_update_plan_config",
   "guard": "nidaan-host,staff:super_admin,rate-limited"
  },
  "PATCH /nidaan/ops/api/quick-tasks/{qid}": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_quick_task_update",
   "guard": "nidaan-host,staff:any"
  },
  "PATCH /nidaan/ops/api/reminders/{sch_id}": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_claim_reminder_status",
   "guard": "nidaan-host,staff:team_member,rate-limited"
  },
  "PATCH /nidaan/ops/api/review-requests/{purchase_id}/status": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_update_review_status",
   "guard": "nidaan-host,staff:sub_super_admin"
  },
  "PATCH /nidaan/ops/api/review-templates/{template_id}": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_review_template_update",
   "guard": "nidaan-host,staff:super_admin"
  },
  "PATCH /nidaan/ops/api/staff/{staff_id}": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_update_staff",
   "guard": "nidaan-host,staff:super_admin"
  },
  "PATCH /nidaan/ops/api/staff/{staff_id}/commission": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_set_staff_commission",
   "guard": "nidaan-host,staff:super_admin"
  },
  "PATCH /nidaan/ops/api/staff/{staff_id}/telegram-access": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_set_staff_tg_access",
   "guard": "nidaan-host,staff:super_admin"
  },
  "PATCH /nidaan/ops/api/status-config/{slug}": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_status_config_update",
   "guard": "nidaan-host,staff:super_admin"
  },
  "PATCH /nidaan/ops/api/support/hours": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_support_hours_set",
   "guard": "nidaan-host,staff:super_admin"
  },
  "PATCH /nidaan/ops/api/task-categories/{category_id}": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_task_category_update",
   "guard": "nidaan-host,staff:super_admin"
  },
  "PATCH /nidaan/ops/api/tasks/{task_id}": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_task_update",
   "guard": "nidaan-host,staff:any"
  },
  "POST /api/admin/create-firm": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_admin_create_firm",
   "guard": "open"
  },
  "POST /api/admin/customers": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_admin_add_customer",
   "guard": "rate-limited"
  },
  "POST /api/admin/customers/{customer_id}/share": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_admin_customer_share",
   "guard": "open"
  },
  "POST /api/admin/invite": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_admin_generate_invite",
   "guard": "rate-limited"
  },
  "POST /api/admin/leads": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_admin_add_lead",
   "guard": "rate-limited"
  },
  "POST /api/admin/leads/{lead_id}/convert": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_admin_convert_lead",
   "guard": "open"
  },
  "POST /api/admin/leads/{lead_id}/reassign": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_admin_reassign_lead",
   "guard": "rate-limited"
  },
  "POST /api/admin/message-queue/{queue_id}/retry": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_retry_dead_letter",
   "guard": "open"
  },
  "POST /api/admin/policies": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_admin_add_policy",
   "guard": "rate-limited"
  },
  "POST /api/admin/policies/extract": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_extract_policy",
   "guard": "rate-limited"
  },
  "POST /api/admin/tenant/{tenant_id}/activate": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_admin_activate",
   "guard": "open"
  },
  "POST /api/admin/tenant/{tenant_id}/bot/restart": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_admin_restart_bot",
   "guard": "open"
  },
  "POST /api/admin/tenant/{tenant_id}/bot/stop": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_admin_stop_bot",
   "guard": "open"
  },
  "POST /api/admin/tenant/{tenant_id}/deactivate": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_admin_deactivate",
   "guard": "open"
  },
  "POST /api/admin/tenant/{tenant_id}/extend": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_admin_extend_trial",
   "guard": "open"
  },
  "POST /api/admin/trigger-scan": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_trigger_scan",
   "guard": "rate-limited"
  },
  "POST /api/affiliate/login": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "affiliate_login",
   "guard": "rate-limited"
  },
  "POST /api/affiliate/login/google": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "affiliate_login_google",
   "guard": "rate-limited"
  },
  "POST /api/affiliate/login/verify": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "affiliate_login_verify",
   "guard": "rate-limited"
  },
  "POST /api/affiliate/register": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "affiliate_register",
   "guard": "rate-limited"
  },
  "POST /api/affiliate/register/google": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "affiliate_register_google",
   "guard": "rate-limited"
  },
  "POST /api/affiliate/tickets": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "affiliate_create_ticket",
   "guard": "rate-limited"
  },
  "POST /api/affiliate/tickets/{ticket_id}/reply": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "affiliate_reply_ticket",
   "guard": "rate-limited"
  },
  "POST /api/affiliate/track": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "affiliate_track_referral",
   "guard": "rate-limited"
  },
  "POST /api/affiliate/verify": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "affiliate_verify",
   "guard": "rate-limited"
  },
  "POST /api/agent/{agent_id}/photo": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_upload_agent_photo",
   "guard": "rate-limited"
  },
  "POST /api/agents/transfer": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_transfer_agent_data",
   "guard": "rate-limited"
  },
  "POST /api/agents/{agent_id}/deactivate": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_deactivate_agent",
   "guard": "rate-limited"
  },
  "POST /api/agents/{agent_id}/reactivate": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_reactivate_agent",
   "guard": "rate-limited"
  },
  "POST /api/agents/{agent_id}/remove": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_remove_agent",
   "guard": "rate-limited"
  },
  "POST /api/ai/ask": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_ai_ask",
   "guard": "rate-limited"
  },
  "POST /api/ai/generate-pitch/{lead_id}": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_ai_generate_pitch",
   "guard": "rate-limited"
  },
  "POST /api/ai/generate-template": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_ai_generate_template",
   "guard": "rate-limited"
  },
  "POST /api/ai/handle-objection": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_ai_handle_objection",
   "guard": "rate-limited"
  },
  "POST /api/ai/recommend-policies/{lead_id}": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_ai_recommend_policies",
   "guard": "rate-limited"
  },
  "POST /api/ai/renewal-intelligence/{lead_id}": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_ai_renewal_intelligence",
   "guard": "rate-limited"
  },
  "POST /api/ai/score-lead/{lead_id}": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_ai_score_lead",
   "guard": "rate-limited"
  },
  "POST /api/ai/suggest-followup/{lead_id}": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_ai_suggest_followup",
   "guard": "rate-limited"
  },
  "POST /api/ai/voice-action": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_ai_voice_action",
   "guard": "rate-limited"
  },
  "POST /api/ai/voice-transcribe": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_ai_voice_transcribe",
   "guard": "rate-limited"
  },
  "POST /api/auth/google": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_google_signin",
   "guard": "rate-limited"
  },
  "POST /api/auth/logout": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_logout",
   "guard": "open"
  },
  "POST /api/auth/recover/options": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_recover_options",
   "guard": "rate-limited"
  },
  "POST /api/auth/recover/send": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_recover_send",
   "guard": "rate-limited"
  },
  "POST /api/auth/recover/verify": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_recover_verify",
   "guard": "rate-limited"
  },
  "POST /api/auth/refresh": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_refresh_token",
   "guard": "rate-limited"
  },
  "POST /api/auth/send-email-otp": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_send_email_otp",
   "guard": "rate-limited"
  },
  "POST /api/auth/send-otp": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_send_otp",
   "guard": "rate-limited"
  },
  "POST /api/auth/send-signup-otp": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_send_signup_otp",
   "guard": "rate-limited"
  },
  "POST /api/auth/verify-email-otp": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_verify_email_otp",
   "guard": "rate-limited"
  },
  "POST /api/auth/verify-otp": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_verify_otp",
   "guard": "rate-limited"
  },
  "POST /api/auth/verify-signup-otp": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_verify_signup_otp",
   "guard": "rate-limited"
  },
  "POST /api/campaigns": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_create_campaign",
   "guard": "rate-limited"
  },
  "POST /api/campaigns/{campaign_id}/send": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_send_campaign",
   "guard": "rate-limited"
  },
  "POST /api/gdrive/disconnect": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_gdrive_disconnect",
   "guard": "open"
  },
  "POST /api/gdrive/sheets/{sheet_id}/import": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_gdrive_sheet_import",
   "guard": "rate-limited"
  },
  "POST /api/gdrive/upload-report": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_gdrive_upload_report",
   "guard": "rate-limited"
  },
  "POST /api/guide/ask": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sarathi_guide_ask",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /api/import/leads": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_import_leads",
   "guard": "rate-limited"
  },
  "POST /api/invite/accept": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_invite_accept",
   "guard": "rate-limited"
  },
  "POST /api/leads/{lead_id}/followup": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_set_followup",
   "guard": "open"
  },
  "POST /api/leads/{lead_id}/followup/{interaction_id}/done": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_followup_done",
   "guard": "open"
  },
  "POST /api/leads/{lead_id}/notes": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_add_note",
   "guard": "open"
  },
  "POST /api/marketing/generate": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_marketing_generate",
   "guard": "rate-limited"
  },
  "POST /api/marketing/generate-video/{content_id}": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_marketing_generate_video",
   "guard": "rate-limited"
  },
  "POST /api/marketing/schedule": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_marketing_schedule_create",
   "guard": "open"
  },
  "POST /api/marketing/segments": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_marketing_segments_create",
   "guard": "open"
  },
  "POST /api/marketing/segments/{segment_id}/send": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_marketing_segment_send",
   "guard": "rate-limited"
  },
  "POST /api/marketing/send-dm": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_marketing_send_dm",
   "guard": "rate-limited"
  },
  "POST /api/marketing/send-status/{content_id}": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_marketing_send_status",
   "guard": "open"
  },
  "POST /api/marketing/send-telegram/{content_id}": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_marketing_send_telegram",
   "guard": "open"
  },
  "POST /api/marketing/send-to-me/{content_id}": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_marketing_send_to_me",
   "guard": "open"
  },
  "POST /api/marketing/settings": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_marketing_settings_save",
   "guard": "open"
  },
  "POST /api/marketing/upload-logo": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_marketing_upload_logo",
   "guard": "open"
  },
  "POST /api/marketing/upload-photo": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_marketing_upload_photo",
   "guard": "open"
  },
  "POST /api/microsite/settings": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_microsite_settings_post",
   "guard": "rate-limited"
  },
  "POST /api/microsite/upload-photo": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_microsite_upload_photo",
   "guard": "rate-limited"
  },
  "POST /api/nudge": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_send_nudge",
   "guard": "rate-limited"
  },
  "POST /api/nudge/broadcast": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_broadcast_nudge",
   "guard": "rate-limited"
  },
  "POST /api/nudge/bulk": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_bulk_nudge",
   "guard": "rate-limited"
  },
  "POST /api/nudge/preview": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_nudge_preview",
   "guard": "rate-limited"
  },
  "POST /api/nurture/enrol-bulk": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_nurture_enrol_bulk",
   "guard": "rate-limited"
  },
  "POST /api/nurture/enrollments/{enrollment_id}/cancel": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_nurture_cancel_enrollment",
   "guard": "rate-limited"
  },
  "POST /api/nurture/leads/{lead_id}/enrol/{sequence_id}": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_nurture_enrol_lead",
   "guard": "rate-limited"
  },
  "POST /api/nurture/sequences": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_nurture_create_sequence",
   "guard": "rate-limited"
  },
  "POST /api/nurture/sequences/{sequence_id}/steps": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_nurture_add_step",
   "guard": "rate-limited"
  },
  "POST /api/nurture/test-tick": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_nurture_test_tick",
   "guard": "rate-limited"
  },
  "POST /api/onboarding/branding": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_onboarding_branding",
   "guard": "open"
  },
  "POST /api/onboarding/telegram-bot": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_onboarding_telegram_bot",
   "guard": "rate-limited"
  },
  "POST /api/onboarding/whatsapp": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_onboarding_whatsapp",
   "guard": "rate-limited"
  },
  "POST /api/payments/create-order": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_create_order",
   "guard": "rate-limited"
  },
  "POST /api/payments/create-subscription": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_create_subscription",
   "guard": "rate-limited"
  },
  "POST /api/payments/verify": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_verify_payment",
   "guard": "rate-limited"
  },
  "POST /api/payments/verify-subscription": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_verify_subscription",
   "guard": "rate-limited"
  },
  "POST /api/payments/webhook": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_razorpay_webhook",
   "guard": "rate-limited"
  },
  "POST /api/quotes/compare/endowment": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_quotes_compare_endowment",
   "guard": "rate-limited"
  },
  "POST /api/quotes/compare/health": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_quotes_compare_health",
   "guard": "rate-limited"
  },
  "POST /api/quotes/compare/sip": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_quotes_compare_sip",
   "guard": "rate-limited"
  },
  "POST /api/quotes/compare/term": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_quotes_compare_term",
   "guard": "rate-limited"
  },
  "POST /api/quotes/compare/ulip": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_quotes_compare_ulip",
   "guard": "rate-limited"
  },
  "POST /api/quotes/generate-pdf": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_quotes_generate_pdf",
   "guard": "rate-limited"
  },
  "POST /api/quotes/upload-ratecard": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_quotes_upload_ratecard",
   "guard": "rate-limited"
  },
  "POST /api/roles": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_create_role",
   "guard": "rate-limited"
  },
  "POST /api/roles/seed-templates": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_seed_role_templates",
   "guard": "rate-limited"
  },
  "POST /api/sa/affiliate-tickets/{ticket_id}/reply": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_reply_affiliate_ticket",
   "guard": "open"
  },
  "POST /api/sa/affiliate/{affiliate_id}/impersonate": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_impersonate_affiliate",
   "guard": "rate-limited"
  },
  "POST /api/sa/affiliates": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_create_affiliate",
   "guard": "open"
  },
  "POST /api/sa/affiliates/clawbacks/settle": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_settle_clawback",
   "guard": "open"
  },
  "POST /api/sa/affiliates/mature-commissions": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_mature_commissions",
   "guard": "open"
  },
  "POST /api/sa/affiliates/payout": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_initiate_payout",
   "guard": "open"
  },
  "POST /api/sa/affiliates/payout/{payout_id}/complete": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_complete_payout",
   "guard": "open"
  },
  "POST /api/sa/affiliates/referrals/{referral_id}/reverse": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_reverse_commission",
   "guard": "open"
  },
  "POST /api/sa/affiliates/{affiliate_id}/approve": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_approve_affiliate",
   "guard": "open"
  },
  "POST /api/sa/affiliates/{affiliate_id}/reject": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_reject_affiliate",
   "guard": "open"
  },
  "POST /api/sa/agent/{agent_id}/toggle": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_toggle_agent",
   "guard": "rate-limited"
  },
  "POST /api/sa/ai-classify-events": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_ai_classify_events",
   "guard": "open"
  },
  "POST /api/sa/anomaly-scan": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_run_anomaly_scan",
   "guard": "open"
  },
  "POST /api/sa/auto-remediate": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_run_auto_remediation",
   "guard": "open"
  },
  "POST /api/sa/create-firm": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_create_firm",
   "guard": "rate-limited"
  },
  "POST /api/sa/events/bulk-resolve": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_bulk_resolve_events",
   "guard": "rate-limited"
  },
  "POST /api/sa/events/{event_id}/resolve": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_resolve_event",
   "guard": "open"
  },
  "POST /api/sa/health-monitor/run": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_health_monitor_run",
   "guard": "open"
  },
  "POST /api/sa/login": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_login",
   "guard": "rate-limited"
  },
  "POST /api/sa/logout": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_logout",
   "guard": "open"
  },
  "POST /api/sa/refunds/manual": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_refund_manual",
   "guard": "open"
  },
  "POST /api/sa/refunds/{refund_id}/retry": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_refund_retry",
   "guard": "open"
  },
  "POST /api/sa/restart-server": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_restart_server",
   "guard": "rate-limited"
  },
  "POST /api/sa/retail-chats/{thread_id}/reply": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_retail_chat_reply",
   "guard": "open"
  },
  "POST /api/sa/tenant/{tenant_id}/activate": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_activate",
   "guard": "open"
  },
  "POST /api/sa/tenant/{tenant_id}/bot/restart": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_restart_bot",
   "guard": "rate-limited"
  },
  "POST /api/sa/tenant/{tenant_id}/bot/stop": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_stop_bot",
   "guard": "open"
  },
  "POST /api/sa/tenant/{tenant_id}/deactivate": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_deactivate",
   "guard": "open"
  },
  "POST /api/sa/tenant/{tenant_id}/extend": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_extend_trial",
   "guard": "open"
  },
  "POST /api/sa/tenant/{tenant_id}/force-plan-change": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_force_plan_change",
   "guard": "rate-limited"
  },
  "POST /api/sa/tenant/{tenant_id}/impersonate": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_impersonate_tenant",
   "guard": "rate-limited"
  },
  "POST /api/sa/tenant/{tenant_id}/plan": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_change_plan",
   "guard": "open"
  },
  "POST /api/sa/tenant/{tenant_id}/schedule-plan-change": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_schedule_plan_change",
   "guard": "open"
  },
  "POST /api/sa/tenants/bulk-activate": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_bulk_activate",
   "guard": "rate-limited"
  },
  "POST /api/sa/tenants/bulk-deactivate": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_bulk_deactivate",
   "guard": "rate-limited"
  },
  "POST /api/sa/tenants/bulk-delete": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_bulk_delete",
   "guard": "rate-limited"
  },
  "POST /api/sa/tenants/bulk-plan": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_bulk_change_plan",
   "guard": "rate-limited"
  },
  "POST /api/sa/tickets/{ticket_id}/reply": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_reply_to_ticket",
   "guard": "open"
  },
  "POST /api/signup": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_signup",
   "guard": "rate-limited"
  },
  "POST /api/signup/google": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_google_signup",
   "guard": "rate-limited"
  },
  "POST /api/subscription/cancel": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_cancel_subscription",
   "guard": "open"
  },
  "POST /api/subscription/downgrade": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_subscription_downgrade",
   "guard": "rate-limited"
  },
  "POST /api/subscription/schedule-change": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_schedule_plan_change",
   "guard": "rate-limited"
  },
  "POST /api/subscription/upgrade": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_subscription_upgrade",
   "guard": "rate-limited"
  },
  "POST /api/support/tickets": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "create_support_ticket",
   "guard": "rate-limited"
  },
  "POST /api/support/tickets/{ticket_id}/reply": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "reply_to_ticket",
   "guard": "open"
  },
  "POST /api/telegram/webhook/{token_hash}": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "telegram_webhook",
   "guard": "open"
  },
  "POST /api/tenant/logo": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_upload_tenant_logo",
   "guard": "rate-limited"
  },
  "POST /api/tg/connect": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_tg_connect",
   "guard": "rate-limited"
  },
  "POST /api/tg/disconnect": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_tg_disconnect",
   "guard": "rate-limited"
  },
  "POST /api/tg/hook/{bot_id}": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_tg_webhook",
   "guard": "open"
  },
  "POST /api/tg/invite": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_tg_invite",
   "guard": "rate-limited"
  },
  "POST /api/tg/owner-link": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_tg_owner_link",
   "guard": "rate-limited"
  },
  "POST /api/video/generate": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_video_generate",
   "guard": "open"
  },
  "POST /api/video/generate-custom": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_video_generate_custom",
   "guard": "rate-limited"
  },
  "POST /api/wa-agent/connect": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "wa_agent_connect",
   "guard": "rate-limited"
  },
  "POST /api/wa/greeting": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_wa_greeting",
   "guard": "rate-limited"
  },
  "POST /api/wa/send": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_wa_send",
   "guard": "rate-limited"
  },
  "POST /api/wa/share-calc": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_wa_share_calc",
   "guard": "rate-limited"
  },
  "POST /api/wa/verify-credentials": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_wa_verify_credentials",
   "guard": "rate-limited"
  },
  "POST /api/whatsapp/v2/acknowledge": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_wa_v2_acknowledge",
   "guard": "open"
  },
  "POST /api/whatsapp/v2/disconnect": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_wa_v2_disconnect",
   "guard": "rate-limited"
  },
  "POST /api/whatsapp/v2/pairing-code": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_wa_v2_pairing_code",
   "guard": "rate-limited"
  },
  "POST /api/whatsapp/v2/setup": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_wa_v2_setup",
   "guard": "rate-limited"
  },
  "POST /api/whatsapp/v2/webhook": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_wa_v2_webhook",
   "guard": "open"
  },
  "POST /internal/deploy": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "internal_deploy_webhook",
   "guard": "open"
  },
  "POST /m/{slug}/lead": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_microsite_lead",
   "guard": "rate-limited"
  },
  "POST /nidaan/api/account/delete": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_account_delete",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/api/account/delete/cancel": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_account_delete_cancel",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/api/change-password": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_change_password",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/api/check-email": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_api_check_email",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/api/check-phone": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_api_check_phone",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/api/claims/submit": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_api_submit_claim",
   "guard": "rate-limited"
  },
  "POST /nidaan/api/claims/{claim_id}/documents/upload": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_upload_claim_doc",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/api/claims/{claim_id}/messages": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_claim_message_send",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/api/claims/{claim_id}/pay": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_claim_pay",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/api/claims/{claim_id}/pay-verify": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_claim_pay_verify",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/api/claimshield/status": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_claimshield_status",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/api/doc/feedback": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_doc_feedback_post",
   "guard": "nidaan-host,staff:team_member,rate-limited"
  },
  "POST /nidaan/api/google": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_api_google_signin",
   "guard": "nidaan-host,rate-limited"
  },
+ "POST /nidaan/api/intake/letter": {
+  "file": "nidaan_app.py",
+  "func": "nidaan_intake_letter_subscriber",
+  "guard": "nidaan-host,rate-limited"
+ },
  "POST /nidaan/api/login": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_api_login",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/api/prefs": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_set_prefs",
   "guard": "nidaan-host"
  },
  "POST /nidaan/api/reset-password": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_api_reset_password",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/api/review-request": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_api_review_request",
   "guard": "nidaan-host"
  },
  "POST /nidaan/api/review-request/pay": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_review_pay",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/api/review-request/verify": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_review_verify",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/api/review-signup": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_review_signup",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/api/review/{purchase_id}/documents/upload": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_upload_review_doc",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/api/review/{purchase_id}/pay": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_review_pay_by_id",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/api/review/{purchase_id}/pay-verify": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_review_pay_verify",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/api/sarathi/access": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_sarathi_access",
   "guard": "nidaan-host"
  },
  "POST /nidaan/api/send-email-otp": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_api_send_email_otp",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/api/send-verify-otp": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_api_send_verify_otp",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/api/signup": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_api_signup",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/api/signup/google": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_api_google_signup",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/api/signup/mobile": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_api_signup_mobile",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/api/subscribe": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_api_subscribe",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/api/subscribe/cancel": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_subscribe_cancel",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/api/subscribe/precapture": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_subscribe_precapture",
   "guard": "nidaan-host"
  },
  "POST /nidaan/api/subscribe/recurring": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_subscribe_recurring",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/api/subscribe/recurring/verify": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_subscribe_recurring_verify",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/api/subscribe/verify": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_subscribe_verify",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/api/support/attach": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_support_attach",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/api/support/close": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_support_close",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/api/support/lead": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_support_lead",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/api/support/message": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_support_message",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/api/support/rate": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_support_rate",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/api/track": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_api_track",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/api/verify-email-otp": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_api_verify_email_otp",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/api/wa/webhook": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_wa_webhook",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/api/webhook": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_razorpay_webhook",
   "guard": "rate-limited"
  },
  "POST /nidaan/branch/api/claims": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_branch_raise_claim",
-  "guard": "nidaan-host"
+  "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/branch/api/claims/{claim_id}/documents/upload": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_branch_upload_claim_doc",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/branch/api/claims/{claim_id}/l2-advance": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_branch_l2_advance",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/branch/api/claims/{claim_id}/l2-pay": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_branch_l2_pay",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/branch/api/claims/{claim_id}/l2-pay-verify": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_branch_l2_pay_verify",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/branch/api/claims/{claim_id}/l2-payment-link": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_branch_l2_payment_link",
   "guard": "nidaan-host,rate-limited"
  },
+ "POST /nidaan/branch/api/intake/letter": {
+  "file": "nidaan_app.py",
+  "func": "nidaan_intake_letter_branch",
+  "guard": "nidaan-host,rate-limited"
+ },
+ "POST /nidaan/branch/api/referred-claims/{claim_id}/note": {
+  "file": "nidaan_app.py",
+  "func": "nidaan_branch_referred_claim_note",
+  "guard": "nidaan-host,rate-limited"
+ },
  "POST /nidaan/branch/api/request-otp": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_branch_request_otp",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/branch/api/verify-otp": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_branch_verify_otp",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/claim/api/consent": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_claim_consent",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/claim/api/documents/submit": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_claim_submit_docs",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/claim/api/documents/upload": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_claim_upload_doc",
   "guard": "nidaan-host,rate-limited"
  },
+ "POST /nidaan/claim/api/email/change": {
+  "file": "nidaan_app.py",
+  "func": "nidaan_claim_email_change",
+  "guard": "nidaan-host,rate-limited"
+ },
+ "POST /nidaan/claim/api/email/check": {
+  "file": "nidaan_app.py",
+  "func": "nidaan_claim_email_check",
+  "guard": "nidaan-host,rate-limited"
+ },
+ "POST /nidaan/claim/api/email/code": {
+  "file": "nidaan_app.py",
+  "func": "nidaan_claim_email_code",
+  "guard": "nidaan-host,rate-limited"
+ },
+ "POST /nidaan/claim/api/email/skip": {
+  "file": "nidaan_app.py",
+  "func": "nidaan_claim_email_skip",
+  "guard": "nidaan-host,rate-limited"
+ },
  "POST /nidaan/claim/api/verify/check": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_claim_verify_check",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/claim/api/verify/start": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_claim_verify_start",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/ops/api/accounts": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_create_account",
   "guard": "nidaan-host,staff:super_admin"
  },
  "POST /nidaan/ops/api/accounts/bulk-delete": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_bulk_delete_accounts",
   "guard": "nidaan-host,staff:super_admin"
  },
  "POST /nidaan/ops/api/accounts/merge": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_account_merge",
   "guard": "nidaan-host,staff:super_admin"
  },
  "POST /nidaan/ops/api/accounts/{account_id}/impersonate": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_impersonate",
   "guard": "nidaan-host,staff:super_admin"
  },
  "POST /nidaan/ops/api/accounts/{account_id}/mark-paid": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_ops_mark_paid",
   "guard": "nidaan-host,staff:super_admin,rate-limited"
  },
  "POST /nidaan/ops/api/accounts/{account_id}/reattribute": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_ops_reattribute_account",
   "guard": "nidaan-host,staff:super_admin,rate-limited"
  },
  "POST /nidaan/ops/api/announce": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_announce",
   "guard": "nidaan-host,staff:super_admin"
  },
  "POST /nidaan/ops/api/announce/{announce_id}/react": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_announce_react",
   "guard": "nidaan-host,staff:any"
  },
  "POST /nidaan/ops/api/announce/{announce_id}/revert": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_announce_revert",
   "guard": "nidaan-host,staff:super_admin"
  },
  "POST /nidaan/ops/api/branches": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_create_branch",
   "guard": "nidaan-host,staff:sub_super_admin"
  },
  "POST /nidaan/ops/api/branches/{branch_code}/impersonate": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_impersonate_branch",
   "guard": "nidaan-host,staff:sub_super_admin"
  },
  "POST /nidaan/ops/api/broadcast": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_broadcast",
   "guard": "nidaan-host,staff:any"
  },
  "POST /nidaan/ops/api/broadcasts/{bid}/react": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_broadcast_react",
   "guard": "nidaan-host,staff:any"
  },
  "POST /nidaan/ops/api/buckets/designer/bucket": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_bucket_save",
   "guard": "nidaan-host,staff:super_admin,rate-limited"
  },
  "POST /nidaan/ops/api/buckets/designer/field": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_bucket_field_save",
   "guard": "nidaan-host,staff:super_admin,rate-limited"
  },
  "POST /nidaan/ops/api/buckets/designer/route": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_bucket_route_save",
   "guard": "nidaan-host,staff:super_admin,rate-limited"
  },
  "POST /nidaan/ops/api/buckets/designer/substate": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_bucket_sub_save",
   "guard": "nidaan-host,staff:super_admin,rate-limited"
  },
  "POST /nidaan/ops/api/cases/{claim_id}/assign": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_ops_case_assign",
   "guard": "nidaan-host,staff:team_member,rate-limited"
  },
  "POST /nidaan/ops/api/cases/{claim_id}/blocker": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_ops_case_blocker",
   "guard": "nidaan-host,staff:team_member,rate-limited"
  },
  "POST /nidaan/ops/api/cases/{claim_id}/bucket/field": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_case_bucket_field",
   "guard": "nidaan-host,staff:team_member,rate-limited"
  },
  "POST /nidaan/ops/api/cases/{claim_id}/bucket/move": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_case_bucket_move",
   "guard": "nidaan-host,staff:team_member,rate-limited"
  },
  "POST /nidaan/ops/api/cases/{claim_id}/bucket/substate": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_case_bucket_sub",
   "guard": "nidaan-host,staff:team_member,rate-limited"
  },
  "POST /nidaan/ops/api/cases/{claim_id}/change-request": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_case_change_request",
   "guard": "nidaan-host,staff:team_member,rate-limited"
  },
  "POST /nidaan/ops/api/cases/{claim_id}/docs-complete": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_docs_complete",
   "guard": "nidaan-host,staff:team_member,rate-limited"
  },
  "POST /nidaan/ops/api/cases/{claim_id}/gist": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_case_gist",
   "guard": "nidaan-host,staff:team_member,rate-limited"
  },
  "POST /nidaan/ops/api/cases/{claim_id}/handover": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_case_handover",
   "guard": "nidaan-host,staff:team_member,rate-limited"
  },
  "POST /nidaan/ops/api/cases/{claim_id}/handover/undo": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_case_handover_undo",
   "guard": "nidaan-host,staff:super_admin,rate-limited"
  },
  "POST /nidaan/ops/api/cases/{claim_id}/pipeline/move": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_ops_pipeline_move",
   "guard": "nidaan-host,staff:team_member,rate-limited"
  },
  "POST /nidaan/ops/api/cases/{claim_id}/pipeline/start": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_ops_pipeline_start",
   "guard": "nidaan-host,staff:team_member,rate-limited"
  },
  "POST /nidaan/ops/api/cases/{claim_id}/query/contact": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_case_query_contact",
   "guard": "nidaan-host,staff:team_member,rate-limited"
  },
  "POST /nidaan/ops/api/cases/{claim_id}/query/raise": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_case_query_raise",
   "guard": "nidaan-host,staff:team_member,rate-limited"
  },
  "POST /nidaan/ops/api/cases/{claim_id}/query/resolve": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_case_query_resolve",
   "guard": "nidaan-host,staff:team_member,rate-limited"
  },
  "POST /nidaan/ops/api/channel-partners": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_cp_create",
   "guard": "nidaan-host,staff:team_member,rate-limited"
  },
  "POST /nidaan/ops/api/claims/archive": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_archive_claims",
   "guard": "nidaan-host,staff:sub_super_admin,rate-limited"
  },
  "POST /nidaan/ops/api/claims/{claim_id}/assign": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_assign_claim",
   "guard": "nidaan-host,staff:any"
  },
+ "POST /nidaan/ops/api/claims/{claim_id}/contacts/confirm": {
+  "file": "nidaan_app.py",
+  "func": "ops_claim_contact_confirm",
+  "guard": "nidaan-host,staff:any,rate-limited"
+ },
+ "POST /nidaan/ops/api/claims/{claim_id}/cp/request": {
+  "file": "nidaan_app.py",
+  "func": "ops_claim_cp_request",
+  "guard": "nidaan-host,staff:team_member,rate-limited"
+ },
  "POST /nidaan/ops/api/claims/{claim_id}/deliver-review": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_deliver_review",
   "guard": "nidaan-host,staff:team_member,rate-limited"
  },
  "POST /nidaan/ops/api/claims/{claim_id}/doc-auto": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_claim_doc_auto",
   "guard": "nidaan-host,staff:any,rate-limited"
  },
  "POST /nidaan/ops/api/claims/{claim_id}/doc-exclude": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_claim_doc_exclude",
   "guard": "nidaan-host,staff:any,rate-limited"
  },
  "POST /nidaan/ops/api/claims/{claim_id}/doc-page": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_claim_doc_page",
   "guard": "nidaan-host,staff:any,rate-limited"
  },
  "POST /nidaan/ops/api/claims/{claim_id}/doc-reminder/email": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_ops_doc_reminder_email",
   "guard": "nidaan-host,staff:sub_super_admin,rate-limited"
  },
  "POST /nidaan/ops/api/claims/{claim_id}/doc-window/add": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_doc_window_add",
   "guard": "nidaan-host,staff:team_member,rate-limited"
  },
  "POST /nidaan/ops/api/claims/{claim_id}/doc-window/called": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_doc_window_called",
   "guard": "nidaan-host,staff:team_member,rate-limited"
  },
  "POST /nidaan/ops/api/claims/{claim_id}/doc-window/draft": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_doc_window_draft",
   "guard": "nidaan-host,staff:team_member,rate-limited"
  },
  "POST /nidaan/ops/api/claims/{claim_id}/doc-window/pause": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_doc_window_pause",
   "guard": "nidaan-host,staff:team_member,rate-limited"
  },
  "POST /nidaan/ops/api/claims/{claim_id}/doc-window/preview": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_doc_window_preview",
   "guard": "nidaan-host,staff:team_member,rate-limited"
  },
  "POST /nidaan/ops/api/claims/{claim_id}/doc-window/remove": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_doc_window_remove",
   "guard": "nidaan-host,staff:team_member,rate-limited"
  },
  "POST /nidaan/ops/api/claims/{claim_id}/doc-window/restore": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_doc_window_restore",
   "guard": "nidaan-host,staff:team_member,rate-limited"
  },
  "POST /nidaan/ops/api/claims/{claim_id}/doc-window/send": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_doc_window_send",
   "guard": "nidaan-host,staff:team_member,rate-limited"
  },
  "POST /nidaan/ops/api/claims/{claim_id}/doc-window/tick": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_doc_window_tick",
   "guard": "nidaan-host,staff:team_member,rate-limited"
  },
  "POST /nidaan/ops/api/claims/{claim_id}/doc-window/type": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_doc_window_type",
   "guard": "nidaan-host,staff:team_member,rate-limited"
  },
  "POST /nidaan/ops/api/claims/{claim_id}/documents/upload": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_upload_any_claim_doc",
   "guard": "nidaan-host,staff:team_member,rate-limited"
  },
  "POST /nidaan/ops/api/claims/{claim_id}/escalation/answered": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_escalation_answered",
   "guard": "nidaan-host,staff:team_member,rate-limited"
  },
  "POST /nidaan/ops/api/claims/{claim_id}/escalation/reply": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_escalation_reply",
   "guard": "nidaan-host,staff:team_member,rate-limited"
  },
  "POST /nidaan/ops/api/claims/{claim_id}/followups": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_add_followup",
   "guard": "nidaan-host,staff:team_member"
  },
  "POST /nidaan/ops/api/claims/{claim_id}/messages": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_claim_message_send",
   "guard": "nidaan-host,staff:any,rate-limited"
  },
  "POST /nidaan/ops/api/claims/{claim_id}/mute": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_claim_mute",
   "guard": "nidaan-host,staff:any"
  },
  "POST /nidaan/ops/api/claims/{claim_id}/notes": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_add_note",
   "guard": "nidaan-host,staff:team_member"
  },
  "POST /nidaan/ops/api/claims/{claim_id}/notes/mark-read": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_claim_notes_mark_read",
   "guard": "nidaan-host,staff:team_member"
  },
  "POST /nidaan/ops/api/claims/{claim_id}/notes/{note_id}/attachments": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_claim_note_attachments",
   "guard": "nidaan-host,staff:team_member,rate-limited"
  },
  "POST /nidaan/ops/api/claims/{claim_id}/portal/ensure": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_claim_portal_ensure",
   "guard": "nidaan-host,staff:sub_super_admin"
  },
  "POST /nidaan/ops/api/claims/{claim_id}/portal/push-authorization": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_claim_push_authorization",
   "guard": "nidaan-host,staff:sub_super_admin"
  },
  "POST /nidaan/ops/api/claims/{claim_id}/portal/send-email": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_claim_portal_send_email",
   "guard": "nidaan-host,staff:sub_super_admin"
  },
  "POST /nidaan/ops/api/claims/{claim_id}/reattribute": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_ops_reattribute_claim",
   "guard": "nidaan-host,staff:super_admin,rate-limited"
  },
  "POST /nidaan/ops/api/claims/{claim_id}/reminders": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_claim_reminder_create",
   "guard": "nidaan-host,staff:team_member,rate-limited"
  },
  "POST /nidaan/ops/api/claims/{claim_id}/send-to-claimshield": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_send_to_claimshield",
   "guard": "nidaan-host,staff:sub_super_admin,rate-limited"
  },
  "POST /nidaan/ops/api/claims/{claim_id}/wa/start": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_ops_wa_start",
   "guard": "nidaan-host,staff:team_member,rate-limited"
  },
+ "POST /nidaan/ops/api/claims/{claim_id}/waiting": {
+  "file": "nidaan_app.py",
+  "func": "ops_claim_waiting_set",
+  "guard": "nidaan-host,staff:team_member,rate-limited"
+ },
  "POST /nidaan/ops/api/claims/{claim_id}/watchers": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_claim_involve",
   "guard": "nidaan-host,staff:team_member,rate-limited"
  },
  "POST /nidaan/ops/api/claimshield/routing": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_claimshield_routing",
   "guard": "nidaan-host,staff:super_admin"
  },
+ "POST /nidaan/ops/api/cp-requests/{req_id}/decide": {
+  "file": "nidaan_app.py",
+  "func": "ops_claim_cp_decide",
+  "guard": "nidaan-host,staff:super_admin,rate-limited"
+ },
+ "POST /nidaan/ops/api/cp-requests/{req_id}/withdraw": {
+  "file": "nidaan_app.py",
+  "func": "ops_claim_cp_withdraw",
+  "guard": "nidaan-host,staff:team_member,rate-limited"
+ },
  "POST /nidaan/ops/api/crm/leads": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "crm_create_lead",
   "guard": "nidaan-host,staff:team_member,rate-limited"
  },
  "POST /nidaan/ops/api/crm/leads/{lead_id}/comment": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "crm_add_comment",
   "guard": "nidaan-host,staff:team_member"
  },
  "POST /nidaan/ops/api/crm/leads/{lead_id}/convert": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "crm_convert_lead",
   "guard": "nidaan-host,staff:team_member"
  },
+ "POST /nidaan/ops/api/docsplit/batch": {
+  "file": "nidaan_app.py",
+  "func": "ops_docsplit_batch",
+  "guard": "nidaan-host,staff:any,rate-limited"
+ },
+ "POST /nidaan/ops/api/docsplit/batch/{job}/file": {
+  "file": "nidaan_app.py",
+  "func": "ops_docsplit_batch_file",
+  "guard": "nidaan-host,staff:any,rate-limited"
+ },
+ "POST /nidaan/ops/api/docsplit/batch/{job}/start": {
+  "file": "nidaan_app.py",
+  "func": "ops_docsplit_batch_start",
+  "guard": "nidaan-host,staff:any,rate-limited"
+ },
  "POST /nidaan/ops/api/docsplit/rules/{rule_id}/undo": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_docsplit_rule_undo",
   "guard": "nidaan-host,staff:sub_super_admin,rate-limited"
  },
+ "POST /nidaan/ops/api/docsplit/settings": {
+  "file": "nidaan_app.py",
+  "func": "ops_docsplit_settings_save",
+  "guard": "nidaan-host,staff:super_admin,rate-limited"
+ },
  "POST /nidaan/ops/api/docsplit/upload": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_docsplit_upload",
   "guard": "nidaan-host,staff:any,rate-limited"
  },
  "POST /nidaan/ops/api/docsplit/{job}/close": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_docsplit_close",
   "guard": "nidaan-host,staff:any,rate-limited"
  },
  "POST /nidaan/ops/api/docsplit/{job}/export": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_docsplit_export",
   "guard": "nidaan-host,staff:any"
  },
  "POST /nidaan/ops/api/docsplit/{job}/retype": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_docsplit_retype",
   "guard": "nidaan-host,staff:any,rate-limited"
  },
  "POST /nidaan/ops/api/health/action": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_health_action",
   "guard": "nidaan-host,staff:super_admin"
  },
+ "POST /nidaan/ops/api/intake/letter": {
+  "file": "nidaan_app.py",
+  "func": "nidaan_intake_letter_staff",
+  "guard": "nidaan-host,staff:team_member,rate-limited"
+ },
+ "POST /nidaan/ops/api/layout/proposals": {
+  "file": "nidaan_app.py",
+  "func": "ops_layout_save",
+  "guard": "nidaan-host,staff:team_member,rate-limited"
+ },
+ "POST /nidaan/ops/api/layout/proposals/{proposal_id}/choose": {
+  "file": "nidaan_app.py",
+  "func": "ops_layout_choose",
+  "guard": "nidaan-host,staff:super_admin"
+ },
  "POST /nidaan/ops/api/leave": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_leave_create",
   "guard": "nidaan-host,staff:any"
  },
  "POST /nidaan/ops/api/leave/{leave_id}/cancel": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_leave_cancel",
   "guard": "nidaan-host,staff:any"
  },
  "POST /nidaan/ops/api/leave/{leave_id}/decision": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_leave_decide",
   "guard": "nidaan-host,staff:sub_super_admin"
  },
  "POST /nidaan/ops/api/login": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_login",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/ops/api/me/comms-onboarded": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_me_comms_onboarded",
   "guard": "nidaan-host,staff:any"
  },
  "POST /nidaan/ops/api/me/language": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_me_language",
   "guard": "nidaan-host,staff:any"
  },
  "POST /nidaan/ops/api/me/profile-pic": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_me_profile_pic",
   "guard": "nidaan-host,staff:any,rate-limited"
  },
  "POST /nidaan/ops/api/me/saved-numbers": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_me_saved_numbers",
   "guard": "nidaan-host,staff:any"
  },
+ "POST /nidaan/ops/api/my-business/claims/{claim_id}/note": {
+  "file": "nidaan_app.py",
+  "func": "ops_my_business_claim_note",
+  "guard": "nidaan-host,staff:any,rate-limited"
+ },
  "POST /nidaan/ops/api/my-claims": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_my_raise_claim",
-  "guard": "nidaan-host"
+  "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/ops/api/my-claims/{claim_id}/documents/upload": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_my_upload_claim_doc",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/ops/api/my-claims/{claim_id}/l2-advance": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_my_l2_advance",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/ops/api/my-claims/{claim_id}/l2-pay": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_my_l2_pay",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/ops/api/my-claims/{claim_id}/l2-pay-verify": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_my_l2_pay_verify",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/ops/api/my-claims/{claim_id}/l2-payment-link": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_my_l2_payment_link",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/ops/api/notifications/ack": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_notifications_ack",
   "guard": "nidaan-host,staff:any"
  },
  "POST /nidaan/ops/api/notifications/prefs": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_notify_pref_set",
   "guard": "nidaan-host,staff:super_admin,rate-limited"
  },
  "POST /nidaan/ops/api/notifications/read": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_notifications_read",
   "guard": "nidaan-host,staff:any"
  },
  "POST /nidaan/ops/api/official-numbers": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_official_upsert",
   "guard": "nidaan-host,staff:super_admin"
  },
  "POST /nidaan/ops/api/payment-links": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_ops_create_payment_link",
   "guard": "nidaan-host,staff:super_admin,rate-limited"
  },
  "POST /nidaan/ops/api/payments/followups": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_payment_followup_set",
   "guard": "nidaan-host,staff:sub_super_admin,rate-limited"
  },
  "POST /nidaan/ops/api/payments/guardian/run": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_payment_guardian_run",
   "guard": "nidaan-host,staff:super_admin,rate-limited"
  },
  "POST /nidaan/ops/api/payments/incidents/{inc_id}/ack": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_payment_incident_ack",
   "guard": "nidaan-host,staff:super_admin,rate-limited"
  },
  "POST /nidaan/ops/api/payments/incidents/{inc_id}/mute": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_payment_incident_mute",
   "guard": "nidaan-host,staff:super_admin,rate-limited"
  },
  "POST /nidaan/ops/api/payments/reconcile": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_payments_reconcile",
   "guard": "nidaan-host,staff:super_admin,rate-limited"
  },
  "POST /nidaan/ops/api/pipeline/auto-advance": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_ops_pipeline_auto",
   "guard": "nidaan-host,staff:sub_super_admin,rate-limited"
  },
  "POST /nidaan/ops/api/push/subscribe": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_push_subscribe",
   "guard": "nidaan-host,staff:any"
  },
  "POST /nidaan/ops/api/push/test": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_push_test",
   "guard": "nidaan-host,staff:any"
  },
  "POST /nidaan/ops/api/push/unsubscribe": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_push_unsubscribe",
   "guard": "nidaan-host,staff:any"
  },
  "POST /nidaan/ops/api/quick-tasks": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_quick_task_create",
   "guard": "nidaan-host,staff:any"
  },
  "POST /nidaan/ops/api/quick-tasks/{qid}/approval": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_quick_task_approval",
   "guard": "nidaan-host,staff:sub_super_admin"
  },
  "POST /nidaan/ops/api/quick-tasks/{qid}/merge": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_quick_task_merge",
   "guard": "nidaan-host,staff:sub_super_admin"
  },
  "POST /nidaan/ops/api/quick-tasks/{qid}/mute": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_quick_task_mute",
   "guard": "nidaan-host,staff:any"
  },
  "POST /nidaan/ops/api/quick-tasks/{qid}/notes": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_quick_task_note_add",
   "guard": "nidaan-host,staff:any,rate-limited"
  },
  "POST /nidaan/ops/api/quick-tasks/{qid}/notes/{note_id}/approval": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_quick_task_note_approval",
   "guard": "nidaan-host,staff:sub_super_admin"
  },
  "POST /nidaan/ops/api/radar/config": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_radar_config_set",
   "guard": "nidaan-host,staff:sub_super_admin"
  },
  "POST /nidaan/ops/api/radar/items/{item_id}/file-to-claim": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_radar_file_to_claim",
   "guard": "nidaan-host,staff:sub_super_admin,rate-limited"
  },
  "POST /nidaan/ops/api/radar/items/{item_id}/reply": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_radar_reply",
   "guard": "nidaan-host,staff:sub_super_admin"
  },
  "POST /nidaan/ops/api/radar/items/{item_id}/resolve": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_radar_resolve",
   "guard": "nidaan-host,staff:sub_super_admin"
  },
  "POST /nidaan/ops/api/radar/mailboxes": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_radar_mailbox_save",
   "guard": "nidaan-host,staff:sub_super_admin"
  },
  "POST /nidaan/ops/api/radar/mailboxes/test": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_radar_test_adhoc",
   "guard": "nidaan-host,staff:sub_super_admin"
  },
  "POST /nidaan/ops/api/radar/mailboxes/{mailbox_id}/purge": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_radar_purge",
   "guard": "nidaan-host,staff:super_admin"
  },
  "POST /nidaan/ops/api/radar/mailboxes/{mailbox_id}/test": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_radar_test_saved",
   "guard": "nidaan-host,staff:sub_super_admin"
  },
  "POST /nidaan/ops/api/radar/poll": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_radar_poll_now",
   "guard": "nidaan-host,staff:sub_super_admin"
  },
  "POST /nidaan/ops/api/refunds/manual": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_refund_manual",
   "guard": "nidaan-host,rate-limited"
  },
  "POST /nidaan/ops/api/refunds/{refund_id}/retry": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_refund_retry",
   "guard": "nidaan-host"
  },
  "POST /nidaan/ops/api/review-templates": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_review_template_create",
   "guard": "nidaan-host,staff:super_admin"
  },
  "POST /nidaan/ops/api/staff": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_create_staff",
   "guard": "nidaan-host,staff:super_admin"
  },
  "POST /nidaan/ops/api/staff/delete-inactive": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_delete_inactive_staff",
   "guard": "nidaan-host,staff:super_admin"
  },
  "POST /nidaan/ops/api/staff/{staff_id}/impersonate": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_impersonate_staff",
   "guard": "nidaan-host,staff:super_admin"
  },
  "POST /nidaan/ops/api/staff/{staff_id}/reset-password": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_reset_staff_password",
   "guard": "nidaan-host,staff:super_admin,rate-limited"
  },
  "POST /nidaan/ops/api/staff/{staff_id}/restore": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_restore_staff",
   "guard": "nidaan-host,staff:super_admin"
  },
  "POST /nidaan/ops/api/status-config": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_status_config_create",
   "guard": "nidaan-host,staff:super_admin"
  },
  "POST /nidaan/ops/api/subscribers/raise-claim": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_ops_raise_for_subscriber",
   "guard": "nidaan-host,staff:team_member,rate-limited"
  },
  "POST /nidaan/ops/api/support/reps": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_support_reps_add",
   "guard": "nidaan-host,staff:super_admin"
  },
  "POST /nidaan/ops/api/support/threads/{thread_id}/attach": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_support_attach",
   "guard": "nidaan-host,staff:team_member,rate-limited"
  },
  "POST /nidaan/ops/api/support/threads/{thread_id}/close": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_support_close",
   "guard": "nidaan-host,staff:team_member"
  },
  "POST /nidaan/ops/api/support/threads/{thread_id}/reply": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_support_reply",
   "guard": "nidaan-host,staff:team_member,rate-limited"
  },
  "POST /nidaan/ops/api/system-flags": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_flags_set",
   "guard": "nidaan-host,staff:super_admin"
  },
  "POST /nidaan/ops/api/task-categories": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_task_category_create",
   "guard": "nidaan-host,staff:super_admin"
  },
  "POST /nidaan/ops/api/tasks": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_task_create",
   "guard": "nidaan-host,staff:any"
  },
  "POST /nidaan/ops/api/tasks/{task_id}/approve": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_task_approve",
   "guard": "nidaan-host,staff:any"
  },
  "POST /nidaan/ops/api/tasks/{task_id}/assign": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_task_assign",
   "guard": "nidaan-host,staff:any"
  },
  "POST /nidaan/ops/api/tasks/{task_id}/notes": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_task_notes_create",
   "guard": "nidaan-host,staff:any"
  },
  "POST /nidaan/ops/api/tasks/{task_id}/qc-review": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_task_qc_review",
   "guard": "nidaan-host,staff:any"
  },
  "POST /nidaan/ops/api/tasks/{task_id}/transition": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_task_transition",
   "guard": "nidaan-host,staff:any"
  },
  "POST /nidaan/ops/api/telegram/config": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_telegram_save_token",
   "guard": "nidaan-host,staff:super_admin"
  },
  "POST /nidaan/ops/api/telegram/disconnect": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_telegram_disconnect",
   "guard": "nidaan-host,staff:super_admin"
  },
  "POST /nidaan/ops/api/telegram/instant-link/{staff_id}": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_telegram_instant_link",
   "guard": "nidaan-host,staff:super_admin"
  },
  "POST /nidaan/ops/api/telegram/remind-unlinked": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_telegram_remind_unlinked",
   "guard": "nidaan-host,staff:super_admin"
  },
  "POST /nidaan/ops/api/telegram/test": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_telegram_test",
   "guard": "nidaan-host,staff:any"
  },
  "POST /nidaan/ops/api/telegram/toggle": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_telegram_toggle",
   "guard": "nidaan-host,staff:super_admin"
  },
  "POST /nidaan/ops/api/telegram/unlink": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_telegram_unlink",
   "guard": "nidaan-host,staff:any"
  },
  "POST /nidaan/ops/api/tg-login/start": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_tg_login_start",
   "guard": "nidaan-host,rate-limited"
  },
+ "POST /nidaan/ops/api/ui/opened": {
+  "file": "nidaan_app.py",
+  "func": "ops_ui_opened",
+  "guard": "nidaan-host,staff:team_member,rate-limited"
+ },
  "POST /nidaan/ops/api/wa/campaign": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_ops_wa_campaign",
   "guard": "nidaan-host,staff:super_admin,rate-limited"
  },
  "POST /nidaan/ops/api/wa/campaign/preview": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_ops_wa_campaign_preview",
   "guard": "nidaan-host,staff:super_admin"
  },
  "POST /nidaan/ops/api/wa/contacts/{msisdn}/lead": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_ops_wa_promote_lead",
   "guard": "nidaan-host,staff:sub_super_admin"
  },
  "POST /nidaan/ops/api/wa/settings": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_ops_wa_settings",
   "guard": "nidaan-host,staff:super_admin"
  },
  "POST /nidaan/ops/api/wa/thread/{msisdn}/owner": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_ops_wa_owner",
   "guard": "nidaan-host"
  },
  "POST /nidaan/ops/api/wa/thread/{msisdn}/reply": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_ops_wa_reply",
   "guard": "nidaan-host,rate-limited"
  },
+ "POST /nidaan/ops/api/wa/unsorted/{item_id}/attach": {
+  "file": "nidaan_app.py",
+  "func": "nidaan_ops_wa_unsorted_attach",
+  "guard": "nidaan-host,staff:team_member,rate-limited"
+ },
+ "POST /nidaan/ops/api/wa/unsorted/{item_id}/set-aside": {
+  "file": "nidaan_app.py",
+  "func": "nidaan_ops_wa_unsorted_aside",
+  "guard": "nidaan-host,staff:team_member,rate-limited"
+ },
  "POST /nidaan/telegram/webhook/{secret}": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "nidaan_telegram_webhook",
   "guard": "nidaan-host"
  },
  "POST /webhook": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "webhook_receive",
   "guard": "open"
  },
  "PUT /api/admin/leads/{lead_id}": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_admin_edit_lead",
   "guard": "rate-limited"
  },
  "PUT /api/admin/leads/{lead_id}/stage": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_admin_change_stage",
   "guard": "rate-limited"
  },
  "PUT /api/admin/policies/{policy_id}": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_admin_edit_policy",
   "guard": "rate-limited"
  },
  "PUT /api/affiliate/payout-info": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "affiliate_update_payout_info",
   "guard": "rate-limited"
  },
  "PUT /api/agents/{agent_id}": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_edit_agent",
   "guard": "rate-limited"
  },
  "PUT /api/leads/{lead_id}/contact-pref": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_set_contact_pref",
   "guard": "open"
  },
  "PUT /api/leads/{lead_id}/followup/{interaction_id}": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_edit_followup",
   "guard": "open"
  },
  "PUT /api/profile": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_update_profile",
   "guard": "rate-limited"
  },
  "PUT /api/roles/{role_id}": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_update_role",
   "guard": "rate-limited"
  },
  "PUT /api/sa/affiliate-tickets/{ticket_id}": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_update_affiliate_ticket",
   "guard": "open"
  },
  "PUT /api/sa/affiliates/{affiliate_id}": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_update_affiliate",
   "guard": "open"
  },
  "PUT /api/sa/agent/{agent_id}": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_edit_agent",
   "guard": "open"
  },
  "PUT /api/sa/tenant/{tenant_id}": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_edit_tenant",
   "guard": "open"
  },
  "PUT /api/sa/tenant/{tenant_id}/features": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_update_tenant_features",
   "guard": "open"
  },
  "PUT /api/sa/tickets/{ticket_id}": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "sa_update_ticket",
   "guard": "open"
  },
  "PUT /api/tenant/branding": {
-  "file": "sarathi_biz.py",
+  "file": "sarathi_app.py",
   "func": "api_update_branding",
   "guard": "rate-limited"
  },
  "PUT /nidaan/ops/api/branch-billing": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_branch_billing_update",
   "guard": "nidaan-host,staff:super_admin"
  },
  "PUT /nidaan/ops/api/claimant-terms": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_claimant_terms_set",
   "guard": "nidaan-host,staff:super_admin"
  },
  "PUT /nidaan/ops/api/grievance-officer": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_grievance_set",
   "guard": "nidaan-host,staff:super_admin"
  },
  "PUT /nidaan/ops/api/gst": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_gst_update",
   "guard": "nidaan-host,staff:super_admin"
  },
  "PUT /nidaan/ops/api/offices": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_offices_set",
   "guard": "nidaan-host,staff:super_admin"
  },
  "PUT /nidaan/ops/api/ops-settings": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_settings_update",
   "guard": "nidaan-host,staff:super_admin"
  },
  "PUT /nidaan/ops/api/review-fee": {
-  "file": "sarathi_biz.py",
+  "file": "nidaan_app.py",
   "func": "ops_review_fee_update",
   "guard": "nidaan-host,staff:super_admin"
  }

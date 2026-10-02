@@ -1369,6 +1369,23 @@ async def init_db():
             );
             CREATE INDEX IF NOT EXISTS idx_bucket_queries_claim ON nidaan_bucket_queries(claim_id, bucket_key);
 
+            -- The rejection letter, uploaded and virus-checked BEFORE the claim exists (founder, 2 Oct:
+            -- one intake at every door). The form holds a single-use token; only its hash is kept here,
+            -- and it works only for the person who uploaded the file (biz_nidaan_intake).
+            CREATE TABLE IF NOT EXISTS nidaan_intake_letters (
+                letter_id     INTEGER PRIMARY KEY AUTOINCREMENT,
+                token_hash    TEXT NOT NULL UNIQUE,
+                owner         TEXT NOT NULL,
+                stored_name   TEXT NOT NULL,
+                original_name TEXT DEFAULT '',
+                file_size     INTEGER DEFAULT 0,
+                mime_type     TEXT DEFAULT '',
+                created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                reserved_at   TIMESTAMP,
+                claim_id      INTEGER,
+                doc_id        INTEGER
+            );
+
             -- Channel Partner added to / removed from an existing claim: asked, then decided by a
             -- super-admin (biz_nidaan_claim_cp). The claim changes only on approval.
             CREATE TABLE IF NOT EXISTS nidaan_claim_cp_requests (
@@ -2306,6 +2323,16 @@ async def init_db():
             -- A sweep that re-checks every 20 minutes will re-find the same unanswered chat every
             -- 20 minutes; without this it becomes noise, and noise is worse than silence because
             -- people mute the channel and then miss the real one.
+            -- One-time WhatsApp journey messages (welcome, claim registered ...) - sent once per
+            -- claim; "payment failed" at most every 15 minutes (biz_nidaan_wa_orchestrator).
+            CREATE TABLE IF NOT EXISTS nidaan_journey_sends (
+                claim_id INTEGER NOT NULL,
+                event    TEXT NOT NULL,
+                state    TEXT NOT NULL DEFAULT 'sending',
+                at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (claim_id, event)
+            );
+
             CREATE TABLE IF NOT EXISTS nidaan_alert_dedup (
                 alert_key   TEXT PRIMARY KEY,      -- e.g. "wa_unanswered:919289131616"
                 sent_count  INTEGER DEFAULT 0,
@@ -2888,6 +2915,13 @@ async def init_db():
             # every stay from here and the move log (founder, 2 Oct).
             "ALTER TABLE nidaan_claims ADD COLUMN pipeline_bucket_at TIMESTAMP",
             "ALTER TABLE nidaan_claims ADD COLUMN pipeline_by TEXT DEFAULT ''",
+            # Raised without the rejection letter (AP / staff doors only, with a reason): when it is
+            # due, and when the raiser was last reminded. Archived on the due date (founder, 2 Oct).
+            "ALTER TABLE nidaan_claims ADD COLUMN letter_due_at TIMESTAMP",
+            "ALTER TABLE nidaan_claims ADD COLUMN letter_reminded_at TIMESTAMP",
+            # Confirm first, then welcome: '' = from before this, 'waiting' = confirmation sent,
+            # 'sent' = welcomed (biz_nidaan_welcome).
+            "ALTER TABLE nidaan_claims ADD COLUMN welcome_state TEXT DEFAULT ''",
             # Who really raised this claim. A claim raised by an admin on a subscriber's behalf
             # still belongs to the subscriber — but the office must be able to see whose hands
             # were on it, so the actor is recorded permanently rather than implied.

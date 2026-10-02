@@ -2055,16 +2055,18 @@ async def list_branch_claims(branch_code: str, limit: int = 100) -> list[dict]:
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         rows = await (await conn.execute(
-            "SELECT claim_id, insured_name, insured_phone, claim_type, insurer_name, "
+            "SELECT claim_id, insured_name, insured_phone, complainant_name, claim_type, insurer_name, "
             "       disputed_amount, status, review_outcome, l2_payment_status, l2_fee_paid, "
-            "       review_delivered_at, created_at "
+            "       review_delivered_at, created_at, letter_due_at, COALESCE(archived,0) AS db_archived, "
+            "       COALESCE(archived_by,'') AS archived_by "
             "FROM nidaan_claims WHERE origin='branch' AND UPPER(branch_code)=? "
             "ORDER BY claim_id DESC LIMIT ?", (code, limit))).fetchall()
         out = []
         for r in rows:
             d = dict(r)
-            archived = False
-            if d.get("review_outcome") == "no_scope" and d.get("l2_payment_status") != "paid":
+            # Archived in the record (e.g. no rejection letter within 7 days) is archived here too.
+            archived = bool(d.pop("db_archived", 0))
+            if not archived and d.get("review_outcome") == "no_scope" and d.get("l2_payment_status") != "paid":
                 dt = _parse_ts(d.get("review_delivered_at"))
                 archived = bool(dt and dt < cutoff)
             d["archived"] = archived
@@ -2459,10 +2461,10 @@ async def ensure_claim_for_paid_purchase(purchase_id: int) -> Optional[int]:
     # one door that produced no "your claim is registered" message. Best-effort and last: the
     # claim already exists and is linked, so nothing here can undo that.
     try:
-        import biz_nidaan_wa_orchestrator as _orch
-        await _orch.wa_journey(claim_id, "claim_registered")
+        import biz_nidaan_welcome as _w
+        await _w.on_claim_created(claim_id)      # confirm first, then the welcome
     except Exception as e:  # noqa: BLE001
-        logger.warning("d2c claim_registered WhatsApp failed for claim %s: %s", claim_id, e)
+        logger.warning("d2c welcome failed for claim %s: %s", claim_id, e)
     return claim_id
 
 

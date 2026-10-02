@@ -267,6 +267,16 @@ async def _protected_document_handler(request: Request, exc: Exception):
         "This is the complainant's signed authorization. It is kept as a record and cannot be "
         "removed. / यह शिकायतकर्ता की हस्ताक्षरित अनुमति है - रिकॉर्ड के रूप में रखी जाती है, हटाई नहीं जा सकती।")})
 app.add_exception_handler(nidaan.ProtectedDocument, _protected_document_handler)
+
+
+async def _intake_error_handler(request: Request, exc: Exception):
+    # A claim detail that is missing or wrong (biz_nidaan_intake) - one answer for every door.
+    # `detail` stays a plain string so any page reading it shows a sentence, never an object.
+    return JSONResponse(status_code=400, content={
+        "detail": getattr(exc, "en", "Please check the claim details."),
+        "detail_hi": getattr(exc, "hi", ""), "field": getattr(exc, "field", "")})
+import biz_nidaan_intake as _intake
+app.add_exception_handler(_intake.IntakeError, _intake_error_handler)
 app.add_middleware(SlowAPIMiddleware)
 
 # ── CORS ─────────────────────────────────────────────────────────────────────
@@ -689,6 +699,22 @@ async def google_search_console_verify(request: Request):
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     return "google-site-verification: google3df0c6b7c9115ee9.html"
+
+
+def _clean_complainant_contact(phone_in: str, email_in: str):
+    """Enforce a valid 10-digit mobile + a valid email for the COMPLAINANT (the person presenting
+    the case and providing documents) at every claim-creation endpoint — this is our comms point.
+    Returns (phone10, email); raises HTTPException(400) with a plain-language message on failure."""
+    phone = "".join(ch for ch in (phone_in or "") if ch.isdigit())
+    if len(phone) >= 11 and phone.startswith("91"):
+        phone = phone[-10:]
+    if len(phone) != 10:
+        raise HTTPException(400, "Enter a valid 10-digit mobile number for the complainant")
+    email = auth.sanitize_email(email_in or "")
+    if not email:
+        raise HTTPException(400, "Enter a valid email for the complainant — that's where we send "
+                                 "document requests and updates")
+    return phone, email
 
 
 # Customer messages in one website chat before it goes to a person regardless - a runaway ceiling,
@@ -15141,6 +15167,10 @@ async def main():
                     e = await nnot.sweep_empty_claims()
                     if e:
                         logger.warning("Flagged %d claim(s) that arrived with no documents", e)
+                    # Raised without the rejection letter: daily reminder, archive on day 7.
+                    lt = await _intake.sweep_letters()
+                    if lt.get("archived") or lt.get("reminded"):
+                        logger.info("Letter sweep: %s", lt)
                 except asyncio.CancelledError:
                     break
                 except Exception as e:

@@ -1833,7 +1833,7 @@ async def on_claim_filed(claim_id: int, account_id: int):
         wa_phone = claim.get("account_phone") or claim.get("insured_phone")
     else:
         wa_phone = ""
-    await dispatch(
+    _filed = await dispatch(
         event_key="claim.filed", priority=PRIORITY_P1,
         recipient_type=RECIPIENT_SUBSCRIBER, recipient_id=account_id,
         recipient_phone=wa_phone, recipient_email=claim.get("account_email") or "",
@@ -1843,12 +1843,12 @@ async def on_claim_filed(claim_id: int, account_id: int):
               f"({claim.get('claim_type','')}). Our team will review within 24 hours "
               f"and reach out with next steps.\n\n— Nidaan – The Legal Consultants LLP"),
         claim_id=claim_id)
-    # Complainant journey: welcome + claim-registered on WhatsApp (safe; template-gated when cold).
+    # The complainant: confirm their mobile / email first, then the welcome (biz_nidaan_welcome).
     try:
-        import biz_nidaan_wa_orchestrator as _orch
-        await _orch.wa_journey(claim_id, "claim_registered")
+        import biz_nidaan_welcome as _w
+        await _w.on_claim_created(claim_id)
     except Exception as e:
-        logger.warning("on_claim_filed wa_journey failed claim %s: %s", claim_id, e)
+        logger.warning("on_claim_filed welcome failed claim %s: %s", claim_id, e)
 
 
 async def sweep_empty_claims(hours: int = 48) -> int:
@@ -1974,12 +1974,13 @@ async def on_ops_claim_raised(claim_id: int, raised_by: str = ""):
                                  claim_id=claim_id)
     except Exception as e:
         logger.warning("on_ops_claim_raised inapp failed for claim %s: %s", claim_id, e)
-    # Complainant journey: welcome + claim-registered on WhatsApp (safe; template-gated when cold).
+    # The complainant: confirm their mobile / email first, then the welcome (biz_nidaan_welcome).
+    # Safe from the alert sweep too: it starts once per claim, and only for a new one.
     try:
-        import biz_nidaan_wa_orchestrator as _orch
-        await _orch.wa_journey(claim_id, "claim_registered")
+        import biz_nidaan_welcome as _w
+        await _w.on_claim_created(claim_id)
     except Exception as e:
-        logger.warning("on_ops_claim_raised wa_journey failed claim %s: %s", claim_id, e)
+        logger.warning("on_ops_claim_raised welcome failed claim %s: %s", claim_id, e)
 
 
 async def on_claimant_accepted(claim_id: int):
@@ -3277,6 +3278,13 @@ async def on_lead_filed(claim_id: int, account_id: int):
             recipient_type=RECIPIENT_STAFF, recipient_id=_sid,
             channel=CHANNEL_DASHBOARD, subject=_asubj, body=_abody,
             status="sent", sent_at=_now, claim_id=claim_id, account_id=account_id)
+    # The complainant (often not the subscriber): confirm first, then the welcome. Last, so the
+    # staff rows above are written even if this is slow or a restart cuts it short.
+    try:
+        import biz_nidaan_welcome as _w
+        await _w.on_claim_created(claim_id)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("on_lead_filed welcome failed claim %s: %s", claim_id, e)
 
 
 def _paid_for_by_an_intermediary(claim: dict) -> bool:

@@ -894,80 +894,13 @@
     <h2 class="en">Raise a Claim Review</h2>
     <h2 class="hi">क्लेम समीक्षा शुरू करें</h2>
     <form id="claimForm" onsubmit="submitClaim(event)">
-      <div class="row2">
-        <div class="field">
-          <label class="en">Claim Type *</label>
-          <label class="hi">क्लेम प्रकार *</label>
-          <select id="claimType" required>
-            <option value="">-- Select --</option>
-            <option value="health">Health / Mediclaim</option>
-            <option value="life">Life Insurance</option>
-            <option value="motor">Motor / Vehicle</option>
-            <option value="property">Property / Fire</option>
-            <option value="travel">Travel</option>
-            <option value="other">Other</option>
-          </select>
-        </div>
-        <div class="field">
-          <label class="en">Insurance Company</label>
-          <label class="hi">बीमा कंपनी</label>
-          <select id="insurerPick" onchange="_onInsurerPick()"></select>
-          <input type="text" id="insurerOther" placeholder="Type the insurance company name" autocomplete="off"
-                 style="display:none;margin-top:.45rem" oninput="document.getElementById('insurerName').value=this.value">
-          <input type="hidden" id="insurerName">
-        </div>
-      </div>
-      <div class="row2">
-        <div class="field">
-          <label class="en">Client / Insured Name *</label>
-          <label class="hi">ग्राहक / बीमाधारक का नाम *</label>
-          <input type="text" id="insuredName" placeholder="Full name" required style="text-transform:uppercase">
-        </div>
-        <div class="field">
-          <label class="en">Client Phone *</label>
-          <label class="hi">ग्राहक फोन *</label>
-          <input type="tel" id="insuredPhone" placeholder="9876543210" required inputmode="numeric" maxlength="10" pattern="[0-9]{10}" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,10)">
-        </div>
-      </div>
-      <div class="row2">
-        <div class="field">
-          <label class="en">Client / Insured Email *</label>
-          <label class="hi">ग्राहक / बीमाधारक का ईमेल *</label>
-          <input type="email" id="insuredEmail" placeholder="client@email.com" required>
-          <div class="en" style="font-size:.72rem;color:var(--nd-text-faint,#94a3b8);margin-top:.2rem">We email the client the authorization link when the claim reaches Level-2.</div>
-          <div class="hi" style="font-size:.72rem;color:var(--nd-text-faint,#94a3b8);margin-top:.2rem">क्लेम Level-2 पर पहुँचने पर हम ग्राहक को अधिकार-पत्र लिंक इसी ईमेल पर भेजते हैं।</div>
-        </div>
-      </div>
-      <!-- Who WE will deal with. Often not the patient - a son raising it for his mother - and
-           every message, document ask and authorisation goes to this person. -->
-      <div class="row2">
-        <div class="field">
-          <label class="en">Who will deal with us?</label>
-          <label class="hi">हमसे कौन बात करेगा?</label>
-          <input type="text" id="compName" placeholder="Leave blank if it is the client">
-        </div>
-        <div class="field">
-          <label class="en">Their mobile</label>
-          <label class="hi">उनका मोबाइल</label>
-          <input type="tel" id="compPhone" placeholder="10-digit mobile" inputmode="numeric" maxlength="10" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,10)">
-        </div>
-      </div>
-      <div class="row2">
-        <div class="field">
-          <label class="en">Policy Number</label>
-          <label class="hi">पॉलिसी नंबर</label>
-          <input type="text" id="policyNo" placeholder="Optional">
-        </div>
-        <div class="field">
-          <label class="en">Disputed Amount (₹)</label>
-          <label class="hi">विवादित राशि (₹)</label>
-          <input type="number" id="disputedAmt" placeholder="e.g. 150000" min="0" oninput="checkDisputedCap()">
-          <p class="en" style="font-size:.71rem;color:var(--nd-text-muted);margin:.25rem 0 0">Enter only the <b>disputed</b> amount — the shortfall you're fighting for, <b>not</b> the sum assured. E.g. cover ₹50L → claimed ₹10L → insurer paid ₹6L → <b>disputed = ₹4L</b>.</p>
-          <p class="hi" style="font-size:.71rem;color:var(--nd-text-muted);margin:.25rem 0 0">केवल <b>विवादित</b> राशि भरें — वह अंतर जिसके लिए आप लड़ रहे हैं, <b>बीमा राशि नहीं</b>। जैसे कवर ₹50L → क्लेम ₹10L → कंपनी ने दिए ₹6L → <b>विवादित = ₹4L</b>।</p>
-          <div id="disputedCapNudge" style="display:none;font-size:.74rem;margin:.45rem 0 0;padding:.5rem .7rem;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.32);border-radius:8px;color:var(--nd-warning-text);line-height:1.45"></div>
-        </div>
-      </div>
-      <div class="row2">
+      <!-- The seven core details every door asks - the shared block (nidaan_intake.js): patient,
+           complainant (name + mobile + email), type, company, amount, policy no., the letter. -->
+      <div id="claimCore"></div>
+      <p class="en" style="font-size:.74rem;color:var(--nd-text-muted);margin:.45rem 0 0">Disputed amount = only the <b>shortfall</b> you're fighting for, <b>not</b> the sum assured. E.g. cover ₹50L → claimed ₹10L → insurer paid ₹6L → <b>disputed = ₹4L</b>.</p>
+      <p class="hi" style="font-size:.74rem;color:var(--nd-text-muted);margin:.45rem 0 0">विवादित राशि = केवल वह <b>अंतर</b> जिसके लिए आप लड़ रहे हैं, <b>बीमा राशि नहीं</b>। जैसे कवर ₹50L → क्लेम ₹10L → कंपनी ने दिए ₹6L → <b>विवादित = ₹4L</b>।</p>
+      <div id="disputedCapNudge" style="display:none;font-size:.74rem;margin:.45rem 0 0;padding:.5rem .7rem;background:var(--nd-warning-soft,rgba(251,191,36,.1));border:1px solid var(--nd-border-warn,rgba(251,191,36,.32));border-radius:8px;color:var(--nd-warning-text);line-height:1.45"></div>
+      <div class="row2" style="margin-top:.7rem">
         <div class="field">
           <label class="en">Policy Inception Date <span style="opacity:.5;font-weight:400">(optional)</span></label>
           <label class="hi">पॉलिसी आरंभ तिथि <span style="opacity:.5;font-weight:400">(वैकल्पिक)</span></label>
@@ -977,18 +910,6 @@
           <label class="en">TPA <span style="opacity:.5;font-weight:400">(optional)</span></label>
           <label class="hi">TPA</label>
           <input type="text" id="tpaName" placeholder="e.g. Medi Assist">
-        </div>
-      </div>
-      <div class="field">
-        <label class="en">Claim Rejection Letter <span style="color:var(--nd-danger-text)">*</span></label>
-        <label class="hi">क्लेम अस्वीकृति पत्र <span style="color:var(--nd-danger-text)">*</span></label>
-        <div style="margin-top:.35rem;background:rgba(248,113,113,.05);border:2px dashed rgba(248,113,113,.35);border-radius:8px;padding:.85rem">
-          <label class="doc-upload-btn" for="claimRejectionLetter" style="display:flex;align-items:center;justify-content:center;gap:.5rem;padding:.55rem 1rem;background:rgba(248,113,113,.16);border:1px solid rgba(248,113,113,.4);border-radius:6px;cursor:pointer;font-size:.9rem;color:var(--nd-danger-text);font-weight:700">
-            📄 <span class="en">Attach rejection letter</span><span class="hi">अस्वीकृति पत्र संलग्न करें</span>
-          </label>
-          <input type="file" id="claimRejectionLetter" accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx" style="display:none" onchange="showRejectionLetterName()">
-          <div id="claimRejectionLetterName" style="margin-top:.5rem;font-size:.82rem;text-align:center"></div>
-          <p style="opacity:.5;font-size:.73rem;margin:.4rem 0 0;text-align:center"><span class="en">The insurer's rejection / repudiation letter — required to raise a claim.</span><span class="hi">बीमाकर्ता का अस्वीकृति पत्र — क्लेम दर्ज करने के लिए आवश्यक।</span><br>PDF · JPG · PNG · DOC · max 25 MB</p>
         </div>
       </div>
       <div class="field">
@@ -1565,111 +1486,60 @@ function openModal()  {
   // raised without refreshing the page (button stayed disabled after success).
   const _b = document.getElementById('claimSubmitBtn'); if (_b) _b.disabled = false;
   const _m = document.getElementById('claimMsg'); if (_m) { _m.className = 'msg'; _m.textContent = ''; }
+  claimCoreMount();
 }
 function closeModal() { document.getElementById('claimModal').classList.remove('open'); document.getElementById('claimMsg').className = 'msg'; }
-// Both use the shared picker so a wrongly chosen file can be taken off again — see
-// /static/nidaan_files.js. The list markup, the Remove control and the styling are identical
-// everywhere an attachment can be made.
-function showRejectionLetterName() {
-  ndFiles('claimRejectionLetter', 'claimRejectionLetterName');
+function claimCoreMount() {
+  NidaanIntake.mount('claimCore', {lang: document.body.classList.contains('hi') ? 'hi' : 'en',
+    letterUrl: '/nidaan/api/intake/letter', headers: () => ({'Authorization': 'Bearer ' + token})});
 }
-
+// The shared picker (nidaan_files.js) lets a wrongly chosen file be taken off again.
 function showClaimDocList() {
   ndFiles('claimDocs', 'claimDocList');
-}
-
-// Insurer picker: native <select> (reliable on mobile) + "Other" free-text.
-// Keeps the hidden #insurerName in sync — that's what submitClaim() reads.
-function _onInsurerPick() {
-  const s = document.getElementById('insurerPick');
-  const t = document.getElementById('insurerOther');
-  const h = document.getElementById('insurerName');
-  if (!s || !t || !h) return;
-  if (s.value === '__other') { t.style.display = ''; t.focus(); h.value = t.value.trim(); }
-  else { t.style.display = 'none'; h.value = s.value; }
 }
 
 async function submitClaim(e) {
   e.preventDefault();
   const btn = document.getElementById('claimSubmitBtn');
   const msg = document.getElementById('claimMsg');
-  btn.disabled = true;
-  msg.className = 'msg';
   const isHi = document.body.classList.contains('hi');
-  // Mobile must be exactly 10 digits.
-  const _phone = (document.getElementById('insuredPhone').value || '').replace(/[^0-9]/g,'');
-  if (_phone.length !== 10) {
-    msg.className = 'msg err';
-    msg.textContent = isHi ? 'कृपया 10 अंकों का सही मोबाइल नंबर दर्ज करें।' : 'Please enter a valid 10-digit mobile number.';
-    btn.disabled = false; return;
-  }
-  // Client email is mandatory — it is where the Level-2 authorization link is sent.
-  const _cemail = (document.getElementById('insuredEmail')?.value || '').trim();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(_cemail)) {
-    msg.className = 'msg err';
-    msg.textContent = isHi ? 'कृपया ग्राहक का सही ईमेल दर्ज करें (Level-2 अधिकार-पत्र लिंक के लिए)।' : 'Please enter a valid client email (for the Level-2 authorization link).';
-    btn.disabled = false; return;
-  }
-  // Rejection letter is mandatory to raise a claim.
-  const _rejFile = document.getElementById('claimRejectionLetter')?.files?.[0];
-  if (!_rejFile) {
-    msg.className = 'msg err';
-    msg.textContent = isHi ? 'क्लेम अस्वीकृति पत्र संलग्न करना आवश्यक है।' : 'Please attach the claim rejection letter — it is required.';
-    btn.disabled = false; return;
-  }
+  msg.className = 'msg';
+  const v = NidaanIntake.collect('claimCore');
+  if (!v.ok) { msg.className = 'msg err'; msg.textContent = v.msg; return; }
+  if (!(await NidaanIntake.confirm('claimCore'))) return;
+  btn.disabled = true;
   try {
     const res = await api('/nidaan/api/claims/submit', {
       method: 'POST',
-      body: JSON.stringify({
-        claim_type: document.getElementById('claimType').value,
-        insured_name: document.getElementById('insuredName').value.trim(),
-        insured_phone: document.getElementById('insuredPhone').value.trim(),
-        insured_email: _cemail,
-        insurer_name: document.getElementById('insurerName').value.trim(),
-        policy_no: document.getElementById('policyNo').value.trim(),
-        disputed_amount: parseInt(document.getElementById('disputedAmt').value)||null,
+      body: JSON.stringify(Object.assign({}, v.data, {
         notes_from_agent: document.getElementById('notes').value.trim(),
         policy_inception_date: (document.getElementById('policyInception')?.value || '') || null,
-        tpa_name: (document.getElementById('tpaName')?.value || '').trim(),
-        complainant_name: (document.getElementById('compName')?.value || '').trim(),
-        complainant_phone: (document.getElementById('compPhone')?.value || '').trim()
-      })
+        tpa_name: (document.getElementById('tpaName')?.value || '').trim()
+      }))
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(_extractErr(data, 'Submission failed'));
-    // Upload the rejection letter (required) + any other selected documents.
-    // Two calls so the mandatory letter always lands even if the extras exceed the
-    // per-upload cap.
-    if (data.claim_id) {
-      const _upload = async (files) => {
-        if (!files || !files.length) return;
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(NidaanIntake.serverError('claimCore', data));
+    // The letter went WITH the claim (uploaded first). Any other papers follow; one that does not
+    // attach is NAMED, never swallowed.
+    const _others = Array.from(document.getElementById('claimDocs').files || []);
+    if (data.claim_id && _others.length) {
+      let ok = false;
+      try {
         const fd = new FormData();
-        for (const f of files) fd.append('files', f);
+        for (const f of _others) fd.append('files', f);
         const r = await fetch(`/nidaan/api/claims/${data.claim_id}/documents/upload`, {
           method: 'POST', headers: {'Authorization': 'Bearer ' + token}, body: fd });
-        return r.ok;
-      };
-      // A failed upload used to pass silently, so a claim reached us with nothing attached while
-      // the client believed their papers were in. Anything that does not attach is NAMED.
-      const _failed = [];
-      const _try = async (files, what) => {
-        try { const ok = await _upload(files); if (ok === false) _failed.push(what); }
-        catch(_) { _failed.push(what); }
-      };
-      await _try([_rejFile], 'the rejection letter');
-      await _try(Array.from(document.getElementById('claimDocs').files), 'the other documents');
-      if (_failed.length) {
-        alert('Claim submitted, but ' + _failed.join(' and ') + ' did not upload. '
-              + 'Please open the claim and attach ' + (_failed.length > 1 ? 'them' : 'it') + '.');
-      }
+        ok = r.ok;
+      } catch (_) { ok = false; }
+      if (!ok) alert(isHi ? 'क्लेम दर्ज हुआ, पर बाकी दस्तावेज़ अपलोड नहीं हुए। क्लेम खोलकर उन्हें लगाएँ।'
+                          : 'Claim submitted, but the other documents did not upload. Please open the claim and attach them.');
     }
     msg.className = 'msg ok';
     msg.textContent = isHi ? `क्लेम #${data.claim_id} सफलतापूर्वक दर्ज हुआ!` : `Claim #${data.claim_id} submitted successfully!`;
     document.getElementById('claimForm').reset();
-    const _io = document.getElementById('insurerOther'); if (_io) _io.style.display = 'none';
-    const _in = document.getElementById('insurerName'); if (_in) _in.value = '';
-    const _rn = document.getElementById('claimRejectionLetterName'); if (_rn) _rn.textContent = '';
-    btn.disabled = false;   // fix: re-enable so another claim can be raised without refresh
+    const _dl = document.getElementById('claimDocList'); if (_dl) _dl.textContent = '';
+    NidaanIntake.reset('claimCore');
+    btn.disabled = false;   // so another claim can be raised without a refresh
     setTimeout(() => { closeModal(); loadDashboard(); }, 1500);
   } catch(err) {
     msg.className = 'msg err';
@@ -2945,9 +2815,15 @@ function setLang(l) {
   document.body.className = 'body ' + l;
   localStorage.setItem('nidaan_lang', l);
   document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.textContent.trim() === (l==='en'?'EN':'हिं')));
+  try { if (window.NidaanIntake && document.getElementById('claimModal').classList.contains('open')) claimCoreMount(); } catch (e) { /* form not open */ }
 }
 const _lang = localStorage.getItem('nidaan_lang') || 'hi';   // default HINDI (matches the voice guide)
 setLang(_lang);
+// The claim form follows the language switch, and the plan-limit nudge follows the amount.
+(function () {
+  const box = document.getElementById('claimCore');
+  if (box) box.addEventListener('input', function (e) { if (e.target && e.target.id === 'claimCore_disputed_amount') checkDisputedCap(); });
+})();
 
 // ── Pending payment recovery ──────────────────────────────────────────────────
 // Called on modal dismiss AND on page init.
@@ -3085,7 +2961,7 @@ function renderPlanCardsUI(){
 function checkDisputedCap() {
   const nudge = document.getElementById('disputedCapNudge');
   if (!nudge) return;
-  const amt = parseInt(document.getElementById('disputedAmt')?.value) || 0;
+  const amt = parseInt((document.getElementById('claimCore_disputed_amount')?.value || '').replace(/[^\d]/g, '')) || 0;
   const mine = _nidaanPlans.find(p => p.plan === window._myPlan);
   const cap = mine ? mine.disputed_cap : null;
   if (!amt || !cap || amt <= cap) { nudge.style.display = 'none'; return; }
@@ -3162,7 +3038,7 @@ if ('serviceWorker' in navigator) {
 <script src="/static/nidaan_support_widget.js?v=24" defer></script>
 <script src="/static/nidaan_insurers.js?v=1"></script>
 <script src="/static/nidaan_track.js?v=2"></script>
-<script>try{NidaanInsurers.fill('insurerPick');}catch(e){}</script>
+<script src="/static/nidaan_intake.js?v=1"></script>
 <script src="/static/nidaan_backguard.js?v=1"></script>
 <script>
 /* Register this dashboard's overlays so the phone Back button closes them instead of

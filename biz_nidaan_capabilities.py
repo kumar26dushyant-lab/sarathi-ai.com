@@ -27,6 +27,42 @@ from __future__ import annotations
 ROLE_RANK = {"team_member": 0, "sub_super_admin": 1, "super_admin": 2}
 
 CAPABILITIES: list[dict] = [
+    # ── One claim form at every door (2 Oct) ─────────────────────────────
+    {
+        "id": "claim_intake_one_form",
+        "en": {"t": "Raise a claim - the same form everywhere",
+               "d": "My Business, Raise for a Subscriber, the AP portal and the customer pages all ask "
+                    "the same things: the patient, the complainant (name, mobile AND email), the "
+                    "insurance type and company, the disputed amount (shown back in words, so a "
+                    "missing zero shows), the policy no. and the rejection letter. A 'please check' "
+                    "window shows it all back before it is sent.",
+               "use": "No letter yet? AP and staff can give the reason - the letter is then due in 7 "
+                      "days, with a reminder every day, or the claim is archived (never deleted)."},
+        "hi": {"t": "क्लेम दर्ज करें - हर जगह एक ही फ़ॉर्म",
+               "d": "My Business, सब्सक्राइबर के लिए क्लेम, AP पोर्टल और ग्राहक के पेज - सब एक जैसा पूछते हैं: "
+                    "मरीज़, शिकायतकर्ता (नाम, मोबाइल और ईमेल), बीमा का प्रकार और कंपनी, विवादित राशि "
+                    "(शब्दों में भी दिखती है, ताकि शून्य की गलती पकड़ में आए), पॉलिसी नं. और रिजेक्शन लेटर। "
+                    "भेजने से पहले 'जाँच लें' विंडो सब दोबारा दिखाती है।",
+               "use": "लेटर अभी नहीं है? AP और स्टाफ कारण लिख सकते हैं - फिर 7 दिन में लेटर चाहिए, "
+                      "रोज़ याद दिलाया जाएगा, वरना क्लेम आर्काइव (डिलीट नहीं) हो जाएगा।"},
+        "telegram": False, "web": True, "min_role": "team_member",
+    },
+    {
+        "id": "complainant_confirm_first",
+        "en": {"t": "The complainant confirms first, then gets the welcome",
+               "d": "A new claim's complainant gets a WhatsApp code and an email link - no claim "
+                    "details in either, so a wrongly typed number tells a stranger nothing. When they "
+                    "confirm, the welcome goes (with the AP's name on an AP case).",
+               "use": "On a call, ask them to send 'Hi' to our WhatsApp +91 91836 86384 - that "
+                      "confirms the mobile at once. Never ask anyone to read a code out."},
+        "hi": {"t": "पहले शिकायतकर्ता पुष्टि करें, फिर स्वागत संदेश",
+               "d": "नए क्लेम के शिकायतकर्ता को व्हाट्सऐप पर कोड और ईमेल पर लिंक जाता है - इनमें क्लेम की "
+                    "कोई जानकारी नहीं, ताकि गलत नंबर पर किसी अनजान को कुछ पता न चले। पुष्टि होते ही "
+                    "स्वागत संदेश जाता है (AP केस में AP के नाम के साथ)।",
+               "use": "कॉल पर उनसे कहें कि इसी मोबाइल से हमारे व्हाट्सऐप +91 91836 86384 पर 'Hi' भेजें - "
+                      "मोबाइल तुरंत पुष्ट हो जाता है। कभी किसी से कोड न पूछें।"},
+        "telegram": False, "web": True, "min_role": "team_member",
+    },
     # ── WhatsApp inbox ───────────────────────────────────────────
     {
         "id": "wa_inbox",

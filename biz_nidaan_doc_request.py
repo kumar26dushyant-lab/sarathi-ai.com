@@ -112,6 +112,31 @@ async def _claim(claim_id: int) -> Optional[dict]:
 
 
 # ── who the ask goes to ──────────────────────────────────────────────────────
+def _one_each(people: list) -> list:
+    """One person, one copy (founder, 2 Oct). A number or address that two parties share - or that
+    a staffer types in again - is used once, under the first party that holds it (the complainant
+    is first). A party left with nothing new to reach is dropped; one that never had a contact
+    stays, so its gap is still seen."""
+    seen_p, seen_e, out = set(), set(), []
+    for p in people:
+        q = dict(p)
+        ph = (q.get("phone") or "")[-10:]
+        em = (q.get("email") or "").lower()
+        had = bool(ph or em)
+        if ph and ph in seen_p:
+            q["phone"] = ""
+        elif ph:
+            seen_p.add(ph)
+        if em and em in seen_e:
+            q["email"] = ""
+        elif em:
+            seen_e.add(em)
+        if had and not q.get("phone") and not q.get("email"):
+            continue
+        out.append(q)
+    return out
+
+
 async def recipients(claim_id: int) -> list[dict]:
     """Every channel this claim came through, with the contacts we hold for each.
 
@@ -328,7 +353,7 @@ async def preview(claim_id: int, *, doc_keys: list[str], message: str, extras=No
     people = [p for p in await recipients(claim_id)
               if ("%s:%s" % (p["role"], p["name"])) not in exclude and p["role"] not in exclude]
     typed, bad_extras = _clean_extras(extras)
-    people += typed
+    people = _one_each(people + typed)
 
     problems, warnings = list(bad_extras), []
     if not doc_keys:

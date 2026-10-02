@@ -461,6 +461,36 @@ option means adding it to both.**
   complainant's consent (`opted_in` = campaign audience). `claim_thread()` is the claim's window -
   the same rows as the inbox.
 
+### One claim intake at every door (2 Oct)
+
+- **The rulebook is `biz_nidaan_intake`** - one list of insurance types (`TYPES`, served at
+  `/nidaan/api/intake/types`), the seven core details (`check_core`), the letter, the 7-day rule.
+  Every claim-creating route calls `_intake_core` -> `_intake_letter` -> `submit_claim` ->
+  `_intake_finish`. A new door must do the same; `_tools/test_intake.py` drives each one over HTTP.
+- **The core**: patient name (mobile/email optional); complainant name + mobile + email
+  REQUIRED; type; insurer; disputed amount (Rs 1 - Rs 100 crore); policy no. optional; the
+  rejection letter. Patient and complainant are stored as the two people the form named - never
+  copy the complainant's contact into the patient's.
+- **The letter is uploaded FIRST** (`/nidaan/{api,branch/api,ops/api}/intake/letter`): same size /
+  type / virus checks as every upload, then a single-use token (only its hash stored, 24 h, bound
+  to the uploader: `acct:`, `branch:`, `staff:`). A claim cannot exist without it.
+- **No letter yet** - only AP, My Business and Raise for a Subscriber (`DOORS`), with a reason:
+  `letter_due_at` = +7 days, a daily reminder (AP: claim-parties WhatsApp/email; staff: Telegram),
+  ARCHIVED on the due date (`sweep_letters`, every 20 min). Uploading with `is_letter=1` or a
+  checklist tick stops the clock.
+- **The form** is one block, `static/nidaan_intake.js` (`NidaanIntake.mount/collect/confirm`),
+  on all five forms: EN/HI, amount in words (lakh/crore), a "please check" window, 16 px inputs,
+  44 px targets. `uitest/intake-block.js` fails if a page keeps its own type list.
+- **Confirm first, then welcome** (`biz_nidaan_welcome`): a new claim's complainant gets a
+  WhatsApp code + an email link (no claim details); the welcome (WhatsApp + email, AP-signed)
+  goes on the first proof, once (`welcome_state`). Staff help by asking them to WhatsApp "Hi" -
+  NEVER by asking for a code.
+- **One person, one message**: `notify_claim_parties` and document asks send each number /
+  address once whatever roles it holds; one-time journey messages are sent once per claim
+  (`nidaan_journey_sends`), "payment failed" at most every 15 minutes.
+- **Still to do**: the Rs 499 review page (claim made on payment), WhatsApp in the person's own
+  language with a Translate switch (TODO I7), the soft "please check" on WhatsApp.
+
 ### The ops menu (1 Oct)
 
 The left menu is an office: foldable groups (My work, Consolidation with every bucket inside it,

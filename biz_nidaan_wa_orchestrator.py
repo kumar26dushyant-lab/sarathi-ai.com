@@ -451,6 +451,54 @@ def _strip_money(ctx: dict) -> dict:
     return {k: v for k, v in (ctx or {}).items() if k not in _MONEY_KEYS}
 
 
+# The welcome and "your claim is registered" are said ONCE per claim. The 20-minute alert sweep
+# re-ran the claim-raised path and every Rs 499 website claim got "claim registered" twice
+# (found 2 Oct). A failed attempt may be retried; a send stuck for 10 minutes may be retaken.
+JOURNEY_ONCE = {"welcome", "intro_value", "claim_registered", "thank_you_payment"}
+JOURNEY_WINDOW_MIN = {"payment_failed": 15}     # two failed UPI tries in a minute: one message
+
+
+async def _journey_reserve(claim_id: int, event: str) -> bool:
+    once, win = event in JOURNEY_ONCE, JOURNEY_WINDOW_MIN.get(event)
+    if not (once or win):
+        return True
+    async with aiosqlite.connect(DB_PATH) as c:
+        await c.execute(
+            "CREATE TABLE IF NOT EXISTS nidaan_journey_sends (claim_id INTEGER NOT NULL, event TEXT NOT NULL,"
+            " state TEXT NOT NULL DEFAULT 'sending', at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,"
+            " PRIMARY KEY (claim_id, event))")
+        cur = await c.execute(
+            "INSERT OR IGNORE INTO nidaan_journey_sends (claim_id, event, state) VALUES (?,?,'sending')",
+            (int(claim_id), event))
+        if cur.rowcount != 1:
+            if once:
+                cur = await c.execute(
+                    "UPDATE nidaan_journey_sends SET state='sending', at=CURRENT_TIMESTAMP"
+                    " WHERE claim_id=? AND event=? AND (state='failed'"
+                    " OR (state='sending' AND at < datetime('now','-10 minutes')))", (int(claim_id), event))
+            else:
+                cur = await c.execute(
+                    "UPDATE nidaan_journey_sends SET state='sending', at=CURRENT_TIMESTAMP"
+                    " WHERE claim_id=? AND event=? AND at < datetime('now', ?)",
+                    (int(claim_id), event, f"-{int(win)} minutes"))
+        await c.commit()
+        return cur.rowcount == 1
+
+
+async def _journey_done(claim_id: int, event: str, ok: bool) -> None:
+    if event not in JOURNEY_ONCE and event not in JOURNEY_WINDOW_MIN:
+        return
+    async with aiosqlite.connect(DB_PATH) as c:
+        if ok:
+            await c.execute("UPDATE nidaan_journey_sends SET state='sent' WHERE claim_id=? AND event=?",
+                            (int(claim_id), event))
+        else:
+            # failed: free to try again (a windowed event is not held back by a send that never went)
+            await c.execute("UPDATE nidaan_journey_sends SET state='failed', at=datetime('now','-1 day')"
+                            " WHERE claim_id=? AND event=?", (int(claim_id), event))
+        await c.commit()
+
+
 async def wa_journey(claim_id: int, event: str, extra: dict | None = None,
                      skip_phones: list | None = None) -> dict:
     """The lifecycle message, signed by the claim's Authorized Partner if it came through one."""
@@ -508,6 +556,8 @@ async def _wa_journey(claim_id: int, event: str, extra: dict | None = None,
         # A failed payment is about their money and blocks their claim: it is never held back by
         # the "how often may we speak first" cap. Everything else in the journey is.
         _as = "critical" if event == "payment_failed" else "journey"
+        if not await _journey_reserve(claim_id, event):
+            return {"ok": False, "error": "already_sent"}
         if await _flow.in_session_window(msisdn):
             with _wa.sending_as(_as):
                 res = await _wa.send_text(msisdn, text)
@@ -519,6 +569,7 @@ async def _wa_journey(claim_id: int, event: str, extra: dict | None = None,
                     res = await _wa.send_template(msisdn, tmpl, _TMPL_LANG.get(lang, "hi"), comps)
             else:
                 res = {"ok": False, "error": "needs_template"}
+        await _journey_done(claim_id, event, bool(res.get("ok")))
         await _activity(claim_id, f"wa_{event}", summary=(
             f"WhatsApp {event} → complainant" + ("" if res.get("ok") else
             (" (queued — needs approved template)" if res.get("error") == "needs_template" else

@@ -106,14 +106,20 @@ def _digits(v: str) -> str:
 
 
 def _valid_phone(v: str) -> str:
+    """An Indian number as 10 digits whichever way it was written (+91, 91, 0, spaces) - so the
+    same phone held by two parties compares equal. A longer foreign number is kept whole."""
     d = _digits(v)
+    if len(d) == 12 and d.startswith("91"):
+        return d[2:]
+    if len(d) == 11 and d.startswith("0"):
+        return d[1:]
     if len(d) >= 10:
-        return d[-10:] if len(d) == 10 else d
+        return d
     return ""
 
 
 def _valid_email(v: str) -> str:
-    v = (v or "").strip()
+    v = (v or "").strip().lower()
     return v if ("@" in v and "." in v.split("@")[-1]) else ""
 
 
@@ -280,17 +286,20 @@ def _missing_ask(party: dict, lang_en: bool = True) -> str:
 
 async def notify_claim_parties(claim_id: int, *, event_key: str, subject: str, body: str,
                                roles: Optional[list] = None,
-                               skip_phones: Optional[list] = None) -> dict:
+                               skip_phones: Optional[list] = None,
+                               skip_emails: Optional[list] = None) -> dict:
     """Every party's message about this claim carries its Authorized Partner's name, if any."""
     import biz_nidaan_ap_sign as _aps
     with _aps.about(claim_id=claim_id):
         return await _notify_claim_parties(claim_id, event_key=event_key, subject=subject, body=body,
-                                           roles=roles, skip_phones=skip_phones)
+                                           roles=roles, skip_phones=skip_phones,
+                                           skip_emails=skip_emails)
 
 
 async def _notify_claim_parties(claim_id: int, *, event_key: str, subject: str, body: str,
                                 roles: Optional[list] = None,
-                                skip_phones: Optional[list] = None) -> dict:
+                                skip_phones: Optional[list] = None,
+                                skip_emails: Optional[list] = None) -> dict:
     """Fan ONE claim update out to every involved party on the channels we have for them.
 
     email + dashboard go through the existing notification engine; WhatsApp goes through the
@@ -305,13 +314,27 @@ async def _notify_claim_parties(claim_id: int, *, event_key: str, subject: str, 
         if roles:
             parties = [p for p in parties if p["role"] in roles]
         import biz_nidaan_notifications as _nnot
-        _skip = {_digits(p)[-10:] for p in (skip_phones or []) if _digits(p)}
-        seen: set = set()
+        # ONE PERSON, ONE MESSAGE (founder, 2 Oct). The same human is often two parties - the
+        # complainant who is also the subscriber, the AP who typed its own number as the
+        # complainant's. Each number gets one WhatsApp and each address one email, under the first
+        # role that holds it (complainant first). The old check compared (role, phone, email), so
+        # two roles with one phone were never the same.
+        _wa_done = {_valid_phone(p)[-10:] for p in (skip_phones or []) if _valid_phone(p)}
+        _mail_done = {_valid_email(e) for e in (skip_emails or []) if _valid_email(e)}
+        _staff_done: set = set()
         for p in parties:
-            key = (p["role"], p.get("phone"), p.get("email"))
-            if key in seen:
-                continue
-            seen.add(key)
+            if p["role"] == "staff":
+                if p.get("staff_id") in _staff_done:
+                    continue
+                _staff_done.add(p.get("staff_id"))
+            _ph = (p.get("phone") or "")[-10:]
+            _em = (p.get("email") or "").lower()
+            p = dict(p, email=("" if (_em and _em in _mail_done) else p.get("email")))
+            if _em:
+                _mail_done.add(_em)
+            _phone_dup = bool(_ph and _ph in _wa_done)
+            if _ph:
+                _wa_done.add(_ph)
             ask = _missing_ask(p)
             # Every notification lands them somewhere useful, on their OWN dashboard.
             link = await dashboard_link(p, claim_id)
@@ -340,7 +363,7 @@ async def _notify_claim_parties(claim_id: int, *, event_key: str, subject: str, 
             # Staff are reached on Telegram and the bell. They were also being sent WhatsApp for
             # every claim update: a channel none of them reads, billed per message, from the
             # number complainants know us by.
-            if p["role"] != "staff" and p.get("phone") and p["phone"][-10:] not in _skip:
+            if p["role"] != "staff" and p.get("phone") and not _phone_dup:
                 try:
                     await _send_party_whatsapp(p, text)
                 except Exception as e:  # noqa: BLE001

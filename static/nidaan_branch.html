@@ -166,43 +166,16 @@
 
   <!-- Raise a claim on behalf of a customer -->
   <div class="card">
-    <div style="font-weight:700;margin-bottom:.4rem;color:var(--nd-text-primary)">📝 Raise a claim for your customer</div>
-    <div style="font-size:.82rem;color:var(--nd-text-muted);margin-bottom:.8rem">Rejected or underpaid claim? Submit it here — Nidaan reviews it and tells you if it can go to Level-2 legal. You'll only pay the Level-2 fee if it's a go.</div>
-    <div style="font-size:.72rem;font-weight:800;color:var(--nd-cyan-text);text-transform:uppercase;letter-spacing:.05em;margin:.2rem 0 .35rem">Complainant — who is giving us the case &amp; documents</div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.55rem">
-      <input id="bcCompName" placeholder="Complainant full name *" style="background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);padding:.55rem .7rem;border-radius:8px;font-size:.85rem;text-transform:uppercase">
-      <input id="bcCompPhone" type="tel" inputmode="numeric" maxlength="10" placeholder="Mobile (10-digit) *" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,10)" style="background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);padding:.55rem .7rem;border-radius:8px;font-size:.85rem">
-      <input id="bcCompEmail" type="email" placeholder="Email *" style="background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);padding:.55rem .7rem;border-radius:8px;font-size:.85rem">
+    <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-bottom:.4rem">
+      <div id="bcTitle" style="font-weight:700;color:var(--nd-text-primary);flex:1;min-width:200px">📝 Raise a claim for your customer</div>
+      <button type="button" class="btn-sm btn-ghost" id="bcLangBtn" onclick="bcToggleLang()" style="min-height:40px">English</button>
     </div>
-    <div style="font-size:.72rem;color:var(--nd-text-faint);margin:.3rem 0 .5rem">📩 We'll send all document requests &amp; updates here — give the mobile &amp; email of whoever will share the documents.</div>
-    <label style="display:flex;gap:.45rem;align-items:center;font-size:.82rem;color:var(--nd-text-secondary);margin-bottom:.4rem;cursor:pointer">
-      <input type="checkbox" id="bcInsDiff" onchange="document.getElementById('bcInsRow').style.display=this.checked?'grid':'none'"> Insured (patient) is a different person
-    </label>
-    <div id="bcInsRow" style="display:none;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.55rem;margin-bottom:.5rem">
-      <input id="bcInsName" placeholder="Insured / patient name" style="background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);padding:.55rem .7rem;border-radius:8px;font-size:.85rem;text-transform:uppercase">
-      <input id="bcInsPhone" type="tel" inputmode="numeric" maxlength="10" placeholder="Insured mobile (optional)" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,10)" style="background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);padding:.55rem .7rem;border-radius:8px;font-size:.85rem">
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.55rem" id="bcGrid">
-      <select id="bcType" style="background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);padding:.55rem .7rem;border-radius:8px;font-size:.85rem">
-        <option value="">Claim type…</option>
-        <option value="health">Health</option><option value="life">Life</option>
-        <option value="motor">Motor</option><option value="general">General / Other</option>
-      </select>
-      <span id="bcInsurerBox"></span>
-      <input id="bcAmount" type="number" min="0" placeholder="Disputed amount ₹ (optional)" style="background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);padding:.55rem .7rem;border-radius:8px;font-size:.85rem">
-      <input id="bcPolicy" placeholder="Policy no. (optional)" style="background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);padding:.55rem .7rem;border-radius:8px;font-size:.85rem">
-    </div>
-    <textarea id="bcNotes" placeholder="Brief background / reason for rejection…" style="width:100%;margin-top:.55rem;background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);padding:.55rem .7rem;border-radius:8px;font-size:.85rem;min-height:60px;resize:vertical"></textarea>
-    <!-- Two slots, on purpose. The rejection letter is the only paper a claim cannot start
-         without; everything else can follow later from the dashboard or WhatsApp - but if they
-         have it in hand now, taking it now is what saves weeks. Both can be undone. -->
+    <div id="bcSub" style="font-size:.82rem;color:var(--nd-text-muted);margin-bottom:.8rem"></div>
+    <!-- The seven core details every door asks - the shared block (nidaan_intake.js). -->
+    <div id="bcCore"></div>
+    <textarea id="bcNotes" style="width:100%;margin-top:.7rem;background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);padding:.55rem .7rem;border-radius:8px;font-size:16px;min-height:60px;resize:vertical"></textarea>
     <div style="margin-top:.6rem">
-      <label style="font-size:.82rem;color:var(--nd-danger-text);font-weight:600">📄 Rejection letter (required) *</label>
-      <input type="file" id="bcRejFile" style="display:block;margin-top:.35rem;color:var(--nd-text-secondary);font-size:.82rem" onchange="ndFiles('bcRejFile','bcRejList')">
-      <div id="bcRejList" style="font-size:.8rem;color:var(--nd-text-muted);margin-top:.25rem"></div>
-    </div>
-    <div style="margin-top:.6rem">
-      <label style="font-size:.82rem;font-weight:600">📎 Other documents <span style="font-weight:400;color:var(--nd-text-faint)">(optional — attach whatever they already have)</span></label>
+      <label id="bcDocsLbl" style="font-size:.82rem;font-weight:600">📎 Other documents <span style="font-weight:400;color:var(--nd-text-faint)">(optional — attach whatever they already have)</span></label>
       <input type="file" id="bcDocs" multiple style="display:block;margin-top:.35rem;color:var(--nd-text-secondary);font-size:.82rem" onchange="ndFiles('bcDocs','bcDocsList')">
       <div id="bcDocsList" style="font-size:.8rem;color:var(--nd-text-muted);margin-top:.25rem"></div>
       <div style="font-size:.75rem;color:var(--nd-text-faint);margin-top:.2rem">PDF, photos, Word, scans — not video. Max 25 MB each.</div>
@@ -232,15 +205,42 @@
 </div>
 
 <script src="/static/nidaan_insurers.js?v=1"></script>
-<script src="/static/nidaan_partner_claims.js?v=5"></script>
+<script src="/static/nidaan_intake.js?v=1"></script>
+<script src="/static/nidaan_partner_claims.js?v=6"></script>
 <script>
 const TOKEN_KEY = 'nidaan_branch_token';
 let _email = '';
 
 function $(id){ return document.getElementById(id); }
-// The insurance-company picker: since 13 Sep the box was left empty, so APs never saw the field.
-function bcMountInsurer(){ try{ NidaanInsurers.mount('bcInsurerBox', {style:'background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);padding:.55rem .7rem;border-radius:8px;font-size:.85rem;width:100%'}); }catch(e){} }
-bcMountInsurer();
+// The claim form: the shared intake block, in Hindi (default - most partners read Hindi first) or
+// English, remembered on this device.
+let _bcLang = 'hi';
+try{ _bcLang = localStorage.getItem('nidaan_branch_form_lang') || 'hi'; }catch(e){}
+function bcText(){
+  const hi = _bcLang === 'hi';
+  $('bcTitle').textContent = hi ? '📝 अपने ग्राहक का क्लेम दर्ज करें' : '📝 Raise a claim for your customer';
+  $('bcSub').textContent = hi
+    ? 'रिजेक्ट या कम भुगतान वाला क्लेम यहाँ जमा करें - Nidaan इसकी समीक्षा करेगा और बताएगा कि यह Level-2 कानूनी कार्रवाई तक जा सकता है या नहीं। Level-2 फ़ीस तभी लगेगी जब जवाब "हाँ" हो।'
+    : "Rejected or underpaid claim? Submit it here - Nidaan reviews it and tells you if it can go to Level-2 legal. You only pay the Level-2 fee if it's a go.";
+  $('bcLangBtn').textContent = hi ? 'English' : 'हिंदी';
+  $('bcNotes').placeholder = hi ? 'संक्षिप्त जानकारी / रिजेक्शन का कारण…' : 'Brief background / reason for rejection…';
+  $('bcSubmitBtn').textContent = hi ? 'क्लेम जमा करें →' : 'Submit claim →';
+  const dl = $('bcDocsLbl'); if (dl) dl.innerHTML = hi
+    ? '📎 अन्य दस्तावेज़ <span style="font-weight:400;color:var(--nd-text-faint)">(वैकल्पिक - जो अभी पास हों)</span>'
+    : '📎 Other documents <span style="font-weight:400;color:var(--nd-text-faint)">(optional — attach whatever they already have)</span>';
+}
+function bcMountCore(){
+  bcText();
+  NidaanIntake.mount('bcCore', {lang: _bcLang, letterUrl: '/nidaan/branch/api/intake/letter',
+    headers: () => authHeaders(), allowNoLetter: true});
+}
+function bcToggleLang(){
+  _bcLang = _bcLang === 'hi' ? 'en' : 'hi';
+  try{ localStorage.setItem('nidaan_branch_form_lang', _bcLang); }catch(e){}
+  bcMountCore();
+  try{ NidaanPartnerClaims.render(); }catch(e){}
+}
+bcMountCore();
 function msg(t, cls){ const m=$('loginMsg'); m.textContent=t||''; m.className='msg'+(cls?' '+cls:''); }
 function esc(s){ return String(s==null?'':s).replace(/[<>&"]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c])); }
 function inr(n){ return '₹'+(Number(n)||0).toLocaleString('en-IN'); }
@@ -512,7 +512,7 @@ async function showDashboard(){
       mount: 'bcClaimsWrap',
       getClaims: () => window._bcAll || [],
       getL2: () => window._bcL2 || { fee: 0, charge_required: false },
-      hi: () => false,
+      hi: () => _bcLang === 'hi',
       api: (path, opts) => { opts = opts || {}; const h = { ...authHeaders() }; if (opts.body) h['Content-Type'] = 'application/json'; return fetch('/nidaan/branch/api' + path, { ...opts, headers: h }); },
       l2Path: (id, a) => '/claims/' + id + '/' + a,
       docsBase: 'claims',
@@ -576,72 +576,38 @@ async function loadBranchClaims(){
   }catch(e){ $('bcClaimsWrap').innerHTML = '<div class="empty">Could not load claims.</div>'; }
 }
 async function raiseBranchClaim(){
-  const msg=$('bcMsg'), btn=$('bcSubmitBtn');
-  const setMsg=(t,ok)=>{ msg.textContent=t; msg.style.color = ok===true?'#6ee7b7':(ok===false?'#fca5a5':'var(--nd-text-muted)'); };
-  const cname=($('bcCompName').value||'').trim();
-  const cphone=($('bcCompPhone').value||'').replace(/[^0-9]/g,'');
-  const cemail=($('bcCompEmail').value||'').trim();
-  const insName=($('bcInsName').value||'').trim();
-  const insPhone=($('bcInsPhone').value||'').replace(/[^0-9]/g,'');
-  const type=$('bcType').value;
-  const rej=($('bcRejFile').files||[])[0];
+  const msg=$('bcMsg'), btn=$('bcSubmitBtn'), hi=_bcLang==='hi';
+  const setMsg=(t,ok)=>{ msg.textContent=t; msg.style.color = ok===true?'var(--nd-success-text)':(ok===false?'var(--nd-danger-text)':'var(--nd-text-muted)'); };
+  const v = NidaanIntake.collect('bcCore');
+  if(!v.ok){ setMsg(v.msg,false); return; }
+  if(!(await NidaanIntake.confirm('bcCore'))) return;
   const extras=Array.from($('bcDocs').files||[]);
-  if(!cname){ setMsg('Enter the complainant name.',false); return; }
-  if(cphone.length!==10){ setMsg('Enter a valid 10-digit complainant mobile.',false); return; }
-  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cemail)){ setMsg('Enter a valid complainant email — we send document requests & updates there.',false); return; }
-  if(!type){ setMsg('Select a claim type.',false); return; }
-  if(!rej){ setMsg('Attach the rejection letter — it is required.',false); return; }
-  btn.disabled=true; setMsg('Submitting…');
+  btn.disabled=true; setMsg(hi?'जमा हो रहा है…':'Submitting…');
   try{
     const r=await fetch('/nidaan/branch/api/claims',{method:'POST',headers:{...authHeaders(),'Content-Type':'application/json'},
-      body:JSON.stringify({complainant_name:cname, complainant_phone:cphone, complainant_email:cemail,
-        insured_name:(insName||cname), insured_phone:insPhone, claim_type:type,
-        insurer_name:(function(){ try{ return NidaanInsurers.value('bcInsurerBox'); }catch(e){ return ''; } })(),policy_no:($('bcPolicy').value||'').trim(),
-        disputed_amount:parseInt($('bcAmount').value)||null,notes:($('bcNotes').value||'').trim()})});
+      body:JSON.stringify(Object.assign({}, v.data, {notes:($('bcNotes').value||'').trim()}))});
     const d=await r.json().catch(()=>({}));
-    if(!r.ok) throw new Error(d.detail||'Could not submit the claim');
-    // The rejection letter is the whole basis of the case. This upload used to be fire-and-forget
-    // inside an empty catch, so when it failed the branch still read "submitted ✓" and the claim
-    // reached us with nothing attached (that is how NP-167 arrived empty). Now a failure is said
-    // out loud, with what to do about it.
-    let docOk=false, docWhy='';
-    try{ const fd=new FormData(); fd.append('files',rej);
-      const ur=await fetch('/nidaan/branch/api/claims/'+d.claim_id+'/documents/upload',
-        {method:'POST',headers:authHeaders(),body:fd});
-      docOk=ur.ok;
-      if(!ur.ok){ const ud=await ur.json().catch(()=>({})); docWhy=ud.detail||('error '+ur.status); }
-    }catch(e){ docWhy=(e&&e.message)||'the upload did not go through'; }
-    // Anything else they had in hand. Optional, and sent separately so a refusal here can never
-    // take the mandatory letter down with it.
+    if(!r.ok){ setMsg(NidaanIntake.serverError('bcCore', d),false); btn.disabled=false; return; }
+    // The letter went WITH the claim (uploaded first), so a claim can no longer arrive without it.
+    // Anything else they had in hand follows; a refusal here never touches the claim.
     let extraFailed=[];
-    if(docOk && extras.length){
+    if(extras.length){
       try{ const fd2=new FormData(); for(const f of extras) fd2.append('files',f);
         const ur2=await fetch('/nidaan/branch/api/claims/'+d.claim_id+'/documents/upload',
           {method:'POST',headers:authHeaders(),body:fd2});
         if(!ur2.ok){ const u2=await ur2.json().catch(()=>({}));
           extraFailed.push(u2.detail||('error '+ur2.status)); }
-      }catch(e){ extraFailed.push('the upload did not go through'); }
-    }
-    if(!docOk){
-      setMsg('Claim #'+d.claim_id+' was created, but the rejection letter did NOT attach — '
-             +docWhy+'. Open the claim below and attach it, or the case cannot move forward.',false);
-      $('bcRejFile').value=''; $('bcDocs').value='';
-      ['bcRejList','bcDocsList'].forEach(function(i){ const e=$(i); if(e) e.innerHTML=''; });
-      loadBranchClaims();
-      btn.disabled=false;
-      return;
+      }catch(e){ extraFailed.push(hi?'अपलोड नहीं हुआ':'the upload did not go through'); }
     }
     setMsg(extraFailed.length
-      ? ('Claim #'+d.claim_id+' submitted ✓ — but the other documents did not attach ('
-         +extraFailed.join('; ')+'). Open the claim below and add them.')
-      : 'Claim #'+d.claim_id+' submitted ✓ — Nidaan will review it.', !extraFailed.length);
-    ['bcCompName','bcCompPhone','bcCompEmail','bcInsName','bcInsPhone','bcAmount','bcPolicy','bcNotes'].forEach(id=>$(id).value='');
-    $('bcType').value=''; $('bcRejFile').value=''; $('bcDocs').value='';
-    bcMountInsurer();
-    ['bcRejList','bcDocsList'].forEach(function(i){ const e=$(i); if(e) e.innerHTML=''; });
-    try{ $('bcInsDiff').checked=false; $('bcInsRow').style.display='none'; }catch(_){}
+      ? (hi ? ('क्लेम #'+d.claim_id+' जमा ✓ - पर बाकी दस्तावेज़ नहीं लगे ('+extraFailed.join('; ')+')। नीचे क्लेम खोलकर लगाएँ।')
+            : ('Claim #'+d.claim_id+' submitted ✓ — but the other documents did not attach ('+extraFailed.join('; ')+'). Open the claim below and add them.'))
+      : (hi ? ('क्लेम #'+d.claim_id+' जमा ✓ - Nidaan समीक्षा करेगा।') : ('Claim #'+d.claim_id+' submitted ✓ — Nidaan will review it.')), !extraFailed.length);
+    $('bcNotes').value=''; $('bcDocs').value='';
+    const dl=$('bcDocsList'); if(dl) dl.innerHTML='';
+    NidaanIntake.reset('bcCore');
     loadBranchClaims();
-  }catch(e){ setMsg(e.message,false); }
+  }catch(e){ setMsg((e&&e.message)||'Network problem',false); }
   btn.disabled=false;
 }
 

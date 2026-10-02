@@ -74,6 +74,17 @@
 
 ---
 
+## ★ 2 Oct 2026 — ONE CLAIM INTAKE AT EVERY DOOR (built, deploy pending)
+
+Every claim-creating route (subscriber dashboard, Get started, AP portal, My Business, Raise for a
+Subscriber) now passes `biz_nidaan_intake`: the same seven core details (patient; complainant name +
+mobile + email; type from one list of Indian insurance types; insurer; disputed amount; policy no.;
+rejection letter uploaded FIRST as a single-use token). AP/staff may raise without the letter with a
+reason - due in 7 days, reminded daily, archived (never deleted) if it does not come. One form block
+(`static/nidaan_intake.js`) on every form, EN/HI, amount in words. The complainant confirms a mobile or
+email before the welcome goes (`biz_nidaan_welcome`). One person, one message across all fan-outs.
+Pending: the Rs 499 review page; WhatsApp in the person's language with a Translate switch.
+
 ## ★ START HERE — the whole project in 2 minutes (for a new agent)
 
 **What this is:** ONE FastAPI app + ONE SQLite DB serving **TWO products**, chosen per request by host: `_is_nidaan_host(request)` → NidaanPartner; else Sarathi.

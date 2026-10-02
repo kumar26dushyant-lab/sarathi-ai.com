@@ -163,10 +163,6 @@ const _PH = {
   regPhone:         ['9876543210', '9876543210'],
   regFirm:          ['Optional', 'वैकल्पिक'],
   regPwd:           ['Min 8 characters', 'कम से कम 8 अक्षर'],
-  rv_insured_name:  ['Name on the policy', 'पॉलिसी पर नाम'],
-  rv_insured_phone: ['10-digit mobile', '10-अंकों का मोबाइल'],
-  rv_insurer_name:  ['e.g. HDFC Ergo', 'जैसे HDFC Ergo'],
-  rv_disputed_amount:['e.g. 250000', 'जैसे 250000'],
   rv_notes:         ['Briefly describe the claim dispute, the rejection or underpayment reason, or what you want the review to cover…',
                      'क्लेम विवाद, रिजेक्शन या कम भुगतान का कारण, या आप समीक्षा में क्या चाहते हैं — संक्षेप में बताएं…'],
 };
@@ -1032,21 +1028,26 @@ function enterClaimForm() {
   if (login) login.style.display = 'none';
   if (review) review.style.display = 'flex';
   if (location.hash) history.replaceState({}, '', location.pathname);  // clean #get-reviewed
+  rvCoreMount();
   _prefillClaimForm();
 }
+function rvCoreMount() {
+  // The block's script sits at the end of the page; if the form opens first, mount once it is in.
+  if (!window.NidaanIntake) { document.addEventListener('DOMContentLoaded', function () { rvCoreMount(); _prefillClaimForm(); }); return; }
+  NidaanIntake.mount('rvCore', {lang: (typeof _lang !== 'undefined' && _lang === 'hi') ? 'hi' : 'en',
+    letterUrl: '/nidaan/api/intake/letter',
+    headers: () => ({'Authorization': 'Bearer ' + (localStorage.getItem('nidaan_token') || '')})});
+}
 
-// Prefill insured name/phone from the logged-in account (editable for family claims).
+// The person signing up is usually the one who will deal with us: pre-fill them as the
+// complainant (editable - and "same person as the patient" is one tick away).
 async function _prefillClaimForm() {
   try {
     const r = await fetch('/nidaan/api/me', { headers: { 'Authorization': 'Bearer ' + localStorage.getItem('nidaan_token') } });
     if (!r.ok) return;
     const me = await r.json();
-    const n = document.getElementById('rv_insured_name');
-    const p = document.getElementById('rv_insured_phone');
-    const em = document.getElementById('rv_insured_email');
-    if (n && !n.value && me.owner_name) n.value = me.owner_name;
-    if (p && !p.value && me.phone) p.value = me.phone;
-    if (em && !em.value && me.email) em.value = me.email;
+    NidaanIntake.fill('rvCore', {complainant_name: me.owner_name || '', complainant_phone: me.phone || '',
+                                 complainant_email: me.email || ''});
   } catch (e) {}
 }
 
@@ -1126,68 +1127,22 @@ async function _prefillClaimForm() {
     <p class="rev-sub"><span class="en">Tell us about your rejected or underpaid claim. Our legal experts review it and tell you exactly where you stand — <strong style="color:var(--nd-text-secondary)">free to submit, no payment to start.</strong></span><span class="hi">अपने खारिज या कम भुगतान वाले क्लेम के बारे में बताएं। हमारे कानूनी विशेषज्ञ इसकी समीक्षा करते हैं और बताते हैं कि आप कहां खड़े हैं — <strong style="color:var(--nd-text-secondary)">जमा करना मुफ़्त, शुरू में कोई भुगतान नहीं।</strong></span></p>
     <div class="rev-badge"><span class="en">🔒 Free to submit · Protected under applicable data-protection law</span><span class="hi">🔒 जमा करना मुफ़्त · लागू डेटा-सुरक्षा कानून के तहत सुरक्षित</span></div>
 
+    <!-- The seven core details every door asks - the shared block (nidaan_intake.js). -->
+    <div id="rvCore" style="margin-bottom:1.1rem"></div>
     <fieldset>
-      <legend><span class="en">Who is this claim for?</span><span class="hi">यह क्लेम किसके लिए है?</span></legend>
+      <legend><span class="en">More about the claim</span><span class="hi">क्लेम के बारे में और</span></legend>
       <div class="rev-row2">
-        <div class="field"><label><span class="en">Insured / Patient Name *</span><span class="hi">बीमित व्यक्ति / मरीज़ का नाम *</span></label><input type="text" id="rv_insured_name" placeholder="Name on the policy" autocomplete="name"></div>
-        <div class="field"><label><span class="en">Contact Phone *</span><span class="hi">संपर्क फ़ोन *</span></label><input type="tel" id="rv_insured_phone" placeholder="10-digit mobile" autocomplete="tel" inputmode="tel"></div>
-      </div>
-      <div class="rev-row2">
-        <div class="field"><label><span class="en">Contact Email *</span><span class="hi">संपर्क ईमेल *</span></label><input type="email" id="rv_insured_email" placeholder="name@email.com" autocomplete="email"></div>
-      </div>
-      <p style="font-size:.74rem;color:var(--nd-text-faint);margin:.15rem 0 0;line-height:1.5"><span class="en">Can be you or a family member. We've pre-filled your details — edit if the claim is for someone else.</span><span class="hi">यह आप या परिवार का कोई सदस्य हो सकता है। हमने आपकी जानकारी भर दी है — किसी और का क्लेम हो तो बदल दें।</span></p>
-      <!-- Who WE will deal with. On a claim raised for a parent or a spouse this is a different
-           person from the patient, and every message and document request goes to them. -->
-      <div class="rev-row2" style="margin-top:.6rem">
-        <div class="field"><label><span class="en">Who will deal with us?</span><span class="hi">हमसे कौन बात करेगा?</span></label><input type="text" id="rv_comp_name" placeholder="Leave blank if it is the patient" autocomplete="name"></div>
-        <div class="field"><label><span class="en">Their mobile</span><span class="hi">उनका मोबाइल</span></label><input type="tel" id="rv_comp_phone" placeholder="10-digit mobile" inputmode="tel"></div>
-      </div>
-    </fieldset>
-
-    <fieldset>
-      <legend><span class="en">Claim Details</span><span class="hi">क्लेम विवरण</span></legend>
-      <div class="rev-row2">
-        <div class="field"><label><span class="en">Claim Type *</span><span class="hi">क्लेम का प्रकार *</span></label>
-          <select id="rv_claim_type" onchange="loadDocChecklist()" style="width:100%;background:var(--nd-bg-surface-2);border:1.5px solid var(--nd-border-strong);border-radius:10px;padding:.75rem 1rem;color:var(--nd-text-primary);font-size:.95rem;outline:none;-webkit-appearance:none">
-            <option value="">Select type… / प्रकार चुनें…</option>
-            <option value="health">Health Insurance / स्वास्थ्य बीमा</option>
-            <option value="life">Life Insurance / जीवन बीमा</option>
-            <option value="motor">Motor Insurance / मोटर बीमा</option>
-            <option value="home">Home / Property / गृह / संपत्ति</option>
-            <option value="travel">Travel Insurance / यात्रा बीमा</option>
-            <option value="other">Other / अन्य</option>
-          </select>
-        </div>
-        <div class="field"><label><span class="en">Insurance Company</span><span class="hi">बीमा कंपनी का नाम</span></label>
-          <select id="rv_insurer_pick" onchange="_onRvInsurerPick()"></select>
-          <input type="text" id="rv_insurer_other" placeholder="Type the insurance company name" autocomplete="off"
-                 style="display:none;margin-top:.45rem" oninput="document.getElementById('rv_insurer_name').value=this.value">
-          <input type="hidden" id="rv_insurer_name">
-        </div>
-      </div>
-      <div class="rev-row2">
-        <div class="field"><label><span class="en">Policy Inception Date</span><span class="hi">पॉलिसी आरंभ तिथि</span></label>
+        <div class="field"><label><span class="en">Policy Inception Date</span><span class="hi">पॉलिसी आरंभ तिथि</span> <span style="color:var(--nd-text-faint);font-weight:400">(<span class="en">optional</span><span class="hi">वैकल्पिक</span>)</span></label>
           <input type="date" id="rv_policy_inception" max="2100-12-31"></div>
         <div class="field"><label><span class="en">TPA</span><span class="hi">TPA</span> <span style="color:var(--nd-text-faint);font-weight:400">(<span class="en">optional</span><span class="hi">वैकल्पिक</span>)</span></label>
           <input type="text" id="rv_tpa_name" placeholder="e.g. Medi Assist, Paramount"></div>
       </div>
-      <div class="field"><label><span class="en">Disputed Amount (₹)</span><span class="hi">विवादित राशि (₹)</span></label><input type="number" id="rv_disputed_amount" placeholder="e.g. 250000" inputmode="numeric"></div>
       <div class="field"><label><span class="en">Brief Description / Notes</span><span class="hi">संक्षिप्त विवरण / नोट्स</span></label>
         <textarea id="rv_notes" rows="3" style="width:100%;background:var(--nd-bg-surface-2);border:1.5px solid var(--nd-border-strong);border-radius:10px;padding:.75rem 1rem;color:var(--nd-text-primary);font-size:.9rem;outline:none;resize:vertical;font-family:inherit" placeholder="Briefly describe the claim dispute, the rejection or underpayment reason, or what you want the review to cover…"></textarea>
       </div>
       <div class="field"><label><span class="en">Authorized Partner code</span><span class="hi">अधिकृत पार्टनर कोड</span> <span style="color:var(--nd-text-faint);font-weight:400">(<span class="en">if you have one</span><span class="hi">यदि आपके पास हो</span>)</span></label>
         <input type="text" id="rv_branch_code" placeholder="e.g. PUN-01" style="text-transform:uppercase" autocapitalize="characters"></div>
     </fieldset>
-
-    <!-- Documents — OPTIONAL. We only need the rejection / underpaid settlement
-         letter to start; everything else can be added later from the dashboard. -->
-    <div id="rev-docs-wrap">
-      <fieldset>
-        <legend><span class="en">Upload your rejection / settlement letter</span><span class="hi">रिजेक्शन / सेटलमेंट लेटर अपलोड करें</span> <span style="color:var(--nd-text-faint);font-weight:400;font-size:.8rem">(<span class="en">optional — you can add later</span><span class="hi">वैकल्पिक — बाद में जोड़ सकते हैं</span>)</span></legend>
-        <div id="rev-doc-trust" style="font-size:.74rem;color:var(--nd-text-muted);line-height:1.5;margin-bottom:.75rem"><span class="en">🔒 Used only to fight your claim. Protected by applicable data-protection law — never shared.</span><span class="hi">🔒 केवल आपका क्लेम लड़ने के लिए। लागू डेटा-सुरक्षा कानून द्वारा सुरक्षित — कभी साझा नहीं।</span></div>
-        <div id="rev-doc-slots"></div>
-      </fieldset>
-    </div>
 
     <label style="display:flex;align-items:flex-start;gap:.55rem;font-size:.82rem;color:var(--nd-text-secondary);line-height:1.5;margin:.2rem 0 1rem;cursor:pointer">
       <input type="checkbox" id="rv_wa_consent" checked style="margin-top:.1rem;flex-shrink:0;width:18px;height:18px;-webkit-appearance:auto;appearance:auto;accent-color:#06b6d4;background:none;border:0;padding:0">
@@ -1304,19 +1259,8 @@ function onRevDocPick(key, input) {
 }
 // Called by setLang() when the user toggles EN/हिं — re-fetch doc labels in the new language.
 function revRefreshLang() {
-  const sel = document.getElementById('rv_claim_type');
-  if (sel && sel.value) loadDocChecklist();
-}
-
-// Insurer picker: native <select> (reliable on mobile) + "Other" free-text,
-// syncing the hidden #rv_insurer_name that submitFreeClaim() reads.
-function _onRvInsurerPick() {
-  const s = document.getElementById('rv_insurer_pick');
-  const t = document.getElementById('rv_insurer_other');
-  const h = document.getElementById('rv_insurer_name');
-  if (!s || !t || !h) return;
-  if (s.value === '__other') { t.style.display = ''; t.focus(); h.value = t.value.trim(); }
-  else { t.style.display = 'none'; h.value = s.value; }
+  const rv = document.getElementById('review-section');
+  if (rv && rv.style.display !== 'none' && rv.style.display !== '') rvCoreMount();
 }
 
 async function submitFreeClaim() {
@@ -1332,35 +1276,21 @@ async function submitFreeClaim() {
     return;
   }
 
-  const insured_name = document.getElementById('rv_insured_name').value.trim();
-  const insured_phone = document.getElementById('rv_insured_phone').value.replace(/\D/g, '');
-  const insured_email = (document.getElementById('rv_insured_email')?.value || '').trim();
-  const claim_type = document.getElementById('rv_claim_type').value;
-
-  if (!insured_name) { showRevMsg('err', _Lr('Please enter the insured name.', 'कृपया बीमित व्यक्ति का नाम दर्ज करें।')); return; }
-  if (insured_phone.length < 10) { showRevMsg('err', _Lr('Please enter a valid 10-digit contact phone.', 'कृपया एक मान्य 10-अंकों का फ़ोन नंबर दर्ज करें।')); return; }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(insured_email)) { showRevMsg('err', _Lr('Please enter a valid contact email (for the Level-2 authorization link).', 'कृपया एक मान्य ईमेल दर्ज करें (Level-2 अधिकार-पत्र लिंक के लिए)।')); return; }
-  if (!claim_type) { showRevMsg('err', _Lr('Please select the claim type.', 'कृपया क्लेम का प्रकार चुनें।')); return; }
-  // Documents are OPTIONAL — no upload is required to submit. Users can add the
-  // rejection letter now or later from the dashboard.
+  const v = NidaanIntake.collect('rvCore');
+  if (!v.ok) { showRevMsg('err', v.msg); return; }
+  if (!(await NidaanIntake.confirm('rvCore'))) return;
 
   const _ll = (localStorage.getItem('nidaan_lang') || 'hi');
   const comm_lang = ['en', 'hi', 'mr'].includes(_ll) ? _ll : 'en';
 
   // Body MUST match NidaanClaimReq exactly (extra="forbid").
-  const body = {
-    claim_type, insured_name, insured_phone, insured_email,
-    insurer_name: document.getElementById('rv_insurer_name').value.trim(),
-    disputed_amount: parseInt(document.getElementById('rv_disputed_amount').value) || null,
+  const body = Object.assign({}, v.data, {
     notes_from_agent: document.getElementById('rv_notes').value.trim(),
     comm_lang, wa_consent: document.getElementById('rv_wa_consent').checked,
     branch_code: (document.getElementById('rv_branch_code')?.value || '').trim().toUpperCase(),
     policy_inception_date: (document.getElementById('rv_policy_inception')?.value || '') || null,
     tpa_name: (document.getElementById('rv_tpa_name')?.value || '').trim(),
-    // Who we will actually deal with, when that is not the patient.
-    complainant_name: (document.getElementById('rv_comp_name')?.value || '').trim(),
-    complainant_phone: (document.getElementById('rv_comp_phone')?.value || '').trim(),
-  };
+  });
 
   btn.disabled = true;
   btn.innerHTML = '<span>⏳</span> ' + _Lr('Submitting…', 'जमा हो रहा है…');
@@ -1378,32 +1308,8 @@ async function submitFreeClaim() {
       setTimeout(() => location.reload(), 1500);
       return;
     }
-    if (!res.ok) throw new Error(_extractErr(data, _Lr('Could not submit your claim.', 'आपका क्लेम जमा नहीं हो सका।')));
-    const claimId = data.claim_id;
-    // Upload every document to the new claim (so the dashboard opens straight on the pay-gate).
-    btn.innerHTML = '<span>⏳</span> ' + _Lr('Uploading your documents…', 'आपके दस्तावेज़ अपलोड हो रहे हैं…');
-    // A failed upload used to pass silently: the customer was taken to their dashboard believing
-    // their papers were with us, and the claim reached our team empty. Now we say which ones did
-    // not go, so they can send them again from the dashboard.
-    const failed = [];
-    for (const key of _revDocs) {
-      const f = _revFiles[key]; if (!f) continue;
-      const fd = new FormData(); fd.append('files', f); fd.append('doc_key', key);
-      try {
-        const ur = await fetch('/nidaan/api/claims/' + claimId + '/documents/upload', {
-          method: 'POST', headers: { 'Authorization': 'Bearer ' + token }, body: fd });
-        if (!ur.ok) failed.push(f.name || key);
-      } catch(_) { failed.push(f.name || key); }
-    }
-    if (failed.length) {
-      showRevMsg('err', _Lr(
-        'Your claim was created, but these did not upload: ' + failed.join(', ')
-          + '. Please add them again from your dashboard.',
-        'आपका क्लेम बन गया, लेकिन ये अपलोड नहीं हुए: ' + failed.join(', ')
-          + '। कृपया इन्हें अपने डैशबोर्ड से दोबारा भेजें।'));
-      setTimeout(() => { window.location.href = '/nidaan/dashboard?new=1'; }, 4000);
-      return;
-    }
+    if (!res.ok) throw new Error(NidaanIntake.serverError('rvCore', data) || _Lr('Could not submit your claim.', 'आपका क्लेम जमा नहीं हो सका।'));
+    // The letter went WITH the claim (uploaded first) - nothing is left to upload here.
     showRevMsg('ok', _Lr('✅ All set! Taking you to your dashboard…', '✅ सब तैयार! आपको आपके डैशबोर्ड पर ले जा रहे हैं…'));
     btn.style.display = 'none';
     setTimeout(() => { window.location.href = '/nidaan/dashboard?new=1'; }, 1300);
@@ -1427,7 +1333,7 @@ if ('serviceWorker' in navigator) {
 }
 </script>
 <script src="/static/nidaan_insurers.js?v=1"></script>
+<script src="/static/nidaan_intake.js?v=1"></script>
 <script src="/static/nidaan_track.js?v=2"></script>
-<script>try{NidaanInsurers.fill('rv_insurer_pick');}catch(e){}</script>
 </body>
 </html>

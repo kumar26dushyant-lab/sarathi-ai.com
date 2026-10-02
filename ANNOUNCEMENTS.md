@@ -1,5 +1,45 @@
 # Staff Announcement Drafts
 
+## 2026-10-02 (evening) — ONE CLAIM FORM, EVERYWHERE  ← SEND AFTER TONIGHT'S DEPLOY
+
+_For: all staff and Authorized Partners. Not yet sent - send only after the deploy is verified._
+
+**EN**
+
+📝 *Raising a claim - the same form everywhere, from today*
+
+My Business, Raise for a Subscriber, the AP portal and the customer pages now ask exactly the same:
+• *Patient* - name (mobile and email optional)
+• *Complainant* - the person we talk to: name, mobile *and* email. Please check them twice - we use them for the whole case.
+• *Insurance type* (all types), *insurance company*, *disputed amount* - the amount is shown in words (e.g. "One lakh fifty thousand rupees"), so a missing zero is easy to spot
+• *Policy no.* (optional)
+• *Rejection letter* - attach it first. No letter, no claim.
+
+Before it is sent, a *"Please check"* window shows everything again. Read it.
+
+*No letter yet?* (AP and staff only) Tap "I don't have the letter yet" and write why. The letter is then due in *7 days* - you get a reminder every day - or the claim is *archived* (not deleted).
+
+*The complainant confirms first.* They get a WhatsApp code and an email link. When they confirm, they get our welcome. If they are on a call with you, ask them to send *"Hi"* to our WhatsApp *+91 91836 86384* from their mobile - that confirms it at once.
+🚫 *Never ask anyone to read a code out to you.*
+
+**HI**
+
+📝 *क्लेम दर्ज करना - आज से हर जगह एक ही फ़ॉर्म*
+
+My Business, सब्सक्राइबर के लिए क्लेम, AP पोर्टल और ग्राहक के पेज - अब सब एक जैसा पूछते हैं:
+• *मरीज़* - नाम (मोबाइल और ईमेल वैकल्पिक)
+• *शिकायतकर्ता* - जिनसे हम बात करेंगे: नाम, मोबाइल *और* ईमेल। दो बार जाँच लें - पूरे केस में इन्हीं पर बात होगी।
+• *बीमा का प्रकार* (सभी प्रकार), *बीमा कंपनी*, *विवादित राशि* - राशि शब्दों में भी दिखती है (जैसे "एक लाख पचास हज़ार रुपये"), ताकि शून्य की गलती पकड़ में आए
+• *पॉलिसी नं.* (वैकल्पिक)
+• *रिजेक्शन लेटर* - पहले लगाएँ। लेटर नहीं, तो क्लेम नहीं।
+
+भेजने से पहले *"जाँच लें"* विंडो सब कुछ दोबारा दिखाती है। उसे पढ़ें।
+
+*लेटर अभी नहीं है?* (सिर्फ़ AP और स्टाफ) "अभी लेटर नहीं है" दबाएँ और कारण लिखें। फिर *7 दिन* में लेटर चाहिए - रोज़ याद दिलाया जाएगा - वरना क्लेम *आर्काइव* (डिलीट नहीं) हो जाएगा।
+
+*पहले शिकायतकर्ता पुष्टि करेंगे।* उन्हें व्हाट्सऐप पर कोड और ईमेल पर लिंक मिलेगा। पुष्टि होते ही हमारा स्वागत संदेश जाएगा। अगर वे आपसे कॉल पर हैं, तो कहें कि अपने मोबाइल से हमारे व्हाट्सऐप *+91 91836 86384* पर *"Hi"* भेजें - तुरंत पुष्टि हो जाएगी।
+🚫 *कभी किसी से कोड न पूछें।*
+
 ## 2026-10-02 — WHAT CHANGED IN THE LAST TWO DAYS (1–2 Oct) — one message for the whole team  ← SEND THIS ONE
 
 _For: all staff. Not yet sent. Replaces the separate 1 Oct and 2 Oct drafts below. Details: nidaanpartner.com/sop-whats-new (sign in to ops first)._

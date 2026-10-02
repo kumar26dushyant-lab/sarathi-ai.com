@@ -58,8 +58,18 @@
       } else if (c.review_outcome === 'no_scope') {
         l2 = `<span style="color:var(--nd-warning-text)">${h ? 'समीक्षा: कोई गुंजाइश नहीं' : 'Reviewed: no scope'}</span>`;
       }
+      // Raised without the rejection letter: say how long is left, and take the letter right here.
+      let due = '';
+      if (c.letter_due_at && !c.archived) {
+        const left = Math.max(0, Math.ceil((new Date(String(c.letter_due_at).replace(' ', 'T') + 'Z') - Date.now()) / 86400000));
+        due = `<div style="margin-top:.3rem;color:var(--nd-danger-text,#b91c1c);font-size:.76rem;font-weight:700">⚠️ ${h ? ('रिजेक्शन लेटर ' + left + ' दिन में चाहिए, नहीं तो क्लेम आर्काइव होगा') : ('Rejection letter due in ' + left + ' day(s), or the claim is archived')}</div>`
+          + `<input type="file" id="npLetter_${c.claim_id}" accept="application/pdf,image/*,.docx" style="display:none" onchange="NidaanPartnerClaims.letter(${c.claim_id}, this)">`
+          + `<button class="btn btn-primary btn-cyan" style="${bs}" onclick="document.getElementById('npLetter_${c.claim_id}').click()">📄 ${h ? 'लेटर लगाएँ' : 'Attach the letter'}</button>`;
+      } else if (c.archived && c.archived_by === 'no rejection letter in 7 days') {
+        due = `<div style="margin-top:.3rem;color:var(--nd-text-muted);font-size:.74rem">${h ? 'आर्काइव: 7 दिन में रिजेक्शन लेटर नहीं आया' : 'Archived: no rejection letter within 7 days'}</div>`;
+      }
       return `<tr>
-        <td>${esc(c.insured_name || '')}<br><span style="font-size:.74rem;color:var(--nd-text-faint)">${esc(c.insured_phone || '')}</span></td>
+        <td>${esc(c.insured_name || '')}<br><span style="font-size:.74rem;color:var(--nd-text-faint)">${esc(c.insured_phone || '')}</span>${due}</td>
         <td>${esc((c.claim_type || '').replace(/_/g, ' '))}</td>
         <td style="text-align:right">${c.disputed_amount ? ('₹' + fmt(c.disputed_amount)) : '—'}</td>
         <td>${esc((c.status || '').replace(/_/g, ' '))}</td>
@@ -242,6 +252,23 @@
     } finally { btn.disabled = false; btn.textContent = orig; }
   }
 
+  // The letter for a claim raised without it: marked as THE letter, so the 7-day clock stops.
+  async function uploadLetter(claimId, inp) {
+    const h = hi();
+    const f = inp && inp.files && inp.files[0];
+    if (inp) inp.value = '';
+    if (!f) return;
+    if (f.size > 25 * 1024 * 1024) { alert(h ? 'फ़ाइल 25 MB से बड़ी है।' : 'That file is over 25 MB.'); return; }
+    const fd = new FormData(); fd.append('files', f); fd.append('is_letter', '1');
+    try {
+      const r = CFG.upload ? await CFG.upload('/' + (CFG.docsBase || 'claims') + '/' + claimId + '/documents/upload', fd)
+                           : await docApi(claimId, '/upload', { method: 'POST', body: fd });
+      if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.detail || 'Upload failed'); }
+      alert(h ? 'लेटर मिल गया ✓ - क्लेम आगे बढ़ेगा।' : 'Letter received ✓ - the claim goes ahead.');
+      if (CFG.reload) CFG.reload();
+    } catch (e) { alert('✕ ' + (e.message || 'Upload failed')); }
+  }
+
   async function deleteDoc(claimId, docId) {
     const h = hi();
     if (!confirm(h ? 'यह दस्तावेज़ हटाएँ? यह वापस नहीं आएगा।' : 'Remove this document? This cannot be undone.')) return;
@@ -257,6 +284,6 @@
     render: render,
     setTab: function (v) { VIEW = v; render(); },
     pay: pay, advance: advance, link: link,
-    docs: toggleDocs, upDoc: uploadDocs, delDoc: deleteDoc
+    docs: toggleDocs, upDoc: uploadDocs, delDoc: deleteDoc, letter: uploadLetter
   };
 })();
