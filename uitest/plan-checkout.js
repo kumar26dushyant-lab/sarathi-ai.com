@@ -55,6 +55,25 @@ const check = (label, ok, detail) => {
     JSON.stringify(shown));
   check('nothing on the page says "you were NOT charged" without knowing it',
     !(await page.content()).includes('you were NOT charged'));
+  // A plan that has ended: NEW claims frozen with the reason; nothing else touched (founder, 2 Oct).
+  const ENT = { can_raise: false, reason: 'sub_expired', options: ['renew'],
+                message_en: 'Your plan has ended, so a new claim cannot be raised.', message_hi: 'आपका प्लान ख़त्म हो चुका है।' };
+  await page.route('**/nidaan/api/me', (r) => r.fulfill({ status: 200, contentType: 'application/json',
+    body: JSON.stringify({ account_id: 1, email: 'a@example.invalid', subscription: null, entitlement: ENT,
+                           account_state: { type: 'retail', active: true } }) }));
+  await page.evaluate(() => { try { loadDashboard(); } catch (e) {} });
+  await page.waitForTimeout(800);
+  const fr = await page.evaluate(() => {
+    const b = document.getElementById('newClaimBtn'), box = document.getElementById('entBanner');
+    try { openModal(); } catch (e) {}
+    return { disabled: !!(b && b.disabled), banner: box ? box.textContent : '', shown: box ? getComputedStyle(box).display : 'none',
+             modal: document.getElementById('claimModal').classList.contains('open'),
+             renew: !!(box && box.querySelector('.ent-btn')) };
+  });
+  check('a plan that has ended: "Raise a claim" is frozen', fr.disabled, JSON.stringify(fr));
+  check('...with the reason on screen and a Renew button', fr.shown !== 'none' && /plan has ended|ख़त्म/.test(fr.banner) && fr.renew,
+    JSON.stringify(fr));
+  check('...and the claim form will not open even if called', !fr.modal, JSON.stringify(fr));
   check('no script errors', errors.length === 0, errors.join(' | '));
   await browser.close();
   console.log(failed ? '\n' + failed + ' failed' : '\nall passed');

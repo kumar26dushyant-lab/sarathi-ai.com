@@ -1023,6 +1023,14 @@ async function _handleGoogleSignup(response) {
 // returns null, login stays hidden, and the page renders blank (bug fixed 2026-06-12).
 // Reveal the claim form (logged-in only). Used by the funnel + post-auth.
 function enterClaimForm() {
+  // The server decides whether this account may raise a new claim (claim_entitlement). If it may
+  // not - a plan that has ended, a review already used - the dashboard says why and what next.
+  try {
+    fetch('/nidaan/api/me', { headers: { 'Authorization': 'Bearer ' + (localStorage.getItem('nidaan_token') || '') } })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (me) { if (me && me.entitlement && me.entitlement.can_raise === false) location.href = '/nidaan/dashboard'; })
+      .catch(function () {});
+  } catch (e) { /* the form still checks on submit */ }
   try { hideNBusy(); } catch (e) {}  // we stay on THIS page → take the sign-in overlay down
   const login = document.getElementById('login-section');
   const review = document.getElementById('review-section');

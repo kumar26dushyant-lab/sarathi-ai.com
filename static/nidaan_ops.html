@@ -14306,8 +14306,7 @@ async function _obDoSearch(){
     const rows = d.subscribers || [];
     if (!rows.length){
       box.innerHTML = '<div style="font-size:.8rem;color:var(--nd-text-muted)">'
-        + 'No subscriber with a live subscription matches that. Only live subscriptions can be '
-        + 'used — a claim raised against an expired one could not be honoured.</div>';
+        + 'Nobody who has had a plan matches that.</div>';
       return;
     }
     box.innerHTML = rows.map(function(x){
@@ -14318,18 +14317,42 @@ async function _obDoSearch(){
         + (x.firm_name ? ' <span style="color:var(--nd-text-faint)">· ' + esc(x.firm_name) + '</span>' : '')
         + '<span style="display:block;font-size:.72rem;color:var(--nd-text-faint);font-weight:400">'
         +   esc(x.phone || '') + (x.email ? ' · ' + esc(x.email) : '')
-        +   (x.plan ? ' · ' + esc(x.plan) : '') + '</span></button>';
+        +   (x.plan ? ' · ' + esc(x.plan) : '') + '</span>' + _obEntBadge(x.entitlement) + '</button>';
     }).join('');
     window._obRows = rows;
   }catch(e){
     box.innerHTML = '<div style="font-size:.8rem;color:var(--nd-danger-text)">Could not search.</div>';
   }
 }
+// What this subscriber may do now - the server's claim_entitlement, shown before anyone fills a
+// form (founder, 2 Oct: flag it in Raise for a Subscriber; a lapsed or capped plan raises nothing).
+function _obEntBadge(e){
+  if (!e) return '';
+  const ok = e.can_raise && (e.pay_status === 'subscription' || e.pay_status === 'paid');
+  const bits = [];
+  if (ok && e.cap) bits.push((e.used || 0) + ' of ' + e.cap + ' claims used this month');
+  if (e.autopay_on === false && e.period_end) bits.push('autopay off - ends ' + e.period_end);
+  else if (ok && e.period_end) bits.push('until ' + e.period_end);
+  const txt = ok ? ('✅ Can raise' + (bits.length ? ' · ' + bits.join(' · ') : ''))
+                 : ('⛔ ' + (e.message_staff || 'Cannot raise a new claim'));
+  return '<span style="display:block;margin-top:.25rem;font-size:.72rem;font-weight:700;color:'
+    + (ok ? 'var(--nd-success-text)' : 'var(--nd-danger-text)') + '">' + esc(txt) + '</span>';
+}
 function obPick(id){
   _obPicked = (window._obRows || []).filter(function(x){ return x.account_id === id; })[0] || null;
   if (!_obPicked) return;
   const f = document.getElementById('obForm');
   if (!f) return;
+  const _e = _obPicked.entitlement || {};
+  if (!(_e.can_raise && (_e.pay_status === 'subscription' || _e.pay_status === 'paid'))){
+    f.innerHTML = '<div style="background:var(--nd-danger-soft,rgba(248,113,113,.08));border:1px solid var(--nd-border);'
+      + 'color:var(--nd-danger-text);border-radius:10px;padding:.7rem .85rem;font-size:.86rem;line-height:1.5">'
+      + '<b>' + esc(_obPicked.label || '') + '</b> cannot have a new claim raised right now.<br>'
+      + esc(_e.message_staff || 'There is no live plan on this account.') + '<br>'
+      + '<span style="color:var(--nd-text-secondary)">Their existing claims are not affected. If they want to '
+      + 'carry on, they renew or change their plan from their dashboard.</span></div>';
+    return;
+  }
   // The banner stays on screen for the whole form. Acting as someone else should never be a
   // thing you can forget you are doing.
   f.innerHTML =

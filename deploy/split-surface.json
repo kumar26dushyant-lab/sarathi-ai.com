@@ -243,6 +243,7 @@
   "_intake_letter_later",
   "_latency_stats",
   "_login_checks",
+  "_me_entitlement",
   "_money_words",
   "_nidaan_account_from_payload",
   "_nidaan_admin_auth",
@@ -2516,12 +2517,14 @@
    ],
    "product": "nidaan",
    "reaches": [
+    "_me_entitlement",
     "_nidaan_account_from_payload",
     "_nidaan_bearer",
     "_row_still_open",
     "app"
    ],
    "uses": [
+    "_me_entitlement",
     "_nidaan_account_from_payload",
     "_nidaan_bearer",
     "app"

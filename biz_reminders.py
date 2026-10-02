@@ -1777,7 +1777,7 @@ async def run_nidaan_subscription_renewal_scan():
         async with aiosqlite.connect(db.DB_PATH) as conn:
             conn.row_factory = aiosqlite.Row
             cursor = await conn.execute(
-                """SELECT ns.sub_id, ns.account_id, ns.plan, ns.current_period_end,
+                """SELECT ns.sub_id, ns.account_id, ns.plan, ns.current_period_end, ns.auto_renew,
                           na.email, na.owner_name
                    FROM nidaan_subscriptions ns
                    JOIN nidaan_accounts na ON ns.account_id = na.account_id
@@ -1791,9 +1791,9 @@ async def run_nidaan_subscription_renewal_scan():
         renew_url = "https://nidaanpartner.com/nidaan/dashboard"
 
         for sub in subscriptions:
-            to_email = sub.get("email")
-            if not to_email:
-                continue
+            # No email is no reason to skip: a plan must still END on time (phone-only
+            # subscribers used to keep theirs for ever - audit, 2 Oct). Only the emails are skipped.
+            to_email = sub.get("email") or ""
 
             try:
                 period_end = datetime.fromisoformat(sub["current_period_end"]).date()
@@ -1802,7 +1802,7 @@ async def run_nidaan_subscription_renewal_scan():
 
             days_left = (period_end - today).days
 
-            if days_left in (7, 1):
+            if days_left in (7, 1) and to_email:
                 asyncio.create_task(email_svc.send_nidaan_renewal_reminder(
                     to_email=to_email,
                     owner_name=sub.get("owner_name", ""),
@@ -1815,8 +1815,11 @@ async def run_nidaan_subscription_renewal_scan():
                 logger.info("Nidaan renewal reminder sent: account=%d plan=%s days_left=%d",
                             sub["account_id"], sub["plan"], days_left)
 
-            elif days_left <= 0:
-                # Subscription has expired — mark inactive and notify
+            elif days_left <= 0 and (int(sub.get("auto_renew") if sub.get("auto_renew") is not None else 1) == 0
+                                     or days_left <= -3):
+                # Ended: autopay off and the period over - or autopay on and no renewal within the
+                # 3-day grace (biz_nidaan.RENEWAL_GRACE_DAYS). Expiring on the day itself used to
+                # race the renewal and reset the claim count when it landed.
                 async with aiosqlite.connect(db.DB_PATH) as conn:
                     await conn.execute(
                         "UPDATE nidaan_subscriptions SET status='expired' WHERE sub_id=?",
@@ -2111,7 +2114,10 @@ async def start_scheduler():
 
             # Run at 11:00 AM — Trial/subscription expiry + paid subscription renewal reminders
             if hour == 11 and 0 <= minute < 5 and last_run_date != today:
-                await run_trial_expiry_scan()
+                try:
+                    await run_trial_expiry_scan()
+                except Exception as _te:   # must never stop the Nidaan expiry below
+                    logger.error("Trial expiry scan error: %s", _te, exc_info=True)
                 try:
                     await run_nidaan_subscription_renewal_scan()
                 except Exception as _ne:

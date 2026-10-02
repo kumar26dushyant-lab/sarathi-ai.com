@@ -1300,6 +1300,10 @@ async def nidaan_intake_letter_subscriber(request: Request, file: UploadFile = F
     payload = _nidaan_bearer(request)
     if not payload:
         raise HTTPException(401, "Unauthorized")
+    _ent = await nidaan.claim_entitlement(payload["sub"])
+    if not _ent["can_raise"]:
+        return JSONResponse(status_code=402, content={"detail": _ent["message_en"], "detail_hi": _ent["message_hi"],
+                                                      "field": "entitlement", "reason": _ent["reason"]})
     return await _stage_intake_letter(request, _intake.owner_key("acct", payload["sub"]), file)
 
 
@@ -3918,6 +3922,12 @@ async def nidaan_api_google_signup(req: NidaanGoogleReq, request: Request):
     return {"access_token": token, "account_id": account_id, "plan": ""}
 
 
+async def _me_entitlement(account_id: int) -> dict:
+    e = await nidaan.claim_entitlement(account_id)
+    return {k: e.get(k) for k in ("can_raise", "reason", "message_en", "message_hi", "options", "plan",
+                                  "period_end", "autopay_on", "cap", "used", "resets_on", "credit")}
+
+
 @app.get("/nidaan/api/me")
 async def nidaan_api_me(request: Request):
     payload = _nidaan_bearer(request)
@@ -3957,6 +3967,7 @@ async def nidaan_api_me(request: Request):
         "status": account["status"],
         "subscription": dict(sub) if sub else None,
         "per_claim": per_claim,
+        "entitlement": await _me_entitlement(account["account_id"]),
         "account_state": account_state,
     }
 
@@ -4419,18 +4430,17 @@ async def nidaan_api_submit_claim(body: NidaanClaimReq, request: Request):
     #   • Neither              → 'unpaid_lead'  → FREE submission; the claim is a
     #       lead awaiting ₹499. Review does NOT start until payment (no auto-task,
     #       no legal notification). The lead is still recorded + visible in ops.
-    _sub_check = await nidaan.get_active_subscription(payload["sub"])
-    _per_claim_check = await nidaan.get_per_claim_status(payload["sub"])
-    # An unused PAID Rs 499 credit. get_per_claim_status has never returned a "status" key, so the old
-    # test was always False: a paid review became an unpaid lead with a second pay-gate while its
-    # credit was consumed anyway (found 2 Oct, before anyone hit it).
-    _is_paid = bool(_per_claim_check and int(_per_claim_check.get("balance") or 0) > 0)
-    if _sub_check:
-        _pay_status, _skip_elig = "subscription", False
-    elif _is_paid:
-        _pay_status, _skip_elig = "paid", False
-    else:
-        _pay_status, _skip_elig = "unpaid_lead", True
+    # MAY THIS ACCOUNT RAISE A NEW CLAIM? One answer for every door (biz_nidaan.claim_entitlement):
+    # a plan that has ended or is at its cap, a used one-time review, or a first claim still
+    # unpaid keeps its existing claims but raises nothing new (founder, 2 Oct). The free
+    # "unpaid lead" is now only for a brand-new account's first claim - it used to be unlimited.
+    _ent = await nidaan.claim_entitlement(payload["sub"])
+    if not _ent["can_raise"]:
+        return JSONResponse(status_code=402, content={
+            "detail": _ent["message_en"], "detail_hi": _ent["message_hi"], "field": "entitlement",
+            "reason": _ent["reason"], "options": _ent["options"]})
+    _pay_status = _ent["pay_status"]
+    _skip_elig = _pay_status == "unpaid_lead"
     # Optional referral code — accepts an active branch OR a staff referral code (staff-as-branch),
     # validated against the LIVE list (branches/staff can change in ops, so no hardcoded pattern).
     _bc = (body.branch_code or "").strip().upper()
@@ -6687,6 +6697,15 @@ async def nidaan_razorpay_webhook(request: Request):
                 ))
     elif event in ("subscription.cancelled", "subscription.halted", "subscription.completed"):
         logger.info("Nidaan subscription %s: account=%d rzp=%s", event, account_id, rzp_sub_id)
+        # No more charges will come: the plan runs to the end of what was paid, then lapses
+        # (get_active_subscription reads the date). It used to stay 'active' until a daily sweep.
+        try:
+            async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _ac:
+                await _ac.execute("UPDATE nidaan_subscriptions SET auto_renew=0 WHERE razorpay_subscription_id=?",
+                                  (rzp_sub_id,))
+                await _ac.commit()
+        except Exception as _are:  # noqa: BLE001
+            logger.error("autopay-off mark failed for %s: %s", rzp_sub_id, _are)
         # B3: unified teardown — webhook + manual cancel converge here.
         try:
             await nidaan.apply_bundle_teardown(account_id, reason=f"webhook_{event}")
@@ -7169,6 +7188,20 @@ async def nidaan_subscribe_cancel(request: Request):
         raise HTTPException(status_code=404, detail="No active subscription to cancel")
     sub_id = sub["sub_id"]
 
+    # Within the refund window with no claims (Policy A) the plan ends now and is refunded. Otherwise
+    # cancelling stops the autopay and the plan runs to the end of the period already paid for - what
+    # this screen always promised (founder, 2 Oct: new claims stop when the duration ends).
+    _elig_now, _, _ = await nidaan.check_refund_eligibility(sub_id)
+    if not _elig_now:
+        _kept = await nidaan.stop_autopay_keep_period(account["account_id"])
+        logger.info("Nidaan autopay stopped, plan kept to %s: account=%d sub_id=%d",
+                    _kept.get("period_end"), account["account_id"], sub_id)
+        return {"status": "autopay_off", "period_end": _kept.get("period_end", ""),
+                "autopay_stopped": bool(_kept.get("ok")),
+                "message": "Autopay is off. Your plan stays active until %s - no more charges."
+                           % (_kept.get("period_end") or "the end of this period"),
+                "message_hi": "ऑटो-पे बंद हो गया। आपका प्लान %s तक चालू रहेगा - आगे कोई भुगतान नहीं कटेगा।"
+                              % (_kept.get("period_end") or "इस अवधि के अंत")}
     # 1. Mark cancelled in our DB (fast, always succeeds)
     await nidaan.cancel_nidaan_subscription(account["account_id"])
     logger.info("Nidaan sub cancelled: account=%d sub_id=%d",
@@ -8824,6 +8857,12 @@ async def nidaan_ops_subscriber_pick(request: Request, q: str = "", limit: int =
     _require_staff(request, "team_member")
     q = (q or "").strip()
     rows = await nidaan.search_subscribers_for_ops(q, limit=max(1, min(int(limit or 20), 50)))
+    # Each with what it may do now - so a lapsed or capped subscriber is SHOWN with the reason,
+    # instead of silently missing from the list.
+    for r in rows:
+        e = await nidaan.claim_entitlement(r["account_id"])
+        r["entitlement"] = {k: e.get(k) for k in ("can_raise", "reason", "message_staff", "plan", "period_end",
+                                                  "autopay_on", "cap", "used", "resets_on", "pay_status")}
     return {"subscribers": rows, "count": len(rows)}
 
 
@@ -8863,11 +8902,12 @@ async def nidaan_ops_raise_for_subscriber(body: _RaiseForSubReq, request: Reques
     acct = await nidaan.get_account_by_id(body.account_id)
     if not acct:
         raise HTTPException(status_code=404, detail="That subscriber does not exist.")
-    sub = await nidaan.get_active_subscription(body.account_id)
-    if not sub:
-        raise HTTPException(
-            status_code=400,
-            detail="That account has no live subscription, so a claim cannot be raised against it.")
+    # The same judge as the subscriber's own dashboard: a plan that has ended or is at its cap
+    # cannot be used for a new claim on their behalf either (founder, 2 Oct).
+    _ent = await nidaan.claim_entitlement(body.account_id)
+    if not _ent["can_raise"] or _ent["pay_status"] not in ("subscription", "paid"):
+        raise HTTPException(status_code=400, detail=(_ent["message_staff"] or
+                            "That account has no live plan, so a claim cannot be raised against it."))
     # The same seven core details as every door. This route used to accept a claim with no phone
     # and no email at all, so the complainant had nowhere to hear from us.
     core, _why = _intake_core(body, "on_behalf")
@@ -8884,7 +8924,7 @@ async def nidaan_ops_raise_for_subscriber(body: _RaiseForSubReq, request: Reques
             policy_no=core["policy_no"],
             disputed_amount=core["disputed_amount"],
             notes_from_agent=body.notes_from_agent,
-            payment_status="subscription",
+            payment_status=_ent["pay_status"],
             origin="ops_on_behalf",
             complainant_name=core["complainant_name"],
             complainant_phone=core["complainant_phone"],

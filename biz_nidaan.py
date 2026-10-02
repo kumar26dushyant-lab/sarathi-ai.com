@@ -1614,15 +1614,25 @@ async def update_account_password(account_id: int, new_password: str) -> bool:
 #  SUBSCRIPTION OPERATIONS
 # =============================================================================
 
+RENEWAL_GRACE_DAYS = 3     # an autopay renewal can land a little after the period ends
+
+
 async def get_active_subscription(account_id: int) -> Optional[dict]:
-    """Return the current active subscription for an account."""
+    """The account's LIVE plan: status active AND inside its paid period.
+
+    Until 2 Oct only the status was read, and status changed once a day by a sweep that skipped
+    accounts without an email - so a plan could outlive its period (audit, 2 Oct). With autopay on,
+    a renewal gets RENEWAL_GRACE_DAYS to arrive; with autopay off the plan ends with its period."""
     async with aiosqlite.connect(DB_PATH) as conn:
         conn.row_factory = aiosqlite.Row
         cur = await conn.execute(
             """SELECT * FROM nidaan_subscriptions
                WHERE account_id = ? AND status = 'active'
+                 AND (COALESCE(current_period_end,'') = ''
+                      OR datetime(current_period_end) > datetime('now',
+                           CASE WHEN COALESCE(auto_renew,1)=1 THEN ? ELSE '+0 days' END))
                ORDER BY started_at DESC LIMIT 1""",
-            (account_id,),
+            (account_id, f"-{RENEWAL_GRACE_DAYS} days"),
         )
         row = await cur.fetchone()
         return dict(row) if row else None
@@ -1734,10 +1744,13 @@ async def search_subscribers_for_ops(q: str = "", limit: int = 20) -> list[dict]
     when a subscriber rings up.
     """
     q = (q or "").strip()
+    # Every account that has HAD a plan (its latest one), so a lapsed or capped subscriber is found
+    # and shown with the reason - the route adds claim_entitlement to each (founder, 2 Oct).
     sql = ("SELECT a.account_id, a.owner_name, a.firm_name, a.phone, a.email, "
-           "       s.plan, s.current_period_end "
+           "       s.plan, s.current_period_end, s.status AS sub_status "
            "FROM nidaan_accounts a "
-           "JOIN nidaan_subscriptions s ON s.account_id = a.account_id AND s.status='active' "
+           "JOIN nidaan_subscriptions s ON s.sub_id = (SELECT s2.sub_id FROM nidaan_subscriptions s2 "
+           "     WHERE s2.account_id = a.account_id ORDER BY s2.started_at DESC LIMIT 1) "
            "WHERE a.deleted_at IS NULL AND COALESCE(a.merged_into,0)=0 ")
     params: list = []
     if q:
@@ -1911,61 +1924,144 @@ def claim_block_message(reason: str, *, for_staff: bool = False) -> str:
                 "इस खाते का एक बार का रिव्यू पहले ही एक क्लेम में लग चुका है।")
     if r == "no_active_subscription":
         return "There is no active plan on this account right now. / इस खाते पर अभी कोई चालू प्लान नहीं है।"
+    if r in _ENT_WORDS and _ENT_WORDS[r][0]:
+        if for_staff:
+            return _ENT_STAFF.get(r, _ENT_WORDS[r][0]).replace("{resets}", "next month")
+        return (_ENT_WORDS[r][0] + " / " + _ENT_WORDS[r][1]).replace("{resets}", "next month")
     return r or "Could not raise the claim. / क्लेम दर्ज नहीं हो सका।"
 
 
-async def can_submit_claim(account_id: int) -> tuple[bool, str]:
-    """
-    Returns (allowed, reason).
-    Priority order:
-      1. Active subscription (all tiers) — quota enforced per month.
-      2. Per-claim purchase (status='paid', no linked_claim_id yet) — exactly 1 claim.
-    """
+HOUSE_DOMAIN = "@house.nidaanpartner.internal"
+
+_ENT_WORDS = {
+    "ok_subscription": ("", ""),
+    "ok_per_claim_credit": ("", ""),
+    "ok_first_review": ("", ""),
+    "house_account": ("", ""),
+    "sub_quota_exhausted": (
+        "Your plan's claims for this month are used up. Your existing claims carry on as usual. "
+        "To raise another now, move to a bigger plan - or wait until {resets}.",
+        "इस महीने आपके प्लान के क्लेम पूरे हो चुके हैं। पुराने क्लेम पहले की तरह चलते रहेंगे। "
+        "अभी नया क्लेम चाहिए तो बड़ा प्लान लें - या {resets} तक रुकें।"),
+    "sub_expired": (
+        "Your plan has ended, so a new claim cannot be raised. Your existing claims and documents "
+        "stay open to you. Renew your plan to raise new claims.",
+        "आपका प्लान ख़त्म हो चुका है, इसलिए नया क्लेम दर्ज नहीं हो सकता। आपके पुराने क्लेम और दस्तावेज़ "
+        "खुले रहेंगे। नए क्लेम के लिए प्लान फिर से लें।"),
+    "one_time_used": (
+        "Your one-time review has been used, so a new claim cannot be raised here. Your existing "
+        "claim stays open to you. Choose a plan to raise more claims, or talk to us on WhatsApp.",
+        "आपका एक बार का रिव्यू इस्तेमाल हो चुका है, इसलिए यहाँ नया क्लेम दर्ज नहीं हो सकता। आपका "
+        "पुराना क्लेम खुला रहेगा। और क्लेम के लिए प्लान लें, या WhatsApp पर हमसे बात करें।"),
+    "lead_pending_payment": (
+        "Your claim is waiting for its review payment. Pay for it - or choose a plan - before "
+        "raising another.",
+        "आपका क्लेम रिव्यू के भुगतान का इंतज़ार कर रहा है। नया क्लेम दर्ज करने से पहले उसका भुगतान "
+        "करें - या कोई प्लान लें।"),
+    "account_closed": ("This account is closed.", "यह खाता बंद है।"),
+}
+_ENT_STAFF = {
+    "sub_quota_exhausted": "This subscriber's plan has used all its claims for this month (frees up {resets}).",
+    "sub_expired": "This subscriber's plan has ended - a new claim cannot be raised until they renew.",
+    "one_time_used": "This account's one-time review is used - no new claim without a plan.",
+    "lead_pending_payment": "This account has a claim waiting for its review payment.",
+    "account_closed": "This account is closed.",
+}
+
+
+async def claim_entitlement(account_id: int) -> dict:
+    """MAY THIS ACCOUNT RAISE A NEW CLAIM? The one answer, for every door (founder, 2 Oct:
+    "block everything for that subscriber and/or one time review user, only their existing case
+    access ... in whatsapp raised claim also or anything on behalf").
+
+    Yes: a brand-new account (its first claim - the Rs 499 value-first funnel); a live plan within
+    its monthly cap; an unused paid review. No - frozen for NEW claims only, existing claims stay
+    fully open: a plan that has ended (autopay off and the period over, or expired), a plan at its
+    cap, a one-time review already used, a first claim still waiting for its payment. AP / staff
+    house accounts are not subscribers and are not judged here.
+
+    Returns {can_raise, reason, pay_status, message_en, message_hi, message_staff, options[],
+    plan, period_end, autopay_on, cap, used, resets_on, credit, had_plan}."""
+    out = {"can_raise": False, "reason": "account_closed", "pay_status": None, "options": [],
+           "plan": "", "period_end": "", "autopay_on": False, "cap": None, "used": 0,
+           "resets_on": "", "credit": 0, "had_plan": False}
+    acct = await get_account_by_id(account_id)
+    if not acct or (acct.get("status") or "active") not in ("active", "deletion_pending"):
+        return _ent_words(out)
+    if (acct.get("email") or "").lower().endswith(HOUSE_DOMAIN):
+        out.update(can_raise=True, reason="house_account", pay_status="unpaid_lead")
+        return _ent_words(out)
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        had_plan = (await (await conn.execute(
+            "SELECT COUNT(*) FROM nidaan_subscriptions WHERE account_id=?", (account_id,))).fetchone())[0]
+        credit = (await (await conn.execute(
+            "SELECT COUNT(*) FROM nidaan_per_claim_purchase WHERE account_id=? AND status='paid' "
+            "AND linked_claim_id IS NULL", (account_id,))).fetchone())[0]
+        bought = (await (await conn.execute(
+            "SELECT COUNT(*) FROM nidaan_per_claim_purchase WHERE account_id=? "
+            "AND status NOT IN ('pending_payment','cancelled')", (account_id,))).fetchone())[0]
+        claims = (await (await conn.execute(
+            "SELECT COUNT(*), SUM(COALESCE(payment_status,'')='unpaid_lead') FROM nidaan_claims "
+            "WHERE account_id=?", (account_id,))).fetchone())
+        quota = await (await conn.execute(
+            "SELECT * FROM nidaan_plan_quota WHERE account_id=?", (account_id,))).fetchone()
+    n_claims, n_unpaid = int(claims[0] or 0), int(claims[1] or 0)
+    out.update(credit=int(credit), had_plan=bool(had_plan))
     sub = await get_active_subscription(account_id)
     if sub:
-        plan = sub["plan"]
-        # Read the claim cap from the (super-admin editable) config; fall back to the
-        # hardcoded default only if the config hasn't been seeded.
-        _cfg = await get_plan_cfg(plan)
-        limit = _cfg.get("claims_per_month") if _cfg else PLAN_LIMITS.get(plan, {}).get("claims_per_month")
-        if limit is None:
-            return True, "ok"  # platinum / unlimited
+        _cfg = await get_plan_cfg(sub["plan"])
+        cap = _cfg.get("claims_per_month") if _cfg else PLAN_LIMITS.get(sub["plan"], {}).get("claims_per_month")
+        used = quota_used(dict(quota) if quota else None, sub)
+        ws = str((dict(quota) if quota else {}).get("current_window_start") or "")[:10]
+        resets = ""
+        try:
+            if ws:
+                resets = (date.fromisoformat(ws) + timedelta(days=30)).strftime("%d %b %Y")
+        except ValueError:
+            resets = ""
+        out.update(plan=sub["plan"], period_end=str(sub.get("current_period_end") or "")[:10],
+                   autopay_on=int(sub.get("auto_renew") if sub.get("auto_renew") is not None else 1) == 1,
+                   cap=cap, used=used, resets_on=resets)
+        if cap is None or used < cap:
+            out.update(can_raise=True, reason="ok_subscription", pay_status="subscription")
+            return _ent_words(out)
+        out.update(reason="sub_quota_exhausted", options=["upgrade", "wait"])
+        if credit:
+            out.update(can_raise=True, reason="ok_per_claim_credit", pay_status="paid", options=[])
+        return _ent_words(out)
+    if credit:
+        out.update(can_raise=True, reason="ok_per_claim_credit", pay_status="paid")
+        return _ent_words(out)
+    if not had_plan and not n_claims and not bought:
+        out.update(can_raise=True, reason="ok_first_review", pay_status="unpaid_lead")
+        return _ent_words(out)
+    if had_plan:
+        out.update(reason="sub_expired", options=["renew"])
+    elif n_unpaid:
+        out.update(reason="lead_pending_payment", options=["pay", "subscribe"])
+    else:
+        out.update(reason="one_time_used", options=["subscribe", "whatsapp"])
+    return _ent_words(out)
 
-        async with aiosqlite.connect(DB_PATH) as conn:
-            conn.row_factory = aiosqlite.Row
-            cur = await conn.execute(
-                "SELECT * FROM nidaan_plan_quota WHERE account_id = ?", (account_id,)
-            )
-            quota = await cur.fetchone()
 
-        if quota_used(dict(quota) if quota else None, sub) >= limit:
-            return False, f"quota_exceeded_{plan}"
-        return True, "ok"
+def _ent_words(out: dict) -> dict:
+    en, hi = _ENT_WORDS.get(out["reason"], ("", ""))
+    r = out.get("resets_on") or "next month"
+    out["message_en"] = en.replace("{resets}", r)
+    out["message_hi"] = hi.replace("{resets}", out.get("resets_on") or "अगले महीने")
+    out["message_staff"] = _ENT_STAFF.get(out["reason"], "").replace("{resets}", r)
+    return out
 
-    # No subscription — check per-claim entitlement balance
-    async with aiosqlite.connect(DB_PATH) as conn:
-        conn.row_factory = aiosqlite.Row
-        cur = await conn.execute(
-            """SELECT COUNT(*) AS available FROM nidaan_per_claim_purchase
-               WHERE account_id=? AND status='paid' AND linked_claim_id IS NULL""",
-            (account_id,),
-        )
-        row = await cur.fetchone()
-    available = row["available"] if row else 0
-    if available > 0:
-        return True, "ok_per_claim"
-    # Check if they have any past purchases (so we can give a meaningful error)
-    async with aiosqlite.connect(DB_PATH) as conn:
-        conn.row_factory = aiosqlite.Row
-        cur = await conn.execute(
-            "SELECT COUNT(*) AS cnt FROM nidaan_per_claim_purchase WHERE account_id=? AND status NOT IN ('pending_payment','cancelled')",
-            (account_id,),
-        )
-        row = await cur.fetchone()
-    if row and row["cnt"] > 0:
-        return False, "per_claim_balance_exhausted"
 
-    return False, "no_active_subscription"
+async def can_submit_claim(account_id: int) -> tuple[bool, str]:
+    """(allowed, reason) - a thin wrapper over claim_entitlement, kept for older callers."""
+    e = await claim_entitlement(account_id)
+    if e["can_raise"]:
+        return True, ("ok_per_claim" if e["reason"] == "ok_per_claim_credit" else "ok")
+    return False, ("quota_exceeded_%s" % e["plan"] if e["reason"] == "sub_quota_exhausted" else
+                   "per_claim_balance_exhausted" if e["reason"] == "one_time_used" else
+                   "no_active_subscription" if e["reason"] == "sub_expired" else e["reason"])
 
 
 async def _increment_quota(account_id: int, conn: aiosqlite.Connection, sub: Optional[dict] = None):
@@ -6090,6 +6186,38 @@ async def _razorpay_sub_status(rzp_sub: str, kid: str, ksec: str) -> str:
         return str((r.json() or {}).get("status") or "") if r.status_code == 200 else ""
     except Exception:  # noqa: BLE001
         return ""
+
+
+async def stop_autopay_keep_period(account_id: int) -> dict:
+    """The customer cancelled: stop the autopay at Razorpay, keep the plan until the end of the
+    period they paid for (the dashboard always promised this; the code ended it at once - audit,
+    2 Oct). The plan then lapses by itself (get_active_subscription reads the date, the sweep marks
+    it expired). If Razorpay will not confirm the stop, the super admins are told."""
+    async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        rows = [dict(r) for r in await (await conn.execute(
+            "SELECT sub_id, razorpay_subscription_id, current_period_end FROM nidaan_subscriptions "
+            "WHERE account_id=? AND status='active'", (account_id,))).fetchall()]
+    not_stopped = [r["razorpay_subscription_id"] for r in rows
+                   if r.get("razorpay_subscription_id") and not await stop_razorpay_autopay(r["razorpay_subscription_id"])]
+    async with aiosqlite.connect(DB_PATH) as conn:
+        await conn.execute(
+            "UPDATE nidaan_subscriptions SET auto_renew=0, cancelled_at=COALESCE(cancelled_at, CURRENT_TIMESTAMP) "
+            "WHERE account_id=? AND status='active'", (account_id,))
+        await conn.commit()
+    if not_stopped:
+        try:
+            import biz_nidaan_notifications as _nn
+            ids = [a["staff_id"] for a in await _nn._super_admin_staff()]
+            await _nn.notify_staff_inapp(
+                ids, "⚠️ Autopay NOT stopped at Razorpay",
+                "A customer cancelled (account %s) but Razorpay did not confirm the stop for %s. "
+                "Stop it by hand in Razorpay so they are not charged again." % (account_id, ", ".join(not_stopped)),
+                event_key="payment.guardian", email=True)
+        except Exception as e:  # noqa: BLE001
+            logger.error("autopay-not-stopped alert failed: %s", e)
+    ends = max((str(r.get("current_period_end") or "")[:10] for r in rows), default="")
+    return {"ok": not not_stopped, "period_end": ends}
 
 
 async def cancel_nidaan_subscription(account_id: int) -> bool:

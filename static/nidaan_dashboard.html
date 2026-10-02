@@ -182,6 +182,11 @@
   }
 
   #newClaimBtn[disabled]{opacity:.5;cursor:not-allowed;position:relative}
+  #newClaimBtn.ent-frozen[disabled]::after{display:none}
+  #entBanner.ent-frozen-box{margin:0 0 1rem;padding:.8rem 1rem;border-radius:12px;background:var(--nd-warning-soft,rgba(251,191,36,.1));border:1px solid var(--nd-border-warn,rgba(251,191,36,.35));color:var(--nd-warning-text);font-size:.88rem;line-height:1.5}
+  #entBanner.ent-note{margin:0 0 .8rem;font-size:.8rem;color:var(--nd-text-muted)}
+  #entBanner .ent-actions{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.6rem}
+  #entBanner .ent-btn{min-height:44px;padding:.5rem 1rem;border-radius:9px;border:1px solid var(--nd-border-strong);background:var(--nd-bg-surface);color:var(--nd-text-primary);font-weight:700;font-size:.85rem;cursor:pointer}
   #newClaimBtn[disabled]::after{content:'Subscribe to unlock';position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:#1e293b;color:#fbbf24;font-size:.72rem;padding:.3rem .6rem;border-radius:6px;white-space:nowrap;pointer-events:none;border:1px solid rgba(251,191,36,.3)}
   .drawer-bg{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200;display:none;justify-content:flex-end}
   .drawer-bg.open{display:flex}
@@ -1128,6 +1133,7 @@ async function loadDashboard() {
 
   const me = await meRes.json();
   _meCache = me;  // cache for Razorpay prefill
+  _applyEntitlement();
   // #6: show the persistent commission disclaimer only for subscribers (advisors).
   const _scd = document.getElementById('subCommissionDisclaimer');
   if (_scd) _scd.style.display = me.subscription ? 'block' : 'none';
@@ -1208,7 +1214,7 @@ async function loadDashboard() {
         <span class="hi">${end} तक वैध</span>
       </div>`;
     _isSubscribed = true;
-    document.getElementById('newClaimBtn').disabled = false;
+    _enableRaise();
     lockOverlay.style.display = 'none';
     claimCard.style.pointerEvents = '';
     // Remove locked-tab styling from gated tabs
@@ -1285,7 +1291,7 @@ async function loadDashboard() {
           <strong>Per-Claim Review — ₹499</strong>
           <span>${bal} review${bal>1?'s':''} available · ${used} used · <a href="#" onclick="openSubscribeModal();return false" style="color:#ffd700;text-decoration:none">Upgrade to subscription</a></span>
         </div>`;
-      document.getElementById('newClaimBtn').disabled = false;
+      _enableRaise();
       lockOverlay.style.display = 'none';
       claimCard.style.pointerEvents = '';
       document.querySelectorAll('.tab-btn[data-requires-sub]').forEach(b => b.classList.remove('locked-tab'));
@@ -1297,10 +1303,10 @@ async function loadDashboard() {
       banner.innerHTML = `
         <div class="sub-banner-text">
           <strong class="en">Need another claim reviewed?</strong><strong class="hi">एक और क्लेम की समीक्षा चाहिए?</strong>
-          <span class="en">${used} review${used>1?'s':''} used · raise another claim below — you pay ₹499 + GST per claim. <a href="#" onclick="openSubscribeModal();return false" style="color:#ffd700;text-decoration:none">Or subscribe</a></span>
+          <span class="en">${used} review${used>1?'s':''} used · see your claims below. <a href="#" onclick="openSubscribeModal();return false" style="color:#ffd700;text-decoration:none">Or subscribe</a></span>
           <span class="hi">${used} समीक्षा हो चुकी · नीचे नया क्लेम दर्ज करें — प्रति क्लेम ₹499 + GST। <a href="#" onclick="openSubscribeModal();return false" style="color:#ffd700;text-decoration:none">या सब्सक्राइब करें</a></span>
         </div>`;
-      document.getElementById('newClaimBtn').disabled = false;
+      _enableRaise();
       document.querySelectorAll('.tab-btn[data-requires-sub]').forEach(b => b.classList.remove('locked-tab'));
       lockOverlay.style.display = 'none';
       claimCard.classList.remove('locked-section');
@@ -1376,8 +1382,7 @@ async function loadDashboard() {
           <span class="hi">हमारे विशेषज्ञ आपके केस पर काम कर रहे हैं — रिपोर्ट 24–48 कार्य-घंटों में, यहाँ और WhatsApp पर।</span>
         </div>`;
       // Minimal ₹499 dashboard: claims visible, raise-another-review, Profile/Settings.
-      const _nb = document.getElementById('newClaimBtn');
-      if (_nb) _nb.disabled = false;
+      _enableRaise();
       document.querySelectorAll('.tab-btn[data-requires-sub]').forEach(b => b.classList.remove('locked-tab'));
       window._leadUserAccess = true;
       lockOverlay.style.display = 'none';
@@ -1482,7 +1487,61 @@ function esc(s) {
 }
 
 // ── New claim modal ───────────────────────────────────────────────────────────
+// ── May this account raise a NEW claim? (founder, 2 Oct) ─────────────────────────
+// The server decides (claim_entitlement, sent in /me); this only shows it. A plan that has ended or
+// is at its cap, a used one-time review, or an unpaid first claim: NEW claims are frozen with the
+// reason and the way forward. Existing claims, documents, messages and payments stay untouched.
+function _entOk() { const e = _meCache && _meCache.entitlement; return !e || e.can_raise !== false; }
+function _enableRaise() {
+  const b = document.getElementById('newClaimBtn'); if (!b) return;
+  b.disabled = !_entOk();
+  b.classList.toggle('ent-frozen', !_entOk());
+}
+function _applyEntitlement() {
+  const e = _meCache && _meCache.entitlement;
+  let box = document.getElementById('entBanner');
+  if (!box) {
+    const card = document.getElementById('claimsSectionCard');
+    if (!card) return;
+    box = document.createElement('div');
+    box.id = 'entBanner';
+    box.setAttribute('role', 'status');
+    card.parentNode.insertBefore(box, card);
+  }
+  if (!e || e.can_raise !== false) {
+    box.style.display = 'none';
+    // Inside the plan: say how much of it is used, so the cap is never a surprise.
+    if (e && e.cap) {
+      box.style.display = '';
+      box.className = 'ent-note';
+      box.innerHTML = '<span class="en">This month: <b>' + (e.used || 0) + ' of ' + e.cap + '</b> claims used'
+        + (e.autopay_on === false && e.period_end ? ' · autopay off - plan ends ' + esc(e.period_end) : '') + '</span>'
+        + '<span class="hi">इस महीने: <b>' + e.cap + ' में से ' + (e.used || 0) + '</b> क्लेम हो चुके'
+        + (e.autopay_on === false && e.period_end ? ' · ऑटो-पे बंद - प्लान ' + esc(e.period_end) + ' को ख़त्म' : '') + '</span>';
+    }
+    _enableRaise();
+    return;
+  }
+  const opts = e.options || [];
+  const btn = function (key, en, hi, onclick) {
+    return opts.indexOf(key) >= 0 ? '<button type="button" class="ent-btn" onclick="' + onclick + '">'
+      + '<span class="en">' + en + '</span><span class="hi">' + hi + '</span></button>' : '';
+  };
+  box.style.display = '';
+  box.className = 'ent-frozen-box';
+  box.innerHTML = '<div class="en">' + esc(e.message_en || '') + '</div><div class="hi">' + esc(e.message_hi || '') + '</div>'
+    + '<div class="ent-actions">'
+    + btn('renew', 'Renew my plan', 'प्लान फिर से लें', 'openSubscribeModal()')
+    + btn('subscribe', 'See plans', 'प्लान देखें', 'openSubscribeModal()')
+    + btn('upgrade', 'Move to a bigger plan', 'बड़ा प्लान लें', 'openSubscribeModal()')
+    + btn('pay', 'Pay for my waiting claim', 'रुके क्लेम का भुगतान करें',
+          "var g=document.getElementById('lcPayBtn');if(g){g.scrollIntoView({behavior:'smooth',block:'center'})}")
+    + btn('whatsapp', 'Talk to us on WhatsApp', 'WhatsApp पर बात करें', "window.open('https://wa.me/919183686384','_blank','noopener')")
+    + '</div>';
+  _enableRaise();
+}
 function openModal()  {
+  if (!_entOk()) { _applyEntitlement(); const b = document.getElementById('entBanner'); if (b) b.scrollIntoView({behavior: 'smooth', block: 'center'}); return; }
   document.getElementById('claimModal').classList.add('open');
   // Fix: re-enable the submit button + clear status so a second claim can be
   // raised without refreshing the page (button stayed disabled after success).
@@ -2290,7 +2349,8 @@ function switchPlan(plan) {
 // ── Cancel subscription ───────────────────────────────────────────────────────
 async function doCancelSub() {
   const isHi = document.body.classList.contains('hi');
-  const msg = isHi ? 'क्या आप वाकई सदस्यता रद्द करना चाहते हैं?' : 'Cancel your subscription? Your plan remains active until the current period ends.';
+  const msg = isHi ? 'ऑटो-पे बंद करें? आपका प्लान इस अवधि के अंत तक चालू रहेगा, फिर ख़त्म हो जाएगा। (7 दिन के अंदर और बिना किसी क्लेम के रद्द करने पर पूरा पैसा वापस होता है और प्लान तुरंत बंद होता है।)'
+                    : 'Stop autopay? Your plan stays active until the end of this period, then ends. (Cancelled within 7 days with no claims raised: full refund, and the plan ends now.)';
   if (!confirm(msg)) return;
   const actionMsg = document.getElementById('subActionMsg');
   const btn = document.getElementById('cancelSubBtn');
@@ -2305,8 +2365,14 @@ async function doCancelSub() {
       localStorage.setItem('nidaan_plan', 'free');
     }
     actionMsg.className = 'msg ok';
-    actionMsg.textContent = isHi ? 'सदस्यता रद्द कर दी गई।' : 'Subscription cancelled. Refreshing…';
-    setTimeout(() => location.reload(), 1500);
+    if (data.status === 'autopay_off') {
+      // Autopay stopped; the plan runs to the end of what was paid (no refund case).
+      actionMsg.textContent = (isHi ? data.message_hi : data.message) || (isHi ? 'ऑटो-पे बंद हो गया।' : 'Autopay is off.');
+      setTimeout(() => location.reload(), 3500);
+    } else {
+      actionMsg.textContent = isHi ? 'सदस्यता रद्द कर दी गई।' : 'Subscription cancelled. Refreshing…';
+      setTimeout(() => location.reload(), 1500);
+    }
   } catch(err) {
     actionMsg.className = 'msg err';
     actionMsg.textContent = err.message;
