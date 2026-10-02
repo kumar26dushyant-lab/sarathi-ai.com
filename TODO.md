@@ -9,6 +9,23 @@ _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned ·
 _Anything raised and not finished lives here until it is done, so an interruption does not lose
 it. Newest first within each group._
 
+### ▶ 2 Oct (afternoon) — the whole journey, end to end (founder)
+
+> "when we are improving things, we should improve all other things too for users ... our app
+> should look professional, built by professionals ... a true user should not face any challenge
+> due to our tight security." His decisions on I13 / the on-behalf letter rule / Marathi-Punjabi /
+> WhatsApp: all OK as recommended.
+
+| # | What | Notes |
+|---|---|---|
+| J1 | **WhatsApp claim-raise**: a complainant raises a claim on WhatsApp - the same 7 core details (biz_nidaan_intake), asked one at a time in their language, each important one read back ("please check"), the letter sent as a photo/PDF in the chat, then the claim is created through the same rulebook | 🟢 Build |
+| J2 | **Keep every claim on track**: one watchdog over the whole journey (initiate -> settlement) - finds claims that are misrouted, in conflict or crossing paths (e.g. in a Level-2 bucket without the L2 step, archived but with open work, two claims for one case, stuck waiting), puts right what is safe to put right, and FLAGS the founder + App Health for the rest | 🟢 Build |
+| J3 | **Homepage -> the right plan**: advisor vs policyholder cards; a confirmation before paying ("you chose the Rs 499 one-time review for a policyholder - right?"); a super-admin way to correct a person who chose the wrong one later | 🟢 Audit, then build |
+| J4 | **Payments end to end**: a thank-you page after every payment and the right next screen for the plan bought - on every device and browser (UPI app switching, popups, reloads, slow networks) | 🟢 Audit, then fix |
+| J5 | **Every login and code**: email OTP, Google, WhatsApp, AP, staff; email + WhatsApp templates (content, format, routing); a clear "please wait" wherever we make someone wait (Google sign-in buffers) | 🟢 Audit, then fix |
+| J6 | **No double tap, anywhere - built in, not remembered**: one shared guard every page loads + a check that FAILS the build if a page does not; buttons say what they are doing while they work | 🟢 First |
+| J7 | Deploy tonight (after 6 pm): the intake work `44fbc2a..8369acb` | Waiting for 6 pm |
+
 ### ▶ 2 Oct — URGENT: one claim intake standard at every door (founder)
 
 | # | What | Notes |
