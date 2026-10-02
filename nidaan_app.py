@@ -3933,7 +3933,7 @@ async def nidaan_api_google_signup(req: NidaanGoogleReq, request: Request):
 
 async def _me_entitlement(account_id: int) -> dict:
     e = await nidaan.claim_entitlement(account_id)
-    return {k: e.get(k) for k in ("can_raise", "reason", "message_en", "message_hi", "options", "plan",
+    return {k: e.get(k) for k in ("can_raise", "reason", "why", "pay_status", "message_en", "message_hi", "options", "plan",
                                   "period_end", "autopay_on", "cap", "used", "resets_on", "credit")}
 
 

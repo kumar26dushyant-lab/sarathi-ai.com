@@ -1959,6 +1959,22 @@ _ENT_WORDS = {
         "आपका क्लेम रिव्यू के भुगतान का इंतज़ार कर रहा है। नया क्लेम दर्ज करने से पहले उसका भुगतान "
         "करें - या कोई प्लान लें।"),
     "account_closed": ("This account is closed.", "यह खाता बंद है।"),
+    # Allowed, but paid for: the claim waits for its review fee before anything happens (M1, 3 Oct).
+    "pay_per_review:sub_expired": (
+        "Your plan has ended. You can renew it - or raise this one claim and pay its review fee "
+        "(from ₹499 + GST) after you submit. Nothing happens on it until it is paid.",
+        "आपका प्लान ख़त्म हो चुका है। आप प्लान फिर से ले सकते हैं - या यह एक क्लेम दर्ज करके उसकी रिव्यू फ़ीस "
+        "(₹499 + GST से) जमा करने के बाद चुका सकते हैं। भुगतान तक उस पर काम शुरू नहीं होगा।"),
+    "pay_per_review:one_time_used": (
+        "Your one-time review has been used. You can raise another claim and pay its review fee "
+        "(from ₹499 + GST) after you submit - or choose a plan.",
+        "आपका एक बार का रिव्यू इस्तेमाल हो चुका है। आप नया क्लेम दर्ज करके उसकी रिव्यू फ़ीस (₹499 + GST से) "
+        "बाद में चुका सकते हैं - या कोई प्लान लें।"),
+    "pay_per_review:sub_quota_exhausted": (
+        "Your plan's claims for this month are used up. You can raise this one and pay its review fee "
+        "(from ₹499 + GST), move to a bigger plan, or wait until {resets}.",
+        "इस महीने आपके प्लान के क्लेम पूरे हो चुके हैं। आप यह क्लेम दर्ज करके उसकी रिव्यू फ़ीस (₹499 + GST से) "
+        "चुका सकते हैं, बड़ा प्लान ले सकते हैं, या {resets} तक रुक सकते हैं।"),
 }
 _ENT_STAFF = {
     "sub_quota_exhausted": "This subscriber's plan has used all its claims for this month (frees up {resets}).",
@@ -1966,6 +1982,9 @@ _ENT_STAFF = {
     "one_time_used": "This account's one-time review is used - no new claim without a plan.",
     "lead_pending_payment": "This account has a claim waiting for its review payment.",
     "account_closed": "This account is closed.",
+    "pay_per_review:sub_expired": "This subscriber's plan has ended - renew it to raise a claim on their behalf.",
+    "pay_per_review:one_time_used": "This account has no plan - a claim on their behalf needs a plan.",
+    "pay_per_review:sub_quota_exhausted": "This subscriber's plan has used all its claims for this month (frees up {resets}).",
 }
 
 
@@ -1980,9 +1999,12 @@ async def claim_entitlement(account_id: int) -> dict:
     cap, a one-time review already used, a first claim still waiting for its payment. AP / staff
     house accounts are not subscribers and are not judged here.
 
-    Returns {can_raise, reason, pay_status, message_en, message_hi, message_staff, options[],
+    A frozen customer may BUY another review (founder, 3 Oct): reason 'pay_per_review' - can_raise,
+    pay_status 'unpaid_lead', the claim waits for its fee; never two unpaid claims at once.
+
+    Returns {can_raise, reason, why, pay_status, message_en, message_hi, message_staff, options[],
     plan, period_end, autopay_on, cap, used, resets_on, credit, had_plan}."""
-    out = {"can_raise": False, "reason": "account_closed", "pay_status": None, "options": [],
+    out = {"can_raise": False, "reason": "account_closed", "why": "", "pay_status": None, "options": [],
            "plan": "", "period_end": "", "autopay_on": False, "cap": None, "used": 0,
            "resets_on": "", "credit": 0, "had_plan": False}
     acct = await get_account_by_id(account_id)
@@ -2029,6 +2051,11 @@ async def claim_entitlement(account_id: int) -> dict:
         out.update(reason="sub_quota_exhausted", options=["upgrade", "wait"])
         if credit:
             out.update(can_raise=True, reason="ok_per_claim_credit", pay_status="paid", options=[])
+        elif n_unpaid:
+            out.update(reason="lead_pending_payment", options=["pay", "upgrade"])
+        else:
+            out.update(can_raise=True, reason="pay_per_review", why="sub_quota_exhausted",
+                       pay_status="unpaid_lead", options=["upgrade", "wait"])
         return _ent_words(out)
     if credit:
         out.update(can_raise=True, reason="ok_per_claim_credit", pay_status="paid")
@@ -2036,21 +2063,25 @@ async def claim_entitlement(account_id: int) -> dict:
     if not had_plan and not n_claims and not bought:
         out.update(can_raise=True, reason="ok_first_review", pay_status="unpaid_lead")
         return _ent_words(out)
-    if had_plan:
-        out.update(reason="sub_expired", options=["renew"])
-    elif n_unpaid:
+    # Not new, no plan, no credit. Never two unpaid claims at once: the waiting one is paid first.
+    # Otherwise they may BUY another review - this claim waits for its fee (founder, 3 Oct).
+    if n_unpaid:
         out.update(reason="lead_pending_payment", options=["pay", "subscribe"])
     else:
-        out.update(reason="one_time_used", options=["subscribe", "whatsapp"])
+        out.update(can_raise=True, reason="pay_per_review",
+                   why=("sub_expired" if had_plan else "one_time_used"), pay_status="unpaid_lead",
+                   options=(["renew"] if had_plan else ["subscribe"]))
     return _ent_words(out)
 
 
 def _ent_words(out: dict) -> dict:
-    en, hi = _ENT_WORDS.get(out["reason"], ("", ""))
+    key = out["reason"] + (":" + out["why"] if out.get("why") else "")
+    out["key"] = key
+    en, hi = _ENT_WORDS.get(key, _ENT_WORDS.get(out["reason"], ("", "")))
     r = out.get("resets_on") or "next month"
     out["message_en"] = en.replace("{resets}", r)
     out["message_hi"] = hi.replace("{resets}", out.get("resets_on") or "अगले महीने")
-    out["message_staff"] = _ENT_STAFF.get(out["reason"], "").replace("{resets}", r)
+    out["message_staff"] = _ENT_STAFF.get(key, _ENT_STAFF.get(out["reason"], "")).replace("{resets}", r)
     return out
 
 

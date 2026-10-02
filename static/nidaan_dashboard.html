@@ -1508,6 +1508,18 @@ function _applyEntitlement() {
     box.setAttribute('role', 'status');
     card.parentNode.insertBefore(box, card);
   }
+  if (e && e.can_raise && e.reason === 'pay_per_review') {
+    // Allowed, and paid for: say so BEFORE they fill the form (founder, 3 Oct).
+    const o = e.options || [];
+    box.style.display = '';
+    box.className = 'ent-frozen-box';
+    box.innerHTML = '<div class="en">' + esc(e.message_en || '') + '</div><div class="hi">' + esc(e.message_hi || '') + '</div>'
+      + ((o.indexOf('renew') >= 0 || o.indexOf('subscribe') >= 0 || o.indexOf('upgrade') >= 0)
+         ? '<div class="ent-actions"><button type="button" class="ent-btn" onclick="openSubscribeModal()">'
+           + '<span class="en">See plans</span><span class="hi">प्लान देखें</span></button></div>' : '');
+    _enableRaise();
+    return;
+  }
   if (!e || e.can_raise !== false) {
     box.style.display = 'none';
     // Inside the plan: say how much of it is used, so the cap is never a surprise.

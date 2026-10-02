@@ -104,21 +104,24 @@ async def main():
     check("a brand-new account may raise its first claim (free, pay later)",
           E[1]["can_raise"] and E[1]["pay_status"] == "unpaid_lead", E[1])
     check("a live plan within its cap may raise", E[2]["can_raise"] and E[2]["pay_status"] == "subscription", E[2])
-    check("a plan whose period ended with autopay off is FROZEN (no sweep needed)",
-          not E[3]["can_raise"] and E[3]["reason"] == "sub_expired", E[3])
-    check("an expired plan is frozen, with words in English and Hindi",
-          not E[6]["can_raise"] and E[6]["message_en"] and E[6]["message_hi"], E[6])
+    check("a plan whose period ended (autopay off) is no longer a plan - no sweep needed; it may BUY a review",
+          E[3]["can_raise"] and E[3]["reason"] == "pay_per_review" and E[3]["pay_status"] == "unpaid_lead"
+          and E[3]["why"] == "sub_expired", E[3])
+    check("...told so in English and Hindi before filling the form",
+          "plan has ended" in E[6]["message_en"] and E[6]["message_hi"], E[6])
     check("autopay on, period ended yesterday: still live (the renewal has 3 days to land)", E[7]["can_raise"], E[7])
-    check("...5 days over: frozen", not E[8]["can_raise"], E[8])
-    check("a one-time review already used is frozen", not E[4]["can_raise"] and E[4]["reason"] == "one_time_used", E[4])
+    check("...5 days over: the plan is over (pay per review)", E[8]["reason"] == "pay_per_review", E[8])
+    check("a used one-time review may buy another (paid before anything happens)",
+          E[4]["reason"] == "pay_per_review" and E[4]["why"] == "one_time_used" and E[4]["pay_status"] == "unpaid_lead", E[4])
     check("an unused paid review may raise (as paid)", E[5]["can_raise"] and E[5]["pay_status"] == "paid", E[5])
     check("an AP / staff house account is not judged as a subscriber", E[9]["can_raise"], E[9])
     cap = E[2]["cap"]
     await ex("INSERT INTO nidaan_plan_quota (account_id, current_window_start, claims_this_window, updated_at) "
              "VALUES (2, date('now'), ?, datetime('now'))", int(cap or 0))
     e2 = await nid.claim_entitlement(2)
-    check("a live plan at its cap is frozen, saying when it frees up",
-          cap is not None and not e2["can_raise"] and e2["reason"] == "sub_quota_exhausted" and e2["resets_on"], e2)
+    check("a live plan at its cap: this claim is paid for, saying when the plan frees up",
+          cap is not None and e2["reason"] == "pay_per_review" and e2["why"] == "sub_quota_exhausted"
+          and e2["resets_on"] and e2["resets_on"] in e2["message_en"], e2)
     await ex("DELETE FROM nidaan_plan_quota WHERE account_id=2")
 
     tok = {aid: {"Authorization": "Bearer " + nid.create_nidaan_token(aid, f"a{aid}@example.invalid")} for aid in range(1, 9)}
@@ -140,23 +143,30 @@ async def main():
         check("...its SECOND is refused at the letter upload already (no free claims for ever)",
               s.status_code == 402 and s.json().get("reason") == "lead_pending_payment", (s.status_code, s.text[:160]))
         s = await stage(tok[3])
-        check("a lapsed plan cannot even start a new claim", s.status_code == 402 and s.json().get("detail_hi"),
-              (s.status_code, s.text[:160]))
-        r = await cl.post("/nidaan/api/claims/submit", headers=tok[3], json=dict(body, letter_token="x" * 30))
-        check("...and its submit is refused with the reason", r.status_code == 402 and r.json().get("reason") == "sub_expired",
-              (r.status_code, r.text[:160]))
+        r = await cl.post("/nidaan/api/claims/submit", headers=tok[3], json=dict(body, letter_token=s.json().get("token")))
+        async with aiosqlite.connect(DBP) as c:
+            ps = (await (await c.execute("SELECT payment_status FROM nidaan_claims WHERE claim_id=?",
+                                         (r.json().get("claim_id"),))).fetchone() or [None])[0]
+        check("a lapsed plan's new claim goes in as UNPAID - it waits for its review fee",
+              r.status_code == 200 and ps == "unpaid_lead", (r.status_code, r.text[:160], ps))
+        s = await stage(tok[3])
+        check("...and a second is refused until that one is paid", s.status_code == 402
+              and s.json().get("reason") == "lead_pending_payment" and s.json().get("detail_hi"), (s.status_code, s.text[:160]))
         r = await cl.get("/nidaan/api/me", headers=tok[3])
         check("/me tells the dashboard to freeze new claims", r.status_code == 200
               and (r.json().get("entitlement") or {}).get("can_raise") is False, r.text[:200])
 
         print("\n-- Raise for a Subscriber --")
         r = await cl.post("/nidaan/ops/api/subscribers/raise-claim", headers=staff,
-                          json=dict(body, account_id=3, no_letter_reason="Insurer has not replied yet"))
-        check("a lapsed plan cannot be used on their behalf either", r.status_code == 400 and "ended" in r.text, r.text[:160])
-        r = await cl.get("/nidaan/ops/api/subscribers/pick?q=Lapsed", headers=staff)
+                          json=dict(body, account_id=8, no_letter_reason="Insurer has not replied yet"))
+        check("a lapsed plan cannot be used on their behalf (staff raise only on a live plan)",
+              r.status_code == 400 and "ended" in r.text, r.text[:160])
+        r = await cl.get("/nidaan/ops/api/subscribers/pick?q=Over", headers=staff)
         rows = r.json().get("subscribers") or []
-        check("the picker SHOWS the lapsed subscriber, with why", rows and rows[0]["entitlement"]["can_raise"] is False
-              and rows[0]["entitlement"]["message_staff"], r.text[:200])
+        ent = rows[0]["entitlement"] if rows else {}
+        check("the picker SHOWS the lapsed subscriber, with why",
+              rows and ent.get("pay_status") not in ("subscription", "paid") and "ended" in (ent.get("message_staff") or ""),
+              r.text[:200])
 
         print("\n-- cancelling --")
 
