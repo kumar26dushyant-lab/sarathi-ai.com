@@ -88,6 +88,38 @@ async def main():
     check("a typed-in copy of the complainant's number and email adds nothing",
           sum(1 for w in ways if "WhatsApp" in w) == 1 and sum(1 for w in ways if "@" in w) == 1, ways)
 
+    print("\n-- who hears what (founder, 3 Oct) --")
+    async with aiosqlite.connect(DBP) as c:
+        await c.execute("INSERT INTO nidaan_staff (staff_id, name, email, password_hash, role, status, phone) "
+                        "VALUES (9,'Ravi','ravi@example.invalid','x','team_member','active','9822222222')")
+        await c.execute("INSERT INTO nidaan_accounts (account_id, owner_name, email, phone, password_hash) "
+                        "VALUES (2,'Advisor','adv@example.invalid','9811111111','x')")
+        await c.execute("INSERT INTO nidaan_claims (claim_id, account_id, claim_type, insured_name, insured_phone, "
+                        "complainant_name, complainant_phone, complainant_email, status, assigned_to_staff_id) VALUES "
+                        "(8,2,'health','KAMLA','','KAMLA','9800000000','k@example.invalid','intimated',9)")
+        await c.commit()
+    pv = await dr.preview(8, doc_keys=["policy_document"], message="Please send your policy")
+    staff_rows = [p for p in pv.get("recipients", []) if p.get("role") == "staff"]
+    check("a staff member copied on a document ask gets it on Telegram - not WhatsApp, not email",
+          staff_rows and staff_rows[0]["ways"] == ["Telegram"], staff_rows)
+    wa.clear(); mail.clear()
+    texts = []
+
+    async def _wa2(p, text):
+        texts.append((p["role"], text))
+    parties._send_party_whatsapp = _wa2
+    nnot.dispatch = _dispatch
+    try:
+        await parties.notify_claim_parties(8, event_key="claim.status", subject="s", body="Claim moved",
+                                           roles=["complainant", "subscriber", "branch", "staff"])
+    finally:
+        nnot.dispatch = real_dispatch
+    sub_txt = [t for r, t in texts if r == "subscriber"]
+    check("the subscriber follows the claim as an FYI on WhatsApp", sub_txt and sub_txt[0].startswith("FYI - "), texts)
+    check("...the complainant gets the update itself, and staff no WhatsApp at all",
+          any(r == "complainant" and not t.startswith("FYI") for r, t in texts) and not any(r == "staff" for r, _ in texts),
+          texts)
+
     print("\n-- one-time messages --")
     sends = []
 

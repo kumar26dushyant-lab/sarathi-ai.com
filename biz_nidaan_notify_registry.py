@@ -117,6 +117,8 @@ EVENTS = [
        "ग्राहक को रिव्यू भेज दिया गया", "Everyone on the claim"),
     _e("claim.no_documents", "claims", "A claim still has no documents",
        "क्लेम में अब तक कोई दस्तावेज़ नहीं", "Everyone on the claim"),
+    _e("claim.doc_request_copy", "claims", "A copy of a document request on your claim (staff: Telegram)",
+       "आपके क्लेम पर दस्तावेज़ माँगने की कॉपी (स्टाफ: टेलीग्राम)", "Staff on the claim"),
     _e("claim.letter_due", "claims", "A claim raised without its rejection letter - daily reminder",
        "बिना रिजेक्शन लेटर का क्लेम - रोज़ की याद", "Whoever raised it (AP or staff)"),
     _e("claim.letter_archived", "claims", "No rejection letter in 7 days - the claim was archived",

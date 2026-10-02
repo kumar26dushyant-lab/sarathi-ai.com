@@ -12859,8 +12859,9 @@ async def ops_update_claim_status(claim_id: int, body: OpsClaimStatusUpdate, req
             body=(f"The claim #{_claim_no(claim_id)}{_who} has moved to: {_st}."
                   + (f"\n\nNote: {body.note}" if body.note else "")
                   + "\n\nOpen it on your dashboard for the full trail."),
-            roles=["complainant", "branch", "staff"],
-            # the account holder was emailed just above; the same inbox does not get it twice
+            # The subscriber follows every claim on their account as an FYI (founder, 3 Oct) - on
+            # WhatsApp; their email already went above, so the same inbox is not written to twice.
+            roles=["complainant", "subscriber", "branch", "staff"],
             skip_emails=[(claim or {}).get("email") or ""]))
     except Exception as _pe:
         logger.info("claim-party fan-out failed for claim %s: %s", claim_id, _pe)

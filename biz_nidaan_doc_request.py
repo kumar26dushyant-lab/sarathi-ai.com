@@ -159,6 +159,7 @@ async def recipients(claim_id: int) -> list[dict]:
                 "missing": party.get("missing") or [],
                 "kind": "to" if role == "complainant" else "cc",
                 "source": "claim",
+                "staff_id": party.get("staff_id"),
             })
     except Exception as e:  # noqa: BLE001
         logger.warning("recipients failed for claim %s: %s", claim_id, e)
@@ -409,6 +410,9 @@ async def preview(claim_id: int, *, doc_keys: list[str], message: str, extras=No
     reach = []
     for p in people:
         ways = []
+        if p.get("role") == "staff":
+            reach.append({**p, "ways": ["Telegram"]})
+            continue
         if p["phone"] and "whatsapp" in channels:
             ways.append("WhatsApp %s" % p["phone"])
         if p["email"] and "email" in channels:
@@ -518,6 +522,19 @@ async def _send(claim_id: int, *, doc_keys: list[str], message: str, confirm: st
     for p in pv["recipients"]:
         row = {"role": p["role"], "name": p["name"] or p["label"], "kind": p["kind"],
                "whatsapp": "", "email": ""}
+        # Staff hear about a claim on Telegram - never WhatsApp, never email (founder, 3 Oct).
+        if p["role"] == "staff":
+            if p.get("staff_id"):
+                try:
+                    import biz_nidaan_notifications as _nn
+                    await _nn.notify_staff_inapp([int(p["staff_id"])], "Copy: " + subject, message,
+                                                 event_key="claim.doc_request_copy", email=False,
+                                                 claim_id=claim_id)
+                    row["telegram"] = "sent"
+                except Exception as e:  # noqa: BLE001
+                    logger.info("staff copy failed for claim %s: %s", claim_id, e)
+            results.append(row)
+            continue
         if p["phone"] and "whatsapp" in pv["channels"]:
             ok, why = await _wa(p["phone"], message)
             row["whatsapp"] = "sent" if ok else (why or "failed")

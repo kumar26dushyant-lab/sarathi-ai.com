@@ -339,7 +339,9 @@ async def _notify_claim_parties(claim_id: int, *, event_key: str, subject: str, 
             # Every notification lands them somewhere useful, on their OWN dashboard.
             link = await dashboard_link(p, claim_id)
             cta = _LINK_CTA.get(p["role"], "Open your dashboard")
-            text = f"{body}{ask}\n\n👉 {cta}:\n{link}"
+            # The subscriber (often the advisor whose client it is) follows the claim: FYI.
+            fyi = "FYI - " if p["role"] == "subscriber" else ""
+            text = f"{fyi}{body}{ask}\n\n👉 {cta}:\n{link}"
             # ── email + dashboard (the always-on rail) ─────────────────────────
             try:
                 if p["role"] == "staff" and p.get("staff_id"):
