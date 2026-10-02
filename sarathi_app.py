@@ -256,6 +256,8 @@ async def _install_bg_exception_handler():
 # to actually fire. Without it, the decorators are silently inert. Discovered
 # during Sprint E.2 hardening (2026-06-11) — every "rate limited" endpoint was
 # wide open until this line was added.
+# Anything a person typed goes into an email's HTML escaped (a name can carry markup or a link).
+from html import escape as _hesc  # noqa: E402
 limiter = Limiter(key_func=get_remote_address, default_limits=["200/minute"])
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -6671,7 +6673,7 @@ async def api_cancel_subscription(req: CancelRequest, request: Request,
                             to_email=tenant_email,
                             subject=f"[Sarathi-AI] Refund of ₹{amount_rupees} initiated",
                             html_body=(
-                                f"<p>Hi {tenant_data.get('owner_name','')},</p>"
+                                f"<p>Hi {_hesc(tenant_data.get('owner_name',''))},</p>"
                                 f"<p>Your Sarathi-AI subscription was cancelled and we have "
                                 f"initiated a full refund of <b>₹{amount_rupees}</b> to your "
                                 f"original payment method.</p>"

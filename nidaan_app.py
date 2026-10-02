@@ -256,6 +256,8 @@ async def _install_bg_exception_handler():
 # to actually fire. Without it, the decorators are silently inert. Discovered
 # during Sprint E.2 hardening (2026-06-11) — every "rate limited" endpoint was
 # wide open until this line was added.
+# Anything a person typed goes into an email's HTML escaped (a name can carry markup or a link).
+from html import escape as _hesc  # noqa: E402
 limiter = Limiter(key_func=get_remote_address, default_limits=["200/minute"])
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -3513,7 +3515,7 @@ async def nidaan_api_signup(body: NidaanSignupReq, request: Request):
         to_email=body.email.strip(),
         subject="Welcome to Nidaan Partner! 🛡️",
         html_body=(
-            f"<p>Hi {body.owner_name.strip()},</p>"
+            f"<p>Hi {_hesc(body.owner_name.strip())},</p>"
             f"<p>Welcome to <b>Nidaan Partner</b> — your gateway to insurance claim dispute resolution.</p>"
             f"<p>Your account is ready. Subscribe to a plan from your dashboard to start submitting claims.</p>"
             f"<p><a href='https://nidaanpartner.com/nidaan/dashboard' style='background:#0891b2;color:#fff;"
@@ -3586,7 +3588,7 @@ async def nidaan_api_signup_mobile(body: NidaanMobileSignupReq, request: Request
             to_email=email,
             subject="Welcome to Nidaan Partner! 🛡️",
             html_body=(
-                f"<p>Hi {name},</p>"
+                f"<p>Hi {_hesc(name)},</p>"
                 f"<p>Welcome to <b>Nidaan Partner</b> — your gateway to insurance claim dispute resolution.</p>"
                 f"<p>Your account is ready.</p>"
                 f"<p>— Nidaan Partner Team</p>"
@@ -3868,8 +3870,9 @@ async def nidaan_api_google_signup(req: NidaanGoogleReq, request: Request):
     """Sign up for a new Nidaan account using Google. If email already registered, signs in instead."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    if req.plan not in ("silver", "gold", "platinum"):
-        req = req.model_copy(update={"plan": "silver"})  # default to silver for any unknown/free plan
+    # A plan is something a person CHOSE (and pays for later) - never a default. Every Google sign-up
+    # used to be recorded and emailed as "Silver Plan", policyholders included (audit, 2 Oct).
+    _gplan = req.plan if req.plan in ("silver", "gold", "platinum") else ""
     google_user = await auth.verify_google_id_token(
         req.credential, expected_client_id=(os.getenv("NIDAAN_GOOGLE_CLIENT_ID") or None))
     if not google_user:
@@ -3889,14 +3892,14 @@ async def nidaan_api_google_signup(req: NidaanGoogleReq, request: Request):
     account_id = await nidaan.create_account_google(
         owner_name=name or email.split("@")[0],
         email=email,
-        plan=req.plan,
+        plan=_gplan,
         branch_code=_gbc,
         utm_source=req.utm_source or "", utm_medium=req.utm_medium or "",
         utm_campaign=req.utm_campaign or "",
     )
     if account_id is None:
         return JSONResponse({"detail": "Email already registered"}, status_code=409)
-    token = nidaan.create_nidaan_token(account_id, email, req.plan)
+    token = nidaan.create_nidaan_token(account_id, email, _gplan)
     import asyncio as _asyncio
     try:
         import biz_nidaan_notifications as _nnot
@@ -3907,19 +3910,21 @@ async def nidaan_api_google_signup(req: NidaanGoogleReq, request: Request):
         to_email=email,
         subject="Welcome to Nidaan Partner! 🛡️",
         html_body=(
-            f"<p>Hi {name or 'there'},</p>"
+            f"<p>Hi {_hesc(name or 'there')},</p>"
             f"<p>Welcome to <b>Nidaan Partner</b> — signed in with Google.</p>"
-            f"<p>You've signed up for the <b>{req.plan.title()} Plan</b>. "
-            f"Complete your subscription payment from your dashboard:</p>"
-            f"<p><a href='https://nidaanpartner.com/nidaan/dashboard' style='background:#0891b2;color:#fff;"
+            + (f"<p>You chose the <b>{_gplan.title()} plan</b>. Complete the payment from your dashboard "
+               f"whenever you are ready:</p>" if _gplan else
+               "<p>Your account is ready. Open your dashboard to raise your claim or choose a plan:</p>")
+            + f"<p><a href='https://nidaanpartner.com/nidaan/dashboard' style='background:#0891b2;color:#fff;"
             f"padding:.6rem 1.2rem;border-radius:8px;text-decoration:none;font-weight:700'>"
             f"Go to Dashboard →</a></p>"
             f"<p>— Nidaan Partner Team</p>"
         ),
         from_name="Nidaan Partner",
     ))
-    logger.info("🆕 Nidaan Google Signup: account %d (%s) plan=%s", account_id, email, req.plan)
-    return {"access_token": token, "account_id": account_id, "plan": req.plan}
+    logger.info("🆕 Nidaan Google Signup: account %d (%s) chose=%s", account_id, email, _gplan or "-")
+    # "plan" is what they HAVE (nothing yet); the plan they clicked travels in the page's own URL.
+    return {"access_token": token, "account_id": account_id, "plan": ""}
 
 
 @app.get("/nidaan/api/me")
@@ -4781,7 +4786,7 @@ async def nidaan_review_pay_verify(purchase_id: int, body: NidaanReviewVerifyByI
         to_email=purchase["advisor_email"],
         subject="Payment confirmed — Your ₹499 claim review is underway",
         html_body=(
-            f"<p>Hi {purchase['advisor_name']},</p>"
+            f"<p>Hi {_hesc(purchase['advisor_name'])},</p>"
             f"<p>Your ₹499 payment has been confirmed. Our legal team has received your review request for your "
             f"<b>{purchase['claim_type']}</b> claim.</p>"
             f"<p>The review will be delivered within <b>48–72 business hours</b> to this email address.</p>"
@@ -5937,7 +5942,7 @@ async def nidaan_review_verify(body: NidaanReviewVerifyReq, request: Request):
         to_email=email,
         subject="Payment confirmed — Your review request is with our legal team",
         html_body=(
-            f"<p>Hi {body.advisor_name},</p>"
+            f"<p>Hi {_hesc(body.advisor_name)},</p>"
             f"<p>Your ₹499 payment has been confirmed. Our legal team has received your review request for "
             f"client <b>{body.insured_name}</b> ({body.claim_type} claim).</p>"
             f"<p>The review will be delivered within <b>48–72 business hours</b> to this email address.</p>"
@@ -5997,7 +6002,7 @@ async def nidaan_api_review_request(body: NidaanReviewReq, request: Request):
         to_email=body.advisor_email,
         subject="Your review request received — Nidaan Partner",
         html_body=(
-            f"<p>Hi {body.advisor_name},</p>"
+            f"<p>Hi {_hesc(body.advisor_name)},</p>"
             f"<p>We've received your ₹499 review request for client <b>{body.insured_name}</b> "
             f"({body.claim_type} claim).</p>"
             f"<p>Our team will send a payment link to this email within a few hours. "
@@ -7244,7 +7249,7 @@ async def nidaan_subscribe_cancel(request: Request):
                         to_email=account["email"],
                         subject=f"[Nidaan] Refund of ₹{amount_rupees} initiated",
                         html_body=(
-                            f"<p>Hi {account.get('owner_name','')},</p>"
+                            f"<p>Hi {_hesc(account.get('owner_name',''))},</p>"
                             f"<p>Your subscription was cancelled and we have initiated a full "
                             f"refund of <b>₹{amount_rupees}</b> to your original payment method.</p>"
                             f"<p><b>Refund ID:</b> {result.get('refund_id','')}<br/>"

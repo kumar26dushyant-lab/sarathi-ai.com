@@ -189,6 +189,26 @@ async def main():
         check("...and the genuine Silver payment activates Silver", r.status_code == 200
               and r.json().get("status") == "active", (r.status_code, r.text[:160]))
 
+    print("\n-- Google sign-up --")
+    sent = []
+
+    async def _google(*a, **k):
+        return {"email": "new@example.com", "name": "<b>Ravi</b>"}
+    app_mod.auth.verify_google_id_token = _google
+
+    async def _send(**k):
+        sent.append(k)
+        return True
+    app_mod.email_svc.send_email = _send
+    async with _RealClient(transport=httpx.ASGITransport(app=app_mod.app), base_url="https://nidaanpartner.com") as cl:
+        r = await cl.post("/nidaan/api/signup/google", json={"credential": "x" * 20, "plan": ""})
+        await asyncio.sleep(0.3)
+    html = " ".join(str(k.get("html_body", "")) for k in sent)
+    check("a Google sign-up that chose no plan is NOT made 'Silver'", r.status_code == 200 and r.json().get("plan") == ""
+          and "Silver" not in html, (r.status_code, r.text[:120], html[:200]))
+    check("...and the name in the welcome email is escaped", "<b>Ravi</b>" not in html and "&lt;b&gt;Ravi" in html,
+          html[:200])
+
     print("\n" + ("all passed" if not FAILED else f"{FAILED} failed"))
     sys.exit(1 if FAILED else 0)
 

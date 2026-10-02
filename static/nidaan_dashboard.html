@@ -135,6 +135,7 @@
   .msg{font-size:.83rem;padding:.55rem .8rem;border-radius:7px;margin-top:.75rem;display:none}
   .msg.err{background:rgba(239,68,68,.14);border:1px solid rgba(239,68,68,.4);color:var(--nd-danger-text);display:block}
   .msg.ok{background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.35);color:var(--nd-success-text);display:block}
+  .msg.info{background:var(--nd-bg-surface-2);border:1px solid var(--nd-border);color:var(--nd-text-secondary);display:block}
 
   .body.hi .en{display:none!important}
   .body.en .hi{display:none!important}
@@ -1282,7 +1283,7 @@ async function loadDashboard() {
       banner.innerHTML = `
         <div class="sub-banner-text">
           <strong>Per-Claim Review — ₹499</strong>
-          <span>${bal} review${bal>1?'s':''} available · ${used} used · <a href="/nidaan/start#plans" style="color:#ffd700;text-decoration:none">Upgrade to subscription</a></span>
+          <span>${bal} review${bal>1?'s':''} available · ${used} used · <a href="#" onclick="openSubscribeModal();return false" style="color:#ffd700;text-decoration:none">Upgrade to subscription</a></span>
         </div>`;
       document.getElementById('newClaimBtn').disabled = false;
       lockOverlay.style.display = 'none';
@@ -1296,8 +1297,8 @@ async function loadDashboard() {
       banner.innerHTML = `
         <div class="sub-banner-text">
           <strong class="en">Need another claim reviewed?</strong><strong class="hi">एक और क्लेम की समीक्षा चाहिए?</strong>
-          <span class="en">${used} review${used>1?'s':''} used · raise another claim below — you pay ₹499 + GST per claim. <a href="/nidaan/start#plans" style="color:#ffd700;text-decoration:none">Or subscribe</a></span>
-          <span class="hi">${used} समीक्षा हो चुकी · नीचे नया क्लेम दर्ज करें — प्रति क्लेम ₹499 + GST। <a href="/nidaan/start#plans" style="color:#ffd700;text-decoration:none">या सब्सक्राइब करें</a></span>
+          <span class="en">${used} review${used>1?'s':''} used · raise another claim below — you pay ₹499 + GST per claim. <a href="#" onclick="openSubscribeModal();return false" style="color:#ffd700;text-decoration:none">Or subscribe</a></span>
+          <span class="hi">${used} समीक्षा हो चुकी · नीचे नया क्लेम दर्ज करें — प्रति क्लेम ₹499 + GST। <a href="#" onclick="openSubscribeModal();return false" style="color:#ffd700;text-decoration:none">या सब्सक्राइब करें</a></span>
         </div>`;
       document.getElementById('newClaimBtn').disabled = false;
       document.querySelectorAll('.tab-btn[data-requires-sub]').forEach(b => b.classList.remove('locked-tab'));
@@ -1998,6 +1999,26 @@ function openSubscribeModal() {
 function closeSubscribeModal() {
   document.getElementById('subscribeModal').classList.remove('open');
 }
+// The checkout closes this window before the payment sheet opens, so anything said afterwards
+// was written into a hidden box (audit, 2 Oct). Bring it back - plan still chosen - to say it.
+function _subShow() { document.getElementById('subscribeModal').classList.add('open'); }
+// Paid but not confirmed yet (UPI autopay can take a minute): wait for the plan to appear.
+async function _subWaitActive(msg, isHi) {
+  _subShow();
+  msg.className = 'msg info';
+  msg.textContent = isHi ? 'हम आपका भुगतान कन्फ़र्म कर रहे हैं - प्लान एक मिनट में चालू हो जाएगा। दोबारा भुगतान न करें।'
+                         : 'We are confirming your payment - your plan will be active in a minute. Please do not pay again.';
+  for (let i = 0; i < 24; i++) {
+    await new Promise(function (r) { setTimeout(r, 5000); });
+    try {
+      const r = await api('/nidaan/api/me');
+      const d = r && r.ok ? await r.json() : null;
+      if (d && d.subscription) { location.href = '/nidaan/success?type=subscription'; return; }
+    } catch (e) { /* keep waiting */ }
+  }
+  msg.textContent = isHi ? 'भुगतान की पुष्टि में देर हो रही है। अगर पैसा कटा है तो प्लान अपने-आप चालू हो जाएगा - दोबारा भुगतान न करें। मदद: WhatsApp +91 91836 86384'
+                         : 'Confirming is taking longer than usual. If money was taken, your plan starts by itself - please do not pay again. Help: WhatsApp +91 91836 86384';
+}
 function toggleNidaanBilling() {
   const tog = document.getElementById('nidaanBillingToggle');
   const isYearly = tog.checked;
@@ -2150,7 +2171,7 @@ async function doSubscribe() {
       const data = await res.json();
       // 1d — already-subscribed guide (server returns 200 with a friendly message, not an error).
       if (data && data.guide) {
-        msg.className = 'msg'; msg.style.color = 'var(--nd-cyan-text, #0891b2)';
+        msg.className = 'msg info';
         msg.textContent = (isHi ? data.message_hi : data.message_en) || (isHi ? 'आपके पास पहले से एक प्लान सक्रिय है।' : 'You already have an active plan.');
         btn.disabled = false; return;
       }
@@ -2177,12 +2198,13 @@ async function doSubscribe() {
           try { if (window.NidaanTrack) NidaanTrack.abandon(); } catch(e){}
           // Closing the sheet and changing your mind look identical from here, so this offers
           // the way through rather than assuming which one it was.
-          if (_payUrl){
-            msg.className = 'msg'; msg.style.color = 'var(--nd-text-secondary)';
-            msg.textContent = isHi ? 'भुगतान पूरा नहीं हुआ \u2014 आपसे कोई राशि नहीं ली गई।'
-                                   : 'Payment was not completed \u2014 you were NOT charged.';
-            _subPayFallback(msg, _payUrl, isHi);
-          }
+          // We cannot know here whether money moved (UPI autopay can finish after the sheet
+          // closes), so this never says "you were not charged".
+          _subShow();
+          msg.className = 'msg info';
+          msg.textContent = isHi ? 'भुगतान पूरा नहीं हुआ। अगर पैसा कट गया है तो प्लान अपने-आप चालू हो जाएगा - दोबारा भुगतान न करें।'
+                                 : 'The payment was not completed. If money was taken, your plan starts by itself - please do not pay again.';
+          if (_payUrl) _subPayFallback(msg, _payUrl, isHi);
         } },
         handler: async function(response) {
           try { if (window.NidaanTrack) NidaanTrack.completeFlow(); } catch(e){}
@@ -2201,7 +2223,9 @@ async function doSubscribe() {
               }),
             });
             const vd = await vr.json();
+            if (vr.ok && vd.status === 'pending') { await _subWaitActive(msg, isHi); return; }
             if (!vr.ok) {
+              _subShow();
               msg.className = 'msg err';
               msg.textContent = _extractErr(vd, 'Activation failed') + ' — Payment ID: ' + response.razorpay_payment_id;
               btn.disabled = false; return;
@@ -2212,8 +2236,10 @@ async function doSubscribe() {
             }
             location.href = '/nidaan/success?type=subscription';
           } catch(e) {
+            _subShow();
             msg.className = 'msg err';
-            msg.textContent = 'Activation error — contact support with Payment ID: ' + response.razorpay_payment_id;
+            msg.textContent = (isHi ? 'प्लान चालू करने में दिक्कत - भुगतान ID के साथ हमसे संपर्क करें: '
+                                    : 'Could not activate your plan - contact us with this payment ID: ') + response.razorpay_payment_id;
             btn.disabled = false;
           }
         },
@@ -2221,9 +2247,10 @@ async function doSubscribe() {
       if (!(await _gstConfirm(data.gst, planLabel + ' Plan'))) { btn.disabled = false; return; }
       _payOpened('subscription');
       rzpSub.on('payment.failed', function(){
+        _subShow();
         msg.className = 'msg err';
-        msg.textContent = isHi ? 'भुगतान पूरा नहीं हुआ — आपसे कोई राशि नहीं ली गई। कृपया दोबारा कोशिश करें।'
-                               : 'Payment could not be completed — you were NOT charged. Please try again.';
+        msg.textContent = isHi ? 'यह भुगतान नहीं हो पाया। कृपया दोबारा कोशिश करें या नीचे दिए लिंक से भुगतान करें।'
+                               : 'That payment did not go through. Please try again, or pay from the link below.';
         _subPayFallback(msg, _payUrl, isHi);
         btn.disabled = false;
       });
@@ -2232,112 +2259,16 @@ async function doSubscribe() {
       try {
         rzpSub.open();
       } catch(_e) {
+        _subShow();
         msg.className = 'msg err';
         msg.textContent = isHi ? 'पेमेंट विंडो नहीं खुल पाई।'
                                : 'The payment window could not open.';
         _subPayFallback(msg, _payUrl, isHi);
         btn.disabled = false;
       }
-    } else {
-      // ── One-time Order flow (existing, also used for annual plans) ─────────
-      const res = await api('/nidaan/api/subscribe', {
-        method: 'POST',
-        body: JSON.stringify({ plan: _selectedPlan })
-      });
-      if (!res) return;
-      const data = await res.json();
-      // 1d — already-subscribed guide (server returns 200 with a friendly message, not an error).
-      if (data && data.guide) {
-        msg.className = 'msg'; msg.style.color = 'var(--nd-cyan-text, #0891b2)';
-        msg.textContent = (isHi ? data.message_hi : data.message_en) || (isHi ? 'आपके पास पहले से एक प्लान सक्रिय है।' : 'You already have an active plan.');
-        btn.disabled = false; return;
-      }
-      if (!res.ok) throw new Error(_extractErr(data, 'Subscription failed'));
-
-      const isAnnual = data.plan.endsWith('_annual');
-      const planLabel = data.plan.replace('_annual','').charAt(0).toUpperCase() + data.plan.replace('_annual','').slice(1);
-      const periodLabel = isAnnual ? '12 months access' : '1 month access';
-
-      // Store pending payment — recovery fallback for UPI app-switch / browser context loss.
-      // localStorage (NOT sessionStorage) is deliberate: mobile browsers often KILL the tab
-      // during a UPI app-switch, which wipes sessionStorage. localStorage survives, so even a
-      // fresh tab recovers the order on load (30-min expiry). The webhook is the final backstop.
-      localStorage.setItem('nidaan_pending_order', JSON.stringify({
-        order_id: data.order_id,
-        plan: data.plan,
-        amount: data.amount,
-        key: data.razorpay_key_id,
-        ts: Date.now(),
-      }));
-
-      const opts = {
-        key: data.razorpay_key_id,
-        order_id: data.order_id,
-        amount: data.amount,
-        currency: 'INR',
-        name: 'Nidaan Partner',
-        description: planLabel + ' Plan — Insurance Claim Advisory (' + periodLabel + ')',
-        image: '/static/nidaan_logo.png',
-        theme: { color: '#06b6d4', backdrop_color: '#0a1628' },
-        prefill: {
-          email: _meCache ? _meCache.email : '',
-          contact: _meCache ? _meCache.phone : '',
-          name: _meCache ? _meCache.owner_name : '',
-        },
-        modal: {
-          backdropclose: false,
-          escape: false,
-          ondismiss: function() { recoverPendingPayment(true); }
-        },
-        handler: async function(response) {
-          _payDone();   // paid - must not also count as an abandonment
-          msg.className = 'msg ok';
-          msg.textContent = isHi ? 'भुगतान सफल! प्लान सक्रिय हो रहा है…' : 'Payment received! Activating your plan…';
-          btn.disabled = true;
-          try {
-            const vr = await fetch('/nidaan/api/subscribe/verify', {
-              method: 'POST',
-              headers: { 'Authorization': 'Bearer ' + localStorage.getItem(TOKEN_KEY), 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_order_id: response.razorpay_order_id,
-                razorpay_signature: response.razorpay_signature,
-                plan: data.plan,
-              }),
-            });
-            const vd = await vr.json();
-            if (!vr.ok) {
-              msg.className = 'msg err';
-              msg.textContent = _extractErr(vd, 'Activation failed') + ' — Payment ID: ' + response.razorpay_payment_id;
-              btn.disabled = false; return;
-            }
-            if (vd.token) {
-              localStorage.setItem(TOKEN_KEY, vd.token);
-              localStorage.setItem('nidaan_plan', vd.plan);
-            }
-            localStorage.removeItem('nidaan_pending_order');
-            closeSubscribeModal();
-            location.href = '/nidaan/success?type=subscription';
-          } catch(e) {
-            msg.className = 'msg err';
-            msg.textContent = 'Payment received but activation failed (network error). Retrying… Payment ID: ' + response.razorpay_payment_id;
-            setTimeout(function() { recoverPendingPayment(true); }, 3000);
-          }
-        },
-      };
-      if (!(await _gstConfirm(data.gst, planLabel + ' Plan'))) { btn.disabled = false; return; }
-      closeSubscribeModal();
-      const rzp = new Razorpay(opts);
-      rzp.on('payment.failed', function(){
-        const b = document.getElementById('subBanner');
-        if (b) { b.className = 'sub-banner'; b.style.display = '';
-          b.innerHTML = '<div class="sub-banner-text" style="color:#f87171">'
-            + '<strong class="en">Payment could not be completed — you were NOT charged. Please try again.</strong>'
-            + '<strong class="hi">भुगतान पूरा नहीं हुआ — आपसे कोई राशि नहीं ली गई। कृपया दोबारा कोशिश करें।</strong></div>'; }
-      });
-      _payOpened('subscription');
-      rzp.open();
     }
+    // (The one-time order branch was removed 2 Oct: every plan is recurring, and its server
+    //  routes are retired - their verify trusted the plan the browser named.)
   } catch(err) {
     msg.className = 'msg err';
     msg.textContent = err.message;
@@ -2347,9 +2278,10 @@ async function doSubscribe() {
 
 // ── Switch plan from profile ──────────────────────────────────────────────────
 function switchPlan(plan) {
-  // If same as current, no-op
-  const curPlan = localStorage.getItem('nidaan_plan') || '';
-  if (plan === curPlan) return;
+  // Only a plan they actually HAVE makes this a no-op. The sign-up stored the plan they clicked
+  // before paying, so a new person who chose Silver never saw the checkout (audit, 2 Oct).
+  const curPlan = (_meCache && _meCache.subscription && _meCache.subscription.plan) || '';
+  if (plan && plan === curPlan) return;
   // Open subscribe modal with plan pre-selected
   openSubscribeModal();
   selectPlan(plan);
