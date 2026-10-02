@@ -9,6 +9,15 @@ _Legend: 🔴 blocked/awaiting owner · 🟡 in progress · 🟢 next/planned ·
 _Anything raised and not finished lives here until it is done, so an interruption does not lose
 it. Newest first within each group._
 
+### ▶ 2 Oct — URGENT: one claim intake standard at every door (founder)
+
+| # | What | Notes |
+|---|---|---|
+| I1 | **My Business form says "Customer" - no patient, no complainant** | Not changed recently: it has asked for ONE "customer" since it was built (10 Aug, `4c5f6a9`); the server stores that one person as BOTH patient and complainant. The AP form asks for them separately - the forms drifted |
+| I2 | **The same core intake at EVERY door** (direct / subscriber, AP, CP, My Business, Raise for a Subscriber, Rs 499 review, WhatsApp, ...): (1) patient/insured name REQUIRED, mobile + email optional; (2) complainant name + mobile + email ALL REQUIRED, with a soft "double-check these - we use them for the whole case" nudge and OTP verification of at least one (email or WhatsApp) from our official email / WhatsApp; the welcome goes after verification; (3) insurance type - all standard types (health, motor, travel, fire, ...); (4) insurance company; (5) disputed amount; (6) policy no. optional; (7) rejection letter REQUIRED. Everything else is per door | Founder: "basic details ... unified at all places and other details as per the scenario" |
+| I3 | **The AP's name in EMAIL signatures too, for AP cases** (as in WhatsApp) | Built 1 Oct for both email and WhatsApp (`b6e6944`) - confirm it covers the welcome email once I2 sends it after verification |
+| I4 | **Advise on industry best practice** for a strong, reliable product on every device (Android, iOS, tablet, web, mobile web, installed web app that feels like a Play Store app) | Founder asked for recommendations, not just execution |
+
 ### ▶ 2 Oct (morning) — decisions and the next discussion
 
 | # | What | Notes |
