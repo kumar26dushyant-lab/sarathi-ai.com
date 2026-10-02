@@ -178,6 +178,64 @@ async def main():
         check("cancelling stops the autopay and KEEPS the paid period", r.status_code == 200
               and r.json().get("status") == "autopay_off" and e2["can_raise"] and e2["autopay_on"] is False,
               (r.status_code, r.text[:160], e2))
+        g = await app_mod._nidaan_resub_guard(2, "gold")
+        check("...and moving to a different plan is allowed (the old autopay stops when it starts)", g is None, g)
+        g = await app_mod._nidaan_resub_guard(2, "silver")
+        check("...the same plan with autopay off is told it ends, not that it renews",
+              g and "Autopay is off" in g["message_en"], g)
+
+        print("\n-- the pre-deploy review (3 Oct) --")
+        # 1. a credit is used exactly once - an older unlinked credit no longer gives paid claims for ever
+        await ex("INSERT INTO nidaan_accounts (account_id, owner_name, email, phone, password_hash, status) "
+                 "VALUES (20,'Two Credits','c20@example.invalid','9000000020','x','active')")
+        for _ in range(2):
+            await ex("INSERT INTO nidaan_per_claim_purchase (account_id, status, amount_paid, claim_type, insured_name, "
+                     "insured_phone, advisor_name, advisor_phone, advisor_email) VALUES "
+                     "(20,'paid',499,'health','A','9000000000','A','9000000000','a@example.invalid')")
+        res = await asyncio.gather(*[nid.submit_claim(account_id=20, user_id=None, claim_type="health",
+                                                      insured_name="A", insured_phone="", payment_status="paid")
+                                     for _ in range(4)])
+        ok = [cid for cid, _ in res if cid]
+        async with aiosqlite.connect(DBP) as c:
+            left = (await (await c.execute("SELECT COUNT(*) FROM nidaan_per_claim_purchase WHERE account_id=20 "
+                                           "AND linked_claim_id IS NULL")).fetchone())[0]
+        check("two credits, four submits at once: exactly two paid claims, both credits used", len(ok) == 2 and left == 0,
+              (res, left))
+        # 6. "one unpaid at a time" holds under a race
+        await ex("INSERT INTO nidaan_accounts (account_id, owner_name, email, phone, password_hash, status) "
+                 "VALUES (21,'Racer','c21@example.invalid','9000000021','x','active')")
+        res = await asyncio.gather(*[nid.submit_claim(account_id=21, user_id=None, claim_type="health",
+                                                      insured_name="A", insured_phone="", payment_status="unpaid_lead",
+                                                      skip_eligibility=True) for _ in range(3)])
+        check("three first claims at the same moment: ONE goes in", len([c for c, _ in res if c]) == 1, res)
+        # 5. an archived unpaid claim does not freeze the account
+        await ex("UPDATE nidaan_claims SET archived=1 WHERE account_id=21")
+        e21 = await nid.claim_entitlement(21)
+        check("an archived unpaid claim does not freeze the account", e21["can_raise"], e21)
+        # 2. nobody can take a house-account address
+        await ex("INSERT INTO nidaan_accounts (account_id, owner_name, email, phone, password_hash, status) "
+                 "VALUES (22,'Sneaky','','9000000022','x','active')")
+        t22 = {"Authorization": "Bearer " + nid.create_nidaan_token(22, "")}
+        await cl.post("/nidaan/api/subscribe/precapture", headers=t22,
+                      json={"owner_name": "Sneaky", "phone": "9000000022", "email": "branch.ap777@house.nidaanpartner.internal"})
+        async with aiosqlite.connect(DBP) as c:
+            em22 = (await (await c.execute("SELECT email FROM nidaan_accounts WHERE account_id=22")).fetchone())[0]
+        check("a customer cannot take a house-account address", em22 == "", em22)
+        await ex("UPDATE nidaan_accounts SET email='branch.ap778@house.nidaanpartner.internal' WHERE account_id=22")
+        check("...and a lookalike is never treated as a house account", (await nid.claim_entitlement(22))["reason"] != "house_account")
+        try:
+            await nid.get_or_create_branch_house_account("AP778")
+            hijack = True
+        except RuntimeError:
+            hijack = False
+        check("...nor are an AP's claims ever filed into it", not hijack)
+        # 12. a pay-per-review claim at the cap does not count against the plan
+        q0 = await nid.claim_entitlement(7)
+        await nid.submit_claim(account_id=7, user_id=None, claim_type="health", insured_name="A", insured_phone="",
+                               payment_status="unpaid_lead", skip_eligibility=True)
+        q1 = await nid.claim_entitlement(7)
+        check("a claim that is paid for separately does not use up the plan's count", q1["used"] == q0["used"],
+              (q0["used"], q1["used"]))
 
     print("\n" + ("all passed" if not FAILED else f"{FAILED} failed"))
     sys.exit(1 if FAILED else 0)

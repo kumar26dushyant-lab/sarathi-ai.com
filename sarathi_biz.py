@@ -6720,9 +6720,16 @@ async def nidaan_razorpay_webhook(request: Request):
                 await _ac.commit()
         except Exception as _are:  # noqa: BLE001
             logger.error("autopay-off mark failed for %s: %s", rzp_sub_id, _are)
-        # B3: unified teardown — webhook + manual cancel converge here.
+        # B3: unified teardown — webhook + manual cancel converge here. But NOT while the plan this
+        # mandate paid for still runs (a cancel now keeps the paid period): the expiry sweep ends
+        # the bundle with the plan (review, 3 Oct: an annual customer would have lost months).
         try:
-            await nidaan.apply_bundle_teardown(account_id, reason=f"webhook_{event}")
+            async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _ac2:
+                _still = (await (await _ac2.execute(
+                    "SELECT COUNT(*) FROM nidaan_subscriptions WHERE razorpay_subscription_id=? AND status='active' "
+                    "AND datetime(current_period_end) > datetime('now')", (rzp_sub_id,))).fetchone())[0]
+            if not _still:
+                await nidaan.apply_bundle_teardown(account_id, reason=f"webhook_{event}")
         except Exception as bwe:
             logger.error("Bundle teardown on webhook failed: %s", bwe)
         # #3(ii): a HALTED subscription = recurring failed after retries — alert super-admins.
@@ -6990,6 +6997,12 @@ async def _nidaan_resub_guard(account_id: int, requested_plan: str) -> Optional[
         return None
     cur_plan = (cur.get("plan") or "").strip().lower()
     same = cur_plan == (requested_plan or "").strip().lower()
+    # A DIFFERENT plan is a switch (the at-cap "move to a bigger plan", Profile's Change Plan): it
+    # goes ahead; when the new plan starts, the old one ends and its autopay is stopped
+    # (create_subscription), so there is never a second mandate (review, 3 Oct).
+    if not same:
+        return None
+    autopay_off = int(cur.get("auto_renew") if cur.get("auto_renew") is not None else 1) == 0
     cur_lbl = _plan_label(cur_plan)
     ends = ""
     try:
@@ -7002,7 +7015,12 @@ async def _nidaan_resub_guard(account_id: int, requested_plan: str) -> Optional[
         ends = (cur.get("current_period_end") or "")[:10]
     until_en = f" It stays active till {ends}." if ends else ""
     until_hi = f" यह {ends} तक सक्रिय है।" if ends else ""
-    if same:
+    if same and autopay_off:
+        msg_en = (f"Your {cur_lbl} plan is active.{until_en} Autopay is off, so it ends then - "
+                  f"you can subscribe again after that, or choose a different plan now.")
+        msg_hi = (f"आपका {cur_lbl} प्लान सक्रिय है।{until_hi} ऑटो-पे बंद है, इसलिए यह तब ख़त्म होगा - "
+                  f"उसके बाद फिर से सब्सक्राइब करें, या अभी कोई दूसरा प्लान चुनें।")
+    elif same:
         msg_en = (f"You already have the {cur_lbl} plan active.{until_en} "
                   f"No need to pay again — it renews automatically.")
         msg_hi = (f"आपके पास पहले से {cur_lbl} प्लान सक्रिय है।{until_hi} "
@@ -7212,10 +7230,16 @@ async def nidaan_subscribe_cancel(request: Request):
                     _kept.get("period_end"), account["account_id"], sub_id)
         return {"status": "autopay_off", "period_end": _kept.get("period_end", ""),
                 "autopay_stopped": bool(_kept.get("ok")),
-                "message": "Autopay is off. Your plan stays active until %s - no more charges."
-                           % (_kept.get("period_end") or "the end of this period"),
-                "message_hi": "ऑटो-पे बंद हो गया। आपका प्लान %s तक चालू रहेगा - आगे कोई भुगतान नहीं कटेगा।"
-                              % (_kept.get("period_end") or "इस अवधि के अंत")}
+                "message": (("Autopay is off. Your plan stays active until %s - no more charges."
+                             if _kept.get("ok") else
+                             "Your plan stays active until %s. We are stopping the autopay with the bank - "
+                             "our team is on it and you will not be charged again.")
+                            % (_kept.get("period_end") or "the end of this period")),
+                "message_hi": (("ऑटो-पे बंद हो गया। आपका प्लान %s तक चालू रहेगा - आगे कोई भुगतान नहीं कटेगा।"
+                                if _kept.get("ok") else
+                                "आपका प्लान %s तक चालू रहेगा। हम बैंक से ऑटो-पे बंद करवा रहे हैं - हमारी टीम लगी है, "
+                                "आपसे दोबारा पैसा नहीं कटेगा।")
+                               % (_kept.get("period_end") or "इस अवधि के अंत"))}
     # 1. Mark cancelled in our DB (fast, always succeeds)
     await nidaan.cancel_nidaan_subscription(account["account_id"])
     logger.info("Nidaan sub cancelled: account=%d sub_id=%d",
@@ -7383,7 +7407,11 @@ async def nidaan_subscribe_precapture(body: _PreCaptureReq, request: Request):
             await nidaan.set_account_branch(account["account_id"], bc)
         except Exception:
             pass
-    em = (body.email or "").strip()
+    # Only a real address, and never one of our reserved house-account addresses: an unchecked
+    # address here let a customer take the address an AP's claims are filed under (review, 3 Oct).
+    em = auth.sanitize_email(body.email or "")
+    if em and nidaan.is_reserved_email(em):
+        em = ""
     if em:  # best-effort; only fill when empty so we never clobber / clash on unique email
         try:
             async with __import__("aiosqlite").connect(nidaan.DB_PATH) as _c:

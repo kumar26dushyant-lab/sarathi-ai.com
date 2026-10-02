@@ -932,7 +932,9 @@ async def _check_effects_and_duplicates(findings: list, ran: set) -> None:
         late = [dict(r) for r in await (await c.execute(
             "SELECT s.account_id, s.plan, s.current_period_end, a.owner_name FROM nidaan_subscriptions s "
             "LEFT JOIN nidaan_accounts a ON a.account_id=s.account_id "
-            "WHERE s.status='active' AND datetime(s.current_period_end) < datetime('now','-1 day')")).fetchall()]
+            # Same grace as biz_nidaan.get_active_subscription: autopay on gets 3 days for the renewal.
+            "WHERE s.status='active' AND datetime(s.current_period_end) < datetime('now', "
+            "CASE WHEN COALESCE(s.auto_renew,1)=1 THEN '-3 days' ELSE '+0 days' END)")).fetchall()]
         for s in late:
             findings.append({
                 "key": "renewal_overdue:%s:%s" % (s["account_id"], str(s["current_period_end"])[:10]),

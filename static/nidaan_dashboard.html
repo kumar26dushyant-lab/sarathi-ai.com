@@ -1304,7 +1304,7 @@ async function loadDashboard() {
         <div class="sub-banner-text">
           <strong class="en">Need another claim reviewed?</strong><strong class="hi">एक और क्लेम की समीक्षा चाहिए?</strong>
           <span class="en">${used} review${used>1?'s':''} used · see your claims below. <a href="#" onclick="openSubscribeModal();return false" style="color:#ffd700;text-decoration:none">Or subscribe</a></span>
-          <span class="hi">${used} समीक्षा हो चुकी · नीचे नया क्लेम दर्ज करें — प्रति क्लेम ₹499 + GST। <a href="#" onclick="openSubscribeModal();return false" style="color:#ffd700;text-decoration:none">या सब्सक्राइब करें</a></span>
+          <span class="hi">${used} समीक्षा हो चुकी · नीचे अपने क्लेम देखें। <a href="#" onclick="openSubscribeModal();return false" style="color:#ffd700;text-decoration:none">या सब्सक्राइब करें</a></span>
         </div>`;
       _enableRaise();
       document.querySelectorAll('.tab-btn[data-requires-sub]').forEach(b => b.classList.remove('locked-tab'));
@@ -2409,6 +2409,13 @@ async function loadProfile() {
     document.getElementById('pf-sub-status').textContent = sub.status || '—';
     document.getElementById('pf-amount').textContent     = sub.amount_paid ? '₹' + sub.amount_paid.toLocaleString('en-IN') : '—';
     document.getElementById('pf-renew').textContent      = sub.current_period_end ? sub.current_period_end.split('T')[0] : '—';
+    // Autopay off (cancelled, plan kept to its paid end): say so, and nothing left to cancel.
+    if (sub.auto_renew === 0 || sub.auto_renew === '0') {
+      const _isHi = document.body.classList.contains('hi');
+      document.getElementById('pf-renew').textContent = (_isHi ? 'ऑटो-पे बंद - ख़त्म ' : 'Autopay off - ends ')
+        + ((sub.current_period_end || '').split('T')[0] || '—');
+      document.getElementById('cancelSubBtn').style.display = 'none';
+    }
     // Update current plan indicator
     document.querySelectorAll('.plan-opt').forEach(p => p.classList.remove('current-plan'));
     const curOpt = document.getElementById('po-' + sub.plan);

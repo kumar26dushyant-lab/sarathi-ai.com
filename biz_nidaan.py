@@ -1800,6 +1800,18 @@ async def create_subscription(
     period_end = datetime.utcnow() + timedelta(days=period_days)
     # We only offer MONTHLY or ANNUAL (no quarterly) — label from the period.
     _cycle = "annual" if period_days >= 350 else "monthly"
+    # The plan being replaced must not keep charging: stop its autopay at Razorpay first (it used to
+    # be cancelled in our records only - a switch could leave two mandates; review, 3 Oct).
+    async with aiosqlite.connect(DB_PATH) as conn:
+        _old = [r[0] for r in await (await conn.execute(
+            "SELECT razorpay_subscription_id FROM nidaan_subscriptions WHERE account_id=? AND status='active' "
+            "AND COALESCE(razorpay_subscription_id,'') LIKE 'sub_%' AND razorpay_subscription_id<>?",
+            (account_id, razorpay_subscription_id or ""))).fetchall()]
+    for _rs in _old:
+        try:
+            await stop_razorpay_autopay(_rs)
+        except Exception as _se:  # noqa: BLE001 - the switch goes ahead; the guardian sees a stray charge
+            logger.error("could not stop replaced autopay %s: %s", _rs, _se)
     async with aiosqlite.connect(DB_PATH) as conn:
         await conn.execute(
             "UPDATE nidaan_subscriptions SET status='cancelled', cancelled_at=CURRENT_TIMESTAMP "
@@ -1933,6 +1945,18 @@ def claim_block_message(reason: str, *, for_staff: bool = False) -> str:
 
 HOUSE_DOMAIN = "@house.nidaanpartner.internal"
 
+
+def is_house_account(acct: Optional[dict]) -> bool:
+    """An AP / staff house account: the reserved address AND the name the system gave it. No
+    customer can hold the address (is_reserved_email refuses it everywhere a customer sets one)."""
+    a = acct or {}
+    return ((a.get("email") or "").lower().endswith(HOUSE_DOMAIN)
+            and (a.get("owner_name") or "").endswith("— house account"))
+
+
+def is_reserved_email(email: str) -> bool:
+    return (email or "").strip().lower().endswith(HOUSE_DOMAIN)
+
 _ENT_WORDS = {
     "ok_subscription": ("", ""),
     "ok_per_claim_credit": ("", ""),
@@ -2010,7 +2034,7 @@ async def claim_entitlement(account_id: int) -> dict:
     acct = await get_account_by_id(account_id)
     if not acct or (acct.get("status") or "active") not in ("active", "deletion_pending"):
         return _ent_words(out)
-    if (acct.get("email") or "").lower().endswith(HOUSE_DOMAIN):
+    if is_house_account(acct):
         out.update(can_raise=True, reason="house_account", pay_status="unpaid_lead")
         return _ent_words(out)
     async with aiosqlite.connect(DB_PATH) as conn:
@@ -2024,8 +2048,8 @@ async def claim_entitlement(account_id: int) -> dict:
             "SELECT COUNT(*) FROM nidaan_per_claim_purchase WHERE account_id=? "
             "AND status NOT IN ('pending_payment','cancelled')", (account_id,))).fetchone())[0]
         claims = (await (await conn.execute(
-            "SELECT COUNT(*), SUM(COALESCE(payment_status,'')='unpaid_lead') FROM nidaan_claims "
-            "WHERE account_id=?", (account_id,))).fetchone())
+            "SELECT COUNT(*), SUM(COALESCE(payment_status,'')='unpaid_lead' AND COALESCE(archived,0)=0) "
+            "FROM nidaan_claims WHERE account_id=?", (account_id,))).fetchone())
         quota = await (await conn.execute(
             "SELECT * FROM nidaan_plan_quota WHERE account_id=?", (account_id,))).fetchone()
     n_claims, n_unpaid = int(claims[0] or 0), int(claims[1] or 0)
@@ -2144,8 +2168,11 @@ async def get_or_create_branch_house_account(branch_code: str) -> int:
     house_phone = ""
     async with aiosqlite.connect(DB_PATH) as conn:
         row = await (await conn.execute(
-            "SELECT account_id FROM nidaan_accounts WHERE email=?", (house_email,))).fetchone()
+            "SELECT account_id, owner_name FROM nidaan_accounts WHERE email=?", (house_email,))).fetchone()
         if row:
+            if not (row[1] or "").endswith("— house account"):
+                # Somebody else's account holds this address: never file an AP's claims into it.
+                raise RuntimeError("house account address %s is held by account %s" % (house_email, row[0]))
             return row[0]
         import secrets as _secrets
         pw = _hash_password(_secrets.token_hex(16))
@@ -2425,6 +2452,7 @@ async def submit_claim(
     raised_by_staff_id=None,
     raised_by_name: str = "",
     raised_via: str = "",
+    link_purchase_id: Optional[int] = None,
 ) -> tuple[Optional[int], str]:
     """
     Submit a new claim after quota check.
@@ -2454,7 +2482,46 @@ async def submit_claim(
     complainant_phone = (complainant_phone or "").strip() or insured_phone
     complainant_email = (complainant_email or "").strip() or insured_email
     complainant_role = (complainant_role or "").strip() or ("branch" if (origin or "") == "branch" else "self")
+    # Read before the lock: the live plan and its cap (config does not race).
+    sub = await get_active_subscription(account_id)
+    _cap = None
+    if sub and payment_status == "subscription":
+        _cfg = await get_plan_cfg(sub["plan"])
+        _cap = _cfg.get("claims_per_month") if _cfg else PLAN_LIMITS.get(sub["plan"], {}).get("claims_per_month")
+    _acct = await get_account_by_id(account_id) or {}
     async with aiosqlite.connect(DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        # ONE locked transaction (review, 3 Oct): the rule is re-checked here, so two submits at the
+        # same moment cannot both pass it, and a paid review credit is used exactly once.
+        await conn.execute("BEGIN IMMEDIATE")
+        _credit_id = None
+        if payment_status == "paid":
+            if link_purchase_id:
+                r = await (await conn.execute(
+                    "SELECT purchase_id FROM nidaan_per_claim_purchase WHERE purchase_id=? AND account_id=? "
+                    "AND status='paid' AND linked_claim_id IS NULL", (int(link_purchase_id), account_id))).fetchone()
+            else:
+                r = await (await conn.execute(
+                    "SELECT purchase_id FROM nidaan_per_claim_purchase WHERE account_id=? AND status='paid' "
+                    "AND linked_claim_id IS NULL ORDER BY purchase_id LIMIT 1", (account_id,))).fetchone()
+            if not r:
+                await conn.rollback()
+                return None, "per_claim_balance_exhausted"
+            _credit_id = r[0]
+        elif payment_status == "unpaid_lead" and not is_house_account(_acct):
+            n = (await (await conn.execute(
+                "SELECT COUNT(*) FROM nidaan_claims WHERE account_id=? AND payment_status='unpaid_lead' "
+                "AND COALESCE(archived,0)=0", (account_id,))).fetchone())[0]
+            if n:
+                await conn.rollback()
+                return None, "lead_pending_payment"
+        elif payment_status == "subscription" and _cap is not None:
+            q = await (await conn.execute("SELECT * FROM nidaan_plan_quota WHERE account_id=?",
+                                          (account_id,))).fetchone()
+            _qd = dict(q) if q else None
+            if quota_used(_qd, sub) >= _cap:
+                await conn.rollback()
+                return None, "quota_exceeded_%s" % sub["plan"]
         cur = await conn.execute(
             """INSERT INTO nidaan_claims
                (account_id, user_id, claim_type, insured_name, insured_phone,
@@ -2499,21 +2566,16 @@ async def submit_claim(
             (claim_id, _first_note, ("staff" if raised_by_name else "advisor"),
              (raised_by_staff_id if raised_by_name else account_id)),
         )
-        # Quota: only increment for subscription users (per-claim users have 1-claim hard limit via linked_claim_id)
-        sub = await get_active_subscription(account_id)
-        if sub:
+        # The plan's count goes up only for a claim ON the plan - not a paid review or a
+        # pay-per-review claim raised by a subscriber whose cap is used (review, 3 Oct).
+        if sub and payment_status == "subscription":
             await _increment_quota(account_id, conn, sub)
+        # A paid review credit is used by THIS claim, exactly once (it was "the newest paid
+        # purchase", so an older credit was never used up and gave paid claims for ever).
+        if _credit_id:
+            await conn.execute("UPDATE nidaan_per_claim_purchase SET linked_claim_id=? WHERE purchase_id=?",
+                               (claim_id, _credit_id))
         await conn.commit()
-
-    # Per-claim users: link this claim back to their purchase (enforces the 1-claim limit server-side)
-    purchase = await get_active_per_claim_purchase(account_id)
-    if purchase and purchase["linked_claim_id"] is None:
-        async with aiosqlite.connect(DB_PATH) as conn:
-            await conn.execute(
-                "UPDATE nidaan_per_claim_purchase SET linked_claim_id=? WHERE purchase_id=?",
-                (claim_id, purchase["purchase_id"]),
-            )
-            await conn.commit()
 
     logger.info("nidaan claim %d submitted: account=%d type=%s", claim_id, account_id, claim_type)
     return claim_id, "ok"
@@ -2567,6 +2629,7 @@ async def ensure_claim_for_paid_purchase(purchase_id: int) -> Optional[int]:
         payment_status="paid",
         skip_eligibility=True,                          # already paid — never gate on quota
         origin="d2c_review",
+        link_purchase_id=purchase_id,                   # this purchase IS the credit it uses
     )
     if not claim_id:
         logger.error("ensure_claim_for_paid_purchase: submit_claim failed purchase=%s msg=%s",
@@ -6248,7 +6311,7 @@ async def stop_autopay_keep_period(account_id: int) -> dict:
                 ids, "⚠️ Autopay NOT stopped at Razorpay",
                 "A customer cancelled (account %s) but Razorpay did not confirm the stop for %s. "
                 "Stop it by hand in Razorpay so they are not charged again." % (account_id, ", ".join(not_stopped)),
-                event_key="payment.guardian", email=True)
+                event_key="payment.autopay_stop_failed", email=True)
         except Exception as e:  # noqa: BLE001
             logger.error("autopay-not-stopped alert failed: %s", e)
     ends = max((str(r.get("current_period_end") or "")[:10] for r in rows), default="")
@@ -6624,6 +6687,8 @@ async def update_account_profile(account_id: int, owner_name: str = None,
                                   email: str = None) -> bool:
     """Update mutable profile fields on a Nidaan account. Email is UNIQUE — a clash is reported
     via ValueError so the caller can surface a clean message."""
+    if email is not None and is_reserved_email(email):
+        raise ValueError("That address is reserved for the system and cannot be used.")
     fields, vals = [], []
     if owner_name is not None:
         fields.append("owner_name=?"); vals.append(owner_name)
@@ -8787,6 +8852,8 @@ async def create_account_by_admin(
     plan: str = "free",
 ) -> Optional[int]:
     """Create a new advisor account directly (no password — invite flow or set later)."""
+    if is_reserved_email(email):
+        return None             # reserved for AP / staff house accounts
     tmp_pw = secrets.token_hex(16)  # random unguessable password — admin must reset
     return await create_account(owner_name=owner_name, email=email, phone=phone,
                                 password=tmp_pw, firm_name=firm_name)

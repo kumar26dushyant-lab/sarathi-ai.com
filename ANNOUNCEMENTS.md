@@ -1,5 +1,33 @@
 # Staff Announcement Drafts
 
+## 2026-10-03 — PLANS, NEW CLAIMS AND PAYMENT MESSAGES  ← SEND AFTER THE 3 OCT DEPLOY
+
+_For: all staff and Authorized Partners. Not yet sent - send only after the deploy is verified._
+
+**EN**
+
+💳 *Plans, new claims and payment messages - from today*
+
+• *A plan that has ended or used all its claims* cannot raise a new claim free. The customer still sees *all* their old claims and documents.
+  - On *Raise for a Subscriber* you will see the reason (plan ended / all claims used) and no form opens.
+  - The customer can raise *one* new claim and pay its review fee (₹499 + GST) first, or renew / take a bigger plan.
+• *Cancelling a plan* stops the autopay. The plan keeps working until the date already paid for. (Cancelled within the refund window: the money is refunded and the plan ends.)
+• *Payment messages go only to the person who paid.* If an AP pays, the AP gets the thank-you - never the patient or complainant. Staff hear about payments on Telegram.
+• *Claim news:* staff get it on Telegram (not WhatsApp). The complainant gets every claim message on WhatsApp. A subscriber gets a short *FYI* update on WhatsApp for claims raised on their behalf.
+• *Prices:* all plans and fees are *without GST*; GST is added at payment. The website now says so.
+
+**HI**
+
+💳 *प्लान, नए क्लेम और भुगतान के मैसेज - आज से*
+
+• *जिस प्लान की अवधि ख़त्म हो गई है या जिसके सारे क्लेम इस्तेमाल हो चुके हैं*, उससे नया क्लेम मुफ़्त में नहीं डाला जा सकता। ग्राहक को अपने *सभी* पुराने क्लेम और दस्तावेज़ दिखते रहेंगे।
+  - *सब्सक्राइबर के लिए क्लेम* में आपको कारण दिखेगा (प्लान ख़त्म / सारे क्लेम इस्तेमाल) और फ़ॉर्म नहीं खुलेगा।
+  - ग्राहक *एक* नया क्लेम डाल सकते हैं और पहले उसकी रिव्यू फ़ीस (₹499 + GST) भर सकते हैं, या प्लान रिन्यू / बड़ा प्लान ले सकते हैं।
+• *प्लान कैंसल करने पर* ऑटो-पे बंद हो जाता है। प्लान उसी तारीख़ तक चलता है जिसका भुगतान हो चुका है। (रिफ़ंड की अवधि में कैंसल करने पर: पैसा वापस और प्लान ख़त्म।)
+• *भुगतान का मैसेज सिर्फ़ उसी को जाता है जिसने भुगतान किया।* अगर AP ने भुगतान किया, तो धन्यवाद AP को जाएगा - मरीज़ या शिकायतकर्ता को कभी नहीं। स्टाफ को भुगतान की ख़बर टेलीग्राम पर मिलती है।
+• *क्लेम की ख़बर:* स्टाफ को टेलीग्राम पर (व्हाट्सऐप पर नहीं)। शिकायतकर्ता को क्लेम का हर मैसेज व्हाट्सऐप पर। सब्सक्राइबर को उनकी ओर से डाले गए क्लेम का छोटा *FYI* अपडेट व्हाट्सऐप पर।
+• *क़ीमतें:* सभी प्लान और फ़ीस *GST के बिना* हैं; GST भुगतान के समय जुड़ता है। वेबसाइट पर अब यही लिखा है।
+
 ## 2026-10-02 (evening) — ONE CLAIM FORM, EVERYWHERE  ← SEND AFTER TONIGHT'S DEPLOY
 
 _For: all staff and Authorized Partners. Not yet sent - send only after the deploy is verified._

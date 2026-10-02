@@ -1397,18 +1397,17 @@ async def send_nidaan_expired_email(
     content = f"""
 <h2>🔒 Your Nidaan Partner subscription has expired.</h2>
 <p>{greeting}</p>
-<p>Your <strong>{info['label']} Plan</strong> ({price}) has expired. Your dashboard has been locked, but your data and claim history are fully preserved.</p>
+<p>Your <strong>{info['label']} Plan</strong> ({price}) has ended. Your existing claims, their status and documents stay open to you on your dashboard.</p>
 
 <div style="background:rgba(248,113,113,.12);border:1px solid rgba(248,113,113,.35);border-radius:12px;padding:1.25rem 1.5rem;margin:1.5rem 0">
-  <p style="color:#fca5a5;font-size:.95rem;font-weight:700;margin-bottom:.5rem">What's locked:</p>
+  <p style="color:#fca5a5;font-size:.95rem;font-weight:700;margin-bottom:.5rem">What changes:</p>
   <ul style="color:#cbd5e1;font-size:.88rem;margin:0;padding-left:1.25rem">
-    <li>Submitting new claims</li>
-    <li>Accessing claim status and documents</li>
+    <li>New claims are raised one at a time, each paying its own review fee - or renew to raise them on your plan</li>
     <li>Team member access</li>
   </ul>
 </div>
 
-<p>Renew now to restore full access immediately.</p>
+<p>Renew any time to raise new claims on your plan again.</p>
 <p style="text-align:center;margin:1.5rem 0">
   <a href="{renew_url}"
      style="display:inline-block;background:#06b6d4;color:#fff;padding:.75rem 2rem;

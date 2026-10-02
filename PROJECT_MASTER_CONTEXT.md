@@ -8198,3 +8198,51 @@ saved only - staff thought they had answered); evening summary per claim with ki
 (moved forward / followed up / documents / notes / only edited); office menu + screen-open
 counting (`biz_nidaan_usage`) so tabs are retired on evidence; App Health per-person WhatsApp
 outcome and errors apart from warnings; CRM lead record routes authorised; `/sop-whats-new`.
+
+## 2-3 Oct 2026 — one intake rulebook; no entitlement, no new claim; payment messages to the payer only
+
+Founder, 2-3 Oct: every claim form asks the same things the same way (12 standard Indian
+insurance types, disputed amount required with a double-check, the rejection letter required -
+AP and My Business may give a reason and have 7 days, else the claim is archived); confirm a
+contact before welcoming it; WhatsApp in the person's language with a Translate badge, records
+and emails in English; one person, one message; no double tap anywhere; a lapsed / used-up /
+capped customer keeps their claims but cannot raise a new one free; GST added once, by us,
+at every checkout; payment messages go ONLY to the person who paid.
+
+Built (one place each):
+- `biz_nidaan_intake` - the server rulebook every door calls (`check_core`, the letter staged by
+  token hash, the 7-day letter rule and `sweep_letters`; `_moved_on` never archives a claim whose
+  papers arrived or that was reviewed / paid). `static/nidaan_intake.js` is the one form block,
+  mounted on My Business, Raise for a Subscriber, the AP portal, the dashboard and Get started.
+- `biz_nidaan_welcome` - confirm first, then welcome, per channel; `nidaan_journey_sends` is the
+  once-guard so a welcome or "claim registered" goes once.
+- `biz_nidaan_wa_lang` - 12 languages with base fallbacks, inbound/outbound translation, the
+  English record (`english_record` contextvar); emails stay English.
+- `static/nidaan_onetap.js` - the one double-tap guard, on every page that talks to the server
+  (`deploy/verify-onetap.py` is in `npm run check:all`).
+- `_nidaan_payment_check` - every payment verify binds payment -> order -> product -> claim /
+  plan / account; a mismatch is refused and raised as `security.payment_mismatch` (founder alarm).
+- `claim_entitlement` - THE judge of "may this account raise a new claim" (live plan inside its
+  paid period, 3 days' grace for an autopay renewal; one unused paid review credit; one free
+  first claim per new account; house accounts). Used by the dashboard, Get started, Raise for a
+  Subscriber, `/me` and the claim submit. A frozen customer may raise ONE claim and pay its review
+  fee first; never two unpaid at once. Cancelling stops the autopay and KEEPS the paid period.
+- `submit_claim` re-checks the rule inside one `BEGIN IMMEDIATE` transaction and uses a paid review
+  credit exactly once (it used to link "the newest purchase", so an older credit gave paid claims
+  for ever).
+- `is_house_account` = the reserved address AND the system's name; no customer may set an address
+  under `HOUSE_DOMAIN` (precapture, profile, admin create).
+- `biz_nidaan_pay_notify` - payer-only payment messages (AP, staff on Telegram, the account holder,
+  or the link payer), once per payment (`nidaan_pay_notices`), only after Razorpay confirms; a
+  failure is told only after 10 minutes and only if the order is still unpaid.
+- GST settings carry our GSTIN; the homepage says "* All plans and fees exclude GST".
+
+Pre-deploy review (3 Oct) of the entitlement work found 13 problems; all fixed, each with a test
+proven to fail without its fix (`_tools/test_entitlement.py`, "the pre-deploy review").
+
+Live facts found: GST has been ON since 7 Aug 2026 (about Rs 10,960 collected) - the founder is
+to check with his CA. 20 genuine house accounts; no sign the precapture address hole was used.
+
+Still open: GST part 2 (one price helper, the ledger keeps Razorpay's actual split, a tax
+invoice); forwarded WhatsApp documents (L4, needs the `np_docs_received` template); the
+WhatsApp claim-raise (J1); the journey watchdog (J2/K8); the K2/K4/K5 login and security list.

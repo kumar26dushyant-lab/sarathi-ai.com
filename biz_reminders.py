@@ -1815,8 +1815,9 @@ async def run_nidaan_subscription_renewal_scan():
                 logger.info("Nidaan renewal reminder sent: account=%d plan=%s days_left=%d",
                             sub["account_id"], sub["plan"], days_left)
 
-            elif days_left <= 0 and (int(sub.get("auto_renew") if sub.get("auto_renew") is not None else 1) == 0
-                                     or days_left <= -3):
+            elif ((int(sub.get("auto_renew") if sub.get("auto_renew") is not None else 1) == 0
+                   and datetime.fromisoformat(str(sub["current_period_end"]).replace("Z", "")[:19]) <= datetime.utcnow())
+                  or days_left <= -3):
                 # Ended: autopay off and the period over - or autopay on and no renewal within the
                 # 3-day grace (biz_nidaan.RENEWAL_GRACE_DAYS). Expiring on the day itself used to
                 # race the renewal and reset the claim count when it landed.
@@ -1843,7 +1844,8 @@ async def run_nidaan_subscription_renewal_scan():
                             logger.info("Nidaan cascade: expired sarathi tenant %d (nidaan account %d)",
                                         sarathi_tid, sub["account_id"])
                     await conn.commit()
-                asyncio.create_task(email_svc.send_nidaan_expired_email(
+                if to_email:
+                  asyncio.create_task(email_svc.send_nidaan_expired_email(
                     to_email=to_email,
                     owner_name=sub.get("owner_name", ""),
                     plan=sub["plan"],
