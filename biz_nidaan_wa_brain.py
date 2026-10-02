@@ -73,11 +73,17 @@ want to talk to a person, ask for a call, are upset, or ask about an existing cl
 choose "handoff". If they ask about a claim they already have with us, also tell them they can
 send the word CODE to verify themselves.
 
-LANGUAGE: the customer's current language is "{lang}". Write in that language unless they ask to
-change ("set_lang" en | hi | hinglish, else ""). "hi" = Devanagari, "hinglish" = Hindi in Roman letters.
+LANGUAGE:
+- The customer's current language is "{lang}". Write your reply in THAT language.
+- If they write in a DIFFERENT language - Marathi, Punjabi, Gujarati, Bengali, Tamil, Telugu,
+  Kannada, Malayalam, Odia, Hindi, English - or ask for one, reply in the language they used and
+  set "set_lang" to its code: en, hi, hinglish, mr, pa, gu, bn, ta, te, kn, ml, or. A short
+  "ok" / "thanks" / a number is not a change of language. Otherwise set "set_lang" to "".
+- "hi" = Hindi in Devanagari. "hinglish" = Hindi in Roman letters. "en" = plain English. Write
+  each language in its own script, and never mix scripts inside one reply.
 
 Reply STRICTLY as JSON:
-{{"action":"<answer|refuse|handoff>","reply":"<message in the customer's language>","set_lang":"<en|hi|hinglish or empty>","lead_name":"<their first name if they told you, else empty>","lead_need":"<their situation in a few words, if known, else empty>","reason":"<3-6 words>"}}
+{{"action":"<answer|refuse|handoff>","reply":"<message in the customer's language>","set_lang":"<en|hi|hinglish|mr|pa|gu|bn|ta|te|kn|ml|or or empty>","lead_name":"<their first name if they told you, else empty>","lead_need":"<their situation in a few words, if known, else empty>","reason":"<3-6 words>"}}
 """
 
 _SYSTEM = """You are the WhatsApp assistant for NidaanPartner, an Indian insurance-claim support
@@ -109,17 +115,17 @@ Decide ONE action:
   you cannot answer safely.
 
 LANGUAGE — this matters:
-- The customer's current language is "{lang}". Write your reply in THAT language unless they ask
-  to change it.
-- If they ask to talk in a specific language ("can you talk in english", "hindi me baat karo",
-  "English please"), set "set_lang" to "en", "hi" or "hinglish" AND write the reply in that new
-  language. Otherwise set "set_lang" to "".
-- "hi" = Hindi in Devanagari script. "hinglish" = Hindi written in Roman/English letters.
-  "en" = plain English. Never mix scripts inside one reply.
+- The customer's current language is "{lang}". Write your reply in THAT language.
+- If they write in a DIFFERENT language - Marathi, Punjabi, Gujarati, Bengali, Tamil, Telugu,
+  Kannada, Malayalam, Odia, Hindi, English - or ask for one, reply in the language they used and
+  set "set_lang" to its code: en, hi, hinglish, mr, pa, gu, bn, ta, te, kn, ml, or. A short
+  "ok" / "thanks" / a number is not a change of language. Otherwise set "set_lang" to "".
+- "hi" = Hindi in Devanagari. "hinglish" = Hindi in Roman letters. "en" = plain English. Write
+  each language in its own script, and never mix scripts inside one reply.
 
 Reply STRICTLY as JSON:
 {{"action":"<one of continue_docs|answer|refuse|handoff>","reply":"<the message to send, in the
-customer's language; empty string if action is continue_docs>","set_lang":"<en|hi|hinglish or
+customer's language; empty string if action is continue_docs>","set_lang":"<en|hi|hinglish|mr|pa|gu|bn|ta|te|kn|ml|or or
 empty>","reason":"<3-6 words>"}}
 """
 
@@ -154,21 +160,25 @@ Decide ONE action:
 - Never choose "continue_docs" in this mode.
 
 LANGUAGE — this matters:
-- The customer's current language is "{lang}". Write your reply in THAT language unless they ask
-  to change it.
-- If they ask to talk in a specific language, set "set_lang" to "en", "hi" or "hinglish" AND
-  write the reply in that new language. Otherwise set "set_lang" to "".
-- "hi" = Hindi in Devanagari. "hinglish" = Hindi in Roman letters. "en" = plain English.
+- The customer's current language is "{lang}". Write your reply in THAT language.
+- If they write in a DIFFERENT language - Marathi, Punjabi, Gujarati, Bengali, Tamil, Telugu,
+  Kannada, Malayalam, Odia, Hindi, English - or ask for one, reply in the language they used and
+  set "set_lang" to its code: en, hi, hinglish, mr, pa, gu, bn, ta, te, kn, ml, or. A short
+  "ok" / "thanks" / a number is not a change of language. Otherwise set "set_lang" to "".
+- "hi" = Hindi in Devanagari. "hinglish" = Hindi in Roman letters. "en" = plain English. Write
+  each language in its own script, and never mix scripts inside one reply.
 
 Reply STRICTLY as JSON:
 {{"action":"<one of answer|refuse|handoff>","reply":"<the message to send, in the customer's
-language>","set_lang":"<en|hi|hinglish or empty>","reason":"<3-6 words>"}}
+language>","set_lang":"<en|hi|hinglish|mr|pa|gu|bn|ta|te|kn|ml|or or empty>","reason":"<3-6 words>"}}
 """
 
 _FALLBACK = {
     "hinglish": "Main aapki baat samajh gaya. Hamari team aapse jaldi baat karegi. 🙏",
     "hi": "मैं आपकी बात समझ गया। हमारी टीम आपसे जल्दी बात करेगी। 🙏",
     "en": "I've noted your message. Our team will get back to you shortly. 🙏",
+    "mr": "मी तुमचा संदेश नोंदवला आहे. आमची टीम लवकरच तुमच्याशी बोलेल. 🙏",
+    "pa": "ਮੈਂ ਤੁਹਾਡਾ ਸੁਨੇਹਾ ਨੋਟ ਕਰ ਲਿਆ ਹੈ। ਸਾਡੀ ਟੀਮ ਜਲਦੀ ਤੁਹਾਡੇ ਨਾਲ ਗੱਲ ਕਰੇਗੀ। 🙏",
 }
 _REFUSE = {
     "hinglish": ("Maaf kijiye — main sirf insurance claim se judi baat me madad kar sakta hoon. "
@@ -177,20 +187,32 @@ _REFUSE = {
            "अपने क्लेम के बारे में पूछिए, मैं ज़रूर मदद करूँगा। 🙏"),
     "en": ("Sorry — I can only help with insurance-claim matters. Ask me about your claim and "
            "I'll gladly help. 🙏"),
+    "mr": ("माफ करा — मी फक्त विमा क्लेमशी संबंधित गोष्टींमध्ये मदत करू शकतो. तुमच्या क्लेमबद्दल "
+           "विचारा, मी नक्की मदत करेन. 🙏"),
+    "pa": ("ਮਾਫ਼ ਕਰਨਾ — ਮੈਂ ਸਿਰਫ਼ ਬੀਮਾ ਕਲੇਮ ਨਾਲ ਜੁੜੀਆਂ ਗੱਲਾਂ ਵਿੱਚ ਮਦਦ ਕਰ ਸਕਦਾ ਹਾਂ। ਆਪਣੇ ਕਲੇਮ ਬਾਰੇ "
+           "ਪੁੱਛੋ, ਮੈਂ ਜ਼ਰੂਰ ਮਦਦ ਕਰਾਂਗਾ। 🙏"),
 }
 _HANDOFF = {
     "hinglish": "Main aapko hamari team se jod raha hoon — wo jaldi hi aapse yahin baat karenge. 🙏",
     "hi": "मैं आपको हमारी टीम से जोड़ रहा हूँ — वे जल्दी ही आपसे यहीं बात करेंगे। 🙏",
     "en": "I'm connecting you with our team — they'll reply to you right here shortly. 🙏",
+    "mr": "मी तुम्हाला आमच्या टीमशी जोडत आहे — ते लवकरच इथेच तुमच्याशी बोलतील. 🙏",
+    "pa": "ਮੈਂ ਤੁਹਾਨੂੰ ਸਾਡੀ ਟੀਮ ਨਾਲ ਜੋੜ ਰਿਹਾ ਹਾਂ — ਉਹ ਜਲਦੀ ਹੀ ਇੱਥੇ ਤੁਹਾਡੇ ਨਾਲ ਗੱਲ ਕਰਨਗੇ। 🙏",
 }
 
 
+def _fixed(table: dict, lang: str) -> str:
+    """A fixed line in their language when we have it written, else the closest one they read."""
+    import biz_nidaan_wa_lang as _wl
+    return table.get(lang) or table.get(_wl.base(lang)) or table["hinglish"]
+
+
 def refusal_text(lang: str) -> str:
-    return _REFUSE.get(lang, _REFUSE["hinglish"])
+    return _fixed(_REFUSE, lang)
 
 
 def handoff_text(lang: str) -> str:
-    return _HANDOFF.get(lang, _HANDOFF["hinglish"])
+    return _fixed(_HANDOFF, lang)
 
 
 async def _facts(lang: str) -> str:
@@ -261,9 +283,8 @@ async def decide(text: str, lang: str = "hinglish", *, history: str = "",
             action, reply = "handoff", handoff_text(lang)
         if action == "refuse" and not reply:
             reply = refusal_text(lang)
-        set_lang = str(v.get("set_lang", "")).strip().lower()
-        if set_lang not in ("en", "hi", "hinglish"):
-            set_lang = ""
+        import biz_nidaan_wa_lang as _wl
+        set_lang = _wl.norm(v.get("set_lang", ""))
         if action == "handoff" and not reply:
             reply = handoff_text(set_lang or lang)
         return {"action": action, "reply": reply, "set_lang": set_lang,

@@ -15167,6 +15167,12 @@ async def main():
                     e = await nnot.sweep_empty_claims()
                     if e:
                         logger.warning("Flagged %d claim(s) that arrived with no documents", e)
+                    # WhatsApp messages still without their English copy (a restart, the AI down).
+                    try:
+                        import biz_nidaan_wa_lang as _wl
+                        await _wl.fill_missing()
+                    except Exception as _te:  # noqa: BLE001
+                        logger.info("translation fill failed: %s", _te)
                     # Raised without the rejection letter: daily reminder, archive on day 7.
                     lt = await _intake.sweep_letters()
                     if lt.get("archived") or lt.get("reminded"):

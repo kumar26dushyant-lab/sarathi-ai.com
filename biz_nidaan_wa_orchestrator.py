@@ -566,7 +566,8 @@ async def _wa_journey(claim_id: int, event: str, extra: dict | None = None,
             if tmpl:
                 comps = _wa.body_params(*_template_params(event, ctx))
                 with _wa.sending_as(_as):
-                    res = await _wa.send_template(msisdn, tmpl, _TMPL_LANG.get(lang, "hi"), comps)
+                    import biz_nidaan_wa_lang as _wl
+                    res = await _wa.send_template(msisdn, tmpl, _TMPL_LANG.get(_wl.base(lang), "hi"), comps)
             else:
                 res = {"ok": False, "error": "needs_template"}
         await _journey_done(claim_id, event, bool(res.get("ok")))

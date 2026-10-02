@@ -200,6 +200,7 @@
   "_WaSortAsideReq",
   "_WaSortAttachReq",
   "_WaStartReq",
+  "_WaTranslateReq",
   "_WaitingReq",
   "_actor_label",
   "_as_viewable",
@@ -5667,6 +5668,34 @@
     "_require_wa_reply",
     "_wa_number_or_400",
     "app"
+   ]
+  },
+  {
+   "func": "nidaan_ops_wa_translate",
+   "paths": [
+    "/nidaan/ops/api/wa/thread/{msisdn}/translate"
+   ],
+   "product": "nidaan",
+   "reaches": [
+    "_WaTranslateReq",
+    "_get_staff_from_request",
+    "_is_nidaan_host",
+    "_require_staff",
+    "_require_wa_inbox",
+    "_require_wa_reply",
+    "_row_still_open",
+    "_staff_still_active",
+    "_wa_number_or_400",
+    "app",
+    "limiter"
+   ],
+   "uses": [
+    "_WaTranslateReq",
+    "_is_nidaan_host",
+    "_require_wa_reply",
+    "_wa_number_or_400",
+    "app",
+    "limiter"
    ]
   },
   {
@@ -19206,6 +19235,7 @@
   "nidaan_ops_wa_start",
   "nidaan_ops_wa_start_preview",
   "nidaan_ops_wa_thread",
+  "nidaan_ops_wa_translate",
   "nidaan_ops_wa_unsorted",
   "nidaan_ops_wa_unsorted_aside",
   "nidaan_ops_wa_unsorted_attach",

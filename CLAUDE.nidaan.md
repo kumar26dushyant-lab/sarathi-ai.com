@@ -488,8 +488,16 @@ option means adding it to both.**
 - **One person, one message**: `notify_claim_parties` and document asks send each number /
   address once whatever roles it holds; one-time journey messages are sent once per claim
   (`nidaan_journey_sends`), "payment failed" at most every 15 minutes.
-- **Still to do**: the Rs 499 review page (claim made on payment), WhatsApp in the person's own
-  language with a Translate switch (TODO I7), the soft "please check" on WhatsApp.
+- **WhatsApp in their language** (`biz_nidaan_wa_lang`): the bot answers in any of `LANGS` and
+  moves a contact to the language they write in; the fixed lines (journey, STOP footer,
+  templates) fall back by `base()`. Every logged message gets `body_en` in the background
+  (NULL = not looked at, '' = English already; `fill_missing()` every 20 min). A staff reply
+  "in their language" is translated by `/wa/thread/{n}/translate`, SHOWN to the staff member,
+  then sent with their own words as `body_en` (`english_record`). Never send machine text unseen.
+- **The old Rs 499 page** (`/nidaan/get-reviewed`) redirects to Get started; its sign-up is 410.
+- **Still to do**: the soft "please check" on WhatsApp for mandatory details - WhatsApp collects
+  no claim details today (it makes leads; staff raise the claim), so it belongs to a WhatsApp
+  claim-raise when one is built.
 
 ### The ops menu (1 Oct)
 

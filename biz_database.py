@@ -1816,7 +1816,11 @@ async def init_db():
             # us speaking first, the bot answering inside a conversation they opened, or a
             # colleague typing. Old rows stay empty and are simply not counted, so the caps
             # begin from the day they are switched on rather than judging history.
-            "ALTER TABLE nidaan_wa_messages ADD COLUMN send_class TEXT DEFAULT ''",  # initiated|conversation|human|consent|critical|business
+            "ALTER TABLE nidaan_wa_messages ADD COLUMN send_class TEXT DEFAULT ''",
+            # The language a message is in, and its English copy for the team (biz_nidaan_wa_lang).
+            # body_en NULL = not looked at yet; '' = it was English already.
+            "ALTER TABLE nidaan_wa_messages ADD COLUMN lang TEXT DEFAULT ''",
+            "ALTER TABLE nidaan_wa_messages ADD COLUMN body_en TEXT",  # initiated|conversation|human|consent|critical|business
             "CREATE INDEX IF NOT EXISTS idx_wamsg_cap ON nidaan_wa_messages(msisdn, send_class, created_at)",
             # When and how someone stopped hearing from us — so a screen can say it plainly
             # instead of a bare status word.

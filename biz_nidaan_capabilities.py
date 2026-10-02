@@ -48,6 +48,22 @@ CAPABILITIES: list[dict] = [
         "telegram": False, "web": True, "min_role": "team_member",
     },
     {
+        "id": "wa_their_language",
+        "en": {"t": "WhatsApp in the customer's own language - read in English",
+               "d": "NidaanMitra answers in the language the customer writes in (Hindi, Marathi, "
+                    "Punjabi, Gujarati, Bengali, Tamil and more). Every message has an English copy "
+                    "under it - switch it on or off with '🌐 English' in the chat.",
+               "use": "Write your reply in English, Hinglish or Hindi and keep 'Send in their "
+                      "language' ticked: you see the translation first, change it if needed, then send."},
+        "hi": {"t": "ग्राहक की अपनी भाषा में व्हाट्सऐप - पढ़ें अंग्रेज़ी में",
+               "d": "NidaanMitra उसी भाषा में जवाब देता है जिसमें ग्राहक लिखता है (हिंदी, मराठी, पंजाबी, "
+                    "गुजराती, बांग्ला, तमिल और कई)। हर संदेश के नीचे उसका अंग्रेज़ी अनुवाद होता है - "
+                    "चैट में '🌐 English' से चालू/बंद करें।",
+               "use": "जवाब अंग्रेज़ी, हिंग्लिश या हिंदी में लिखें और 'उनकी भाषा में भेजें' चालू रखें: "
+                      "पहले अनुवाद दिखेगा, ज़रूरत हो तो बदलें, फिर भेजें।"},
+        "telegram": False, "web": True, "min_role": "team_member",
+    },
+    {
         "id": "complainant_confirm_first",
         "en": {"t": "The complainant confirms first, then gets the welcome",
                "d": "A new claim's complainant gets a WhatsApp code and an email link - no claim "

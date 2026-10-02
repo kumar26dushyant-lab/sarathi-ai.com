@@ -92,7 +92,8 @@ _FOOTER = {
 
 
 def footer_text(lang: str) -> str:
-    return _FOOTER.get(_s(lang) or "hinglish", _FOOTER["hinglish"])
+    import biz_nidaan_wa_lang as _wl
+    return _FOOTER.get(_wl.base(_s(lang) or "hinglish"), _FOOTER["hinglish"])
 
 
 async def _contact(msisdn: str) -> dict:

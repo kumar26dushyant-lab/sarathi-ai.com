@@ -9326,6 +9326,36 @@ async def nidaan_ops_wa_owner(msisdn: str, body: _WaOwnerReq, request: Request):
 class _WaReplyReq(BaseModel):
     model_config = ConfigDict(extra="forbid")
     text: str = Field(..., min_length=1, max_length=4000)
+    # Sent in their language: the staff member's own words, kept as the English record.
+    english: str = Field("", max_length=4000)
+    lang: str = Field("", max_length=12)
+
+
+class _WaTranslateReq(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    text: str = Field(..., min_length=1, max_length=4000)
+
+
+@app.post("/nidaan/ops/api/wa/thread/{msisdn}/translate")
+@limiter.limit("30/minute")
+async def nidaan_ops_wa_translate(msisdn: str, body: _WaTranslateReq, request: Request):
+    """A staff reply in the person's own language - returned to the staff member to READ before
+    anything is sent. Nothing is sent from here."""
+    if not _is_nidaan_host(request):
+        raise HTTPException(status_code=404)
+    await _require_wa_reply(request)
+    import biz_nidaan_wa_flow as _flow
+    import biz_nidaan_wa_lang as _wl
+    ct = await _flow.get_contact(_wa_number_or_400(msisdn)) or {}
+    lang = _wl.norm(ct.get("language")) or "hinglish"
+    if lang == "en":
+        return {"lang": "en", "lang_name": "English", "text": body.text, "same": True}
+    out = await _wl.translate_out(body.text, lang)
+    if not out:
+        raise HTTPException(status_code=503, detail="Translation is not available right now - "
+                                                    "send it as written, or try again in a minute.")
+    return {"lang": lang, "lang_name": _wl.name(lang), "text": out, "same": False}
+
 
 
 @app.post("/nidaan/ops/api/wa/thread/{msisdn}/reply")
@@ -9336,9 +9366,11 @@ async def nidaan_ops_wa_reply(msisdn: str, body: _WaReplyReq, request: Request):
         raise HTTPException(status_code=404)
     caller = await _require_wa_reply(request)
     import biz_nidaan_wa_inbox as _inbox
+    import biz_nidaan_wa_lang as _wl
     res = await _inbox.send_human(_wa_number_or_400(msisdn), body.text,
                                   staff_id=str(caller.get("staff_id") or ""),
-                                  staff_name=_actor_label(caller))
+                                  staff_name=_actor_label(caller),
+                                  english=(body.english or "").strip(), lang=_wl.norm(body.lang))
     if not res.get("ok"):
         raise HTTPException(status_code=400, detail=res.get("error") or "Could not send")
     await _ops_audit(request, "wa.reply", "wa_contact", msisdn, body.text[:120])
@@ -31489,6 +31521,12 @@ async def main():
                     e = await nnot.sweep_empty_claims()
                     if e:
                         logger.warning("Flagged %d claim(s) that arrived with no documents", e)
+                    # WhatsApp messages still without their English copy (a restart, the AI down).
+                    try:
+                        import biz_nidaan_wa_lang as _wl
+                        await _wl.fill_missing()
+                    except Exception as _te:  # noqa: BLE001
+                        logger.info("translation fill failed: %s", _te)
                     # Raised without the rejection letter: daily reminder, archive on day 7.
                     lt = await _intake.sweep_letters()
                     if lt.get("archived") or lt.get("reminded"):

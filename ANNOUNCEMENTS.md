@@ -19,6 +19,8 @@ Before it is sent, a *"Please check"* window shows everything again. Read it.
 
 *No letter yet?* (AP and staff only) Tap "I don't have the letter yet" and write why. The letter is then due in *7 days* - you get a reminder every day - or the claim is *archived* (not deleted).
 
+*WhatsApp in their language.* NidaanMitra now replies in the language the customer writes in (Marathi, Punjabi, Gujarati and more). Every message shows an English copy under it - switch it with *🌐 English*. Write your reply in English, Hinglish or Hindi; with *"Send in their language"* ticked you see the translation first, then send.
+
 *The complainant confirms first.* They get a WhatsApp code and an email link. When they confirm, they get our welcome. If they are on a call with you, ask them to send *"Hi"* to our WhatsApp *+91 91836 86384* from their mobile - that confirms it at once.
 🚫 *Never ask anyone to read a code out to you.*
 
@@ -36,6 +38,8 @@ My Business, सब्सक्राइबर के लिए क्लेम,
 भेजने से पहले *"जाँच लें"* विंडो सब कुछ दोबारा दिखाती है। उसे पढ़ें।
 
 *लेटर अभी नहीं है?* (सिर्फ़ AP और स्टाफ) "अभी लेटर नहीं है" दबाएँ और कारण लिखें। फिर *7 दिन* में लेटर चाहिए - रोज़ याद दिलाया जाएगा - वरना क्लेम *आर्काइव* (डिलीट नहीं) हो जाएगा।
+
+*ग्राहक की भाषा में व्हाट्सऐप।* NidaanMitra अब उसी भाषा में जवाब देता है जिसमें ग्राहक लिखता है (मराठी, पंजाबी, गुजराती और कई)। हर संदेश के नीचे उसका अंग्रेज़ी अनुवाद दिखता है - *🌐 English* से चालू/बंद करें। जवाब अंग्रेज़ी, हिंग्लिश या हिंदी में लिखें; *"Send in their language"* (उनकी भाषा में भेजें) चालू हो तो पहले अनुवाद दिखेगा, फिर भेजें।
 
 *पहले शिकायतकर्ता पुष्टि करेंगे।* उन्हें व्हाट्सऐप पर कोड और ईमेल पर लिंक मिलेगा। पुष्टि होते ही हमारा स्वागत संदेश जाएगा। अगर वे आपसे कॉल पर हैं, तो कहें कि अपने मोबाइल से हमारे व्हाट्सऐप *+91 91836 86384* पर *"Hi"* भेजें - तुरंत पुष्टि हो जाएगी।
 🚫 *कभी किसी से कोड न पूछें।*

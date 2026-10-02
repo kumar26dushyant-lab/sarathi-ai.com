@@ -215,7 +215,7 @@ async def claim_thread(claim_id: int, *, limit: int = 300) -> dict:
             args += list(shared) + [int(claim_id)]
         rows = await (await c.execute(
             "SELECT wam_row_id, msisdn, direction, msg_type, template_name, body, media_id, status, "
-            "error, sender, sender_name, claim_id, created_at FROM nidaan_wa_messages "
+            "error, sender, sender_name, claim_id, created_at, lang, body_en FROM nidaan_wa_messages "
             "WHERE " + " OR ".join(cond) + " ORDER BY wam_row_id DESC LIMIT ?",
             (*args, max(1, min(int(limit), 500))))).fetchall()
         ct = await (await c.execute("SELECT * FROM nidaan_wa_contacts WHERE msisdn=?", (nums[0],))).fetchone()
@@ -223,8 +223,22 @@ async def claim_thread(claim_id: int, *, limit: int = 300) -> dict:
     contact["window"] = _window(contact.get("last_inbound_at"))
     contact["owner"] = "human" if contact.get("bot_paused") else "bot"
     contact["verified"] = _verified_now(contact.get("verified_role"), contact.get("verified_until"))
-    return {"ok": True, "numbers": nums, "messages": [dict(r) for r in rows][::-1], "contact": contact,
+    contact["language_name"] = _lang_name(contact.get("language"))
+    return {"ok": True, "numbers": nums, "messages": _named([dict(r) for r in rows][::-1]), "contact": contact,
             "name": (cl.get("complainant_name") or cl.get("insured_name") or "").strip()}
+
+
+def _lang_name(code) -> str:
+    import biz_nidaan_wa_lang as _wl
+    return _wl.name(code or "hinglish")
+
+
+def _named(msgs: list) -> list:
+    """Each message says which language it is in, by name - the one list in biz_nidaan_wa_lang."""
+    import biz_nidaan_wa_lang as _wl
+    for m in msgs:
+        m["lang_name"] = _wl.name(m.get("lang")) if m.get("lang") and m.get("lang") != "en" else ""
+    return msgs
 
 
 async def thread(msisdn: str, *, limit: int = 200) -> dict:
@@ -237,14 +251,15 @@ async def thread(msisdn: str, *, limit: int = 200) -> dict:
             "SELECT * FROM nidaan_wa_contacts WHERE msisdn=?", (msisdn,))).fetchone()
         rows = await (await c.execute(
             "SELECT wam_row_id, direction, msg_type, template_name, body, media_id, status, "
-            "error, sender, sender_name, claim_id, created_at "
+            "error, sender, sender_name, claim_id, created_at, lang, body_en "
             "FROM nidaan_wa_messages WHERE msisdn=? ORDER BY wam_row_id DESC LIMIT ?",
             (msisdn, limit))).fetchall()
     ct = dict(contact) if contact else {"msisdn": msisdn}
     ct["window"] = _window(ct.get("last_inbound_at"))
     ct["owner"] = "human" if ct.get("bot_paused") else "bot"
     ct["verified"] = _verified_now(ct.get("verified_role"), ct.get("verified_until"))
-    msgs = [dict(r) for r in rows][::-1]     # oldest first — reads like a chat
+    msgs = _named([dict(r) for r in rows][::-1])     # oldest first — reads like a chat
+    ct["language_name"] = _lang_name(ct.get("language"))
     # Who is this number, in business terms? Best-effort; never blocks the thread.
     who = {}
     try:
@@ -317,7 +332,8 @@ async def set_owner(msisdn: str, *, human: bool, by_id: str = "", by_name: str =
     return {"ok": True, "owner": "human" if human else "bot"}
 
 
-async def send_human(msisdn: str, text: str, *, staff_id: str = "", staff_name: str = "") -> dict:
+async def send_human(msisdn: str, text: str, *, staff_id: str = "", staff_name: str = "",
+                     english: str = "", lang: str = "") -> dict:
     """Send a staffer's own reply on WhatsApp, attributed to them.
 
     Refuses outside the 24h window rather than firing a send that WhatsApp will drop — a reply the
@@ -348,7 +364,8 @@ async def send_human(msisdn: str, text: str, *, staff_id: str = "", staff_name: 
         return {"ok": False, "error": "WhatsApp is not connected yet."}
 
     # The send layer logs the message itself; this just tells it who is speaking.
-    with _wa.sending_as("human", staff_name, staff_id):
+    # Sent in their language: the staff member's own words are the English record.
+    with _wa.sending_as("human", staff_name, staff_id), _wa.english_record((english or "").strip()[:4000], lang):
         res = await _wa.send_text(msisdn, text)
     ok = bool(res.get("ok", True)) and not res.get("error")
     if not ok:

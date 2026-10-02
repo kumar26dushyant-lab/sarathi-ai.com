@@ -24,14 +24,18 @@ DB_PATH = db.DB_PATH
 _STOP_WORDS = {"stop", "unsubscribe", "band karo", "band karein", "roko", "mat bhejo"}
 _START_WORDS = {"start", "yes", "haan", "haँ", "ha", "ok", "okay", "start karo"}
 _LANG_WORDS = {"english": "en", "eng": "en", "hindi": "hi", "हिंदी": "hi",
-               "hinglish": "hinglish", "roman": "hinglish"}
+               "hinglish": "hinglish", "roman": "hinglish",
+               "marathi": "mr", "मराठी": "mr", "punjabi": "pa", "ਪੰਜਾਬੀ": "pa",
+               "gujarati": "gu", "ગુજરાતી": "gu", "bengali": "bn", "bangla": "bn", "বাংলা": "bn",
+               "tamil": "ta", "தமிழ்": "ta", "telugu": "te", "తెలుగు": "te", "kannada": "kn",
+               "ಕನ್ನಡ": "kn", "malayalam": "ml", "മലയാളം": "ml", "odia": "or", "oriya": "or", "ଓଡ଼ିଆ": "or"}
 
 
 async def log_message(*, direction: str, msisdn: str, claim_id: Optional[int] = None,
                       wa_message_id: str = "", msg_type: str = "", template_name: str = "",
                       body: str = "", media_id: str = "", status: str = "", error: str = "",
                       sender: str = "", sender_name: str = "", staff_id: str = "",
-                      send_class: str = "") -> bool:
+                      send_class: str = "", body_en: Optional[str] = None, lang: str = "") -> bool:
     """Write one row to the WA message log. Idempotent on wa_message_id (inbound dedup).
 
     `sender` records WHO produced an outbound message — bot | human | campaign | journey |
@@ -63,16 +67,26 @@ async def log_message(*, direction: str, msisdn: str, claim_id: Optional[int] = 
                     "SELECT 1 FROM nidaan_wa_messages WHERE wa_message_id=?", (wa_message_id,))).fetchone()
                 if ex:
                     return False
-            await conn.execute(
+            cur = await conn.execute(
                 """INSERT INTO nidaan_wa_messages
                    (direction, msisdn, claim_id, wa_message_id, msg_type, template_name,
-                    body, media_id, status, error, sender, sender_name, staff_id, send_class)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    body, media_id, status, error, sender, sender_name, staff_id, send_class,
+                    lang, body_en)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (direction, msisdn, claim_id, wa_message_id or "", msg_type or "", template_name or "",
                  (body or "")[:4000], media_id or "", status or "", (error or "")[:300],
                  sender[:20], (sender_name or "")[:80], str(staff_id or "")[:20],
-                 (send_class or "")[:16]))
+                 (send_class or "")[:16], (lang or "")[:12],
+                 (body_en[:4000] if body_en is not None else None)))
             await conn.commit()
+            row_id = cur.lastrowid
+        # Every message gets an English copy for the team, in the background (biz_nidaan_wa_lang).
+        if body_en is None and (body or "").strip():
+            try:
+                import biz_nidaan_wa_lang as _wl
+                _wl.schedule(row_id)
+            except Exception:  # noqa: BLE001
+                pass
         return True
     except Exception as e:  # noqa: BLE001
         logger.warning("log_message failed: %s", e)

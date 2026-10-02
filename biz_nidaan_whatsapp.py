@@ -46,6 +46,20 @@ GRAPH = "https://graph.facebook.com/v22.0"
 _SENDER: contextvars.ContextVar = contextvars.ContextVar("wa_sender", default=("bot", "", ""))
 
 
+# A staff reply sent in the customer's language carries the staff member's own words as the
+# English record (biz_nidaan_wa_lang). Unset for everything else - those get a machine copy.
+_ENGLISH: contextvars.ContextVar = contextvars.ContextVar("wa_english", default=None)
+
+
+@contextlib.contextmanager
+def english_record(text, lang: str = ""):
+    tok = _ENGLISH.set((str(text), str(lang or "")) if text else None)
+    try:
+        yield
+    finally:
+        _ENGLISH.reset(tok)
+
+
 @contextlib.contextmanager
 def sending_as(sender: str, name: str = "", staff_id: str = ""):
     """Attribute sends made inside this block — 'human', 'campaign', 'journey', 'bot'."""
@@ -138,12 +152,14 @@ async def _log_outbound(payload: dict, res: dict, send_class: str = "") -> None:
             pass
         sender, sname, sid = _SENDER.get()
         ok = bool(res.get("ok"))
+        eng = _ENGLISH.get()
         await _flow.log_message(
             direction="out", msisdn=to, claim_id=claim_id,
             wa_message_id=str(res.get("message_id") or ""), msg_type=mtype or "text",
             template_name=tmpl, body=body, media_id=media_id,
             status="sent" if ok else "failed", error=str(res.get("error") or "")[:300],
-            sender=sender, sender_name=sname, staff_id=sid, send_class=send_class)
+            sender=sender, sender_name=sname, staff_id=sid, send_class=send_class,
+            body_en=(eng[0] if eng else None), lang=(eng[1] if eng else ""))
     except Exception as e:  # noqa: BLE001
         logger.info("outbound WhatsApp log failed (send itself was fine): %s", e)
 

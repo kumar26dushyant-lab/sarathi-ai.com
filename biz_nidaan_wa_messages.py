@@ -40,8 +40,10 @@ FAST_TRACK_RESEND = {
 
 
 def _lang(l: Optional[str]) -> str:
-    l = (l or "hinglish").strip().lower()
-    return l if l in ("hinglish", "hi", "en") else "hinglish"
+    # Marathi / Gujarati readers get the Hindi text, Punjabi the Hinglish, others English
+    # (biz_nidaan_wa_lang.base). The AI's own replies are written in their language itself.
+    import biz_nidaan_wa_lang as _wl
+    return _wl.base(l)
 
 
 def _reg(ctx: dict) -> str:

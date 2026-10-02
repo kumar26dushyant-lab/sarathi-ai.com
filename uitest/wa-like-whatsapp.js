@@ -18,9 +18,14 @@ const e = h.indexOf('const _WAI_EMO');
 const s2 = h.indexOf('const _WAI_SENDER = {');
 const e2 = h.indexOf('};', s2) + 2;
 if (s < 0 || e < 0 || s2 < 0) { console.error('helpers not found'); process.exit(1); }
+// The helpers touch the page once at load (the Translate switch); a bare stand-in is enough here.
+global.window = global.window || {};
+global.document = global.document || { addEventListener() {}, querySelectorAll() { return []; },
+  body: { classList: { toggle() {} } } };
+global.localStorage = global.localStorage || { getItem() { return null; }, setItem() {} };
 global.esc = (x) => String(x == null ? '' : x).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 // eslint-disable-next-line no-eval
-eval(h.slice(s2, e2) + h.slice(s, e) + '; global._istParts=_istParts; global._waiTicks=_waiTicks; global._waiBubbles=_waiBubbles;');
+eval(h.slice(s2, e2) + h.slice(s, e) + '; global._istParts=_istParts; global._waiTicks=_waiTicks; global._waiBubbles=_waiBubbles; global._waLangTick=_waLangTick;');
 
 const p = _istParts('2026-10-02 05:00:00');
 check('a UTC time is shown in Indian time with am/pm (05:00 UTC = 10:30 am)', p && p.time === '10:30 am', p && p.time);
@@ -57,6 +62,22 @@ check('...with take over / give back, search in the chat, the 24-hour note and t
 check('...the same bubbles as the inbox (ticks, Indian time, day separators)', cw.includes('_waiBubbles(d.messages, nm)'));
 check('...and it refreshes quietly while open, never while someone types',
   cw.includes('setInterval(') && cw.includes('ndPaint(el, html)') && cw.includes('document.activeElement === b'));
+
+// In their language, recorded in English (founder, 2 Oct).
+const trHtml = _waiBubbles([
+  { direction: 'in', body: 'माझा क्लेम नाकारला', body_en: 'My claim was rejected', lang: 'mr', lang_name: 'Marathi', created_at: '2026-10-02 05:00:00' },
+  { direction: 'out', sender: 'human', sender_name: 'Ravi', body: 'कृपया पाठवा', body_en: 'Please send it', created_at: '2026-10-02 05:01:00' },
+], 'Ramesh');
+check('a Marathi message shows its English copy, labelled as a machine translation from Marathi',
+  trHtml.includes('class="wai-tr"') && trHtml.includes('machine translation from Marathi') && trHtml.includes('My claim was rejected'));
+check("a staff reply sent in their language shows the staff member's own English",
+  trHtml.includes('as our team wrote it') && trHtml.includes('Please send it'));
+check('searching a chat finds a message by its English too', trHtml.includes('my claim was rejected'));
+check('"Send in their language" is offered for a Marathi speaker, not for an English one',
+  _waLangTick('t', 'mr', 'Marathi').includes('Send in their language (Marathi)') && _waLangTick('t', 'en', 'English') === '');
+check('the switch hides the English copy without redrawing', h.includes('body.wa-tr-off .wai-tr{display:none}'));
+check('nothing machine-translated is sent unseen: the preview comes first',
+  h.includes("const final = await _waTrPreview(text") && h.includes("payload = {text: final, english: text"));
 
 console.log(failed ? '\n' + failed + ' failed' : '\nall passed');
 process.exit(failed ? 1 : 0);

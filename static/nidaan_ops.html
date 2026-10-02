@@ -15500,7 +15500,7 @@ async function claimWaLoad(claimId, quiet){
     +   '<div style="flex:1;min-width:140px"><div style="font-weight:800;font-size:.88rem">' + esc(nm) + '</div>'
     +   '<div style="font-size:.7rem;color:var(--nd-text-muted)">' + d.numbers.map(function(n){ return '+' + esc(n); }).join(' · ')
     +   ' · <a href="#" onclick="showPanel(\'whatsapp\');setTimeout(function(){waiOpen(\'' + esc(msisdn) + '\')},400);return false">Open in the inbox</a></div></div>'
-    +   ownerBar
+    +   ownerBar + _waTrBtn()
     +   '<input class="wai-find" type="search" placeholder="Search in this chat" aria-label="Search in this chat" oninput="claimWaFind(' + claimId + ',this.value)">'
     + '</div>'
     + '<div class="wai-msgs" id="claimWaMsgs_' + claimId + '" data-keep-scroll="bottom">' + _waiBubbles(d.messages, nm) + '</div>'
@@ -15511,7 +15511,7 @@ async function claimWaLoad(claimId, quiet){
     +       ' style="flex:1;resize:vertical;background:var(--nd-bg-surface-2);color:var(--nd-text-primary);border:1px solid var(--nd-border);border-radius:10px;padding:.5rem .65rem;font-size:.85rem;font-family:inherit"></textarea>'
     +     '<button class="btn btn-primary"' + (canType ? '' : ' disabled') + ' onclick="claimWaSend(' + claimId + ',\'' + esc(msisdn) + '\',this)">Send</button>'
     +   '</div>'
-    +   (canType ? _waiEmojiBar(boxId) : '')
+    +   (canType ? _waLangTick(boxId + '_tr', c.language || 'hinglish', c.language_name) + _waiEmojiBar(boxId) : '')
     +   '<div><button class="btn-sm btn-ghost" style="color:var(--nd-success-text)" onclick="startWaCollection(' + claimId + ')">💬 Start WhatsApp collection</button>'
     +   ' <span id="docReminderMsg_' + claimId + '" style="font-size:.78rem"></span></div>'
     + '</div></div>';
@@ -15548,9 +15548,8 @@ async function claimWaSend(claimId, msisdn, btn){
   const text = (box.value||'').trim(); if (!text){ box.focus(); return; }
   btn.disabled = true;
   try{
-    const r = await API('/wa/thread/' + encodeURIComponent(msisdn) + '/reply', {method:'POST', body: JSON.stringify({text: text})});
-    const e = await r.json().catch(function(){ return {}; });
-    if (!r.ok){ ndUI.toast(e.detail || 'Could not send.', 'error'); return; }
+    const res = await _waSmartSend(msisdn, text, 'claimWaBox_' + claimId + '_tr');
+    if (!res.ok){ if (!res.cancelled) ndUI.toast(res.error, 'error'); return; }
     box.value = '';
     await claimWaLoad(claimId, true);
     const mb = document.getElementById('claimWaMsgs_' + claimId); if (mb) mb.scrollTop = mb.scrollHeight;
@@ -20371,6 +20370,12 @@ function _waiStyles(){
   if (document.getElementById('waiCss')) return;
   const st = document.createElement('style'); st.id = 'waiCss';
   st.textContent = `
+  .wai-tr{margin-top:.35rem;padding-top:.3rem;border-top:1px dashed var(--nd-border);font-size:.8rem;color:var(--nd-text-secondary);white-space:pre-wrap}
+  .wai-tr i{display:block;font-style:normal;font-size:.64rem;font-weight:700;color:var(--nd-text-muted);margin-bottom:.1rem}
+  body.wa-tr-off .wai-tr{display:none}
+  .wa-trbtn{min-height:36px}
+  .wa-tick{display:flex;align-items:center;gap:.4rem;font-size:.78rem;color:var(--nd-text-secondary);cursor:pointer;min-height:36px}
+  .wa-tick input{width:18px;height:18px}
   .wai-grid{display:grid;grid-template-columns:330px 1fr;gap:.9rem;align-items:start}
   .wai-pane{background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:14px;overflow:hidden}
   .wai-list{max-height:600px;overflow-y:auto}
@@ -20477,16 +20482,83 @@ function _waiBubbles(messages, nm){
       m.msg_type==='image'?'📷 Photo': m.msg_type==='document'?'📄 File':
       m.msg_type==='audio'?'🎤 Voice note':
       m.template_name?'(the wording of this message was not recorded - it was sent before we started keeping it)':'—');
-    const find = ' data-t="' + esc(String(body).toLowerCase().slice(0, 400)) + '"';
+    const find = ' data-t="' + esc([String(body), m.body_en || ''].filter(Boolean).join(' ').toLowerCase().slice(0, 600)) + '"';
+    // The English copy for the team (founder, 2 Oct): a machine translation is labelled as one; a
+    // staff reply sent in their language shows the staff member's own words.
+    const tr = m.body_en
+      ? '<div class="wai-tr"><i>🌐 ' + (m.sender === 'human' && m.direction !== 'in'
+          ? 'In English, as our team wrote it'
+          : 'English - machine translation' + (m.lang_name ? ' from ' + esc(m.lang_name) : ''))
+        + '</i>' + esc(m.body_en) + '</div>' : '';
     if (m.direction==='in')
-      return sep + '<div class="wai-b wai-in"' + find + '><div class="wai-who" style="color:var(--nd-success-text)">'+esc(nm)+'</div>'+esc(body)
+      return sep + '<div class="wai-b wai-in"' + find + '><div class="wai-who" style="color:var(--nd-success-text)">'+esc(nm)+'</div>'+esc(body)+tr
            + '<div class="wai-meta">' + esc(p.time) + '</div></div>';
     const s = _WAI_SENDER[m.sender||'bot'] || _WAI_SENDER.bot;
     const who = m.sender==='human' ? (m.sender_name||'Team member') : s.label;
-    return sep + '<div class="wai-b wai-out '+s.cls+'"' + find + '><div class="wai-who">'+esc(who)+'</div>'+tLabel+esc(body)
+    return sep + '<div class="wai-b wai-out '+s.cls+'"' + find + '><div class="wai-who">'+esc(who)+'</div>'+tLabel+esc(body)+tr
          + '<div class="wai-meta">' + esc(p.time) + _waiTicks(m) + '</div></div>';
   }).join('') || '<div style="margin:auto;color:var(--nd-text-faint);font-size:.82rem">No messages yet.</div>';
 }
+// ── WhatsApp in their language, recorded in English (founder, 2 Oct) ──
+// The English copy is always drawn; the switch only shows or hides it, so it is instant.
+function _waTrOn(){ try{ return localStorage.getItem('nd_wa_tr') !== '0'; }catch(e){ return true; } }
+function _waTrApply(){ document.body.classList.toggle('wa-tr-off', !_waTrOn());
+  document.querySelectorAll('.wa-trbtn').forEach(function(b){ b.textContent = _waTrLabel(); }); }
+function _waTrLabel(){ return _waTrOn() ? '🌐 English: on' : '🌐 English: off'; }
+function _waTrToggle(){ try{ localStorage.setItem('nd_wa_tr', _waTrOn() ? '0' : '1'); }catch(e){} _waTrApply(); }
+function _waTrBtn(){ return '<button type="button" class="btn-sm btn-ghost wa-trbtn" onclick="_waTrToggle()" title="Show an English copy under every message">' + _waTrLabel() + '</button>'; }
+// "Send in their language": shown when the person does not write in English. On by default.
+function _waLangTick(id, lang, langName){
+  if (!lang || lang === 'en') return '';
+  return '<label class="wa-tick"><input type="checkbox" id="' + id + '" checked> Send in their language (' + esc(langName || lang) + ') - you will see it before it goes</label>';
+}
+// Nothing machine-translated is sent unseen: the staff member reads (and may edit) the text first.
+function _waTrPreview(original, translated, langName){
+  return new Promise(function(resolve){
+    const ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100000;display:flex;align-items:center;justify-content:center;padding:16px';
+    ov.innerHTML = '<div role="dialog" aria-modal="true" style="background:var(--nd-bg-surface);color:var(--nd-text-primary);border-radius:14px;max-width:520px;width:100%;max-height:90vh;overflow:auto;padding:1rem 1.1rem">'
+      + '<div style="font-weight:800;font-size:1rem;margin-bottom:.3rem">This goes in ' + esc(langName) + '</div>'
+      + '<div style="font-size:.78rem;color:var(--nd-text-muted);margin-bottom:.5rem">A machine translation of your message. Read it - change anything that is not right.</div>'
+      + '<textarea id="waTrOut" rows="5" style="width:100%;box-sizing:border-box;font-size:16px;padding:.55rem;border-radius:9px;border:1px solid var(--nd-border-strong);background:var(--nd-bg-surface-2);color:var(--nd-text-primary);font-family:inherit"></textarea>'
+      + '<div style="font-size:.74rem;color:var(--nd-text-muted);margin:.5rem 0 .2rem">Your words (kept as the English record):</div>'
+      + '<div id="waTrIn" style="font-size:.82rem;white-space:pre-wrap;background:var(--nd-bg-surface-2);border-radius:8px;padding:.45rem .6rem"></div>'
+      + '<div style="display:flex;gap:.5rem;justify-content:flex-end;flex-wrap:wrap;margin-top:.7rem">'
+      + '<button type="button" class="btn btn-ghost" data-a="no" style="min-height:44px">Edit my message</button>'
+      + '<button type="button" class="btn btn-primary" data-a="yes" style="min-height:44px">Send this</button></div></div>';
+    document.body.appendChild(ov);
+    ov.querySelector('#waTrOut').value = translated;
+    ov.querySelector('#waTrIn').textContent = original;
+    const done = function(v){ document.removeEventListener('keydown', key); ov.remove(); resolve(v); };
+    const key = function(e){ if (e.key === 'Escape') done(null); };
+    document.addEventListener('keydown', key);
+    ov.addEventListener('click', function(e){
+      const a = e.target.getAttribute && e.target.getAttribute('data-a');
+      if (a === 'yes'){ const v = (ov.querySelector('#waTrOut').value || '').trim(); done(v || null); }
+      else if (a === 'no' || e.target === ov) done(null);
+    });
+    ov.querySelector('#waTrOut').focus();
+  });
+}
+async function _waSmartSend(msisdn, text, tickId){
+  const tick = tickId ? document.getElementById(tickId) : null;
+  let payload = {text: text};
+  if (tick && tick.checked){
+    const tr = await API('/wa/thread/' + encodeURIComponent(msisdn) + '/translate', {method:'POST', body: JSON.stringify({text: text})});
+    const d = await tr.json().catch(function(){ return {}; });
+    if (!tr.ok) return {ok:false, error: d.detail || 'Could not translate it - untick "Send in their language" to send it as written.'};
+    if (!d.same){
+      const final = await _waTrPreview(text, d.text || '', d.lang_name || '');
+      if (final === null) return {ok:false, cancelled:true};
+      payload = {text: final, english: text, lang: d.lang || ''};
+    }
+  }
+  const r = await API('/wa/thread/' + encodeURIComponent(msisdn) + '/reply', {method:'POST', body: JSON.stringify(payload)});
+  const e = await r.json().catch(function(){ return {}; });
+  return r.ok ? {ok:true} : {ok:false, error: e.detail || 'Could not send.'};
+}
+window._waTrToggle = _waTrToggle;
+document.addEventListener('DOMContentLoaded', _waTrApply);
 // A few good emojis - not a keyboard of hundreds (founder, 2 Oct: "only good ones").
 const _WAI_EMO = ['🙏','👍','✅','😊','🙂','👋','📄','📎','⏳','📞','✉️','💪','🎉','❤️'];
 function _waiEmojiBar(boxId){
@@ -20675,7 +20747,7 @@ async function waiOpen(msisdn, quiet){
     +       (id.role && id.role!=='unknown' ? ' · '+esc(id.role) : '')
     +       (c.claim_id ? ' · Claim #'+c.claim_id : '')+'</div>'
     +   '</div>'
-    +   ownerBar
+    +   ownerBar + _waTrBtn()
     +   '<input class="wai-find" type="search" placeholder="Search in this chat" aria-label="Search in this chat" oninput="waiFind(this.value)" value="' + esc(_waiFindQ) + '">'
     +   '<span id="waiFindN" style="font-size:.72rem;color:var(--nd-text-muted)"></span>'
     + '</div>'
@@ -20694,7 +20766,7 @@ async function waiOpen(msisdn, quiet){
     +       ' style="flex:1;resize:vertical;background:var(--nd-bg-surface-2);color:var(--nd-text-primary);border:1px solid var(--nd-border);border-radius:10px;padding:.5rem .65rem;font-size:.85rem;font-family:inherit"></textarea>'
     +     '<button class="btn btn-primary" '+(canType?'':'disabled')+' onclick="waiSend(this)">Send</button>'
     +   '</div>'
-    +   (canType ? _waiEmojiBar('waiBox') : '')
+    +   (canType ? _waLangTick('waiTr', c.language || 'hinglish', c.language_name) + _waiEmojiBar('waiBox') : '')
     +   '<div id="waiMsg" style="font-size:.78rem"></div>'
     + '</div>');
   // Never lose what somebody was typing to a refresh.
@@ -20789,9 +20861,9 @@ async function waiSend(btn){
   _waiBusy = true; const orig = btn.textContent; btn.disabled = true; btn.textContent = 'Sending…';
   m.style.color = 'var(--nd-text-faint)'; m.textContent = '';
   try{
-    const r = await API('/wa/thread/'+encodeURIComponent(_waiSel)+'/reply', {method:'POST', body: JSON.stringify({text: text})});
-    if(r.ok){ box.value=''; await waiOpen(_waiSel, true); }
-    else { const e = await r.json().catch(function(){return {};}); m.style.color='var(--nd-danger-text)'; m.textContent = e.detail || 'Could not send.'; }
+    const res = await _waSmartSend(_waiSel, text, 'waiTr');
+    if(res.ok){ box.value=''; await waiOpen(_waiSel, true); }
+    else if(!res.cancelled){ m.style.color='var(--nd-danger-text)'; m.textContent = res.error; }
   }catch(e){ m.style.color='var(--nd-danger-text)'; m.textContent='Could not send.'; }
   finally{ _waiBusy=false; btn.disabled=false; btn.textContent=orig; }
 }
