@@ -213,6 +213,20 @@ async def routes():
         r = await cl.post("/nidaan/api/claims/submit", headers=sub,
                           json={k: v for k, v in dict(body, letter_token=s.json().get("token")).items()})
         check("with the letter, the subscriber's claim is created", r.status_code == 200, r.text)
+        # A paid Rs 499 credit, unused: the claim is PAID, not a lead with a second pay-gate.
+        async with aiosqlite.connect(DBP) as c:
+            await c.execute("INSERT INTO nidaan_accounts (account_id, owner_name, email, phone, password_hash, status) "
+                            "VALUES (50,'Retail','r2@example.invalid','9000000003','x','active')")
+            await c.execute("INSERT INTO nidaan_per_claim_purchase (account_id, status, amount_paid, claim_type, insured_name, insured_phone, advisor_name, advisor_phone, advisor_email) VALUES (50,'paid',49900,'health','A','9000000003','R','9000000003','r2@example.invalid')")
+            await c.commit()
+        sub2 = {"Authorization": "Bearer " + nid.create_nidaan_token(50, "r2@example.invalid")}
+        s2 = await stage("/nidaan/api/intake/letter", sub2)
+        r = await cl.post("/nidaan/api/claims/submit", headers=sub2, json=dict(body, letter_token=s2.json().get("token")))
+        async with aiosqlite.connect(DBP) as c:
+            ps = (await (await c.execute("SELECT payment_status FROM nidaan_claims WHERE claim_id=?",
+                                         (r.json().get("claim_id"),))).fetchone() or [None])[0]
+        check("a paid Rs 499 credit makes the claim PAID - never a second pay-gate", r.status_code == 200 and ps == "paid",
+              (r.status_code, ps, r.text[:120]))
         s = await stage("/nidaan/api/intake/letter", {})
         check("nobody signed in cannot upload a letter", s.status_code == 401, s.status_code)
 

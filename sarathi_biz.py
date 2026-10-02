@@ -4349,7 +4349,10 @@ async def nidaan_api_submit_claim(body: NidaanClaimReq, request: Request):
     #       no legal notification). The lead is still recorded + visible in ops.
     _sub_check = await nidaan.get_active_subscription(payload["sub"])
     _per_claim_check = await nidaan.get_per_claim_status(payload["sub"])
-    _is_paid = bool(_per_claim_check and _per_claim_check.get("status") == "paid")
+    # An unused PAID Rs 499 credit. get_per_claim_status has never returned a "status" key, so the old
+    # test was always False: a paid review became an unpaid lead with a second pay-gate while its
+    # credit was consumed anyway (found 2 Oct, before anyone hit it).
+    _is_paid = bool(_per_claim_check and int(_per_claim_check.get("balance") or 0) > 0)
     if _sub_check:
         _pay_status, _skip_elig = "subscription", False
     elif _is_paid:
