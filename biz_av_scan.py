@@ -35,8 +35,8 @@ _CHUNK = 64 * 1024
 
 
 def _timeout_for(n: int) -> float:
-    """A big file takes longer to scan. 20 s, plus about half a second per MB - a 95 MB file gets
-    67 s, still inside Cloudflare's 100 s wait. A timeout refuses the file, so too short a clock
+    """A big file takes longer to scan. 20 s, plus about half a second per MB - a 100 MB file gets
+    about 68 s, still inside Cloudflare's 100 s wait. A timeout refuses the file, so too short a clock
     would refuse genuine papers."""
     return _SCAN_TIMEOUT + 0.5 * (n / (1024 * 1024))
 

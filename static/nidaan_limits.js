@@ -1,14 +1,14 @@
 /* HOW BIG A DOCUMENT MAY BE - the pages' copy of biz_nidaan_limits.py (3 Oct 2026).
    deploy/verify-limits.py fails the build if these numbers and the server's disagree.
-   95 MB, not 100: Cloudflare refuses a request over 100 MB, and a request is the file plus a
-   little form data. */
+   100 MB a document: Cloudflare refuses a request over 100 MiB (104,857,600 bytes, measured 4 Oct),
+   so a 100 MB file plus the form fits; a request carries up to 104 MB. */
 (function(){
   if (window.NidaanLimits) return;
   var MB = 1000 * 1000;            // decimal megabytes: they pass however Cloudflare counts its 100
   window.NidaanLimits = {
-    docMaxMB: 95,
-    docMaxBytes: 95 * MB,          // one document
-    requestMaxBytes: 99 * MB,      // one upload request
+    docMaxMB: 100,
+    docMaxBytes: 100 * MB,         // one document
+    requestMaxBytes: 104 * MB,     // one upload request
     filesPerRequest: 20,           // the server's own count per request
     // Bigger than one request allows? Send it alone. Smaller ones are grouped under this.
     tooBig: function(file){ return !!file && file.size > this.docMaxBytes; },

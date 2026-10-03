@@ -6,9 +6,10 @@ merged PDFs. The limit used to be 25 MB in about ten separate places (30 in the 
 the bot, 48 at the scanner, 50 at nginx), so a file could pass one door and be refused at the
 next. Every door now reads it from here.
 
-WHY 95 MB AND NOT 100: Cloudflare, in front of every request, refuses a request over 100 MB - and
-a request carries the file plus a little form data. The document and request limits are counted in
-DECIMAL megabytes (1 MB = 1,000,000 bytes), so they pass however Cloudflare counts its 100.
+100 MB, MEASURED: Cloudflare, in front of every request, refuses a request over 100 MiB
+(104,857,600 bytes) - tested 4 Oct 2026: 104.5 MB passed, 105.5 MB got Cloudflare's own 413; nginx's
+100M is the same number. A document of 100 MB (decimal, 100,000,000 bytes - what people mean) plus the
+form data fits with ~850 KB to spare, so the request limit is 104 MB decimal.
 
 WHAT WE CANNOT RAISE (other companies' rules), each named so the message can say why:
   * Telegram bots cannot download a file over 20 MB.
@@ -25,9 +26,10 @@ the build if the two disagree.
 MB = 1024 * 1024                           # binary megabyte - the scanner's and Telegram's unit
 MB_DEC = 1000 * 1000                       # decimal megabyte - what people (and Cloudflare) mean
 
-DOC_MAX_MB = 95
+DOC_MAX_MB = 100
 DOC_MAX_BYTES = DOC_MAX_MB * MB_DEC        # one document, at any door
-REQUEST_MAX_BYTES = 99 * MB_DEC            # one upload request (one or more files) - under Cloudflare's 100
+REQUEST_MAX_BYTES = 104 * MB_DEC           # one upload request - under Cloudflare's 104,857,600
+CLOUDFLARE_MAX_BYTES = 100 * MB            # measured 4 Oct 2026 (Cloudflare's own 413 above it)
 SCAN_MAX_BYTES = 105 * MB                  # what we hand the scanner (110 MB); clamd allows 110M
 
 TELEGRAM_BOT_MAX_BYTES = 20 * MB           # Telegram's own rule for bots
@@ -37,7 +39,7 @@ EMAIL_MAX_BYTES = 25 * MB
 
 
 def mb(n: int) -> str:
-    """'95 MB' for messages - decimal, as people count."""
+    """'100 MB' for messages - decimal, as people count."""
     return "%d MB" % round(n / MB_DEC)
 
 

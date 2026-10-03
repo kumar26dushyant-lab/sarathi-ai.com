@@ -2,7 +2,7 @@
 """ONE DOCUMENT LIMIT AT EVERY DOOR (founder, 3 Oct 2026: "100 MB each doc").
 
 Through the real routes of the real app, and the WhatsApp / Telegram / email doors:
-  * a 30 MB file - refused at 25 MB until today - is accepted; one over 95 MB is refused, saying
+  * a 30 MB file - refused at 25 MB until today - is accepted; one over 100 MB is refused, saying
     the limit; several files too big for one request are refused as a batch, saying how to send them
   * the old one-request splitter (no virus scan, unused since 29 Sep) is closed
   * WhatsApp: a file Meta says is too big is NOT fetched, and the person is told the real reason
@@ -47,8 +47,8 @@ def pdf(n_bytes):
 
 async def main():
     print("\n-- the numbers --")
-    check("95 MB a document, 99 MB a request - both under Cloudflare's 100, however it counts",
-          L.DOC_MAX_BYTES == 95_000_000 and L.REQUEST_MAX_BYTES == 99_000_000 < 100_000_000)
+    check("100 MB a document, 104 MB a request - under Cloudflare's measured 104,857,600",
+          L.DOC_MAX_BYTES == 100_000_000 and L.REQUEST_MAX_BYTES == 104_000_000 < 104_857_600 - 512 * 1024)
     check("the scanner takes more than a document, so nothing we accept is unscannable",
           L.SCAN_MAX_BYTES > L.DOC_MAX_BYTES)
 
@@ -80,13 +80,13 @@ async def main():
         url = "/nidaan/ops/api/claims/7/documents/upload"
         r = await cl.post(url, headers=staff, files={"files": ("big-scan.pdf", pdf(30_000_000), "application/pdf")})
         check("a 30 MB scan is accepted (it was refused at 25 MB)", r.status_code == 200, (r.status_code, r.text[:200]))
-        r = await cl.post(url, headers=staff, files={"files": ("huge.pdf", pdf(96_000_000), "application/pdf")})
-        check("a 96 MB file is refused, saying the limit", r.status_code == 413 and "95 MB" in r.text,
+        r = await cl.post(url, headers=staff, files={"files": ("huge.pdf", pdf(101_000_000), "application/pdf")})
+        check("a 101 MB file is refused, saying the limit", r.status_code == 413 and "100 MB" in r.text,
               (r.status_code, r.text[:200]))
         r = await cl.post(url, headers=staff, files=[("files", ("a.pdf", pdf(60_000_000), "application/pdf")),
                                                       ("files", ("b.pdf", pdf(60_000_000), "application/pdf"))])
         check("two 60 MB files in ONE request are refused as a batch, saying how much at a time",
-              r.status_code == 413 and "99 MB" in r.text, (r.status_code, r.text[:200]))
+              r.status_code == 413 and "104 MB" in r.text, (r.status_code, r.text[:200]))
         r = await cl.post("/nidaan/ops/api/docsplit/upload", headers=staff,
                           files={"files": ("a.pdf", pdf(1000), "application/pdf")})
         check("the old one-request splitter (no virus scan) is closed", r.status_code == 410, (r.status_code, r.text[:120]))
@@ -101,7 +101,7 @@ async def main():
     wa.download_media = _too_big
     data, _mime, why = await unsorted._download_and_scan("m1")
     check("a file Meta says is too big is not stored, and says why in plain words",
-          data is None and "too large" in why and "95 MB" in why, why)
+          data is None and "too large" in why and "100 MB" in why, why)
     wa.download_media = real
 
     # download_media itself: the size Meta declares is read BEFORE the file is fetched.
@@ -142,8 +142,8 @@ async def main():
     print("\n-- Telegram --")
     import biz_nidaan_bot_guard as g
     r = g.check_size(25 * L.MB)
-    check("over Telegram's own 20 MB: refused before downloading, pointing to the website's 95 MB",
-          not r["ok"] and "website" in r["reason"] and "95" in r["reason"], r)
+    check("over Telegram's own 20 MB: refused before downloading, pointing to the website's 100 MB",
+          not r["ok"] and "website" in r["reason"] and "100" in r["reason"], r)
     check("a normal file passes; an unknown size is left to the real check",
           g.check_size(5 * L.MB)["ok"] and g.check_size(0)["ok"])
 

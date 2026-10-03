@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <script src="/static/nidaan_onetap.js?v=2"></script>
-<script src="/static/nidaan_limits.js?v=1"></script>
+<script src="/static/nidaan_limits.js?v=2"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <style>html.ops-has-token #loginScreen{display:none!important}</style>
@@ -2521,7 +2521,7 @@ async function openQuickTaskModal(presetClaimId){
       <input type="file" id="qtCreateFile" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.heif,.doc,.docx,.xls,.xlsx,.txt,.csv" style="display:none" onchange="_qtCreateFilePicked()">
       <button type="button" class="btn-sm" onclick="document.getElementById('qtCreateFile').click()"
               style="background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);margin-bottom:.4rem">📎 Attach file(s)</button>
-      <div style="font-size:.7rem;color:var(--nd-text-faint);margin-bottom:.4rem">Up to 10 files · <span data-nd-docmax>95</span> MB each · PDF, images (JPG/PNG/HEIC), DOC/XLS, TXT/CSV.</div>
+      <div style="font-size:.7rem;color:var(--nd-text-faint);margin-bottom:.4rem">Up to 10 files · <span data-nd-docmax>100</span> MB each · PDF, images (JPG/PNG/HEIC), DOC/XLS, TXT/CSV.</div>
       <div id="qtCreateFileName" style="display:none;font-size:.76rem;color:var(--nd-cyan-text);margin-bottom:.6rem"></div>
 
       ${(_role==='super_admin'||_role==='sub_super_admin') ? `
@@ -3204,7 +3204,7 @@ async function openQuickTaskDrawer(qid){
             <button class="btn-sm" title="Attach file(s)" style="background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary)" onclick="document.getElementById('qtNoteFile').click()">📎</button>
             <button class="btn-sm" style="background:#22d3ee;color:#0a1628;font-weight:700" onclick="qtAddNote(${qt.quick_task_id})">Send</button>
           </div>
-          <div style="font-size:.7rem;color:var(--nd-text-faint);margin-top:.25rem">💡 Tag a teammate with @ to pull them onto this task. 📎 Up to 10 files · <span data-nd-docmax>95</span> MB each · PDF, images (JPG/PNG/HEIC), DOC/XLS, TXT/CSV. You can remove your own attachment within 1 hour.</div>
+          <div style="font-size:.7rem;color:var(--nd-text-faint);margin-top:.25rem">💡 Tag a teammate with @ to pull them onto this task. 📎 Up to 10 files · <span data-nd-docmax>100</span> MB each · PDF, images (JPG/PNG/HEIC), DOC/XLS, TXT/CSV. You can remove your own attachment within 1 hour.</div>
           <div id="qtNoteFileName" style="display:none;font-size:.76rem;color:var(--nd-cyan-text);margin-top:.3rem"></div>` : ''}
       </div>
     </div>`;

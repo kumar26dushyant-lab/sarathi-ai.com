@@ -43,8 +43,9 @@ for name, want in (("docMaxMB", L.DOC_MAX_MB), ("docMaxBytes", L.DOC_MAX_BYTES),
         bad.append("nidaan_limits.js %s = %r, server says %r" % (name, got, want))
 if not (L.SCAN_MAX_BYTES > L.DOC_MAX_BYTES and L.REQUEST_MAX_BYTES >= L.DOC_MAX_BYTES):
     bad.append("the scanner / request ceilings must sit above the document limit")
-if L.REQUEST_MAX_BYTES >= 100 * L.MB_DEC:
-    bad.append("a request at or over 100 MB is refused by Cloudflare")
+# Cloudflare refuses a request over 100 MiB (measured 4 Oct 2026). Leave room for the form data.
+if L.REQUEST_MAX_BYTES > L.CLOUDFLARE_MAX_BYTES - 512 * 1024:
+    bad.append("a request this big would hit Cloudflare's 100 MiB limit (leave 512 KB for the form)")
 
 # Document doors that must read the shared limit, not carry their own number.
 DOORS = {

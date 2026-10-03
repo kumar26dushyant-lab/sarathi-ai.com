@@ -36,7 +36,7 @@ const check = (label, ok, detail) => {
     const MB = 1e6;
     const f = (name, mb) => { const x = new File(['x'], name); Object.defineProperty(x, 'size', { value: mb * MB }); return x; };
     const L = window.NidaanLimits;
-    const files = [f('a.pdf', 40), f('b.pdf', 40), f('c.pdf', 40), f('huge.pdf', 96), f('d.pdf', 1)];
+    const files = [f('a.pdf', 40), f('b.pdf', 40), f('c.pdf', 40), f('huge.pdf', 101), f('d.pdf', 1)];
     const groups = L.batches(files).map(g => g.map(x => x.name));
     const sums = L.batches(files).map(g => g.reduce((t, x) => t + x.size, 0));
     const many = L.batches(Array.from({ length: 25 }, (_, i) => f('p' + i + '.jpg', 1))).map(g => g.length);
@@ -44,30 +44,30 @@ const check = (label, ok, detail) => {
     return {
       limit: L.docMaxMB, big: L.oversize(files).map(x => x.name), groups, sums, many, sent,
       en: L.report(sent, false), hi: L.report(sent, true),
-      tooBig: L.tooBig(f('x', 95.5)), fits: L.tooBig(f('y', 95)),
+      tooBig: L.tooBig(f('x', 100.5)), fits: L.tooBig(f('y', 100)),
       refusalEn: L.refusal('scan.pdf', 120 * MB, false), refusalHi: L.refusal('scan.pdf', 120 * MB, true),
     };
   });
 
   console.log('\nWhat is refused\n');
-  check('the limit is 95 MB', res.limit === 95, res.limit);
-  check('a 96 MB file is picked out before anything is sent', JSON.stringify(res.big) === '["huge.pdf"]', res.big);
-  check('95 MB fits; 95.5 MB does not', res.fits === false && res.tooBig === true);
-  check('the refusal says the size, the limit and what to do', /120 MB/.test(res.refusalEn) && /95 MB/.test(res.refusalEn)
+  check('the limit is 100 MB', res.limit === 100, res.limit);
+  check('a 101 MB file is picked out before anything is sent', JSON.stringify(res.big) === '["huge.pdf"]', res.big);
+  check('100 MB fits; 100.5 MB does not', res.fits === false && res.tooBig === true);
+  check('the refusal says the size, the limit and what to do', /120 MB/.test(res.refusalEn) && /100 MB/.test(res.refusalEn)
         && /PDF/.test(res.refusalEn) && /सीमा/.test(res.refusalHi), [res.refusalEn, res.refusalHi]);
 
   console.log('\nHow it splits\n');
   check('three 40 MB files go as two requests (80 + 40), never one 120 MB request',
         JSON.stringify(res.groups) === '[["a.pdf","b.pdf"],["c.pdf","d.pdf"]]', res.groups);
   check('25 small files go as 20 + 5 - the server takes 20 per request', JSON.stringify(res.many) === '[20,5]', res.many);
-  check('no request carries more than 99 MB of files', res.sums.length === 2 && res.sums.every(n => n <= 99e6), res.sums);
+  check('no request carries more than 104 MB of files', res.sums.length === 2 && res.sums.every(n => n <= 104e6), res.sums);
 
   console.log('\nWhat it reports\n');
   check('every batch is sent', posts.length === 2, posts.length);
   check('the files that went are counted', res.sent.sent === 2, res.sent);
   check('the files in the failed batch are NAMED', JSON.stringify(res.sent.failed) === '["c.pdf","d.pdf"]', res.sent.failed);
   check('...with the server\'s reason', /too big/.test(res.en), res.en);
-  check('the too-big file is named as not sent', /huge\.pdf/.test(res.en) && /95 MB/.test(res.en), res.en);
+  check('the too-big file is named as not sent', /huge\.pdf/.test(res.en) && /100 MB/.test(res.en), res.en);
   check('...and all of it in Hindi too', /नहीं भेजी/.test(res.hi) && /अपलोड नहीं हुई/.test(res.hi), res.hi);
   check('it is not called a success', res.sent.ok === false);
 
