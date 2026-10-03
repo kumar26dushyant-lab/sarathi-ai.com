@@ -89,11 +89,15 @@ class Remote:
             p = self._p(rel)
             return open(p, "rb").read() if os.path.exists(p) else None
         try:
-            return self._rclone("cat", self._p(rel))
+            out = self._rclone("cat", self._p(rel))
         except BackupError as e:
             if "not found" in str(e).lower() or "doesn't exist" in str(e).lower():
                 return None
             raise
+        # `rclone cat` of an object that does not exist answers with NOTHING and success (seen on
+        # the Oracle bucket, 3 Oct) - it read as an empty salt and an empty manifest. None of our
+        # objects is ever empty, so nothing back means not there.
+        return out or None
 
     def put(self, rel: str, data: bytes) -> None:
         if self.local:

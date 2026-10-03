@@ -154,6 +154,17 @@ r = of.restore(os.path.join(base, "restored2"), remote, PP, with_db=True)
 check("restore can bring back the latest database, as a separate file",
       r["db"] and open(r["db"], "rb").read().startswith(b"SQLite format 3\0"), r)
 
+print("\n-- the real remote's habits --")
+# `rclone cat` of a missing object answers with nothing and success (the Oracle bucket, 3 Oct).
+# That read as an EMPTY salt, so the first copy was encrypted without one. Pretend to be rclone.
+rr = of.Remote("oci:bucket")
+rr._rclone = lambda *a, **k: b""
+check("an empty answer from rclone means 'not there', not an empty object", rr.get("salt") is None)
+made = {}
+rr.put = lambda rel, data: made.__setitem__(rel, data)
+k = of.keys_for(rr, PP, create=True)
+check("...so a new backup creates its own random salt", len(made.get("salt", b"")) == 16, made.keys())
+
 print("\n-- settings --")
 try:
     of.Keys("short", b"0" * 16)
