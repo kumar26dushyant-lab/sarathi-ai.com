@@ -30,7 +30,7 @@ import biz_database as db
 
 logger = logging.getLogger("nidaan.wa.unsorted")
 DB_PATH = db.DB_PATH
-MAX_BYTES = 25 * 1024 * 1024
+from biz_nidaan_limits import DOC_MAX_BYTES as MAX_BYTES  # one limit for every door
 NP_RE = re.compile(r"\bNP[-\s#]?0*(\d{1,6})\b", re.I)
 
 SCHEMA = """
@@ -104,11 +104,15 @@ async def _download_and_scan(media_id: str) -> tuple[Optional[bytes], str, str]:
     """(bytes, mime, why_not). bytes is None when the file must not be stored."""
     import biz_nidaan_whatsapp as _wa
     dl = await _wa.download_media(media_id)
+    if dl.get("error") == "too_large":            # Meta said how big it is; we did not fetch it
+        import biz_nidaan_limits as _lim
+        return None, "", "too large (%s - over %s)" % (_lim.mb(dl.get("size") or 0), _lim.mb(MAX_BYTES))
     if not dl.get("ok"):
         return None, "", "could not be downloaded from WhatsApp (%s)" % (dl.get("error") or "error")
     data = dl.get("content") or b""
     if len(data) > MAX_BYTES:
-        return None, dl.get("mime") or "", "too large (over 25 MB)"
+        import biz_nidaan_limits as _lim
+        return None, dl.get("mime") or "", "too large (over %s)" % _lim.mb(MAX_BYTES)
     try:
         import biz_av_scan as _av
         allowed, why = await _av.scan_bytes(data)

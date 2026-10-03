@@ -1270,7 +1270,7 @@ async def _stage_intake_letter(request: Request, owner: str, file: UploadFile) -
         raise HTTPException(429, "Too many uploads today. Please try again tomorrow, or call us.")
     content = await file.read()
     if len(content) > _MAX_DOC_SIZE:
-        raise HTTPException(413, f"{file.filename} is over the {_MAX_DOC_SIZE // (1024*1024)} MB limit")
+        raise HTTPException(413, f"{file.filename} is over the {_limits.mb(_MAX_DOC_SIZE)} limit")
     if not _doc_magic_ok(content):
         raise HTTPException(415, _upload_refusal(file.filename, content))
     ext = await validate_upload_scanned(content, (file.content_type or ""), what="document")
@@ -1472,7 +1472,7 @@ async def nidaan_branch_upload_claim_doc(claim_id: int, request: Request,
     for f in files:
         content = await f.read()
         if len(content) > _MAX_DOC_SIZE:
-            raise HTTPException(413, f"{f.filename} is over the {_MAX_DOC_SIZE // (1024*1024)} MB limit")
+            raise HTTPException(413, f"{f.filename} is over the {_limits.mb(_MAX_DOC_SIZE)} limit")
         if not _doc_magic_ok(content):
             raise HTTPException(415, _upload_refusal(f.filename, content))
         ext = await validate_upload_scanned(content, (f.content_type or ""), what="document")
@@ -2286,7 +2286,7 @@ async def nidaan_claim_upload_doc(request: Request, files: list[UploadFile] = Fi
     for f in files:
         content = await f.read()
         if len(content) > _MAX_DOC_SIZE:
-            raise HTTPException(status_code=413, detail=f"{f.filename} is over the {_MAX_DOC_SIZE // (1024*1024)} MB limit")
+            raise HTTPException(status_code=413, detail=f"{f.filename} is over the {_limits.mb(_MAX_DOC_SIZE)} limit")
         if not _doc_magic_ok(content):
             raise HTTPException(status_code=415, detail=_upload_refusal(f.filename, content))
         ext = await validate_upload_scanned(content, (f.content_type or ""), what="document")
@@ -4836,19 +4836,19 @@ def _verify_doc_sig(stored_name: str, exp: str, sig: str) -> bool:
     if e < int(_time.time()):
         return False
     return hmac.compare_digest(_doc_sig(stored_name, e), sig or "")
-# Per-file ceiling. 25 MB, not 100: every stored file is virus-scanned in memory before it is
-# written, and clamd will not scan a stream beyond its StreamMaxLength. A file we cannot scan is a
-# file we would have to either refuse or wave through unscanned, and we refuse to do the latter —
-# so the scanner's ceiling is the honest ceiling for the whole feature.
-_MAX_DOC_SIZE = 25 * 1024 * 1024  # 25 MB
+# Per-file ceiling - ONE number for every door (biz_nidaan_limits, founder 3 Oct: "100 MB each").
+# 95 MB: Cloudflare refuses a request over 100 MB. Every stored file is still virus-scanned in
+# memory before it is written; the scanner's ceiling sits above this (deploy/verify-limits.py).
+import biz_nidaan_limits as _limits
+_MAX_DOC_SIZE = _limits.DOC_MAX_BYTES
 _MAX_DOCS_PER_CLAIM = 60          # storage-DoS guard for free leads
 # Files in ONE request. A person who has all the paperwork in hand should be able to attach it in
 # one go; the old limit of 5 forced a real claim file to be sent in four or five trips.
 _MAX_FILES_PER_UPLOAD = 20
-# Bytes in ONE request. nginx caps the request body at 50 MB, so this sits below that: the caller
-# gets a clear message from us instead of an opaque 413 from the web server. The browser splits a
-# large set into batches under this figure, so a big upload succeeds rather than being rejected.
-_MAX_UPLOAD_BATCH_BYTES = 40 * 1024 * 1024
+# Bytes in ONE request: under Cloudflare's 100 MB (nginx allows 100M), so the caller gets a clear
+# message from us instead of an opaque 413. The pages send big sets in batches under this figure
+# (NidaanLimits.batches), so a big upload succeeds rather than being refused.
+_MAX_UPLOAD_BATCH_BYTES = _limits.REQUEST_MAX_BYTES
 
 
 def _guard_upload_batch(files) -> None:
@@ -4867,8 +4867,8 @@ def _guard_upload_batch(files) -> None:
     if total > _MAX_UPLOAD_BATCH_BYTES:
         raise HTTPException(
             status_code=413,
-            detail=f"That batch is {total // (1024*1024)} MB. Please send up to "
-                   f"{_MAX_UPLOAD_BATCH_BYTES // (1024*1024)} MB at a time.")
+            detail=f"That batch is {_limits.mb(total)}. Please send up to "
+                   f"{_limits.mb(_MAX_UPLOAD_BATCH_BYTES)} at a time.")
 
 
 def _sniff_file(content: bytes) -> tuple:
@@ -5023,7 +5023,7 @@ def validate_upload(content: bytes, declared_mime: str = "", *, images_only: boo
         raise HTTPException(status_code=400, detail=f"The {what} is empty")
     if len(content) > max_bytes:
         raise HTTPException(status_code=413,
-                            detail=f"{what.capitalize()} exceeds the {max_bytes // (1024*1024)} MB limit")
+                            detail=f"{what.capitalize()} exceeds the {_limits.mb(max_bytes)} limit")
     ext = _doc_ext_for(content)
     if not ext or (images_only and ext not in _IMAGE_EXTS):
         raise HTTPException(
@@ -5090,7 +5090,7 @@ async def nidaan_upload_review_doc(purchase_id: int, request: Request, files: li
         content = await f.read()
         if len(content) > _MAX_DOC_SIZE:
             raise HTTPException(status_code=413,
-                                detail=f"File {f.filename} is over the {_MAX_DOC_SIZE // (1024*1024)} MB limit")
+                                detail=f"File {f.filename} is over the {_limits.mb(_MAX_DOC_SIZE)} limit")
         if not _doc_magic_ok(content):
             raise HTTPException(status_code=415, detail=_upload_refusal(f.filename, content))
         ext = await validate_upload_scanned(content, (f.content_type or ""), what="document")
@@ -5153,7 +5153,7 @@ async def nidaan_upload_claim_doc(claim_id: int, request: Request,
         content = await f.read()
         if len(content) > _MAX_DOC_SIZE:
             raise HTTPException(status_code=413,
-                                detail=f"File {f.filename} is over the {_MAX_DOC_SIZE // (1024*1024)} MB limit")
+                                detail=f"File {f.filename} is over the {_limits.mb(_MAX_DOC_SIZE)} limit")
         if not _doc_magic_ok(content):
             raise HTTPException(status_code=415, detail=_upload_refusal(f.filename, content))
         ext = await validate_upload_scanned(content, (f.content_type or ""), what="document")
@@ -5400,7 +5400,7 @@ async def ops_upload_any_claim_doc(claim_id: int, request: Request,
             raise HTTPException(400, "That is not a document on this claim's list.")
     _guard_upload_batch(files)
     saved = []
-    mb = _MAX_DOC_SIZE // (1024 * 1024)
+    mb = round(_MAX_DOC_SIZE / _limits.MB_DEC)   # decimal, as the limit is set
     for f in files:
         content = await f.read()
         if len(content) > _MAX_DOC_SIZE:
@@ -11437,7 +11437,7 @@ async def ops_my_upload_claim_doc(claim_id: int, request: Request,
     for f in files:
         content = await f.read()
         if len(content) > _MAX_DOC_SIZE:
-            raise HTTPException(413, f"{f.filename} is over the {_MAX_DOC_SIZE // (1024*1024)} MB limit")
+            raise HTTPException(413, f"{f.filename} is over the {_limits.mb(_MAX_DOC_SIZE)} limit")
         if not _doc_magic_ok(content):
             raise HTTPException(415, _upload_refusal(f.filename, content))
         ext = await validate_upload_scanned(content, (f.content_type or ""), what="document")
@@ -13169,7 +13169,7 @@ async def ops_claim_notes_mark_read(claim_id: int, request: Request):
 async def ops_claim_note_attachments(claim_id: int, note_id: int, request: Request,
                                      files: Optional[list[UploadFile]] = File(None),
                                      file: Optional[UploadFile] = File(None)):
-    """Attach one or more files (≤10, ≤10 MB each) to a claim note. Mirrors the quick-task flow."""
+    """Attach one or more files (up to 10, each within biz_nidaan_limits) to a claim note. Mirrors the quick-task flow."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     staff = _require_staff(request, "team_member")
@@ -13601,70 +13601,21 @@ async def ops_claim_doc_exclude(claim_id: int, body: _ClaimExcludeReq, request: 
 
 @app.post("/nidaan/ops/api/docsplit/upload")
 @limiter.limit("20/minute")
-async def ops_docsplit_upload(request: Request, files: list[UploadFile] = File(...)):
-    """Upload one or more mixed files (PDF / JPEG / PNG / …) → merge → AI-detect the distinct documents
-    + page ranges → return them for human review. Any staff."""
+async def ops_docsplit_upload(request: Request):
+    """Retired 3 Oct 2026. The single-request upload read every page before answering (Cloudflare
+    cut it at 100 s) and skipped the virus scan; the screen has used the batch flow below since
+    29 Sep. Kept as a clear refusal so an old open tab says what to do instead of failing oddly."""
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
-    staff = _require_staff(request)
-    raw = []
-    skipped_bad: list = []
-    for f in (files or [])[:12]:
-        b = await f.read()
-        if not b or len(b) > 30 * 1024 * 1024:   # 30 MB per file cap
-            continue
-        # Confirm it really is a document/image before it reaches the PDF pipeline. Silently
-        # skipping (rather than erroring) matches the existing tolerant behaviour of this tool.
-        if not _doc_magic_ok(b):
-            skipped_bad.append(f.filename or "file")
-            continue
-        raw.append((f.filename or "file", b))
-    if not raw:
-        raise HTTPException(status_code=400, detail="No readable files (max 30 MB each)")
-    pdf, n, skipped = docsplit.normalize_to_pdf(raw)
-    if n == 0:
-        raise HTTPException(status_code=400,
-                            detail="Couldn't read any pages. Supported: PDF, JPG, PNG (DOC/DOCX not yet).")
-    if n > docsplit.MAX_PAGES:
-        raise HTTPException(status_code=400,
-                            detail=f"Too many pages ({n}). Please split into batches of ≤{docsplit.MAX_PAGES}.")
-    # THREE AT A TIME. A fourth does not quietly push the first out: it reports that the inbox
-    # is full and names the one it would put away, and the screen asks. (Founder, 28 Sep.)
-    import biz_nidaan_doc_store as _store
-    room = await _store.room_for_a_job(staff.get("staff_id"))
-    if not room.get("ok") and room.get("reason") == "unavailable":
-        raise HTTPException(status_code=503, detail="Your open files could not be checked just "
-                                                    "now. Please try again in a minute.")
-    if not room.get("ok"):
-        raise HTTPException(status_code=409, detail={
-            "reason": "inbox_full", "limit": room.get("limit"),
-            "oldest": room.get("oldest") or {},
-            "message": "You already have %d files open. Close one to start another."
-                       % room.get("limit", 3)})
-    job = docsplit.save_job(pdf)
-    await _store.create_job(job, staff.get("staff_id"),
-                            (raw[0][0] if raw else "Upload"), n)
-    # Classified ONCE, here, and saved beside the working PDF. Reading a scanned page costs
-    # about fifteen seconds; doing it again every time the screen opens would make a long bundle
-    # unusable, and would also throw away any correction somebody had made.
-    import biz_nidaan_doc_brain as _brain
-    try:
-        page_types = await _brain.classify_pages(pdf, await _store.load_rules())
-        docsplit.save_pages(job, page_types)
-    except Exception as _e:  # noqa: BLE001
-        logger.info("classify failed for job %s: %s", job, _e)
-    documents = await docsplit.segment(pdf, n)
-    # Report files rejected as not-a-real-document alongside the pipeline's own skips, so the
-    # staffer sees WHY something didn't make it in rather than silently losing a page.
-    return {"job_id": job, "page_count": n, "documents": documents,
-            "skipped": list(skipped or []) + skipped_bad}
+    _require_staff(request)
+    raise HTTPException(status_code=410, detail="Please reload the page - the Doc Splitter now sends files one at a time.")
 
 
 # ── The splitter, one file at a time, read in the background (29 Sep) ─────────
 # The single-request upload read every page before answering: 45 to 247 seconds on 29 Sep.
-# Cloudflare cuts every request at 100 s and nginx refuses a body over 50 MB, so the staffer saw
-# "Could not process the file(s)" for jobs that had in fact finished, and 40 files of up to 30 MB
-# could never be sent at all. Now: a batch is opened, files arrive one per request (each well
+# Cloudflare cuts every request at 100 s and refuses a body over 100 MB, so the staffer saw
+# "Could not process the file(s)" for jobs that had in fact finished, and 40 large files could
+# never be sent at all. Now: a batch is opened, files arrive one per request (each well
 # inside every limit), and reading happens in the background with progress the screen shows.
 _DS_TASKS: set = set()
 _DS_READ_LOCK = asyncio.Semaphore(1)     # one batch read per process - OCR is heavy on 2 CPUs

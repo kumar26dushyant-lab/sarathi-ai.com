@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <script src="/static/nidaan_onetap.js?v=2"></script>
+<script src="/static/nidaan_limits.js?v=1"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Authorized Partner (AP) Portal — Nidaan Partner</title>
@@ -179,7 +180,7 @@
       <label id="bcDocsLbl" style="font-size:.82rem;font-weight:600">📎 Other documents <span style="font-weight:400;color:var(--nd-text-faint)">(optional — attach whatever they already have)</span></label>
       <input type="file" id="bcDocs" multiple style="display:block;margin-top:.35rem;color:var(--nd-text-secondary);font-size:.82rem" onchange="ndFiles('bcDocs','bcDocsList')">
       <div id="bcDocsList" style="font-size:.8rem;color:var(--nd-text-muted);margin-top:.25rem"></div>
-      <div style="font-size:.75rem;color:var(--nd-text-faint);margin-top:.2rem">PDF, photos, Word, scans — not video. Max 25 MB each.</div>
+      <div style="font-size:.75rem;color:var(--nd-text-faint);margin-top:.2rem">PDF, photos, Word, scans — not video. Max <span data-nd-docmax>95</span> MB each.</div>
     </div>
     <div class="msg" id="bcMsg" style="margin-top:.5rem"></div>
     <button class="btn btn-cyan" id="bcSubmitBtn" style="margin-top:.7rem" onclick="raiseBranchClaim()">Submit claim →</button>
@@ -206,8 +207,8 @@
 </div>
 
 <script src="/static/nidaan_insurers.js?v=1"></script>
-<script src="/static/nidaan_intake.js?v=2"></script>
-<script src="/static/nidaan_partner_claims.js?v=7"></script>
+<script src="/static/nidaan_intake.js?v=3"></script>
+<script src="/static/nidaan_partner_claims.js?v=8"></script>
 <script>
 const TOKEN_KEY = 'nidaan_branch_token';
 let _email = '';
@@ -581,8 +582,10 @@ async function raiseBranchClaim(){
   const setMsg=(t,ok)=>{ msg.textContent=t; msg.style.color = ok===true?'var(--nd-success-text)':(ok===false?'var(--nd-danger-text)':'var(--nd-text-muted)'); };
   const v = NidaanIntake.collect('bcCore');
   if(!v.ok){ setMsg(v.msg,false); return; }
-  if(!(await NidaanIntake.confirm('bcCore'))) return;
   const extras=Array.from($('bcDocs').files||[]);
+  const _big = NidaanLimits.oversize(extras);
+  if(_big.length){ setMsg(NidaanLimits.refusal(_big[0].name, _big[0].size, hi), false); return; }
+  if(!(await NidaanIntake.confirm('bcCore'))) return;
   btn.disabled=true; setMsg(hi?'जमा हो रहा है…':'Submitting…');
   try{
     const r=await fetch('/nidaan/branch/api/claims',{method:'POST',headers:{...authHeaders(),'Content-Type':'application/json'},
@@ -593,12 +596,9 @@ async function raiseBranchClaim(){
     // Anything else they had in hand follows; a refusal here never touches the claim.
     let extraFailed=[];
     if(extras.length){
-      try{ const fd2=new FormData(); for(const f of extras) fd2.append('files',f);
-        const ur2=await fetch('/nidaan/branch/api/claims/'+d.claim_id+'/documents/upload',
-          {method:'POST',headers:authHeaders(),body:fd2});
-        if(!ur2.ok){ const u2=await ur2.json().catch(()=>({}));
-          extraFailed.push(u2.detail||('error '+ur2.status)); }
-      }catch(e){ extraFailed.push(hi?'अपलोड नहीं हुआ':'the upload did not go through'); }
+      // In batches that fit; a file that did not go is named in the message below.
+      const up=await NidaanLimits.send('/nidaan/branch/api/claims/'+d.claim_id+'/documents/upload', extras, {headers:authHeaders()});
+      if(!up.ok) extraFailed.push(NidaanLimits.report(up, hi));
     }
     setMsg(extraFailed.length
       ? (hi ? ('क्लेम #'+d.claim_id+' जमा ✓ - पर बाकी दस्तावेज़ नहीं लगे ('+extraFailed.join('; ')+')। नीचे क्लेम खोलकर लगाएँ।')

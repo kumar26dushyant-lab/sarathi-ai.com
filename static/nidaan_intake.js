@@ -29,6 +29,15 @@
   var TYPES = null, typesWait = null;
 
   function L(st, en, hi) { return st.lang === 'hi' ? hi : en; }
+  // The document limit lives in /static/nidaan_limits.js (one number for every door). If a page
+  // forgot to load it, the server still enforces the limit - the page just skips its own check.
+  function LIM() {
+    return window.NidaanLimits || { docMaxMB: 0, docMaxBytes: Infinity, refusal: function (n) { return n; } };
+  }
+  function limText(st) {
+    var n = LIM().docMaxMB;
+    return n ? L(st, ' Up to ' + n + ' MB.', ' ' + n + ' MB तक।') : '';
+  }
   function esc(x) {
     return String(x == null ? '' : x).replace(/[&<>"']/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
@@ -199,7 +208,7 @@
                   '7 दिन के अंदर लेटर भेजें। न आने पर क्लेम आर्काइव हो जाएगा (डिलीट नहीं)। रोज़ याद दिलाया जाएगा।') + '</div>' +
                 '<button type="button" class="link" data-act="haveit">' + L(st, 'I have the letter - attach it', 'लेटर है - लगाएँ') + '</button>'
               : '<button type="button" class="btnf" data-act="pick">📄 ' + L(st, 'Attach the letter (photo or PDF)', 'लेटर लगाएँ (फ़ोटो या PDF)') + '</button>' +
-                '<div class="hint">' + L(st, 'A claim cannot be raised without it. Up to 25 MB.', 'इसके बिना क्लेम दर्ज नहीं होता। 25 MB तक।') + '</div>' +
+                '<div class="hint">' + L(st, 'A claim cannot be raised without it.', 'इसके बिना क्लेम दर्ज नहीं होता।') + limText(st) + '</div>' +
                 (letter.busy ? '<div class="bar"><i id="' + p + 'bar"></i></div><div class="hint">' + L(st, 'Uploading and checking…', 'अपलोड और जाँच हो रही है…') + '</div>' : '') +
                 (letter.err ? '<div class="hint" style="color:var(--nd-danger-text,#dc2626)">' + esc(letter.err) + '</div>' : '') +
                 (st.allowNoLetter ? '<button type="button" class="link" data-act="noletter">' + L(st, "I don't have the letter yet", 'अभी लेटर नहीं है') + '</button>' : ''))) +
@@ -269,8 +278,8 @@
   function upload(box, file) {
     var st = S[box];
     st.values = read(box);
-    if (file.size > 25 * 1024 * 1024) {
-      st.letter = { err: L(st, file.name + ' is over 25 MB.', file.name + ' 25 MB से बड़ी है।') };
+    if (file.size > LIM().docMaxBytes) {
+      st.letter = { err: LIM().refusal(file.name, file.size, st.lang === 'hi') };
       draw(box); return;
     }
     st.letter = { busy: true }; draw(box);

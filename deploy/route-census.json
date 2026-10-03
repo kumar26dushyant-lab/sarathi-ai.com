@@ -2092,12 +2092,12 @@
  "GET /nidaan/ops/api/wa/conversations": {
   "file": "nidaan_app.py",
   "func": "nidaan_ops_wa_conversations",
-  "guard": "nidaan-host"
+  "guard": "nidaan-host,staff:wa-inbox"
  },
  "GET /nidaan/ops/api/wa/overview": {
   "file": "nidaan_app.py",
   "func": "nidaan_ops_wa_overview",
-  "guard": "nidaan-host"
+  "guard": "nidaan-host,staff:wa-inbox"
  },
  "GET /nidaan/ops/api/wa/search": {
   "file": "nidaan_app.py",
@@ -2107,7 +2107,7 @@
  "GET /nidaan/ops/api/wa/thread/{msisdn}": {
   "file": "nidaan_app.py",
   "func": "nidaan_ops_wa_thread",
-  "guard": "nidaan-host"
+  "guard": "nidaan-host,staff:wa-inbox"
  },
  "GET /nidaan/ops/api/wa/unsorted": {
   "file": "nidaan_app.py",
@@ -4387,12 +4387,17 @@
  "POST /nidaan/ops/api/wa/thread/{msisdn}/owner": {
   "file": "nidaan_app.py",
   "func": "nidaan_ops_wa_owner",
-  "guard": "nidaan-host"
+  "guard": "nidaan-host,staff:wa-reply"
  },
  "POST /nidaan/ops/api/wa/thread/{msisdn}/reply": {
   "file": "nidaan_app.py",
   "func": "nidaan_ops_wa_reply",
-  "guard": "nidaan-host,rate-limited"
+  "guard": "nidaan-host,staff:wa-reply,rate-limited"
+ },
+ "POST /nidaan/ops/api/wa/thread/{msisdn}/translate": {
+  "file": "nidaan_app.py",
+  "func": "nidaan_ops_wa_translate",
+  "guard": "nidaan-host,staff:wa-reply,rate-limited"
  },
  "POST /nidaan/ops/api/wa/unsorted/{item_id}/attach": {
   "file": "nidaan_app.py",

@@ -642,7 +642,7 @@ CAPABILITIES: list[dict] = [
     {
         "id": "doc_splitter",
         "en": {"t": "Document Splitter",
-               "d": "Upload up to 40 files at once (30 MB each) - PDFs, photos including iPhone HEIC, Word and Excel. They are read on our own server (no AI, nothing leaves) in the background while you get on with other work; a file holding several documents is read page by page. You check each page before sending to authorities.",
+               "d": "Upload up to 40 files at once (95 MB each) - PDFs, photos including iPhone HEIC, Word and Excel. They are read on our own server (no AI, nothing leaves) in the background while you get on with other work; a file holding several documents is read page by page. You check each page before sending to authorities.",
                "u": "Choose the files; watch the count; leave the page if you like - you get a notice when it is ready. Check each page, then download the set."},
         "hi": {"t": "डॉक्यूमेंट स्प्लिटर",
                "d": "ग्राहक की मिली-जुली फ़ाइल अपलोड करें; पेज हमारे अपने सर्वर पर पढ़े जाते हैं (कोई AI नहीं, कुछ बाहर नहीं जाता) और अलग-अलग दस्तावेज़ों में बाँटे जाते हैं — भेजने से पहले आप जाँचते हैं।",
@@ -989,10 +989,10 @@ CAPABILITIES: list[dict] = [
     {
         "id": "claim_documents",
         "en": {"t": "Open a claim's documents without downloading them",
-               "d": "Click a document and read it in the page — PDFs, photos and Word letters. Rename anything badly named (IMG_2231 → 'Discharge summary'), or remove a wrong one — which reopens the checklist line it answered, so we ask for the right one. Any file except video, up to 25 MB, virus-scanned before it is stored.",
+               "d": "Click a document and read it in the page — PDFs, photos and Word letters. Rename anything badly named (IMG_2231 → 'Discharge summary'), or remove a wrong one — which reopens the checklist line it answered, so we ask for the right one. Any file except video, up to 95 MB, virus-scanned before it is stored.",
                "u": "Open a claim → Documents → click a file to read it, or ✏️ to rename it. Download is still one click away."},
         "hi": {"t": "क्लेम के दस्तावेज़ बिना डाउनलोड किए खोलें",
-               "d": "दस्तावेज़ पर क्लिक करें और पेज में ही पढ़ें — PDF, फोटो और Word पत्र। ग़लत नाम वाली फाइल का नाम बदलें (IMG_2231 → 'डिस्चार्ज समरी'), वह क्लेम पर दर्ज हो जाता है। वीडियो छोड़कर हर तरह की फाइल, 25 MB तक, स्टोर करने से पहले वायरस जाँच।",
+               "d": "दस्तावेज़ पर क्लिक करें और पेज में ही पढ़ें — PDF, फोटो और Word पत्र। ग़लत नाम वाली फाइल का नाम बदलें (IMG_2231 → 'डिस्चार्ज समरी'), वह क्लेम पर दर्ज हो जाता है। वीडियो छोड़कर हर तरह की फाइल, 95 MB तक, स्टोर करने से पहले वायरस जाँच।",
                "u": "क्लेम खोलें → Documents → पढ़ने के लिए फाइल पर क्लिक करें, या नाम बदलने के लिए ✏️। डाउनलोड अब भी एक क्लिक दूर है।"},
         "telegram": False, "web": True, "min_role": "team_member",
     },

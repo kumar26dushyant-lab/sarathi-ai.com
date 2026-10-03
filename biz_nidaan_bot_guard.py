@@ -43,7 +43,7 @@ LIMITS: dict[str, tuple[int, int, bool]] = {
 
 # A Telegram bot cannot download anything larger than 20 MB anyway; saying so ourselves means a
 # clear message to the person instead of a confusing failure from the API.
-MAX_FILE_BYTES = 20 * 1024 * 1024
+from biz_nidaan_limits import TELEGRAM_BOT_MAX_BYTES as MAX_FILE_BYTES, DOC_MAX_MB  # Telegram's rule
 MAX_FILES_PER_BATCH = 10
 
 _hits: dict[tuple[int, str], deque] = {}
@@ -111,11 +111,17 @@ def check_file(name: str, data: bytes) -> dict:
     n = len(data or b"")
     if n == 0:
         return {"ok": False, "reason": "That file came through empty. Please send it again."}
-    if n > MAX_FILE_BYTES:
+    return check_size(n)
+
+
+def check_size(n: int) -> dict:
+    """Over Telegram's own 20 MB rule for bots? Checked on the size Telegram DECLARES, before
+    downloading - a bigger file used to fail inside Telegram and read "did not come through"."""
+    if n and n > MAX_FILE_BYTES:
         return {"ok": False,
-                "reason": ("That file is %d MB. Telegram can only pass files up to %d MB — "
-                           "please send a smaller scan, or upload it on the portal."
-                           % (n // (1024 * 1024), MAX_FILE_BYTES // (1024 * 1024)))}
+                "reason": ("That file is %d MB. Telegram lets a bot receive files up to %d MB only - "
+                           "please upload it on the website instead (up to %d MB), or send a smaller scan."
+                           % (n // (1024 * 1024), MAX_FILE_BYTES // (1024 * 1024), DOC_MAX_MB))}
     return {"ok": True, "reason": ""}
 
 

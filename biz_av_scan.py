@@ -26,11 +26,19 @@ logger = logging.getLogger("nidaan.av")
 
 CLAMD_SOCKET = os.getenv("CLAMD_SOCKET", "/var/run/clamav/clamd.ctl")
 _SCAN_TIMEOUT = float(os.getenv("CLAMD_TIMEOUT", "20"))
-# Must stay BELOW clamd's StreamMaxLength (64M on this server) and ABOVE the app's per-file
-# upload cap (25 MB), so every file we are willing to store is a file we are able to scan. If
-# these ever cross, uploads in the gap get refused — we never store what we could not scan.
-_MAX_SCAN_BYTES = 48 * 1024 * 1024
+# One limit for the whole app (biz_nidaan_limits): this sits ABOVE the per-document limit and
+# BELOW clamd's StreamMaxLength (110M, deploy/server-upload-limits.sh), so every file we are willing
+# to store is a file we are able to scan. If they ever cross, files in the gap are refused - we
+# never store what we could not scan. deploy/verify-limits.py checks the order.
+from biz_nidaan_limits import SCAN_MAX_BYTES as _MAX_SCAN_BYTES  # noqa: E402
 _CHUNK = 64 * 1024
+
+
+def _timeout_for(n: int) -> float:
+    """A big file takes longer to scan. 20 s, plus about half a second per MB - a 95 MB file gets
+    67 s, still inside Cloudflare's 100 s wait. A timeout refuses the file, so too short a clock
+    would refuse genuine papers."""
+    return _SCAN_TIMEOUT + 0.5 * (n / (1024 * 1024))
 
 
 def _scan_blocking(data: bytes) -> tuple:
@@ -38,7 +46,7 @@ def _scan_blocking(data: bytes) -> tuple:
     s = None
     try:
         s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        s.settimeout(_SCAN_TIMEOUT)
+        s.settimeout(_timeout_for(len(data)))
         s.connect(CLAMD_SOCKET)
         s.sendall(b"zINSTREAM\0")
         for i in range(0, len(data), _CHUNK):
@@ -85,7 +93,7 @@ async def scan_bytes(data: bytes, *, fail_open: bool = False) -> tuple:
         return False, "file too large to scan safely"
     try:
         clean, detail = await asyncio.wait_for(
-            asyncio.to_thread(_scan_blocking, data), timeout=_SCAN_TIMEOUT + 5)
+            asyncio.to_thread(_scan_blocking, data), timeout=_timeout_for(len(data)) + 5)
     except Exception as e:  # noqa: BLE001
         clean, detail = None, str(e)[:120]
     if clean is True:

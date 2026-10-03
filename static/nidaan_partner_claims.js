@@ -237,14 +237,21 @@
     const inp = document.getElementById('npDocFile_' + claimId);
     const msg = document.getElementById('npDocMsg_' + claimId);
     if (!inp || !inp.files.length) { if (msg) msg.textContent = h ? 'पहले फ़ाइल चुनें।' : 'Choose a file first.'; return; }
-    const fd = new FormData();
-    for (const f of inp.files) fd.append('files', f);
+    // One limit for every door (/static/nidaan_limits.js); several big files go in batches that fit.
+    const LIM = window.NidaanLimits;
+    const big = LIM ? LIM.oversize(inp.files) : [];
+    if (big.length) { if (msg) { msg.style.color = 'var(--nd-danger-text,#b91c1c)'; msg.textContent = '✕ ' + LIM.refusal(big[0].name, big[0].size, h); } return; }
+    const groups = LIM ? LIM.batches(inp.files) : [Array.from(inp.files)];
     const orig = btn.textContent; btn.disabled = true; btn.textContent = h ? 'भेजा जा रहा…' : 'Uploading…';
     try {
-      // Multipart must NOT carry a JSON Content-Type, so pages inject a dedicated uploader.
-      const r = CFG.upload ? await CFG.upload('/' + (CFG.docsBase || 'claims') + '/' + claimId + '/documents/upload', fd)
-                           : await docApi(claimId, '/upload', { method: 'POST', body: fd });
-      if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.detail || 'Upload failed'); }
+      for (const g of groups) {
+        const fd = new FormData();
+        for (const f of g) fd.append('files', f);
+        // Multipart must NOT carry a JSON Content-Type, so pages inject a dedicated uploader.
+        const r = CFG.upload ? await CFG.upload('/' + (CFG.docsBase || 'claims') + '/' + claimId + '/documents/upload', fd)
+                             : await docApi(claimId, '/upload', { method: 'POST', body: fd });
+        if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error((e.detail || 'Upload failed') + ' - ' + g.map(f => f.name).join(', ')); }
+      }
       if (msg) { msg.style.color = 'var(--nd-success-text,#047857)'; msg.textContent = h ? 'अपलोड हो गया ✓' : 'Uploaded ✓'; }
       await loadDocs(claimId);
     } catch (e) {
@@ -258,7 +265,7 @@
     const f = inp && inp.files && inp.files[0];
     if (inp) inp.value = '';
     if (!f) return;
-    if (f.size > 25 * 1024 * 1024) { alert(h ? 'फ़ाइल 25 MB से बड़ी है।' : 'That file is over 25 MB.'); return; }
+    if (window.NidaanLimits && NidaanLimits.tooBig(f)) { alert(NidaanLimits.refusal(f.name, f.size, h)); return; }
     const fd = new FormData(); fd.append('files', f); fd.append('is_letter', '1');
     try {
       const r = CFG.upload ? await CFG.upload('/' + (CFG.docsBase || 'claims') + '/' + claimId + '/documents/upload', fd)

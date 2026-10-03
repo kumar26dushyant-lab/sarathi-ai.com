@@ -54,6 +54,12 @@ def _guard_of(body: str) -> str:
         bits.append("staff:" + m.group(1))
     elif "_require_staff(request)" in body:
         bits.append("staff:any")
+    # The WhatsApp gates wrap _require_staff (team_member + the duty roster). Named, so a route
+    # using one is not recorded as open - and so losing one is caught like any other gate.
+    elif "_require_wa_reply(request)" in body:
+        bits.append("staff:wa-reply")
+    elif "_require_wa_inbox(request)" in body:
+        bits.append("staff:wa-inbox")
     if "_require_admin" in body:
         bits.append("admin")
     if "limiter.limit" in body:

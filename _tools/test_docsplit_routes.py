@@ -111,7 +111,11 @@ for app in APPS:
     check("...and asks biz_nidaan_doc_store, which fails closed",
           "biz_nidaan_doc_store" in helper and "job_for(" in helper)
 
-    up = route_body(src, "post", "/nidaan/ops/api/docsplit/upload")
+    # The live door is the batch (one file per request since 29 Sep); the one-request upload was
+    # retired on 3 Oct - it skipped the virus scan and crashed on a bad file.
+    old = route_body(src, "post", "/nidaan/ops/api/docsplit/upload")
+    check("the old one-request upload stays closed (410)", "status_code=410" in old, old[:200] or "NOT FOUND")
+    up = route_body(src, "post", "/nidaan/ops/api/docsplit/batch")
     check("upload asks before pushing a fourth job out",
           "room_for_a_job" in up and "inbox_full" in up, up[:160] or "NOT FOUND")
     check("...and records who the job belongs to", "create_job(" in up)
@@ -140,7 +144,7 @@ for app in APPS:
           inbox[:160] or "NOT FOUND")
 
     # Nothing in the splitter routes may delete.
-    for verb, path in LOADERS + [("post", "/nidaan/ops/api/docsplit/upload"),
+    for verb, path in LOADERS + [("post", "/nidaan/ops/api/docsplit/batch"),
                                  ("post", "/nidaan/ops/api/docsplit/{job}/close")]:
         b = route_body(src, verb, path)
         if "discard_job_file" in b or re.search(r"\bos\.remove\b|\bshutil\.rmtree\b", b):

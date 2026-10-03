@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <script src="/static/nidaan_onetap.js?v=2"></script>
+<script src="/static/nidaan_limits.js?v=1"></script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0b5c4f">
@@ -94,6 +95,9 @@
 "use strict";
 // ── i18n (Tier II/III friendly; everything switches with the toggle) ──────────
 var LANG = (localStorage.getItem("claim_lang") || "hi");  // Tier 2/3 audience → Hindi default
+// The document limit comes from /static/nidaan_limits.js. If that file ever fails to load, the page
+// must still work: the hint just leaves the number out (the server enforces the limit anyway).
+var _DMB = (window.NidaanLimits && NidaanLimits.docMaxMB) || 0;
 var T = {
   en: {
     greet:"Hello", sub:"Here is the status of your insurance claim. We are handling it for you.",
@@ -105,7 +109,7 @@ var T = {
     recovered:"If recovered (example)", ourFee:"Our fee", gst:"GST", totalFee:"Total our fee", netYou:"You receive",
     illust:"Example only — based on your disputed amount. Actual fee applies to whatever is recovered.",
     terms:"Terms", agree:"I have read and I agree to the fee terms above.", accept:"Accept & Continue",
-    accepted:"✅ You accepted the fee terms", on:"on", docsTitle:"Your documents", docsHint:"Upload documents related to your claim (PDF, photo). Up to 20 files, 25 MB each.",
+    accepted:"✅ You accepted the fee terms", on:"on", docsTitle:"Your documents", docsHint:"Upload documents related to your claim (PDF, photo). Up to 20 files" + (_DMB ? ", " + _DMB + " MB each." : "."),
     upload:"📎 Upload documents", uploading:"Uploading…", noDocs:"No documents uploaded yet.",
     submitDocs:"✅ Save and submit documents", submitting:"Sending…",
     notSentYet:"Not sent yet",
@@ -162,7 +166,7 @@ var T = {
     recovered:"वसूली होने पर (उदाहरण)", ourFee:"हमारी फीस", gst:"जीएसटी", totalFee:"कुल हमारी फीस", netYou:"आपको मिलेंगे",
     illust:"केवल उदाहरण — आपकी विवादित राशि पर आधारित। वास्तविक फीस वसूल की गई राशि पर लगेगी।",
     terms:"नियम व शर्तें", agree:"मैंने ऊपर दी गई फीस शर्तें पढ़ ली हैं और मैं सहमत हूँ।", accept:"स्वीकार करें और आगे बढ़ें",
-    accepted:"✅ आपने फीस शर्तें स्वीकार कर लीं", on:"दिनांक", docsTitle:"आपके दस्तावेज़", docsHint:"अपने दावे से जुड़े दस्तावेज़ अपलोड करें (PDF, फ़ोटो)। अधिकतम 20 फ़ाइलें, हर एक 25 MB तक।",
+    accepted:"✅ आपने फीस शर्तें स्वीकार कर लीं", on:"दिनांक", docsTitle:"आपके दस्तावेज़", docsHint:"अपने दावे से जुड़े दस्तावेज़ अपलोड करें (PDF, फ़ोटो)। अधिकतम 20 फ़ाइलें" + (_DMB ? ", हर एक " + _DMB + " MB तक।" : "।"),
     upload:"📎 दस्तावेज़ अपलोड करें", uploading:"अपलोड हो रहा है…", noDocs:"अभी तक कोई दस्तावेज़ अपलोड नहीं हुआ।",
     submitDocs:"✅ दस्तावेज़ सेव करके भेजें", submitting:"भेजा जा रहा है…",
     notSentYet:"अभी भेजा नहीं",
@@ -711,13 +715,14 @@ async function uploadDocs(input){
   if(!input.files || !input.files.length) return;
   var btn = document.getElementById("uploadBtn");
   btn.disabled = true; btn.textContent = t("uploading");
-  var fd = new FormData();
-  for(var i=0;i<input.files.length;i++){ fd.append("files", input.files[i]); }
-  try{
-    var r = await fetch("/nidaan/claim/api/documents/upload", { method:"POST", headers: auth(), body:fd });
-    if(r.ok){ var me = await fetch("/nidaan/claim/api/me",{headers: auth()}); DATA = await me.json(); render(); }
-    else { btn.disabled=false; btn.textContent=t("upload"); }
-  }catch(e){ btn.disabled=false; btn.textContent=t("upload"); }
+  // In batches that fit, and anything that did not go is NAMED - it used to fail without a word.
+  if (!window.NidaanLimits) { btn.disabled=false; btn.textContent=t("upload"); alert(LANG === "hi" ? "पेज दोबारा खोलें और फिर कोशिश करें।" : "Please reload the page and try again."); return; }
+  var up = await NidaanLimits.send("/nidaan/claim/api/documents/upload", input.files, { headers: auth() });
+  input.value = "";
+  if (up.sent) {
+    try { var me = await fetch("/nidaan/claim/api/me",{headers: auth()}); DATA = await me.json(); render(); } catch(e) {}
+  } else { btn.disabled=false; btn.textContent=t("upload"); }
+  if (!up.ok) alert(NidaanLimits.report(up, LANG === "hi"));
 }
 
 // Heavy "new update" popup — shows the latest status if it changed since last visit.

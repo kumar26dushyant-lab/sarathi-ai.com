@@ -929,19 +929,19 @@ def _verify_doc_sig(stored_name: str, exp: str, sig: str) -> bool:
     if e < int(_time.time()):
         return False
     return hmac.compare_digest(_doc_sig(stored_name, e), sig or "")
-# Per-file ceiling. 25 MB, not 100: every stored file is virus-scanned in memory before it is
-# written, and clamd will not scan a stream beyond its StreamMaxLength. A file we cannot scan is a
-# file we would have to either refuse or wave through unscanned, and we refuse to do the latter —
-# so the scanner's ceiling is the honest ceiling for the whole feature.
-_MAX_DOC_SIZE = 25 * 1024 * 1024  # 25 MB
+# Per-file ceiling - ONE number for every door (biz_nidaan_limits, founder 3 Oct: "100 MB each").
+# 95 MB: Cloudflare refuses a request over 100 MB. Every stored file is still virus-scanned in
+# memory before it is written; the scanner's ceiling sits above this (deploy/verify-limits.py).
+import biz_nidaan_limits as _limits
+_MAX_DOC_SIZE = _limits.DOC_MAX_BYTES
 _MAX_DOCS_PER_CLAIM = 60          # storage-DoS guard for free leads
 # Files in ONE request. A person who has all the paperwork in hand should be able to attach it in
 # one go; the old limit of 5 forced a real claim file to be sent in four or five trips.
 _MAX_FILES_PER_UPLOAD = 20
-# Bytes in ONE request. nginx caps the request body at 50 MB, so this sits below that: the caller
-# gets a clear message from us instead of an opaque 413 from the web server. The browser splits a
-# large set into batches under this figure, so a big upload succeeds rather than being rejected.
-_MAX_UPLOAD_BATCH_BYTES = 40 * 1024 * 1024
+# Bytes in ONE request: under Cloudflare's 100 MB (nginx allows 100M), so the caller gets a clear
+# message from us instead of an opaque 413. The pages send big sets in batches under this figure
+# (NidaanLimits.batches), so a big upload succeeds rather than being refused.
+_MAX_UPLOAD_BATCH_BYTES = _limits.REQUEST_MAX_BYTES
 
 
 _IMAGE_EXTS = (".jpg", ".png", ".webp", ".heic", ".heif", ".gif", ".bmp", ".tiff")
@@ -1195,9 +1195,9 @@ async def _ops_audit(request: Request, action: str, target_type: str = "",
 
 # ── The splitter, one file at a time, read in the background (29 Sep) ─────────
 # The single-request upload read every page before answering: 45 to 247 seconds on 29 Sep.
-# Cloudflare cuts every request at 100 s and nginx refuses a body over 50 MB, so the staffer saw
-# "Could not process the file(s)" for jobs that had in fact finished, and 40 files of up to 30 MB
-# could never be sent at all. Now: a batch is opened, files arrive one per request (each well
+# Cloudflare cuts every request at 100 s and refuses a body over 100 MB, so the staffer saw
+# "Could not process the file(s)" for jobs that had in fact finished, and 40 large files could
+# never be sent at all. Now: a batch is opened, files arrive one per request (each well
 # inside every limit), and reading happens in the background with progress the screen shows.
 _DS_TASKS: set = set()
 _DS_READ_LOCK = asyncio.Semaphore(1)     # one batch read per process - OCR is heavy on 2 CPUs

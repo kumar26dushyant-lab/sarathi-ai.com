@@ -1938,6 +1938,9 @@ async def _handle_claim_file(staff: dict, doc: Optional[dict], photos: list, cha
         fname = "upload.jpg"
     if not file_id:
         await send_message(str(chat_id), T(lang, "dc_no_file")); return
+    _big = _g.check_size(int(((doc or {}).get("file_size")) or 0))
+    if not _big["ok"]:
+        await send_message(str(chat_id), _big["reason"]); return
 
     await send_message(str(chat_id), T(lang, "dc_reading"))
     data = await _download_file(file_id)
@@ -1980,6 +1983,9 @@ async def _handle_split_file(staff: dict, doc: Optional[dict], photos: list, cha
     if not g["ok"]:
         await send_message(str(chat_id), g["reason"]); return
 
+    _big = _g.check_size(int(doc.get("file_size") or 0))
+    if not _big["ok"]:
+        await send_message(str(chat_id), _big["reason"]); return
     data = await _download_file(doc.get("file_id"))
     if not data:
         await send_message(str(chat_id), T(lang, "dc_dl_fail")); return

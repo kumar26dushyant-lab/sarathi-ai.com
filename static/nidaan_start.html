@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <script src="/static/nidaan_onetap.js?v=2"></script>
+<script src="/static/nidaan_limits.js?v=1"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <script src="/static/nidaan_cookies.js"></script>
@@ -1262,7 +1263,7 @@ function _clearRevDoc(key) {
 }
 function onRevDocPick(key, input) {
   const f = input.files[0]; if (!f) return;
-  if (f.size > 25 * 1024 * 1024) { showRevMsg('err', _Lr('Each file must be under 25 MB.', 'हर फ़ाइल 25 MB से कम होनी चाहिए।')); input.value=''; return; }
+  if (NidaanLimits.tooBig(f)) { showRevMsg('err', NidaanLimits.refusal(f.name, f.size, document.body.classList.contains('hi'))); input.value=''; return; }
   _revFiles[key] = f;
   _markDocDone(key, f);
 }
@@ -1342,7 +1343,7 @@ if ('serviceWorker' in navigator) {
 }
 </script>
 <script src="/static/nidaan_insurers.js?v=1"></script>
-<script src="/static/nidaan_intake.js?v=2"></script>
+<script src="/static/nidaan_intake.js?v=3"></script>
 <script src="/static/nidaan_track.js?v=2"></script>
 </body>
 </html>

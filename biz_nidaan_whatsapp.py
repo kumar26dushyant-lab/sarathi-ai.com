@@ -393,10 +393,21 @@ async def download_media(media_id: str) -> dict:
             url = md.get("url")
             if not url:
                 return {"ok": False, "error": "no_media_url"}
-            fr = await c.get(url, headers={"Authorization": f"Bearer {_token()}"})
+            # Meta tells us the size first. Over our limit (biz_nidaan_limits): say so, and do not
+            # pull 100 MB into memory only to refuse it.
+            import biz_nidaan_limits as _lim
+            try:
+                _declared = int(md.get("file_size") or 0)
+            except (TypeError, ValueError):
+                _declared = 0
+            if _declared > _lim.DOC_MAX_BYTES:
+                return {"ok": False, "error": "too_large", "size": _declared}
+            fr = await c.get(url, headers={"Authorization": f"Bearer {_token()}"}, timeout=180)
         if fr.status_code != 200:
             return {"ok": False, "error": f"download_{fr.status_code}"}
         content = fr.content
+        if len(content) > _lim.DOC_MAX_BYTES:
+            return {"ok": False, "error": "too_large", "size": len(content)}
         return {"ok": True, "content": content, "mime": md.get("mime_type", ""),
                 "sha256": md.get("sha256", ""), "size": len(content)}
     except Exception as e:  # noqa: BLE001

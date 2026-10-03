@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <script src="/static/nidaan_onetap.js?v=2"></script>
+<script src="/static/nidaan_limits.js?v=1"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <script src="/static/nidaan_cookies.js"></script>
@@ -196,7 +197,7 @@
           <label class="doc-upload-btn" for="reviewDocs" title="Attach files">📎 <span class="en">Attach Files</span><span class="hi">फ़ाइलें जोड़ें</span></label>
           <input type="file" id="reviewDocs" multiple accept=".pdf,.jpg,.jpeg,.png,.docx" style="display:none" onchange="showReviewDocList()">
           <div id="reviewDocList" style="margin-top:.4rem;font-size:.82rem"></div>
-          <p style="opacity:.4;font-size:.76rem;margin:.3rem 0 0">Claim rejection letter, policy document, insurer correspondence — PDF/JPG/PNG, max 25 MB each, up to 20 files</p>
+          <p style="opacity:.4;font-size:.76rem;margin:.3rem 0 0">Claim rejection letter, policy document, insurer correspondence — PDF/JPG/PNG, max <span data-nd-docmax>95</span> MB each, up to 20 files</p>
         </div>
       </div>
       <button type="submit" class="btn" id="submitBtn">
@@ -371,13 +372,11 @@ async function verifyAndSubmit() {
     if (reviewFiles.length > 0 && data.purchase_id) {
       try {
         btn.innerHTML = '<span class="en">Uploading documents…</span><span class="hi">दस्तावेज़ अपलोड हो रहे हैं…</span>';
-        const fd = new FormData();
-        for (const f of reviewFiles) fd.append('files', f);
-        await fetch(`/nidaan/api/review/${data.purchase_id}/documents/upload`, {
-          method: 'POST',
-          headers: {'Authorization': 'Bearer ' + data.token},
-          body: fd
-        });
+        const up = await NidaanLimits.send(`/nidaan/api/review/${data.purchase_id}/documents/upload`, reviewFiles,
+          {headers: {'Authorization': 'Bearer ' + data.token}});
+        // Not fatal - the dashboard still opens - but never silent: say which papers to add there.
+        if (!up.ok) alert(NidaanLimits.report(up, document.body.classList.contains('hi'))
+                          + (document.body.classList.contains('hi') ? ' - डैशबोर्ड से इन्हें लगाएँ।' : ' - add them from your dashboard.'));
       } catch(_) { /* non-fatal — dashboard will still load */ }
     }
     window.location.href = data.dashboard_url + '?new=1';

@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <script src="/static/nidaan_onetap.js?v=2"></script>
+<script src="/static/nidaan_limits.js?v=1"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <style>html.ops-has-token #loginScreen{display:none!important}</style>
@@ -25,8 +26,8 @@ try { if (localStorage.getItem('nidaan_ops_token')) document.documentElement.cla
 <link rel="apple-touch-icon" href="/static/nidaan_logo.png">
 <script src="/static/_err.js?v=1"></script>
 <script src="/static/nidaan_insurers.js?v=1"></script>
-<script src="/static/nidaan_intake.js?v=2"></script>
-<script src="/static/nidaan_partner_claims.js?v=7"></script>
+<script src="/static/nidaan_intake.js?v=3"></script>
+<script src="/static/nidaan_partner_claims.js?v=8"></script>
 <script src="/static/nidaan_theme.js?v=2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -2520,7 +2521,7 @@ async function openQuickTaskModal(presetClaimId){
       <input type="file" id="qtCreateFile" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.heif,.doc,.docx,.xls,.xlsx,.txt,.csv" style="display:none" onchange="_qtCreateFilePicked()">
       <button type="button" class="btn-sm" onclick="document.getElementById('qtCreateFile').click()"
               style="background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary);margin-bottom:.4rem">📎 Attach file(s)</button>
-      <div style="font-size:.7rem;color:var(--nd-text-faint);margin-bottom:.4rem">Up to 10 files · 10 MB each · PDF, images (JPG/PNG/HEIC), DOC/XLS, TXT/CSV.</div>
+      <div style="font-size:.7rem;color:var(--nd-text-faint);margin-bottom:.4rem">Up to 10 files · <span data-nd-docmax>95</span> MB each · PDF, images (JPG/PNG/HEIC), DOC/XLS, TXT/CSV.</div>
       <div id="qtCreateFileName" style="display:none;font-size:.76rem;color:var(--nd-cyan-text);margin-bottom:.6rem"></div>
 
       ${(_role==='super_admin'||_role==='sub_super_admin') ? `
@@ -2745,10 +2746,28 @@ function _renderInvolveChips(){
   box.innerHTML = ids.map(id=>`<span style="background:rgba(56,189,248,.14);border:1px solid rgba(56,189,248,.4);color:var(--nd-cyan-text);padding:.15rem .2rem .15rem .5rem;border-radius:999px;font-size:.8rem;display:inline-flex;align-items:center;gap:.35rem">🏷️ ${esc(window._qtInvolveIds[id])} <span onclick="_qtInvolveRemove('${id}')" style="cursor:pointer;font-weight:800;padding:0 .3rem">✕</span></span>`).join('');
 }
 
+// Attachments: a file over the one limit, or a set too big for one request, is refused the moment
+// it is picked - it used to go up and come back as a bare "413" from the web server.
+function _ndPickOk(input){
+  if (!input || !input.files || !input.files.length) return true;
+  const hi = _ndLang() === 'hi', big = NidaanLimits.oversize(input.files);
+  let total = 0; for (const f of input.files) total += f.size;
+  let why = '';
+  if (big.length) why = NidaanLimits.refusal(big[0].name, big[0].size, hi);
+  else if (total > NidaanLimits.requestMaxBytes)
+    why = hi ? ('ये फ़ाइलें मिलाकर ' + Math.round(total / 1e6) + ' MB हैं - एक बार में ' + Math.round(NidaanLimits.requestMaxBytes / 1e6) + ' MB तक भेजें।')
+             : ('These files come to ' + Math.round(total / 1e6) + ' MB together - send up to ' + Math.round(NidaanLimits.requestMaxBytes / 1e6) + ' MB at a time.');
+  if (!why) return true;
+  input.value = '';
+  ndUI.toast(why, 'error');
+  return false;
+}
+window._ndPickOk = _ndPickOk;
 function _qtCreateFilePicked(){
   const f = document.getElementById('qtCreateFile');
   const lbl = document.getElementById('qtCreateFileName');
   if (!f || !lbl) return;
+  _ndPickOk(f);
   const n = f.files ? f.files.length : 0;
   if (n) {
     lbl.textContent = '📎 ' + (n === 1 ? f.files[0].name : n + ' files: ' + Array.from(f.files).map(x=>x.name).join(', '));
@@ -3185,7 +3204,7 @@ async function openQuickTaskDrawer(qid){
             <button class="btn-sm" title="Attach file(s)" style="background:var(--nd-bg-surface-2);border:1px solid var(--nd-border-strong);color:var(--nd-text-primary)" onclick="document.getElementById('qtNoteFile').click()">📎</button>
             <button class="btn-sm" style="background:#22d3ee;color:#0a1628;font-weight:700" onclick="qtAddNote(${qt.quick_task_id})">Send</button>
           </div>
-          <div style="font-size:.7rem;color:var(--nd-text-faint);margin-top:.25rem">💡 Tag a teammate with @ to pull them onto this task. 📎 Up to 10 files · 10 MB each · PDF, images (JPG/PNG/HEIC), DOC/XLS, TXT/CSV. You can remove your own attachment within 1 hour.</div>
+          <div style="font-size:.7rem;color:var(--nd-text-faint);margin-top:.25rem">💡 Tag a teammate with @ to pull them onto this task. 📎 Up to 10 files · <span data-nd-docmax>95</span> MB each · PDF, images (JPG/PNG/HEIC), DOC/XLS, TXT/CSV. You can remove your own attachment within 1 hour.</div>
           <div id="qtNoteFileName" style="display:none;font-size:.76rem;color:var(--nd-cyan-text);margin-top:.3rem"></div>` : ''}
       </div>
     </div>`;
@@ -3419,6 +3438,7 @@ function _qtFilePicked(){
   const f = document.getElementById('qtNoteFile');
   const lbl = document.getElementById('qtNoteFileName');
   if (!f || !lbl) return;
+  _ndPickOk(f);
   const n = f.files ? f.files.length : 0;
   if (n) {
     lbl.textContent = '📎 ' + (n === 1 ? f.files[0].name : n + ' files') + ' — press Send to attach';
@@ -5498,7 +5518,7 @@ async function loadMyBusiness() {
       <div id="mbcFilesWrap" style="margin-top:.55rem">
         <input id="mbcFiles" type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.docx,application/pdf,image/jpeg,image/png,application/vnd.openxmlformats-officedocument.wordprocessingml.document" style="display:none" onchange="mbcAddFiles(this)">
         <button type="button" class="btn btn-ghost" style="font-size:.8rem;padding:.4rem .8rem" onclick="document.getElementById('mbcFiles').click()">📎 ${hi?'दस्तावेज़ संलग्न करें':'Attach document(s)'}</button>
-        <span style="font-size:.72rem;color:var(--nd-text-faint);margin-left:.4rem">${hi?'अन्य सहायक दस्तावेज़ (वैकल्पिक) — PDF/JPG/PNG/DOCX (25MB तक, 20 तक)':'Other supporting documents (optional) — PDF/JPG/PNG/DOCX · up to 25MB each, 20 files'}</span>
+        <span style="font-size:.72rem;color:var(--nd-text-faint);margin-left:.4rem">${hi?'अन्य सहायक दस्तावेज़ (वैकल्पिक) — PDF/JPG/PNG/DOCX ('+NidaanLimits.docMaxMB+' MB तक, 20 तक)':'Other supporting documents (optional) — PDF/JPG/PNG/DOCX · up to '+NidaanLimits.docMaxMB+' MB each, 20 files'}</span>
         <div id="mbcFileList" style="display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.45rem"></div>
       </div>
       <div id="mbcMsg" style="font-size:.82rem;margin-top:.5rem"></div>
@@ -5532,36 +5552,25 @@ async function loadMyBusiness() {
 
 // ── Raise-claim staged attachments (review before submit, remove individually) ──
 let _mbcFiles = [];
-// Someone who already has the whole file in hand should attach it in one go. 20 documents at up
-// to 25 MB each covers a full claim file; the old 5 forced four or five separate trips.
-const _MBC_MAX = 20, _MBC_MAXSIZE = 25*1024*1024;
-// One request stays under the web server's body limit. A bigger set is SPLIT into batches rather
-// than refused, so the person never has to work out the arithmetic themselves.
-const _MBC_BATCH_BYTES = 35*1024*1024;
+// Someone who already has the whole file in hand should attach it in one go: 20 documents, each
+// within the one limit every door shares (/static/nidaan_limits.js). A bigger set is SPLIT into
+// batches rather than refused, so the person never has to work out the arithmetic themselves.
+const _MBC_MAX = 20;
 function mbcAddFiles(input){
   const hi=_mbHi(); const msg=document.getElementById('mbcMsg');
   const picked = Array.from(input.files||[]);
   input.value='';   // allow re-picking the same file after a remove
   for(const f of picked){
     if(_mbcFiles.length >= _MBC_MAX){ if(msg){ msg.style.color='#fbbf24'; msg.textContent=hi?('अधिकतम '+_MBC_MAX+' फ़ाइलें।'):('Up to '+_MBC_MAX+' files.'); } break; }
-    if(f.size > _MBC_MAXSIZE){ if(msg){ msg.style.color='#f87171'; msg.textContent='✕ '+(f.name)+' — '+(hi?'25MB से बड़ी।':'over 25MB.'); } continue; }
+    if(NidaanLimits.tooBig(f)){ if(msg){ msg.style.color='#f87171'; msg.textContent='✕ '+NidaanLimits.refusal(f.name, f.size, hi); } continue; }
     if(_mbcFiles.some(x=>x.name===f.name && x.size===f.size)) continue;  // dedupe
     _mbcFiles.push(f);
   }
   mbcRenderFiles();
 }
 function mbcRemoveFile(i){ _mbcFiles.splice(i,1); mbcRenderFiles(); }
-// Group files into requests that each stay under the body-size limit. A single file larger than
-// the batch budget still goes alone - the per-file cap already keeps it inside the server limit.
-function _mbcBatch(list){
-  const out=[]; let cur=[], bytes=0;
-  for(const f of list){
-    if(cur.length && (bytes + f.size > _MBC_BATCH_BYTES || cur.length >= _MBC_MAX)){ out.push(cur); cur=[]; bytes=0; }
-    cur.push(f); bytes += f.size;
-  }
-  if(cur.length) out.push(cur);
-  return out;
-}   // pre-submit unstage — nothing persisted yet
+// Group files into requests that each stay under the request limit - the shared rule.
+function _mbcBatch(list){ return NidaanLimits.batches(list, _MBC_MAX); }   // pre-submit unstage — nothing persisted yet
 
 // The rejection letter is its own slot because it is the one document a claim cannot proceed
 // without: it is the insurer's decision, and therefore the basis of the whole dispute. Raising a
@@ -5959,7 +5968,7 @@ async function radarLoadAttachments(id){
   el.innerHTML=`
     <div style="background:var(--nd-bg-surface);border:1px solid var(--nd-border);border-radius:10px;padding:.7rem .9rem">
       <div style="font-weight:700;color:var(--nd-text-primary);margin-bottom:.35rem">📎 ${files.length} attachment(s)</div>
-      ${files.map(f=>`<div style="font-size:.78rem;color:var(--nd-text-secondary)">• ${esc(f.name)} <span style="color:var(--nd-text-faint)">(${kb(f.size)})</span></div>`).join('')}
+      ${files.map(f=>`<div style="font-size:.78rem;color:var(--nd-text-secondary)">• ${esc(f.name)} <span style="color:var(--nd-text-faint)">(${kb(f.size)})</span>${f.too_big?` <span style="color:var(--nd-warning-text)">- over the ${NidaanLimits.docMaxMB} MB limit, will not be filed; ask for a PDF or parts</span>`:''}</div>`).join('')}
       <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-top:.6rem">
         <span style="font-size:.76rem;color:var(--nd-text-muted)">File to claim #</span>
         <input id="radarFileClaim_${id}" type="number" min="1" value="${s?s.claim_id:''}" placeholder="e.g. 93" style="width:96px;padding:.35rem .5rem;border-radius:6px;border:1px solid var(--nd-border-strong);background:var(--nd-bg-surface-2);color:var(--nd-text-primary)">
@@ -6327,7 +6336,7 @@ function loadDocSplit(){
     <div style="background:var(--nd-bg-surface);border:2px dashed var(--nd-border-strong);border-radius:12px;padding:1.6rem;text-align:center">
       <div style="font-size:2rem;margin-bottom:.5rem">📤</div>
       <label class="btn btn-primary" style="cursor:pointer">Choose file(s)<input id="dsFiles" type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.gif,.bmp,.tif,.tiff,.heic,.heif,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp,.rtf,.csv" style="display:none" onchange="dsUpload()"></label>
-      <div style="font-size:.78rem;color:var(--nd-text-muted);margin-top:.7rem">PDF · photos (JPG, PNG, iPhone HEIC…) · Word · Excel · other office files &nbsp;·&nbsp; up to <b id="dsLimitTxt">40</b> files at once &nbsp;·&nbsp; 30 MB each</div>
+      <div style="font-size:.78rem;color:var(--nd-text-muted);margin-top:.7rem">PDF · photos (JPG, PNG, iPhone HEIC…) · Word · Excel · other office files &nbsp;·&nbsp; up to <b id="dsLimitTxt">40</b> files at once &nbsp;·&nbsp; ${NidaanLimits.docMaxMB} MB each</div>
       <div id="dsLimitAdmin" style="margin-top:.5rem"></div>
     </div>
     <div id="dsInbox" style="margin-top:1rem"></div>
@@ -6470,9 +6479,9 @@ async function dsUpload(){
       + _dsLimit + ' can go at once — please send the rest as a second upload.</p></div>';
     return;
   }
-  const big = files.filter(f => f.size > 30 * 1024 * 1024);
+  const big = NidaanLimits.oversize(files);
   if (big.length){
-    res.innerHTML = '<div class="empty"><div class="ei">⚠️</div><p>Larger than 30 MB: '
+    res.innerHTML = '<div class="empty"><div class="ei">⚠️</div><p>Larger than ' + NidaanLimits.docMaxMB + ' MB: '
       + big.map(f => esc(f.name)).join(', ') + '. Please send smaller copies (a PDF is usually smaller than a photo).</p></div>';
     return;
   }
@@ -7387,6 +7396,7 @@ async function opsUnsendMessage(claimId, messageId){
 function opsMsgFilePicked(claimId){
   const f = document.getElementById('opsMsgFile_'+claimId);
   const lbl = document.getElementById('opsMsgFileName_'+claimId);
+  _ndPickOk(f);
   if (lbl) lbl.textContent = (f && f.files && f.files[0]) ? ('📎 ' + f.files[0].name) : '';
 }
 // ── Complainant Portal card (in the claim drawer) ───────────────────────────────
@@ -7670,6 +7680,7 @@ function claimToggleMention(claimId, staffId){
 function claimNoteFilesPicked(claimId){
   const fi = document.getElementById('claimNoteFiles_'+claimId), fl = document.getElementById('claimNoteFileList_'+claimId);
   if (!fi || !fl) return;
+  _ndPickOk(fi);
   fl.textContent = fi.files.length ? (fi.files.length+' file'+(fi.files.length>1?'s':'')+' selected') : '';
 }
 function claimToggleReply(nid){
@@ -10719,6 +10730,7 @@ async function sendSupportReply(id){
 async function sendSupportAttach(id){
   const el = document.getElementById('supAttachFile');
   if(!el || !el.files || !el.files[0]) return;
+  if(!_ndPickOk(el)) return;
   const fd = new FormData(); fd.append('file', el.files[0]);
   try{
     // multipart: no JSON Content-Type, so the browser sets the boundary itself
@@ -14424,6 +14436,8 @@ async function obSubmit(btn){
   if (!(await NidaanIntake.confirm('obCore'))) return;
   const docsEl = document.getElementById('obDocs');
   const otherDocs = docsEl && docsEl.files ? Array.from(docsEl.files) : [];
+  const _big = NidaanLimits.oversize(otherDocs);
+  if (_big.length){ if (msg){ msg.style.color = 'var(--nd-danger-text)'; msg.textContent = NidaanLimits.refusal(_big[0].name, _big[0].size, _ndLang() === 'hi'); } return; }
   const notes = ((document.getElementById('obNotes') || {}).value || '').trim();
   const payload = Object.assign({account_id: _obPicked.account_id, notes_from_agent: notes}, v.data);
   if (btn) btn.disabled = true;
@@ -14438,14 +14452,12 @@ async function obSubmit(btn){
       // does not attach is NAMED, never swallowed.
       if (otherDocs.length){
         try{
-          const fd = new FormData();
-          for (const f of otherDocs) fd.append('files', f);
-          const ur = await API('/claims/' + d.claim_id + '/documents/upload', {method:'POST', body: fd});
-          if (!ur.ok && msg){
-            const ud = await ur.json().catch(function(){ return {}; });
+          const up = await NidaanLimits.send('/nidaan/ops/api/claims/' + d.claim_id + '/documents/upload', otherDocs,
+            {headers: {'Authorization': 'Bearer ' + _token}});
+          if (!up.ok && msg){
             msg.style.color = 'var(--nd-warning-text)';
-            msg.textContent = 'NP-' + d.claim_id + ' raised, but the other documents did NOT attach ('
-              + _extractErr(ud, 'refused') + '). Open the claim and attach them.';
+            msg.textContent = 'NP-' + d.claim_id + ' raised, but some documents did NOT attach ('
+              + NidaanLimits.report(up, _ndLang() === 'hi') + '). Open the claim and attach them.';
           }
         }catch(e){
           if (msg){ msg.style.color = 'var(--nd-warning-text)';
@@ -17560,7 +17572,7 @@ async function docsRender(msg, ok){
     +       '<input type="file" id="dcFile" multiple>'
     +       '<button class="l2mv p" style="margin-top:.45rem" onclick="docsUpload(this)">Attach</button>'
     +       '<div class="bdsub" style="margin-top:.3rem">PDF, photos, Word, scans — not video. '
-    +         'Max 25 MB each.</div>'
+    +         'Max ' + NidaanLimits.docMaxMB + ' MB each.</div>'
     +     '</div>'
     +   '</div>'
     +   '<div class="dcbox"><div class="dch">The checklist · ' + got.length + ' of ' + list.length + '</div>'
@@ -18011,18 +18023,17 @@ async function docsUpload(btn){
   if (!inp || !inp.files || !inp.files.length){
     return docsRender('Choose a file first.', false);
   }
-  const fd = new FormData();
-  for (let i = 0; i < inp.files.length; i++) fd.append('files', inp.files[i]);
-  fd.append('doc_key', key);
+  const big = NidaanLimits.oversize(inp.files);
+  if (big.length) return docsRender(NidaanLimits.refusal(big[0].name, big[0].size, _ndLang() === 'hi'), false);
   if (btn){ btn.disabled = true; btn.textContent = 'Attaching…'; }
   try{
-    // FormData must set its own multipart boundary, so this goes around API(), which would
-    // force a JSON content type onto it.
-    const r = await fetch('/nidaan/ops/api/claims/' + _dcClaim + '/documents/upload',
-      {method: 'POST', headers: {'Authorization': 'Bearer ' + _token}, body: fd});
-    const d = await r.json().catch(function(){ return {}; });
-    if (!r.ok){ return docsRender(_l2Err(d, 'Could not attach it.'), false); }
-    await docsRender('Attached ' + d.count + ' file(s)' + (key ? ' — marked received.' : '.'), true);
+    // In batches that fit (FormData sets its own multipart boundary, so this goes around API(),
+    // which would force a JSON content type onto it).
+    const up = await NidaanLimits.send('/nidaan/ops/api/claims/' + _dcClaim + '/documents/upload', inp.files,
+      {headers: {'Authorization': 'Bearer ' + _token}, extra: {doc_key: key}});
+    if (!up.sent){ return docsRender(NidaanLimits.report(up, _ndLang() === 'hi') || 'Could not attach it.', false); }
+    await docsRender('Attached ' + up.sent + ' file(s)' + (key ? ' — marked received.' : '.')
+                     + (up.ok ? '' : ' ' + NidaanLimits.report(up, _ndLang() === 'hi')), up.ok);
     if (typeof _dcAfter === 'function') _dcAfter();
   }catch(e){
     docsRender('Could not attach it.', false);

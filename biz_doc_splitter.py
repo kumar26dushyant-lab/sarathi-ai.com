@@ -32,7 +32,7 @@ logger = logging.getLogger("sarathi.docsplit")
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TMP_ROOT = os.getenv("DOCSPLIT_TMP") or os.path.join(_BASE_DIR, "var", "docsplit")
 MAX_PAGES = 400         # safety cap for a single job (up to 100 files arrive in one)
-MAX_FILE_MB = 30        # per file
+from biz_nidaan_limits import DOC_MAX_MB as MAX_FILE_MB  # per file - one limit for every door
 FILES_DEFAULT = 40      # per job, unless a super-admin sets otherwise (founder, 29 Sep)
 FILES_CEILING = 100     # the most a super-admin may set
 IMAGE_EXTS = ("jpg", "jpeg", "png", "webp", "gif", "bmp", "tif", "tiff")

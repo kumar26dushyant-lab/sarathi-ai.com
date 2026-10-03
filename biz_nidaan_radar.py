@@ -1031,7 +1031,7 @@ async def read_full_email(item_id: int) -> dict:
 # attachment on the wrong claim is a privacy and data-integrity bug. Instead we extract the
 # files, SUGGEST the claim we think it belongs to, and let a human confirm in one click.
 _ATTACH_MAX_FILES = 10
-_ATTACH_MAX_BYTES = 25 * 1024 * 1024      # per file
+from biz_nidaan_limits import DOC_MAX_BYTES as _ATTACH_MAX_BYTES  # per file - one limit everywhere
 _ATTACH_SKIP_EXT = (".ics", ".vcf", ".p7s", ".asc")
 
 
@@ -1066,10 +1066,13 @@ def _imap_fetch_attachments(host: str, port: int, email: str, password: str, uid
             if fname.lower().endswith(_ATTACH_SKIP_EXT):
                 continue
             payload = part.get_payload(decode=True) or b""
-            if not payload or len(payload) > _ATTACH_MAX_BYTES:
+            if not payload:
                 continue
             rec = {"name": fname[:160], "size": len(payload)}
-            if not names_only:
+            if len(payload) > _ATTACH_MAX_BYTES:
+                # Shown, marked too large - it used to vanish, so staff never knew it had come.
+                rec["too_big"] = True
+            elif not names_only:
                 rec["data"] = payload
             out.append(rec)
             if len(out) >= _ATTACH_MAX_FILES:
@@ -1161,6 +1164,9 @@ async def file_attachments_to_claim(item_id: int, claim_id: int, by: str = "") -
     filed, skipped = 0, []
     import biz_av_scan as _av
     for f in files:
+        if f.get("too_big") or "data" not in f:
+            skipped.append("%s (too large)" % f.get("name"))
+            continue
         try:
             # VIRUS SCAN before anything else. These attachments arrive from customer mailboxes -
             # forwarded insurer mail, hospital paperwork, whatever a stranger sent them - and get

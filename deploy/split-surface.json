@@ -9863,25 +9863,19 @@
    ],
    "product": "nidaan",
    "reaches": [
-    "_doc_ext_for",
-    "_doc_magic_ok",
     "_get_staff_from_request",
     "_is_nidaan_host",
     "_require_staff",
     "_row_still_open",
-    "_sniff_file",
     "_staff_still_active",
     "app",
-    "limiter",
-    "logger"
+    "limiter"
    ],
    "uses": [
-    "_doc_magic_ok",
     "_is_nidaan_host",
     "_require_staff",
     "app",
-    "limiter",
-    "logger"
+    "limiter"
    ]
   },
   {

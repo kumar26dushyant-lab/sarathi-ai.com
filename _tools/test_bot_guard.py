@@ -108,7 +108,8 @@ async def main():
     check("an ordinary file is fine", g.check_file("x.pdf", b"%PDF-1.4 hello")["ok"])
     big = g.check_file("big.pdf", b"x" * (g.MAX_FILE_BYTES + 1))
     check("an oversized file is refused", not big["ok"])
-    check("...and is told what to do instead", "portal" in big["reason"], big["reason"])
+    check("...and is told what to do instead (the website, and its limit)",
+          "website" in big["reason"] and str(__import__("biz_nidaan_limits").DOC_MAX_MB) in big["reason"], big["reason"])
 
     # ── the trail ───────────────────────────────────────────────────────────
     await g.record(ME, "upload", claim_id=501, detail="2 files stored", allowed=True)

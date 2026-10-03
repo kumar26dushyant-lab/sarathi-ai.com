@@ -709,6 +709,18 @@ async def handle_inbound_document(msisdn: str, media_id: str, mime: str,
     human = (await _awaiting(claim_id) == "__human__") or await _contact_paused(msisdn)
 
     dl = await _wa.download_media(media_id)
+    if dl.get("error") == "too_large":
+        # Too big for us (biz_nidaan_limits) - say exactly that, and what to do about it. It used
+        # to read as "didn't come through clearly", which sent people to retake a good photo.
+        import biz_nidaan_limits as _lim
+        if human:
+            await _tell_staff_inbound(claim_id, msisdn, "[a file of %s - over our %s limit; ask for a PDF "
+                                      "or the file in parts]" % (_lim.mb(dl.get("size") or 0), _lim.mb(_lim.DOC_MAX_BYTES)))
+        else:
+            await _wa.send_text(msisdn, _msg.compose("doc_quality", lang, _send_ctx(
+                claim, 0, 0, doc={"en": "that file"}, lang=lang,
+                reason="it is larger than %s - please send it as a PDF, or in parts" % _lim.mb(_lim.DOC_MAX_BYTES))))
+        return {"ok": False, "error": "too_large"}
     if not dl.get("ok") and human:
         await _tell_staff_inbound(claim_id, msisdn, "[a file that could not be downloaded - "
                                   "please ask them to send it again]")

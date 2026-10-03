@@ -53,7 +53,7 @@ DOCS_DIR = Path(os.getenv("NIDAAN_DOCS_DIR", "uploads/nidaan-docs"))
 # A ZIP arrives as one file and can hold the whole case. One level deep only: a zip inside a zip
 # is rare enough, and unbounded recursion on an untrusted archive is how you get a zip bomb.
 MAX_MEMBERS = 40
-MAX_MEMBER_BYTES = 25 * 1024 * 1024
+from biz_nidaan_limits import DOC_MAX_BYTES as MAX_MEMBER_BYTES  # one paper inside a ZIP
 
 _DOCLIKE = (".pdf", ".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif", ".tif", ".tiff",
             ".doc", ".docx")
