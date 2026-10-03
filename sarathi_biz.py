@@ -7874,7 +7874,7 @@ async def nidaan_ops_changes(request: Request):
 
 @app.get("/nidaan/ops/api/cases/board")
 async def nidaan_ops_case_board(request: Request, stage: str = "", blocker: str = "",
-                                flag: str = "", mine: int = 0, limit: int = 300):
+                                flag: str = "", mine: int = 0, limit: int = 300, wait: str = ""):
     """The work board. Cases nobody else is holding up come first, oldest waiting at the top.
 
     `mine=1` narrows to the caller's own assigned cases — the queue a staff member opens to see
@@ -7886,7 +7886,7 @@ async def nidaan_ops_case_board(request: Request, stage: str = "", blocker: str 
     import biz_nidaan_case_state as _cs
     _me = caller.get("staff_id") or caller.get("sub") if mine else None
     out = await _cs.board(stage=stage.strip(), blocker=blocker.strip(),
-                          flag=flag.strip(), assigned_to=_me, limit=limit)
+                          flag=flag.strip(), assigned_to=_me, limit=limit, wait=wait.strip()[:30])
     out["staff"] = await _cs.assignable_staff()
     out["me"] = caller.get("staff_id") or caller.get("sub")
     # The bucket list travels with the board so the screen never keeps its own copy of the stage
@@ -8558,8 +8558,12 @@ async def ops_bucket_claims(bucket_key: str, request: Request, sub: str = "",
         raise HTTPException(status_code=404)
     _require_staff(request, "team_member")
     import biz_nidaan_buckets as _bk
-    return await _bk.board(bucket_key.strip(), sub=sub.strip(), q=q.strip(), limit=limit,
-                           days=days.strip()[:8])
+    import biz_nidaan_waits as _w
+    out = await _bk.board(bucket_key.strip(), sub=sub.strip(), q=q.strip(), limit=limit,
+                          days=days.strip()[:8])
+    if isinstance(out, dict):
+        out["wait_reasons"] = _w.filter_choices()
+    return out
 
 
 @app.get("/nidaan/ops/api/buckets/waiting-to-start")
@@ -8578,7 +8582,14 @@ async def ops_bucket_waiting(request: Request):
         r["missing_count"] = x.get("missing_count", 0)
         r["blocks"] = x.get("blocks", [])
         r["fixes"] = x.get("fixes", [])
-    return {"claims": rows}
+    import biz_nidaan_waits as _w
+    try:
+        _wt = await _w.for_rows(rows)
+        for r in rows:
+            r["waits"] = _wt.get(int(r["claim_id"]), [])
+    except Exception as _we:  # noqa: BLE001 - chips never sink the queue
+        logger.info("waits skipped on the entry queue: %s", _we)
+    return {"claims": rows, "wait_reasons": _w.filter_choices()}
 
 
 class _HandoverReq(BaseModel):
@@ -12359,6 +12370,8 @@ class _WaitingReq(BaseModel):
     model_config = ConfigDict(extra="forbid")
     keys: list[str] = Field(default_factory=list, max_length=8)
     note: str = Field("", max_length=300)
+    # Words per reason: "other" and the "docs_pending" list. Checked again in biz_nidaan_waits.
+    notes: dict[str, str] = Field(default_factory=dict, max_length=4)
 
 
 @app.get("/nidaan/ops/api/claims/{claim_id}/waiting")
@@ -12382,8 +12395,11 @@ async def ops_claim_waiting_set(claim_id: int, body: _WaitingReq, request: Reque
         raise HTTPException(status_code=404)
     caller = _require_staff(request, "team_member")
     import biz_nidaan_waits as _w
+    if any(len(str(k)) > 30 or len(str(v)) > 2000 for k, v in body.notes.items()):
+        raise HTTPException(status_code=400, detail="That is too long to save.")
     res = await _w.set_reasons(claim_id, [str(k)[:30] for k in body.keys], body.note,
-                               {"staff_id": caller.get("staff_id"), "name": _actor_label(caller)})
+                               {"staff_id": caller.get("staff_id"), "name": _actor_label(caller)},
+                               notes={str(k)[:30]: str(v) for k, v in body.notes.items()})
     if not res.get("ok"):
         raise HTTPException(status_code=400, detail=res.get("error") or "Could not save that")
     await _ops_audit(request, "claim.waiting", "claim", str(claim_id),
@@ -12410,6 +12426,8 @@ async def ops_list_claims(
     if not _is_nidaan_host(request):
         raise HTTPException(status_code=404)
     staff = _require_staff(request, "team_member")
+    limit = max(1, min(int(limit or 100), 2000))
+    offset = max(0, int(offset or 0))
     _stats: dict = {}
     claims = await nidaan.get_claims_ops(
         staff_id=staff["staff_id"], role=staff["role"],
@@ -12433,9 +12451,12 @@ async def ops_list_claims(
         for r in await (await _c.execute(
                 f"SELECT payment_status, COUNT(*) n FROM nidaan_claims{_scope} GROUP BY payment_status")).fetchall():
             counts[r["payment_status"] or "paid"] = r["n"]
-    # Why each claim is waiting (chips), for the L2 Claims list and All Claims alike.
+    # Why each claim is waiting (chips), for the L2 Claims list and All Claims alike, and the one
+    # list of "Waiting on" filter choices every screen uses.
+    _wreasons: list = []
     try:
         import biz_nidaan_waits as _w
+        _wreasons = _w.filter_choices()
         _wt = await _w.for_rows(claims)
         for _c in claims:
             _c["waits"] = _wt.get(int(_c.get("claim_id") or 0), [])
@@ -12445,7 +12466,7 @@ async def ops_list_claims(
     # match the filters — what a pager needs, and what nothing could previously ask for.
     return {"claims": claims, "count": len(claims),
             "total": _stats.get("total", len(claims)),
-            "limit": limit, "offset": offset, "pipeline": counts}
+            "limit": limit, "offset": offset, "pipeline": counts, "wait_reasons": _wreasons}
 
 
 class OpsClaimArchiveReq(BaseModel):

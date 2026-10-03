@@ -78,7 +78,73 @@ async def main():
     keys = [x["key"] for x in row.get("waits", [])]
     check("the bucket list carries every reason as a chip", set(keys) == {"docs", "fee", "auth", "other"}, keys)
 
+    print("\n-- Documents pending (3 Oct) --")
+    one = await w.for_claim(61)
+    check("the box fills itself with the checklist's missing papers", len(one.get("docs_missing") or []) >= 3,
+          one.get("docs_missing"))
+    check("'Documents pending' is the first reason staff see", one["choices"][0]["key"] == "docs_pending", one["choices"][:2])
+    r = await w.set_reasons(61, ["docs_pending"], "", {"staff_id": 3, "name": "Ravi"}, notes={"docs_pending": "  "})
+    check("ticking it with no list is refused", not r.get("ok") and "documents" in (r.get("error") or "").lower(), r)
+    mylist = "Final bill\n- Discharge summary (page 2)\n\nHospital ICP"
+    r = await w.set_reasons(61, ["docs_pending", "other"], "", {"staff_id": 3, "name": "Ravi"},
+                            notes={"docs_pending": mylist, "other": "Waiting for the hospital to reply"})
+    check("a list staff wrote is saved", r.get("ok"), r)
+    t = {x["key"]: x for x in (await w.for_claim(61))["ticked"]}
+    check("...one paper per line, tidied", t.get("docs_pending", {}).get("note") == "Final bill\nDischarge summary (page 2)\nHospital ICP",
+          t.get("docs_pending"))
+    check("...and 'Other' kept its words", t.get("other", {}).get("note") == "Waiting for the hospital to reply", t.get("other"))
+    chips = (await w.for_rows([{"claim_id": 61, "review_outcome": "can_fight", "l2_payment_status": "due",
+                                "payment_status": "unpaid_lead"}]))[61]
+    dk = [c for c in chips if c["key"] in ("docs", "docs_pending")]
+    check("ONE documents chip on a list, not two - staff's list, with the checklist count beside it",
+          len(dk) == 1 and dk[0]["key"] == "docs_pending" and " of " in (dk[0].get("progress") or ""), dk)
+    r = await w.set_reasons(61, ["docs_pending", "other"], "", {"staff_id": 3, "name": "Ravi"},
+                            notes={"docs_pending": "Final bill", "other": "Waiting for the hospital to reply"})
+    check("changing the list replaces it", r.get("ok") and r.get("added") == ["docs_pending"], r)
+    async with aiosqlite.connect(DBP) as c:
+        n = (await (await c.execute("SELECT COUNT(*) FROM nidaan_claim_waits WHERE claim_id=61 "
+                                    "AND reason_key='docs_pending'")).fetchone())[0]
+    check("...and the old list is kept as history", n == 2, n)
+
+    print("\n-- one filter, one meaning --")
+    check("'Documents pending' finds the automatic reason", w.matches([{"key": "docs", "auto": True}], "docs"))
+    check("...and a list staff wrote", w.matches([{"key": "docs_pending"}], "docs"))
+    check("'Nothing recorded' finds a claim with no reasons", w.matches([], "none") and not w.matches([{"key": "fee"}], "none"))
+    check("no filter matches everything", w.matches([], "") and w.matches([{"key": "fee"}], ""))
+    check("every list gets the same choices, 'Documents pending' first and 'Nothing recorded' last",
+          [c["key"] for c in w.filter_choices()][0] == "docs" and w.filter_choices()[-1]["key"] == "none")
+
+    print("\n-- the case board follows what staff ticked --")
+    import biz_nidaan_case_state as cs
+    cs.DB_PATH = DBP
+    async with aiosqlite.connect(DBP) as c:
+        await c.execute("INSERT INTO nidaan_claims (claim_id, account_id, claim_type, insured_name, insured_phone, status, "
+                        "review_outcome, l2_payment_status, payment_status) VALUES "
+                        "(62,1,'health','Y','9000000002','in_review','','','paid')")
+        await c.commit()
+    b = await cs.board()
+    it = next(i for i in b["items"] if i["claim_id"] == 62)
+    check("before anything is ticked, the board works it out (a claim in review is ours)", it["blocker"] == "internal", it["blocker"])
+    await w.set_reasons(62, ["query_complainant"], "", {"staff_id": 3, "name": "Ravi"})
+    b = await cs.board()
+    it = next(i for i in b["items"] if i["claim_id"] == 62)
+    check("ticking 'Query - complainant' puts the next move with the complainant", it["blocker"] == "complainant", it["blocker"])
+    check("...and the board shows the same chip", [x["key"] for x in it.get("waits", [])] == ["query_complainant"], it.get("waits"))
+    check("the board's 'Waiting on' filter finds it", any(i["claim_id"] == 62 for i in (await cs.board(wait="query_complainant"))["items"]))
+    check("...and leaves out what does not match", not any(i["claim_id"] == 62 for i in (await cs.board(wait="insurer_reply"))["items"]))
+    check("...with a count for every choice", (await cs.board()).get("by_wait", {}).get("query_complainant", 0) >= 1)
+    await cs.set_blocker(62, "insurer", actor="Ravi")
+    it = next(i for i in (await cs.board())["items"] if i["claim_id"] == 62)
+    check("a person's own choice on the board still wins", it["blocker"] == "insurer", it["blocker"])
+    st = await cs.for_claim(62)
+    check("the claim drawer says what the board says", st.get("blocker") == "insurer", st.get("blocker"))
+
     ops = open(os.path.join(ROOT, "static", "nidaan_ops.html"), encoding="utf-8").read()
+    check("All Claims, Level-2 Claims, the entry queue and the case board all offer the same filter",
+          "claimWaitFilter(this.value)" in ops and "_setL2f('wait',this.value)" in ops
+          and "l2StartWaitFilter(this.value)" in ops and "cbSet('wait'," in ops)
+    check("All Claims shows the chips and no longer stops at 200",
+          "${_waitChips(c.waits)}</td>\n      <td>${_uPay(c)}</td>" in ops and "params.set('limit','2000')" in ops)
     check("the bucket list, the L2 Claims list, the case sheet and the drawer all show it",
           "_waitChips(i.waits)" in ops and "_waitChips(c.waits)" in ops
           and "waitBox_' + id" in ops and 'id="waitBox_${c.claim_id}"' in ops)

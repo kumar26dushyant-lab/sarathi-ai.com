@@ -4970,12 +4970,14 @@
     "_require_staff",
     "_row_still_open",
     "_staff_still_active",
-    "app"
+    "app",
+    "logger"
    ],
    "uses": [
     "_is_nidaan_host",
     "_require_staff",
-    "app"
+    "app",
+    "logger"
    ]
   },
   {

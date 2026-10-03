@@ -899,11 +899,11 @@ CAPABILITIES: list[dict] = [
     {
         "id": "waiting_reasons",
         "en": {"t": "Why is this claim waiting? - on every list",
-               "d": "Every claim shows why it is waiting, as small labels with days: what we already know (documents - how many we have and which are missing, the Level-2 fee unpaid, the authorization not accepted yet) and what you tick: Query - complainant, Reply - insurer, Our team, or Other in your own words. Several can be ticked at once. Each bucket can be filtered by it. Unticking keeps the history.",
-               "u": "Open the claim - Why is this claim waiting? - tick what applies, Save. On a bucket list use 'Waiting on' to filter."},
+               "d": "Every claim shows why it is waiting, as small labels with days. Documents pending comes first: it ticks itself while the checklist is missing papers and its box lists them - edit the list to add papers the checklist does not name, and your list is kept with your name. Also: the Level-2 fee unpaid, the authorization not accepted yet, and what you tick: Query - complainant, Reply - insurer, Our team, or Other in your own words. All Claims, Level-2 Claims, every bucket, the entry queue and the case board show the same labels and the same 'Waiting on' filter, with counts - including 'Nothing recorded'. On the case board, 'Next move with' follows what you ticked. Unticking keeps the history.",
+               "u": "Open the claim - Why is this claim waiting? - tick what applies (edit the documents list if needed), Save. On any list use 'Waiting on' to filter."},
         "hi": {"t": "यह क्लेम क्यों रुका है? - हर सूची पर",
-               "d": "हर क्लेम छोटे लेबल और दिनों के साथ दिखाता है कि वह क्यों रुका है: जो हम पहले से जानते हैं (दस्तावेज़ - कितने हैं और कौन-से बाकी, लेवल-2 फ़ीस बाकी, अनुमति अभी स्वीकार नहीं) और जो आप टिक करें: सवाल - शिकायतकर्ता, जवाब - बीमा कंपनी, हमारी टीम, या अन्य अपने शब्दों में। एक साथ कई टिक हो सकते हैं। हर बकेट में इससे फ़िल्टर कर सकते हैं। टिक हटाने पर इतिहास रहता है।",
-               "u": "क्लेम खोलें - यह क्लेम क्यों रुका है? - जो लागू हो टिक करें, Save। बकेट सूची में 'Waiting on' से फ़िल्टर करें।"},
+               "d": "हर क्लेम छोटे लेबल और दिनों के साथ दिखाता है कि वह क्यों रुका है। सबसे पहले 'दस्तावेज़ बाकी': चेकलिस्ट में कागज़ बाकी हों तो यह अपने-आप टिक रहता है और इसके बॉक्स में बाकी कागज़ों की सूची आ जाती है - जो कागज़ चेकलिस्ट में नहीं हैं वे जोड़ सकते हैं, आपकी सूची आपके नाम से रहती है। साथ में: लेवल-2 फ़ीस बाकी, अनुमति अभी स्वीकार नहीं, और जो आप टिक करें: सवाल - शिकायतकर्ता, जवाब - बीमा कंपनी, हमारी टीम, या अन्य अपने शब्दों में। सभी क्लेम, लेवल-2 क्लेम, हर बकेट, शुरू होने की कतार और केस बोर्ड पर एक जैसे लेबल और एक जैसा 'किसका इंतज़ार' फ़िल्टर है, गिनती के साथ - 'कुछ दर्ज नहीं' भी। केस बोर्ड पर 'अगला कदम किसका' आपके टिक के हिसाब से चलता है। टिक हटाने पर इतिहास रहता है।",
+               "u": "क्लेम खोलें - यह क्लेम क्यों रुका है? - जो लागू हो टिक करें (ज़रूरत हो तो दस्तावेज़ सूची बदलें), Save। किसी भी सूची में 'किसका इंतज़ार' से फ़िल्टर करें।"},
         "telegram": False, "web": True, "min_role": "team_member",
     },
     {

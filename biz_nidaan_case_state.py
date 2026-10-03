@@ -333,6 +333,14 @@ def derive(claim: dict, *, docs_done: int = 0, docs_total: int = 0,
         if blocker == "none":
             blocker = "internal"
 
+    # ── what staff ticked on "Why is this claim waiting?" ────────────────────
+    # A ticked "Query - complainant" or "Reply - insurer" says who owes the next move better than
+    # a rule can, so the board follows it (3 Oct: one answer everywhere). The caller puts the
+    # ticked keys in claim["_waits"]; a person's explicit choice below still wins over both.
+    if stage != "closed" and claim.get("_waits"):
+        import biz_nidaan_waits as _w
+        blocker = _w.blocker_from(claim.get("_waits")) or blocker
+
     # ── an explicit override beats the derivation ────────────────────────────
     # No derivation can know what someone was told on a phone call. When a person says what a
     # case is waiting for, that wins — until a park expires, at which point the case rejoins the
@@ -462,8 +470,22 @@ async def _last_activity(claim_ids: list) -> dict:
     return out
 
 
+async def _waits_for(rows: list) -> dict:
+    """{claim_id: chips} from "Why is this claim waiting?", and each row's ticked keys put in
+    row["_waits"] for derive(). Chips never sink the board."""
+    try:
+        import biz_nidaan_waits as _w
+        chips = await _w.for_rows(rows)
+    except Exception as e:  # noqa: BLE001
+        logger.info("waiting reasons skipped on the case board: %s", e)
+        return {}
+    for r in rows:
+        r["_waits"] = [x["key"] for x in chips.get(int(r["claim_id"]), []) if not x.get("auto")]
+    return chips
+
+
 async def board(*, stage: str = "", blocker: str = "", flag: str = "",
-                assigned_to=None, limit: int = 300) -> dict:
+                assigned_to=None, limit: int = 300, wait: str = "") -> dict:
     """Every open case with its derived state, plus counts for the filter chips.
 
     Ordered so the answer to "what do I do next" is the top of the list: cases nobody else is
@@ -478,7 +500,7 @@ async def board(*, stage: str = "", blocker: str = "", flag: str = "",
         rows = [dict(r) for r in await (await c.execute(
             "SELECT claim_id, account_id, claim_type, insured_name, complainant_name, "
             "complainant_phone, complainant_email, insured_phone, insured_email, insurer_name, "
-            "status, review_outcome, l2_payment_status, disputed_amount, branch_code, "
+            "status, review_outcome, l2_payment_status, payment_status, disputed_amount, branch_code, "
             "assigned_to_staff_id, archived, created_at, last_status_at, "
             "blocker, blocker_note, blocker_by, hold_until, "
             "pipeline_stage, pipeline_entered_at, pipeline_stage_at, pipeline_by, "
@@ -489,6 +511,7 @@ async def board(*, stage: str = "", blocker: str = "", flag: str = "",
     ids = [r["claim_id"] for r in rows]
     counts = await _checklist_counts(ids)
     acts = await _last_activity(ids)
+    chips = await _waits_for(rows)
 
     items = []
     for r in rows:
@@ -511,6 +534,7 @@ async def board(*, stage: str = "", blocker: str = "", flag: str = "",
             "docs": {"done": done, "total": total},
             "raised_by": (r.get("raised_by_name") or ""),
             "raised_via": (r.get("raised_via") or ""),
+            "waits": chips.get(int(r["claim_id"]), []),
             **st,
         })
 
@@ -540,6 +564,13 @@ async def board(*, stage: str = "", blocker: str = "", flag: str = "",
         open_items = [it for it in open_items if it["blocker"] == blocker]
     if flag:
         open_items = [it for it in open_items if flag in it["flags"]]
+    # "Waiting on" - the same filter, the same meaning, as every other claim list. Counted over
+    # the cases the other filters left, so each option says how many it would show.
+    import biz_nidaan_waits as _w
+    tally_wait = {k["key"]: sum(1 for it in open_items if _w.matches(it["waits"], k["key"]))
+                  for k in _w.filter_choices()}
+    if wait:
+        open_items = [it for it in open_items if _w.matches(it["waits"], wait)]
 
     # Ours first, then by how long it has been waiting.
     open_items.sort(key=lambda i: (i["blocker"] not in OURS, -(i["age_days"] or 0)))
@@ -554,6 +585,8 @@ async def board(*, stage: str = "", blocker: str = "", flag: str = "",
         "by_stage": tally_stage,
         "by_blocker": tally_blocker,
         "by_flag": tally_flag,
+        "by_wait": tally_wait,
+        "wait_reasons": _w.filter_choices(),
         "stage_order": [s for s in STAGES if s != "closed"],
         "labels": {"stage": STAGE_LABEL, "blocker": BLOCKER_LABEL, "flag": FLAG_LABEL},
     }
@@ -570,6 +603,7 @@ async def for_claim(claim_id: int) -> dict:
     row = dict(r)
     done, total = (await _checklist_counts([claim_id])).get(claim_id, (0, 0))
     last = (await _last_activity([claim_id])).get(claim_id)
+    await _waits_for([row])          # the drawer must say what the board says
     return derive(row, docs_done=done, docs_total=total, last_activity=last)
 
 

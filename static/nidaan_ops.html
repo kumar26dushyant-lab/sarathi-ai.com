@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<script src="/static/nidaan_onetap.js?v=1"></script>
+<script src="/static/nidaan_onetap.js?v=2"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <style>html.ops-has-token #loginScreen{display:none!important}</style>
@@ -819,7 +819,7 @@ const _ND_STATE = {
   l2Sel:  [function(){ return _l2Sel; }, function(v){ _l2Sel = v; }],
   l2Sub:  [function(){ return _l2Sub; }, function(v){ _l2Sub = v; }],
   l2Q:    [function(){ return _l2Q; }, function(v){ _l2Q = v; }],
-  cb:     [function(){ return _cbState; }, function(v){ if (v && typeof v === 'object') _cbState = Object.assign({blocker:'', stage:'', flag:'', mine:false}, v); }],
+  cb:     [function(){ return _cbState; }, function(v){ if (v && typeof v === 'object') _cbState = Object.assign({blocker:'', stage:'', flag:'', wait:'', mine:false}, v); }],
   pay:    [function(){ return _opsPayFilter; }, function(v){ _opsPayFilter = v || ''; }],
   sup:    [function(){ return _supportFilter; }, function(v){ if (v) _supportFilter = v; }],
   wai:    [function(){ return _waiScope; }, function(v){ if (v) _waiScope = v; }],
@@ -3973,7 +3973,7 @@ function _filterClaimsByOriginAndCustomer(rows){
 // #7: L2 (can_fight) + Archived (no_scope) claim lists — review-delivered outcomes.
 // L2 is a full dashboard: metrics on top + filters + ClaimShield (L2 legal) management.
 let _outcomeCache = {};
-let _l2f = {pay:'', cs:'', type:'', auth:'', dash:'', mail:''};   // L2 dashboard filters
+let _l2f = {pay:'', cs:'', type:'', auth:'', dash:'', mail:'', wait:''};   // L2 dashboard filters
 function _setL2f(k,v){ _l2f[k]=v; _renderOutcome('l2claims'); }
 let _l2View = localStorage.getItem('l2_view') || 'table';   // table | board | cards
 function _setL2View(v){ _l2View=v; localStorage.setItem('l2_view',v); _renderOutcome('l2claims'); }
@@ -3985,7 +3985,7 @@ function _l2SaveView(){
   const q=((document.getElementById('oc_l2claims_s')||{}).value)||'';
   const views=_l2Views();
   views.push({id:'v'+Date.now(), name:name.slice(0,40), view:_l2View, pay:_l2f.pay, cs:_l2f.cs, type:_l2f.type,
-              auth:_l2f.auth, dash:_l2f.dash, mail:_l2f.mail, q});
+              auth:_l2f.auth, dash:_l2f.dash, mail:_l2f.mail, wait:_l2f.wait, q});
   localStorage.setItem('l2_saved_views', JSON.stringify(views));
   _renderL2Views();
   ndUI.toast('View saved','success');
@@ -3993,7 +3993,7 @@ function _l2SaveView(){
 function _l2ApplyView(id){
   const v=_l2Views().find(x=>x.id===id); if(!v) return;
   _l2f={pay:v.pay||'', cs:v.cs||'', type:v.type||'',
-        auth:v.auth||'', dash:v.dash||'', mail:v.mail||''};
+        auth:v.auth||'', dash:v.dash||'', mail:v.mail||'', wait:v.wait||''};
   _l2View=v.view||'table'; localStorage.setItem('l2_view',_l2View);
   const s=document.getElementById('oc_l2claims_s'); if(s) s.value=v.q||'';
   ['pay','cs','type'].forEach(k=>{ const el=document.getElementById('oc_l2claims_'+k); if(el) el.value=v[k]||''; });
@@ -4352,6 +4352,7 @@ function _l2CardInner(c, withL2){
     + `<div style="font-weight:600;font-size:.85rem;margin-top:.15rem">${esc(c.insured_name||'—')}</div>`
     + `<div style="font-size:.72rem;color:var(--nd-text-faint)">${esc(c.claim_type||'—')} · ₹${fmt(c.disputed_amount||0)}</div>`
     + `<div style="font-size:.72rem;margin-top:.25rem">${_l2CsBadge(c)}</div>`
+    + _waitChips(c.waits)
     + _claimTrail(c)
     // On L2 Claims the card must be able to move the claim, exactly as the table row can.
     + (withL2 ? `<div style="margin-top:.45rem;padding-top:.4rem;border-top:1px dashed var(--nd-border);font-size:.72rem" onclick="event.stopPropagation()">${_l2HandoverControls(c)}</div>` : '');
@@ -4517,6 +4518,7 @@ async function loadOutcomeClaims(key, outcome, title, sub){
       <select id="oc_l2claims_auth" onchange="_setL2f('auth',this.value)" style="min-width:150px"><option value="">Authorisation: All</option><option value="yes">Received</option><option value="no">Not received</option></select>
       <select id="oc_l2claims_dash" onchange="_setL2f('dash',this.value)" style="min-width:150px"><option value="">Dashboard: All</option><option value="yes">Opened</option><option value="no">Never opened</option></select>
       <select id="oc_l2claims_mail" onchange="_setL2f('mail',this.value)" style="min-width:150px"><option value="">Email: All</option><option value="yes">Verified</option><option value="no">Unverified</option></select>
+      <span id="oc_l2claims_waitwrap"></span>
       <span class="vw-switch" style="margin-left:auto">
         <button id="vw_table" onclick="_setL2View('table')">☰ Table</button>
         <button id="vw_board" onclick="_setL2View('board')">▦ Board</button>
@@ -4527,7 +4529,9 @@ async function loadOutcomeClaims(key, outcome, title, sub){
     <div id="oc_${key}_wrap"><div class="empty"><div class="ei">⏳</div><p>Loading…</p></div></div>`;
   const r = await API('/claims?review_outcome='+outcome+'&limit=300');
   if(!r || !r.ok){ document.getElementById('oc_'+key+'_wrap').innerHTML='<div class="empty"><p>Failed to load</p></div>'; return; }
-  _outcomeCache[key] = (await r.json()).claims || [];
+  const _ocj = await r.json();
+  _outcomeCache[key] = _ocj.claims || [];
+  _setWaitReasons(_ocj.wait_reasons);
   if(isL2){
     const types=[...new Set((_outcomeCache[key]||[]).map(c=>c.claim_type).filter(Boolean))].sort();
     const sel=document.getElementById('oc_l2claims_type');
@@ -4626,6 +4630,10 @@ function _renderOutcome(key){
     if(_l2f.mail==='yes') rows=rows.filter(c=>!!c.email_proven);
     else if(_l2f.mail==='no') rows=rows.filter(c=>!c.email_proven);
     if(_l2f.type) rows=rows.filter(c=>(c.claim_type||'')===_l2f.type);
+    // Waiting on - the same filter as every other list, counted over what is left so far.
+    const _ww = document.getElementById('oc_l2claims_waitwrap');
+    if(_ww) _ww.innerHTML = _waitFilterHtml(rows, _l2f.wait, "_setL2f('wait',this.value)");
+    if(_l2f.wait) rows=rows.filter(c=>_waitMatch(c, _l2f.wait));
   }
   // Reflect the active view on the switcher (L2 only).
   if(isL2){ ['table','board','cards'].forEach(v=>{ const b=document.getElementById('vw_'+v); if(b) b.classList.toggle('active', _l2View===v); }); }
@@ -4857,6 +4865,7 @@ async function loadClaims(statusFilter='', search='', branch='', plan='', assign
         <option value="paid">✅ ₹499 paid</option>
         <option value="unpaid_lead">🟠 Lead (unpaid)</option>
       </select>
+      <span id="claimWaitWrap"></span>
     </div>
     <div id="claimTableWrap"><div class="empty"><div class="ei">⏳</div><p>Loading claims…</p></div></div>`;
 
@@ -4888,7 +4897,9 @@ async function loadClaims(statusFilter='', search='', branch='', plan='', assign
   if (branch) params.set('branch', branch);
   if (plan) params.set('plan', plan);
   if (assigned) params.set('assigned_to', assigned);
-  params.set('limit','200');
+  // Every claim, not the first 200: the list stopped at 200 while there were more, so the newest
+  // claims past that point never appeared here at all (3 Oct). The server caps a page at 2000.
+  params.set('limit','2000');
   if (window._claimsArchivedView) params.set('archived_only','true');
 
   const _wrap = document.getElementById('claimTableWrap');
@@ -4900,6 +4911,8 @@ async function loadClaims(statusFilter='', search='', branch='', plan='', assign
     if (!r.ok) { if(_wrap) _wrap.innerHTML='<div class="empty"><p>Failed to load claims ('+r.status+'). <a href="#" onclick="applyClaimFilters();return false" style="color:var(--nd-cyan-text)">Retry</a></p></div>'; return; }
     const d = await r.json();
     _claimsCache = d.claims || [];
+    _claimsTotal = d.total || _claimsCache.length;
+    _setWaitReasons(d.wait_reasons);
     _renderClaimResults();
   } catch(err) {
     const msg = (err && err.name==='AbortError') ? 'Request timed out' : ('Error — '+String((err&&err.message)||err));
@@ -4994,10 +5007,24 @@ function pagerBar(key, total, redraw, arg){
 window.pageSize = pageSize; window.pageOf = pageOf; window.pageSlice = pageSlice;
 window.setPageSize = setPageSize; window.gotoPage = gotoPage; window.pagerBar = pagerBar;
 
+let _claimWait = '', _claimsTotal = 0;   // the "Waiting on" filter; how many the server has
+function claimWaitFilter(v){ _claimWait = v || ''; _pageNo['claims'] = 1; _renderClaimResults(); }
+window.claimWaitFilter = claimWaitFilter;
 function _renderClaimResults(){
  try {
-  const all = _filterClaimsBySearch(
+  const base = _filterClaimsBySearch(
     _filterClaimsByOriginAndCustomer(_claimsCache || []));
+  // Counted over what the other filters left, so each choice says how many it would show.
+  const ww = document.getElementById('claimWaitWrap');
+  if (ww) ww.innerHTML = _waitFilterHtml(base, _claimWait, 'claimWaitFilter(this.value)');
+  const all = base.filter(function(c){ return _waitMatch(c, _claimWait); });
+  if (_claimsTotal > (_claimsCache || []).length){
+    // Never again a silent cut-off: say so if the server holds more than this page.
+    setTimeout(function(){ const w = document.getElementById('claimTableWrap');
+      if (w && !document.getElementById('claimMoreNote')) w.insertAdjacentHTML('afterbegin',
+        '<div id="claimMoreNote" class="l2ban amber">Showing the first ' + _claimsCache.length + ' of ' + _claimsTotal
+        + ' claims. Narrow it with the filters above.</div>'); }, 0);
+  }
   if (!all.length) {
     document.getElementById('claimTableWrap').innerHTML='<div class="empty"><div class="ei">📋</div><p>No claims found</p></div>';
     return;
@@ -5032,7 +5059,7 @@ function _renderClaimResults(){
       <td>${esc(c.claim_type||'—')}</td>
       <td>${esc(c.insurer_name||'—')}</td>
       <td>₹${fmt(c.disputed_amount||0)}</td>
-      <td><span class="pill-status ${claimStatusClass(c.status)}">${(c.status||'').replace(/_/g,' ')}</span></td>
+      <td><span class="pill-status ${claimStatusClass(c.status)}">${(c.status||'').replace(/_/g,' ')}</span>${_waitChips(c.waits)}</td>
       <td>${_uPay(c)}</td>
       <td style="font-size:.8rem">${_sourceBadge(c)}</td>
       <td style="font-size:.72rem;line-height:1.5">${_authBadge(c)}<br>${_portalBadge(c)}</td>
@@ -15009,8 +15036,8 @@ function l2Pick(key){
     _l2Sel = key; _l2Sub = ''; _l2Q = ''; _l2Days = '';
     // Each entry keeps its own chip filters until they are cleared; a stage entry pins its stage.
     const kept = ((_ndKeepGet().cbBy) || {})[key];
-    _cbState = kept ? Object.assign({blocker:'', stage:'', flag:'', mine:false}, kept)
-                    : {blocker:'', stage:'', flag:'', mine:false};
+    _cbState = kept ? Object.assign({blocker:'', stage:'', flag:'', wait:'', mine:false}, kept)
+                    : {blocker:'', stage:'', flag:'', wait:'', mine:false};
     if (key.indexOf('pre:') === 0) _cbState.stage = key.slice(4);
   }
   l2Shell();
@@ -15050,7 +15077,9 @@ async function l2Load(){
   if (_l2Sel === 'start'){
     try{
       const r = await API('/buckets/waiting-to-start');
-      _l2Wait = r.ok ? ((await r.json()).claims || []) : [];
+      const _wj = r.ok ? await r.json() : {};
+      _l2Wait = _wj.claims || [];
+      _setWaitReasons(_wj.wait_reasons);
     }catch(e){ _l2Wait = []; }
     l2RenderStart();
     return;
@@ -15062,6 +15091,7 @@ async function l2Load(){
     if (!r.ok) throw 0;
     const d = await r.json();
     _l2Rows = d.items || []; _l2Rows2 = d;
+    _setWaitReasons(d.wait_reasons);
   }catch(e){
     m.innerHTML = '<div class="empty"><div class="ei">⚠️</div><p>Could not load this bucket.</p></div>';
     return;
@@ -15082,7 +15112,8 @@ function l2RenderStart(){
         : 'Nothing stuck. Claims handed over from L2 Claims go straight into Live Cases.')
     + '</div>';
   if (!_l2Wait.length){ m.innerHTML = head; return; }
-  const rows = _l2Wait.map(function(x){
+  const shown = _l2Wait.filter(function(x){ return _waitMatch(x, _l2StartWait); });
+  const rows = shown.map(function(x){
     // Readiness decides what this row offers. A claim that cannot be worked should not present
     // a Start button as though it can - it should present the reason it cannot.
     const blocks = x.blocks || [], fixes = x.fixes || [];
@@ -15097,7 +15128,7 @@ function l2RenderStart(){
       + '<button class="l2mv d" onclick="l2SendBack(' + x.claim_id + ')">↩ Send back</button>';
     return '<tr>'
       + '<td><b>NP-' + x.claim_id + '</b></td>'
-      + '<td>' + esc(x.who || '(name not recorded)') + '</td>'
+      + '<td>' + esc(x.who || '(name not recorded)') + _waitChips(x.waits) + '</td>'
       + '<td>' + (x.insurer ? esc(x.insurer) : '<span class="l2warn">not recorded</span>') + '</td>'
       + '<td style="text-align:right">' + (x.amount ? '₹' + Number(x.amount).toLocaleString('en-IN') : '—') + '</td>'
       + '<td style="font-size:.78rem;color:var(--nd-text-muted)">' + esc(x.origin || '')
@@ -15116,10 +15147,15 @@ function l2RenderStart(){
   m.innerHTML = head
     + (notReady ? '<div class="l2ban red">⛔ ' + notReady + ' cannot be started yet — something '
         + 'essential is missing. Press <b>Why not?</b> on the row to see exactly what.</div>' : '')
-    + '<div class="table-wrap"><table><thead><tr><th>Ref</th><th>Complainant</th>'
+    + '<div class="l2tools">' + _waitFilterHtml(_l2Wait, _l2StartWait, 'l2StartWaitFilter(this.value)') + '</div>'
+    + (shown.length ? '<div class="table-wrap"><table><thead><tr><th>Ref</th><th>Complainant</th>'
     + '<th>Insurance Co.</th><th style="text-align:right">Disputed</th><th>Origin</th>'
-    + '<th>Waiting</th><th>Ready?</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+    + '<th>Waiting</th><th>Ready?</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+      : '<div class="empty"><p>Nothing here is waiting on that.</p></div>');
 }
+let _l2StartWait = '';   // the "Waiting on" filter on the entry queue
+function l2StartWaitFilter(v){ _l2StartWait = v || ''; l2RenderStart(); }
+window.l2StartWaitFilter = l2StartWaitFilter;
 
 async function l2Start(claimId, btn, force){
   if (_l2Busy) return;
@@ -15285,11 +15321,7 @@ function l2RenderBucket(){
     +   '<input class="l2srch" id="l2Q" placeholder="Search name, claim no., phone, insurance company…" '
     +     'value="' + esc(_l2Q) + '" oninput="l2Search(this.value)">'
     +   _l2DaysSel(d)
-    +   '<select class="l2days" aria-label="Waiting on" onchange="l2WaitFilter(this.value)">'
-    +     [['', 'Waiting on: anything'], ['docs', 'Documents'], ['fee', 'L2 fee unpaid'], ['auth', 'Authorization not accepted'],
-           ['query_complainant', 'Query - complainant'], ['insurer_reply', 'Reply - insurer'], ['our_team', 'Our team'], ['other', 'Other']]
-          .map(function(o){ return '<option value="' + o[0] + '"' + (_l2WaitOn === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('')
-    +   '</select>'
+    +   _waitFilterHtml(_l2Rows, _l2WaitOn, 'l2WaitFilter(this.value)')
     +   '<button class="btn-sm btn-ghost" onclick="l2Export()">⤓ Excel</button>'
     + '</div>';
 
@@ -15356,12 +15388,49 @@ function _waitChips(list){
   if (!list || !list.length) return '';
   return '<div class="wchips">' + list.map(function(w){
     const lbl = (_ndLang() === 'hi' && w.label_hi) ? w.label_hi : w.label;
-    const extra = w.key === 'other' && w.note ? ': ' + w.note : '';
-    return '<span class="wchip' + (w.auto ? ' auto' : '') + '" title="'
-      + esc((w.auto ? 'Automatic' : 'Ticked by ' + (w.by || 'staff')) + (w.days != null && !w.auto ? ' · ' + w.days + ' day(s)' : '')) + '">'
+    // 'Other' shows its words; a documents list staff wrote is too long for a chip, so it shows
+    // the checklist count and the list itself on hover.
+    const extra = w.key === 'other' && w.note ? ': ' + w.note : (w.progress ? ' ' + w.progress : '');
+    const hover = (w.auto ? 'Automatic' : 'Ticked by ' + (w.by || 'staff'))
+      + (w.days != null && !w.auto ? ' · ' + w.days + ' day(s)' : '')
+      + (w.key === 'docs_pending' && w.note ? '\n' + w.note : '');
+    return '<span class="wchip' + (w.auto ? ' auto' : '') + '" title="' + esc(hover) + '">'
       + esc(lbl + extra) + (w.days && !w.auto ? ' · ' + w.days + 'd' : '') + '</span>';
   }).join('') + '</div>';
 }
+// ONE "WAITING ON" FILTER FOR EVERY LIST (3 Oct): All Claims, Level-2 Claims, every bucket, the
+// entry queue and the case board ask the same question the same way. The choices come from the
+// server with each list (wait_reasons), so a new reason appears everywhere at once; this copy is
+// only what shows before the first list arrives.
+let _waitReasons = [
+  {key:'docs', label:'Documents pending'}, {key:'fee', label:'L2 fee unpaid'},
+  {key:'auth', label:'Authorization not accepted yet'}, {key:'query_complainant', label:'Query - complainant'},
+  {key:'insurer_reply', label:'Reply - insurer'}, {key:'our_team', label:'Our team'},
+  {key:'other', label:'Other'}, {key:'none', label:'Nothing recorded'}];
+function _setWaitReasons(list){ if (Array.isArray(list) && list.length) _waitReasons = list; }
+// The same meaning as biz_nidaan_waits.matches(): "docs" is the automatic documents reason or a
+// list staff wrote; "none" is a claim nobody has said anything about.
+function _waitMatch(c, key){
+  if (!key) return true;
+  const have = ((c && c.waits) || []).map(function(w){ return w.key; });
+  if (key === 'none') return !have.length;
+  if (key === 'docs') return have.indexOf('docs') >= 0 || have.indexOf('docs_pending') >= 0;
+  return have.indexOf(key) >= 0;
+}
+// The <select>, with how many of `rows` each choice would show. `counts` (from the server) wins
+// when the list is filtered there, as on the case board.
+function _waitFilterHtml(rows, cur, onchange, counts){
+  const hi = _ndLang() === 'hi';
+  return '<select class="l2days" aria-label="Waiting on" onchange="' + onchange + '">'
+    + '<option value="">' + (hi ? 'किसका इंतज़ार: कुछ भी' : 'Waiting on: anything') + '</option>'
+    + _waitReasons.map(function(o){
+        const n = counts ? (counts[o.key] || 0) : (rows || []).filter(function(c){ return _waitMatch(c, o.key); }).length;
+        return '<option value="' + esc(o.key) + '"' + (cur === o.key ? ' selected' : '') + '>'
+          + esc((hi && o.label_hi) ? o.label_hi : o.label) + ' (' + n + ')</option>';
+      }).join('')
+    + '</select>';
+}
+window._waitMatch = _waitMatch; window._waitFilterHtml = _waitFilterHtml; window._setWaitReasons = _setWaitReasons;
 function _ndLang(){ try{ return (localStorage.getItem('nidaan_lang') || 'en').slice(0,2); }catch(e){ return 'en'; } }
 // The tick box, on the case sheet and in the claim drawer.
 async function waitLoad(claimId){
@@ -15370,38 +15439,89 @@ async function waitLoad(claimId){
   try{ const r = await API('/claims/' + claimId + '/waiting'); if (r.ok) d = await r.json(); }catch(e){}
   if (!d){ el.innerHTML = ''; return; }
   const ticked = {}; (d.ticked || []).forEach(function(t){ ticked[t.key] = t; });
-  const auto = (d.auto || []).map(function(a){
-    return '<div class="wauto">• ' + esc(a.label)
-      + (a.missing && a.missing.length ? ' — <b>missing:</b> ' + esc(a.missing.join(', ')) : '') + '</div>';
+  // DOCUMENTS PENDING (3 Oct): ticked by itself while the checklist is short, and its box lists
+  // the missing papers. Staff may rewrite the list; theirs is kept and shown instead.
+  const autoDocs = (d.auto || []).filter(function(a){ return a.key === 'docs'; })[0] || null;
+  const missing = d.docs_missing || [];
+  const mine = ticked.docs_pending || null;
+  _waitDocs[claimId] = {auto: !!autoDocs, missing: missing, mine: !!mine};
+  // The other automatic reasons stay as plain lines; documents now live in their own tick.
+  const auto = (d.auto || []).filter(function(a){ return a.key !== 'docs'; }).map(function(a){
+    return '<div class="wauto">• ' + esc(a.label) + '</div>';
   }).join('');
+  const docsOn = !!(mine || autoDocs);
+  const docsWho = mine ? ' <span class="wby">(' + esc(mine.by) + ', ' + mine.days + 'd)</span>'
+    : (autoDocs ? ' <span class="wby">(automatic · ' + esc(autoDocs.label.replace(/^Documents pending\s*/, '')) + ' on the checklist)</span>' : '');
+  const lim = (d.note_limits || {});
+  const docsBox = '<div id="waitDocsWrap_' + claimId + '" style="display:' + (docsOn ? 'block' : 'none') + ';margin:.15rem 0 .45rem 1.4rem">'
+    + '<textarea id="waitDocs_' + claimId + '" rows="4" maxlength="' + (lim.docs_pending || 1000) + '" '
+    +   'placeholder="One document per line" style="width:100%">'
+    +   esc(mine ? (mine.note || '') : missing.join('\n')) + '</textarea>'
+    + '<div style="font-size:.74rem;color:var(--nd-text-muted);display:flex;gap:.6rem;flex-wrap:wrap">'
+    +   (missing.length ? '<a href="#" onclick="waitDocsRefill(' + claimId + ');return false" style="color:var(--nd-cyan-text)">↻ Fill from the checklist</a>' : '')
+    +   '<span>' + (mine ? 'Your list is kept until you change or untick it.'
+                  : (autoDocs ? 'Filled from the checklist. Edit it to keep your own list; it stays until the papers are ticked received in 📂 Documents.'
+                              : 'List what is still to come, one per line.')) + '</span>'
+    + '</div></div>';
   const boxes = (d.choices || []).map(function(c){
     const t = ticked[c.key];
+    if (c.key === 'docs_pending'){
+      return '<label class="wtick"><input type="checkbox" value="docs_pending"' + (docsOn ? ' checked' : '')
+        + ' onchange="document.getElementById(\'waitDocsWrap_' + claimId + '\').style.display=this.checked?\'block\':\'none\'"> '
+        + esc(c.label) + docsWho + '</label>' + docsBox;
+    }
     return '<label class="wtick"><input type="checkbox" value="' + esc(c.key) + '"' + (t ? ' checked' : '')
       + (c.key === 'other' ? ' onchange="document.getElementById(\'waitOther_' + claimId + '\').style.display=this.checked?\'block\':\'none\'"' : '')
       + '> ' + esc(c.label) + (t ? ' <span class="wby">(' + esc(t.by) + ', ' + t.days + 'd)</span>' : '') + '</label>';
   }).join('');
   const other = ticked.other ? ticked.other.note : '';
   el.innerHTML = '<div class="l2sec">Why is this claim waiting?</div>'
-    + (auto ? '<div class="wautos">' + auto + '</div>' : '<div class="hint">Nothing automatic is holding it.</div>')
+    + (auto ? '<div class="wautos">' + auto + '</div>' : '')
     + '<div class="wticks">' + boxes + '</div>'
-    + '<textarea id="waitOther_' + claimId + '" rows="2" maxlength="300" placeholder="Other - say why, in your own words" '
+    + '<textarea id="waitOther_' + claimId + '" rows="2" maxlength="' + (lim.other || 300) + '" placeholder="Other - say why, in your own words" '
     + 'style="width:100%;display:' + (ticked.other ? 'block' : 'none') + '">' + esc(other) + '</textarea>'
     + '<button class="btn-sm btn-primary" style="margin-top:.35rem" onclick="waitSave(' + claimId + ')">Save</button> '
     + '<span id="waitMsg_' + claimId + '" style="font-size:.78rem"></span>';
 }
+const _waitDocs = {};
+function waitDocsRefill(claimId){
+  const ta = document.getElementById('waitDocs_' + claimId), s = _waitDocs[claimId];
+  if (ta && s) ta.value = (s.missing || []).join('\n');
+}
+function _waitNorm(t){ return String(t || '').split('\n').map(function(x){ return x.trim(); }).filter(Boolean).join('\n'); }
 async function waitSave(claimId){
   const el = document.getElementById('waitBox_' + claimId); if (!el) return;
-  const keys = Array.from(el.querySelectorAll('.wticks input:checked')).map(function(x){ return x.value; });
+  const picked = Array.from(el.querySelectorAll('.wticks input:checked')).map(function(x){ return x.value; });
+  let keys = picked.slice();
   const note = ((document.getElementById('waitOther_' + claimId) || {}).value || '').trim();
+  const docs = _waitNorm((document.getElementById('waitDocs_' + claimId) || {}).value);
+  const s = _waitDocs[claimId] || {};
   const m = document.getElementById('waitMsg_' + claimId);
-  if (keys.indexOf('other') >= 0 && note.length < 3){ if (m){ m.style.color='var(--nd-danger-text)'; m.textContent = "Say why in your own words for 'Other'."; } return; }
-  const r = await API('/claims/' + claimId + '/waiting', {method:'POST', body: JSON.stringify({keys: keys, note: note})});
+  const say = function(t, col){ if (m){ m.style.color = col; m.textContent = t; } };
+  if (keys.indexOf('other') >= 0 && note.length < 3){ say("Say why in your own words for 'Other'.", 'var(--nd-danger-text)'); return; }
+  if (keys.indexOf('docs_pending') >= 0){
+    // Unchanged from what the checklist already says, and not a list somebody wrote: it is the
+    // automatic reason, so nothing is stored - it follows the checklist by itself.
+    if (!s.mine && s.auto && docs === _waitNorm((s.missing || []).join('\n'))) keys = keys.filter(function(k){ return k !== 'docs_pending'; });
+    else if (docs.length < 3){ say('List the documents still pending.', 'var(--nd-danger-text)'); return; }
+  }
+  const r = await API('/claims/' + claimId + '/waiting', {method:'POST',
+    body: JSON.stringify({keys: keys, note: note, notes: {other: note, docs_pending: docs}})});
   const d = await r.json().catch(function(){ return {}; });
-  if (!r.ok){ if (m){ m.style.color='var(--nd-danger-text)'; m.textContent = _l2Err(d, 'Could not save'); } return; }
-  if (m){ m.style.color='var(--nd-success-text)'; m.textContent = 'Saved'; }
-  waitLoad(claimId);
+  if (!r.ok){ say(_l2Err(d, 'Could not save'), 'var(--nd-danger-text)'); return; }
+  await waitLoad(claimId);
+  const m2 = document.getElementById('waitMsg_' + claimId);   // the box was redrawn
+  if (!m2) return;
+  if (s.auto && picked.indexOf('docs_pending') < 0){
+    // Unticked while the checklist is still short: say why it is ticked again, and where to fix it.
+    m2.style.color = 'var(--nd-warning-text)';
+    m2.textContent = 'Saved. Documents pending stays while the checklist has missing papers - tick what has arrived in 📂 Documents.';
+  } else {
+    m2.style.color = 'var(--nd-success-text)';
+    m2.textContent = 'Saved';
+  }
 }
-window.waitLoad = waitLoad; window.waitSave = waitSave;
+window.waitLoad = waitLoad; window.waitSave = waitSave; window.waitDocsRefill = waitDocsRefill;
 
 // THE CLAIM'S WHATSAPP (founder, 2 Oct: "make it as original messaging box as we have outside ...
 // like a real whatsapp window inside the claim"). The same messages as the inbox, the same bubbles
@@ -15508,9 +15628,7 @@ window.l2WaitFilter = l2WaitFilter;
 function l2Table(b){
   // One page key per BUCKET: paging Live Cases must not leave you on page 3 of Escalation.
   const _pk = 'bucket:' + (b.bucket_key || '');
-  const _allRows = (_l2Rows || []).filter(function(i){
-    return !_l2WaitOn || (i.waits || []).some(function(w){ return w.key === _l2WaitOn; });
-  });
+  const _allRows = (_l2Rows || []).filter(function(i){ return _waitMatch(i, _l2WaitOn); });
   const rows = pageSlice(_pk, _allRows).map(function(i){
     const mv = (b.moves || []);
     const fwd = mv.filter(function(x){ return x.kind === 'forward'; })[0];
@@ -19608,7 +19726,7 @@ window.deskAssign=deskAssign;
 //
 // Cards rather than a table at every width — a case carries several flags at once, and a table
 // wide enough to hold them would scroll sideways on a phone. Cards read the same on both.
-let _cbState = {blocker:'', stage:'', flag:'', mine:false};
+let _cbState = {blocker:'', stage:'', flag:'', wait:'', mine:false};
 let _cbBusy = false;
 let _cbLast = {};        // the last board response — the action sheet reads the case from here
 
@@ -19707,6 +19825,7 @@ async function cbRefresh(){
     if (_cbState.stage)   q.set('stage', _cbState.stage);
     if (_cbState.blocker) q.set('blocker', _cbState.blocker);
     if (_cbState.flag)    q.set('flag', _cbState.flag);
+    if (_cbState.wait)    q.set('wait', _cbState.wait);
     if (_cbState.mine)    q.set('mine', '1');
     const r = await API('/cases/board?' + q.toString());
     if (!r.ok) throw new Error('load');
@@ -19794,9 +19913,13 @@ function cbRender(d){
 
   // ── filters. Only offer a chip that would actually match something ──
   const f = document.getElementById('cbFilters');
+  _setWaitReasons(d.wait_reasons);
   if (f){
-    let who = '<div class="cb-fgroup"><span class="lbl">Waiting on</span>'
-      + _cbChip('Everything', d.open_total||0, !_cbState.blocker, "cbSet('blocker','')");
+    // "Next move with" is WHO owes the next step; "Waiting on" is WHAT we are waiting for - the
+    // same reasons, chips and filter as every other claim list (3 Oct). Both used to be called
+    // "Waiting on", which made two different questions look like one.
+    let who = '<div class="cb-fgroup"><span class="lbl">Next move with</span>'
+      + _cbChip('Everyone', d.open_total||0, !_cbState.blocker, "cbSet('blocker','')");
     ['none','internal','complainant','insurer','lokpal','hold'].forEach(function(k){
       if (!byB[k]) return;
       const nice = {none:'Us', internal:'A reviewer here', complainant:'The complainant',
@@ -19824,19 +19947,29 @@ function cbRender(d){
     });
     prob += '</div>';
 
+    const byW = d.by_wait || {};
+    let wt = '<div class="cb-fgroup"><span class="lbl">Waiting on</span>'
+      + _cbChip('Anything', null, !_cbState.wait, "cbSet('wait','')");
+    (_waitReasons || []).forEach(function(o){
+      if (!byW[o.key] && _cbState.wait !== o.key) return;
+      const nm = (_ndLang() === 'hi' && o.label_hi) ? o.label_hi : o.label;
+      wt += _cbChip(esc(nm), byW[o.key] || 0, _cbState.wait === o.key, "cbSet('wait','" + o.key + "')");
+    });
+    wt += '</div>';
+
     const mine = '<div class="cb-fgroup"><span class="lbl">Show</span>'
       + _cbChip('Everyone&rsquo;s cases', null, !_cbState.mine, "cbSet('mine',false)")
       + _cbChip('Only mine', _cbState.mine ? (d.mine_total||0) : null, _cbState.mine, "cbSet('mine',true)")
       + '</div>';
 
-    f.innerHTML = who + stg + prob + mine;
+    f.innerHTML = who + wt + stg + prob + mine;
   }
 
   // ── the list ──
   const body = document.getElementById('cbBody');
   const items = d.items || [];
   if (!items.length){
-    const filtered = _cbState.stage || _cbState.blocker || _cbState.flag || _cbState.mine;
+    const filtered = _cbState.stage || _cbState.blocker || _cbState.flag || _cbState.wait || _cbState.mine;
     body.innerHTML = filtered
       ? '<div class="cb-empty"><span class="ei">🔍</span>No cases match these filters.'
         + '<div style="margin-top:.5rem"><button class="btn-sm btn-ghost" onclick="cbClear()">Clear filters</button></div></div>'
@@ -19876,7 +20009,7 @@ function cbRender(d){
         const who = (it.who || '').trim() || '(name not recorded)';
         const wait = ours
           ? `<span class="cb-b cb-b-ours">${it.blocker==='internal'?'With a reviewer':'Ours to move'}</span>`
-          : `<span class="cb-b cb-b-wait">Waiting: ${esc((L.blocker[it.blocker]||it.blocker).replace(/^The /,''))}</span>`;
+          : `<span class="cb-b cb-b-wait">Next move: ${esc((L.blocker[it.blocker]||it.blocker).replace(/^The /,''))}</span>`;
         const age = it.age_days == null ? ''
           : (it.over_by > 0
               ? `<span class="cb-age"><b>${it.age_days}d</b> · ${it.over_by}d over</span>`
@@ -19902,6 +20035,7 @@ function cbRender(d){
             ${bits.length?`<div class="cb-meta" onclick="openClaimDrawer(${it.claim_id})">${bits.join(' · ')}</div>`:''}
             <div class="cb-row"><span class="cb-b cb-b-stage">${esc(L.stage[it.stage]||it.stage)}</span>${wait}${age}</div>
             ${(flags||docs)?`<div class="cb-row">${flags}${docs}</div>`:''}
+            ${_waitChips(it.waits)}
             ${note}
             <div class="cb-acts">
               <button type="button" class="cb-act" onclick="openClaimDrawer(${it.claim_id})">Open case</button>
@@ -19927,7 +20061,7 @@ window.cbSetView = cbSetView;
 function _cbWaitLabel(it, L){
   const ours = it.blocker === 'none' || it.blocker === 'internal';
   if (ours) return it.blocker === 'internal' ? 'With a reviewer' : 'Ours to move';
-  return 'Waiting: ' + ((L.blocker[it.blocker] || it.blocker) || '').replace(/^The /, '');
+  return 'Next move: ' + ((L.blocker[it.blocker] || it.blocker) || '').replace(/^The /, '');
 }
 
 function _cbTable(items, L, flagName){
@@ -19944,6 +20078,7 @@ function _cbTable(items, L, flagName){
       + '<td style="white-space:nowrap">NP-' + it.claim_id + '</td>'
       + '<td><b>' + esc((it.who || '').trim() || '(name not recorded)') + '</b>'
       +   (it.insurer ? '<br><span style="font-size:.72rem;color:var(--nd-text-faint)">' + esc(it.insurer) + '</span>' : '')
+      +   _waitChips(it.waits)
       + '</td>'
       + '<td>' + esc(L.stage[it.stage] || it.stage || '') + '</td>'
       + '<td style="' + (ours ? '' : 'color:var(--nd-warning-text)') + '">' + esc(_cbWaitLabel(it, L)) + '</td>'
@@ -19956,7 +20091,7 @@ function _cbTable(items, L, flagName){
       + '</tr>';
   };
   return '<div class="table-wrap" style="margin-top:.6rem"><table class="claims-tbl">'
-    + '<thead><tr><th>#</th><th>Who</th><th>Stage</th><th>Waiting on</th><th>Age</th>'
+    + '<thead><tr><th>#</th><th>Who</th><th>Stage</th><th>Next move with</th><th>Age</th>'
     +   '<th>Docs</th><th>Disputed</th><th>Flags</th><th></th></tr></thead>'
     + '<tbody>' + items.map(row).join('') + '</tbody></table></div>';
 }
@@ -19992,6 +20127,7 @@ function _cbKanban(items, L, flagName){
                 + (it.docs && it.docs.total
                     ? '<div style="font-size:.72rem;color:var(--nd-text-faint)">Documents '
                       + it.docs.done + '/' + it.docs.total + '</div>' : '')
+                + _waitChips(it.waits)
                 + '</div>';
             }).join('')
           + '</div>';
@@ -20006,7 +20142,7 @@ function cbSet(k, v){
   cbRefresh();
 }
 function cbClear(){
-  _cbState = {blocker:'', stage:'', flag:'', mine:false};
+  _cbState = {blocker:'', stage:'', flag:'', wait:'', mine:false};
   try{ const kk = _ndKeepGet(); if (kk.cbBy) delete kk.cbBy[_l2Sel || 'all']; _ndKeepPut(kk); }catch(e){}
   cbRefresh();
 }
