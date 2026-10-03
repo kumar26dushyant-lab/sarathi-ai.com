@@ -1,5 +1,29 @@
 # Staff Announcement Drafts
 
+## 2026-10-03 (evening) — DOCUMENTS PENDING, AND "WAITING ON" EVERYWHERE  ← SEND AFTER THIS DEPLOY
+
+_For: all staff. Not yet sent - send only after the deploy is verified._
+
+**EN**
+
+📄 *Why is this claim waiting? - two improvements*
+
+• *Documents pending* is now the first reason on every claim. When papers are missing on the checklist, it is ticked for you and its box lists them. Know of a paper the checklist does not name? Add it to the list and press *Save* - your list is kept with your name. "↻ Fill from the checklist" brings the checklist's list back.
+• The same labels and the same *Waiting on* filter are now on *All Claims, Level-2 Claims, every bucket and the case board* - with a count beside each choice. Use *Waiting on: Nothing recorded* to find claims where nobody has said why they are waiting.
+• On the case board, the old "Waiting on" is now called *Next move with* (who must act next). It follows what you tick.
+• *Doc Splitter*: "Choose file(s)" works again.
+• *All Claims* now shows every claim (it stopped at 200 before).
+
+**HI**
+
+📄 *यह क्लेम क्यों रुका है? - दो सुधार*
+
+• हर क्लेम पर अब सबसे पहला कारण *दस्तावेज़ बाकी* है। चेकलिस्ट में कागज़ बाकी हों तो यह अपने-आप टिक रहता है और बॉक्स में उनकी सूची आ जाती है। कोई ऐसा कागज़ बाकी है जो चेकलिस्ट में नहीं? सूची में जोड़ें और *Save* दबाएँ - आपकी सूची आपके नाम से रहेगी। "↻ Fill from the checklist" से चेकलिस्ट वाली सूची वापस आ जाती है।
+• वही लेबल और वही *Waiting on (किसका इंतज़ार)* फ़िल्टर अब *सभी क्लेम, लेवल-2 क्लेम, हर बकेट और केस बोर्ड* पर है - हर विकल्प के साथ गिनती। *Nothing recorded* चुनें तो वे क्लेम दिखेंगे जिन पर किसी ने कारण नहीं लिखा।
+• केस बोर्ड पर पुराना "Waiting on" अब *Next move with (अगला कदम किसका)* है। यह आपके टिक के हिसाब से चलता है।
+• *Doc Splitter*: "Choose file(s)" फिर से काम करता है।
+• *सभी क्लेम* में अब हर क्लेम दिखता है (पहले 200 पर रुक जाता था)।
+
 ## 2026-10-03 — PLANS, NEW CLAIMS AND PAYMENT MESSAGES  ← SEND AFTER THE 3 OCT DEPLOY
 
 _For: all staff and Authorized Partners. Not yet sent - send only after the deploy is verified._
