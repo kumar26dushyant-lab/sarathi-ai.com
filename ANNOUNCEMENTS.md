@@ -1,5 +1,29 @@
 # Staff Announcement Drafts
 
+## 2026-10-04 — BIGGER DOCUMENTS: UP TO 95 MB EACH  ← SEND AFTER THE DEPLOY
+
+_For: all staff and Authorized Partners. Not yet sent - send only after the deploy is verified._
+
+**EN**
+
+📎 *Documents can now be up to 95 MB each* (it was 25 MB)
+
+• Everywhere: claim documents, the rejection letter, the Doc Splitter, the claim page, the AP portal and files that arrive on WhatsApp.
+• Choose several big files at once - they are sent in parts automatically. If one does not go, the screen names it.
+• A file over 95 MB is stopped before upload, with the reason. Send it as a PDF, or in parts.
+• *Telegram* still takes only 20 MB per file (Telegram's own rule) - for bigger files use the website.
+• *WhatsApp* takes photos up to 5 MB and videos up to 16 MB (WhatsApp's rule); documents up to 95 MB.
+
+**HI**
+
+📎 *अब हर दस्तावेज़ 95 MB तक का हो सकता है* (पहले 25 MB था)
+
+• हर जगह: क्लेम दस्तावेज़, रिजेक्शन लेटर, Doc Splitter, क्लेम पेज, AP पोर्टल और व्हाट्सऐप पर आई फ़ाइलें।
+• एक साथ कई बड़ी फ़ाइलें चुनें - वे अपने-आप हिस्सों में जाती हैं। कोई न जाए तो स्क्रीन उसका नाम बताती है।
+• 95 MB से बड़ी फ़ाइल अपलोड से पहले ही रुक जाती है, कारण के साथ। उसे PDF में या हिस्सों में भेजें।
+• *टेलीग्राम* पर अब भी एक फ़ाइल 20 MB तक ही (टेलीग्राम का नियम) - बड़ी फ़ाइल वेबसाइट से भेजें।
+• *व्हाट्सऐप* पर फ़ोटो 5 MB और वीडियो 16 MB तक (व्हाट्सऐप का नियम); दस्तावेज़ 95 MB तक।
+
 ## 2026-10-03 (evening) — DOCUMENTS PENDING, AND "WAITING ON" EVERYWHERE  ← SEND AFTER THIS DEPLOY
 
 _For: all staff. Not yet sent - send only after the deploy is verified._
