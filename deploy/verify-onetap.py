@@ -23,7 +23,10 @@ for f in pages:
     if TALKS.search(t) and "/static/nidaan_onetap.js" not in t:
         bad.append(os.path.basename(f))
 guard = io.open(os.path.join(ROOT, "static", "nidaan_onetap.js"), encoding="utf-8").read()
-for must in ("addEventListener('click'", "XMLHttpRequest.prototype.send", "window.fetch = function", ".nd-working"):
+# The last two keep file pickers and tick boxes working: without them the guard swallows the
+# click a <label> sends on to its control (the Doc Splitter's dead "Choose file(s)", 3 Oct).
+for must in ("addEventListener('click'", "XMLHttpRequest.prototype.send", "window.fetch = function", ".nd-working",
+             "btn.tagName === 'LABEL'", "select, textarea, option"):
     if must not in guard:
         bad.append("nidaan_onetap.js lost: " + must)
 for b in bad:

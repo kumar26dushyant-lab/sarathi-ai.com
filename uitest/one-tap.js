@@ -24,9 +24,12 @@ const page_html = `<!doctype html><meta charset="utf-8"><body>
 <button id="opens" onclick="openDlg()">Opens a dialog</button>
 <div id="dlg"></div>
 <table><tr id="row" onclick="go('row')"><td>NP-1</td></tr></table>
+<label class="btn btn-primary" id="pick">Choose file(s)<input id="pickf" type="file" style="display:none"></label>
+<label class="btn" id="pick2" for="pickf2">Attach</label><input id="pickf2" type="file" style="display:none">
+<table><tr id="row2" onclick="go('row2')"><td><input type="checkbox" id="tick" onclick="event.stopPropagation()"></td></tr></table>
 <div id="out"></div>
 <script>
-window.calls = {slow:0, rapid:0, other:0, ui:0, hang:0, row:0};
+window.calls = {slow:0, rapid:0, other:0, ui:0, hang:0, row:0, row2:0};
 window.sent = 0;
 // A request that takes 600ms, like a move on a slow phone.
 function go(k){ window.calls[k]++; window.sent++;
@@ -130,6 +133,26 @@ const check = (label, ok) => { console.log((ok ? '  PASS  ' : '  FAIL  ') + labe
   await page.click('#yes');
   check('but a real click a moment later does',
         (await page.evaluate(() => window.confirmed)) === 1);
+
+  console.log('\nA file picker behind a button-styled label opens (the Doc Splitter, 3 Oct)\n');
+  // A label sends a SECOND click to its file input straight after the first. The guard took that
+  // for a double tap and cancelled it, so "Choose file(s)" did nothing at all.
+  for (const [sel, what] of [['#pick', 'a label wrapping the picker'], ['#pick2', 'a label pointing at the picker']]) {
+    let opened = false;
+    const on = () => { opened = true; };
+    page.on('filechooser', on);
+    await page.click(sel);
+    await page.waitForTimeout(700);
+    page.off('filechooser', on);
+    check('the file picker opens from ' + what, opened);
+  }
+
+  console.log('\nTick boxes are never held\n');
+  await page.waitForTimeout(300);
+  await page.click('#tick');
+  await page.waitForTimeout(60);
+  await page.click('#tick');
+  check('two quick ticks both land (on, then off)', (await page.evaluate(() => document.getElementById('tick').checked)) === false);
 
   console.log('\nSomething that asks to stay rapid, stays rapid\n');
   for (let i = 0; i < 3; i++) { await page.click('#rapid'); await page.waitForTimeout(30); }

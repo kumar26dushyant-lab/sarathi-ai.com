@@ -64,6 +64,13 @@
   }
 
   document.addEventListener('click', function(e){
+    // A click that lands on a form control (a file picker, a tick box, a dropdown) is the browser
+    // carrying the person's own tap to it - often sent on by a <label> styled as a button, as a
+    // second click straight after the first. Swallowing it as a "double tap" is what stopped the
+    // Doc Splitter's file picker opening (3 Oct). Controls are never held.
+    const tgt = e.target;
+    if (tgt && tgt.matches && tgt.matches(
+        'input:not([type=submit]):not([type=button]):not([type=image]):not([type=reset]), select, textarea, option')) return;
     // Buttons, and the other things people actually tap on these screens: a claim row, a board
     // or task card, a tab. closest() finds the NEAREST one, so a button inside a clickable row
     // is guarded as the button, not as the row.
@@ -72,6 +79,8 @@
                        + 'tr[onclick], td[onclick], .board-card, .task-card, .tab-pill, .wai-row')
       : null;
     if (!btn) return;
+    // A label does nothing itself - it hands the tap to its control, which is checked above.
+    if (btn.tagName === 'LABEL') return;
     if (btn.dataset.ndRapid === '1' || btn.hasAttribute('data-nd-rapid')) return;
 
     // A dialog that has only just appeared, under a finger still coming down. Or already
