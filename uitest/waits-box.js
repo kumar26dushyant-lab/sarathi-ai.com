@@ -123,6 +123,20 @@ async function API(u, o){ return fetch('/api' + u, o); }
   check('"Documents pending" counts the automatic reason and a list staff wrote', /Documents pending \(2\)/.test(sel), sel);
   check('"Nothing recorded" counts the claim nobody has said anything about', /Nothing recorded \(1\)/.test(sel), sel);
 
+  console.log('\nThe website\'s Hindi does not leak into ops (4 Oct)\n');
+  // The website and the staff SOP keep their own Hindi switch in 'nidaan_lang'. A phone that had
+  // read the SOP in Hindi showed ops' waiting filter in Hindi beside English everything else.
+  const leak = await page.evaluate(() => {
+    localStorage.setItem('nidaan_lang', 'hi');
+    const out = _waitFilterHtml([{waits: []}], '', 'f(this.value)')
+      + _waitChips([{key: 'fee', label: 'L2 fee unpaid', label_hi: 'L2 फ़ीस बाकी', auto: true}]);
+    localStorage.removeItem('nidaan_lang');
+    return out;
+  });
+  check('with the website set to Hindi, the ops filter still reads in English',
+        /Waiting on: anything/.test(leak) && !/किसका इंतज़ार/.test(leak), leak.slice(0, 120));
+  check('...and so do the chips', /L2 fee unpaid/.test(leak) && !/फ़ीस बाकी/.test(leak));
+
   console.log('\nAt phone width\n');
   state = SHORT;
   await load();

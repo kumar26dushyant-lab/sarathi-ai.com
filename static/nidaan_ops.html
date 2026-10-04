@@ -12637,7 +12637,7 @@ async function loadNotificationRegistry(){
 
   let d;
   try{
-    const r = await API('/notifications/registry?lang=' + (localStorage.getItem('nidaan_lang')==='hi'?'hi':'en'));
+    const r = await API('/notifications/registry?lang=' + (_ndLang()==='hi'?'hi':'en'));
     if (!r.ok) throw 0;
     d = await r.json();
   }catch(e){
@@ -15443,7 +15443,11 @@ function _waitFilterHtml(rows, cur, onchange, counts){
     + '</select>';
 }
 window._waitMatch = _waitMatch; window._waitFilterHtml = _waitFilterHtml; window._setWaitReasons = _setWaitReasons;
-function _ndLang(){ try{ return (localStorage.getItem('nidaan_lang') || 'en').slice(0,2); }catch(e){ return 'en'; } }
+// The OPS language - its own key. It read 'nidaan_lang', which the customer pages and the staff SOP
+// pages set with their own Hindi switch on the same site, so a phone that had once read the SOP in
+// Hindi showed ops' waiting chips and filters in Hindi beside English everything else (4 Oct).
+// Ops has no language switch yet, so this is English unless 'nidaan_ops_lang' is ever set.
+function _ndLang(){ try{ return (localStorage.getItem('nidaan_ops_lang') || 'en').slice(0,2); }catch(e){ return 'en'; } }
 // The tick box, on the case sheet and in the claim drawer.
 async function waitLoad(claimId){
   const el = document.getElementById('waitBox_' + claimId); if (!el) return;
