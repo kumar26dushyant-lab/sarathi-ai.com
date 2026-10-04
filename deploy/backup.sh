@@ -67,7 +67,7 @@ if [ "$(sqlite3 "$TMP_DB" 'PRAGMA quick_check;' 2>&1)" != "ok" ]; then
     log "DATABASE COPY FAILED ITS INTEGRITY CHECK - not kept."
     rm -f "$TMP_DB"; FAILED=1
 else
-    gzip -c "$TMP_DB" > "${DB_GZ}.part" && mv "${DB_GZ}.part" "$DB_GZ"
+    gzip -9 -c "$TMP_DB" > "${DB_GZ}.part" && mv "${DB_GZ}.part" "$DB_GZ"   # smallest gzip makes
     rm -f "$TMP_DB"
     log "[1/3] Database: $(du -h "$DB_GZ" | cut -f1) ($(basename "$DB_GZ"))"
 fi
@@ -85,6 +85,11 @@ if [ "$LOCAL_OK" = 1 ]; then
             rsync -a "$SARATHI_DIR/$DIR/" "$SNAP.partial/$DIR/"
         fi
     done
+    # The same paper attached to two claims is two files (10% of the space, measured 4 Oct). Inside
+    # this BACKUP copy only - never the live uploads - identical files become one, linked twice.
+    if command -v hardlink >/dev/null 2>&1; then
+        hardlink -q -c "$SNAP.partial" >/dev/null 2>&1 || log "NOTE: de-duplicating the snapshot did not finish - it is still a complete copy"
+    fi
     mv "$SNAP.partial" "$SNAP"
     log "[2/3] Files snapshot: $(basename "$SNAP") ($(du -sh "$SNAP" | cut -f1) on its own; unchanged files are shared)"
 fi

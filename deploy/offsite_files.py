@@ -46,11 +46,14 @@ import subprocess
 import sys
 import tempfile
 import time
+import zlib
 from datetime import datetime, timezone
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-MAGIC = b"NPB1"
+MAGIC = b"NPB1"        # encrypted as it is
+MAGIC_Z = b"NPB2"      # compressed, then encrypted (since 4 Oct)
+MAX_RESTORE_BYTES = 512 * 1024 * 1024
 PREFIX = "v1"
 # What is backed up, relative to the app folder. Claim papers live in uploads/nidaan-docs.
 FOLDERS = ("uploads", "generated_pdfs", "generated_videos")
@@ -142,20 +145,43 @@ class Keys:
         m = hashlib.scrypt(passphrase.encode("utf-8"), salt=salt, **SCRYPT)
         self.enc, self.name = m[:32], m[32:]
 
-    def seal(self, obj: str, data: bytes) -> bytes:
+    def seal(self, obj: str, data: bytes, compress: bool = False) -> bytes:
+        """Encrypt. compress=True squeezes it first (zlib, level 9) - but only when that actually
+        saves something: photos and scanned PDFs are already compressed, and a quick probe of the
+        first megabyte stops us burning the CPU on them (measured 4 Oct: ~4.5% overall)."""
+        magic, payload = MAGIC, data
+        if compress and len(data) > 1024:
+            head = data[:1 << 20]
+            if len(zlib.compress(head, 6)) < 0.97 * len(head):
+                z = zlib.compress(data, 9)
+                if len(z) < 0.98 * len(data):
+                    magic, payload = MAGIC_Z, z
         nonce = os.urandom(12)
-        return MAGIC + nonce + AESGCM(self.enc).encrypt(nonce, data, obj.encode("utf-8"))
+        return magic + nonce + AESGCM(self.enc).encrypt(nonce, payload, obj.encode("utf-8"))
 
     def open(self, obj: str, blob: bytes) -> bytes:
-        if not blob or blob[:4] != MAGIC:
+        if not blob or blob[:4] not in (MAGIC, MAGIC_Z):
             raise BackupError("%s is not one of our backup objects." % obj)
         try:
-            return AESGCM(self.enc).decrypt(blob[4:16], blob[16:], obj.encode("utf-8"))
+            out = AESGCM(self.enc).decrypt(blob[4:16], blob[16:], obj.encode("utf-8"))
         except Exception:
             raise BackupError("%s did not decrypt - wrong passphrase or a damaged object." % obj)
+        if blob[:4] == MAGIC_Z:
+            # Bounded: authenticated, so ours - but never let one object balloon without limit.
+            d = zlib.decompressobj()
+            out = d.decompress(out, MAX_RESTORE_BYTES)
+            if d.unconsumed_tail:
+                raise BackupError("%s expands beyond any file we keep." % obj)
+        return out
 
     def object_name(self, rel: str, sha: str) -> str:
+        """Objects uploaded before 4 Oct were named by path + contents. Still read, never renamed."""
         return hmac.new(self.name, (rel + "\0" + sha).encode("utf-8"), hashlib.sha256).hexdigest() + ".npb"
+
+    def content_name(self, sha: str) -> str:
+        """Since 4 Oct: named by CONTENTS alone, so the same paper on two claims (10% of files,
+        measured) is one object off-site, not two."""
+        return hmac.new(self.name, ("content\0" + sha).encode("utf-8"), hashlib.sha256).hexdigest() + ".npb"
 
 
 def keys_for(remote: Remote, passphrase: str, create: bool) -> Keys:
@@ -180,8 +206,8 @@ def save_manifest(remote: Remote, k: Keys, man: dict) -> None:
     data = json.dumps(man, separators=(",", ":")).encode("utf-8")
     # A dated copy first, then the current one: a manifest is never lost to a failed overwrite.
     day = datetime.now(timezone.utc).strftime("%Y%m%d")
-    remote.put("manifests/manifest-%s.npb" % day, k.seal("manifests/manifest-%s.npb" % day, data))
-    remote.put("manifest.npb", k.seal("manifest.npb", data))
+    remote.put("manifests/manifest-%s.npb" % day, k.seal("manifests/manifest-%s.npb" % day, data, compress=True))
+    remote.put("manifest.npb", k.seal("manifest.npb", data, compress=True))
 
 
 def _sha(path: str) -> str:
@@ -216,8 +242,13 @@ def push(app: str, remote: Remote, passphrase: str, state_path: str) -> dict:
     except (OSError, ValueError):
         state = {}
     staging = tempfile.mkdtemp(prefix="npb_stage_", dir=os.path.dirname(state_path) or None)
-    new, same, seen = 0, 0, set()
+    new, same, seen, shared = 0, 0, set(), 0
     pending = {}
+    # Every object the backup already holds - a file whose contents are already off-site (the same
+    # paper on another claim) is recorded against that object instead of being sent again.
+    held = {e.get("obj") for e in man["files"].values()} | {e.get("obj") for e in man["gone"].values()}
+    for vs in (man.get("versions") or {}).values():
+        held |= {e.get("obj") for e in vs}
     try:
         for rel, full in _walk(app):
             seen.add(rel)
@@ -233,19 +264,26 @@ def push(app: str, remote: Remote, passphrase: str, state_path: str) -> dict:
                 state[rel] = sig + [sha]          # touched, not changed
                 same += 1
                 continue
-            obj = k.object_name(rel, sha)
-            with open(full, "rb") as f:
-                data = f.read()
-            if hashlib.sha256(data).hexdigest() != sha:
-                continue                          # changed while we read it - next run takes it
-            with open(os.path.join(staging, obj), "wb") as f:
-                f.write(k.seal("f/" + obj, data))
-            pending[rel] = {"obj": obj, "sha": sha, "size": len(data),
+            obj = k.content_name(sha)
+            size = st.st_size
+            if obj in held:
+                shared += 1                       # these exact contents are already off-site
+            else:
+                with open(full, "rb") as f:
+                    data = f.read()
+                if hashlib.sha256(data).hexdigest() != sha:
+                    continue                      # changed while we read it - next run takes it
+                with open(os.path.join(staging, obj), "wb") as f:
+                    f.write(k.seal("f/" + obj, data, compress=True))
+                held.add(obj)
+                size = len(data)
+            pending[rel] = {"obj": obj, "sha": sha, "size": size,
                             "at": datetime.now(timezone.utc).strftime("%Y-%m-%d")}
             state[rel] = sig + [sha]
             new += 1
         if pending:
-            remote.put_dir(staging, "f")
+            if os.listdir(staging):               # nothing to send when every new file was a copy
+                remote.put_dir(staging, "f")
             for rel, e in pending.items():
                 old = man["files"].get(rel)
                 if old:                           # the earlier version stays off-site, listed
@@ -263,7 +301,7 @@ def push(app: str, remote: Remote, passphrase: str, state_path: str) -> dict:
         os.replace(tmp, state_path)
     finally:
         shutil.rmtree(staging, ignore_errors=True)   # our own scratch, encrypted copies only
-    return {"new": new, "unchanged": same, "files": len(man["files"]), "gone": len(man["gone"])}
+    return {"new": new, "shared": shared, "unchanged": same, "files": len(man["files"]), "gone": len(man["gone"])}
 
 
 # ── the database: one copy a night, seven kept ───────────────────────────────
@@ -279,7 +317,7 @@ def push_db(path: str, remote: Remote, passphrase: str, now: datetime | None = N
     k = keys_for(remote, passphrase, create=True)
     now = now or datetime.now(timezone.utc)
     obj = "db/sarathi_biz_%s.db.gz.npb" % now.strftime("%Y%m%d_%H%M%S")
-    remote.put(obj, k.seal(obj, data))
+    remote.put(obj, k.seal(obj, data, compress=True))
     # The newest seven stay; older ones go - ONLY our own dated database copies in db/. By count,
     # not age: if nights are missed, the last good copies are never aged out from under us.
     ours = sorted(n for n in remote.list("db") if n.startswith("sarathi_biz_") and n.endswith(".db.gz.npb"))

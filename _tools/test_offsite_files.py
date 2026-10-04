@@ -154,6 +154,48 @@ r = of.restore(os.path.join(base, "restored2"), remote, PP, with_db=True)
 check("restore can bring back the latest database, as a separate file",
       r["db"] and open(r["db"], "rb").read().startswith(b"SQLite format 3\0"), r)
 
+print("\n-- saving space (4 Oct: compress what shrinks, store each paper once) --")
+app2, rem2 = os.path.join(base, "app2"), os.path.join(base, "remote2")
+st2 = os.path.join(app2, "backups", "offsite", "state.json")
+os.makedirs(os.path.dirname(st2))
+same_paper = b"%PDF-1.4 discharge summary " + os.urandom(30000)
+write(os.path.join(app2, "uploads", "nidaan-docs", "claim1-copy.pdf"), same_paper)
+write(os.path.join(app2, "uploads", "nidaan-docs", "claim2-copy.pdf"), same_paper)
+text_like = (b"Hospital bill line item: ward charges 1500.00 INR per day\n" * 4000)
+write(os.path.join(app2, "uploads", "nidaan-docs", "bill.txt"), text_like)
+photo = os.urandom(200000)
+write(os.path.join(app2, "uploads", "nidaan-docs", "photo.jpg"), photo)
+r2 = of.Remote("dir:" + rem2)
+res = of.push(app2, r2, PP, st2)
+objs2 = os.listdir(os.path.join(rem2, "v1", "f"))
+check("the same paper on two claims is stored ONCE off-site", res["shared"] == 1 and len(objs2) == 3, (res, len(objs2)))
+k2 = of.keys_for(r2, PP, False)
+m2 = of.load_manifest(r2, k2)
+bill_obj = os.path.join(rem2, "v1", "f", m2["files"]["uploads/nidaan-docs/bill.txt"]["obj"])
+photo_obj = os.path.join(rem2, "v1", "f", m2["files"]["uploads/nidaan-docs/photo.jpg"]["obj"])
+bill_blob, photo_blob = open(bill_obj, "rb").read(), open(photo_obj, "rb").read()
+check("a file that compresses is stored compressed (and still encrypted)",
+      bill_blob[:4] == b"NPB2" and len(bill_blob) < len(text_like) / 10, (bill_blob[:4], len(bill_blob), len(text_like)))
+check("a photo, already compressed, is stored as it is - no wasted effort", photo_blob[:4] == b"NPB1")
+out2 = os.path.join(base, "restored3")
+rr2 = of.restore(out2, r2, PP)
+check("both paths of the shared paper, the compressed bill and the photo all restore exactly",
+      rr2["restored"] == 4
+      and open(os.path.join(out2, "uploads", "nidaan-docs", "claim2-copy.pdf"), "rb").read() == same_paper
+      and open(os.path.join(out2, "uploads", "nidaan-docs", "bill.txt"), "rb").read() == text_like
+      and open(os.path.join(out2, "uploads", "nidaan-docs", "photo.jpg"), "rb").read() == photo, rr2)
+check("objects written before today (uncompressed, named by path) still open",
+      k2.open("f/x.npb", k2.seal("f/x.npb", b"old style object")) == b"old style object")
+saved_max = of.MAX_RESTORE_BYTES
+of.MAX_RESTORE_BYTES = 1000
+try:
+    k2.open("f/" + os.path.basename(bill_obj), bill_blob)
+    guard = False
+except of.BackupError:
+    guard = True
+of.MAX_RESTORE_BYTES = saved_max
+check("an object that would expand beyond any file we keep is refused", guard)
+
 print("\n-- the real remote's habits --")
 # `rclone cat` of a missing object answers with nothing and success (the Oracle bucket, 3 Oct).
 # That read as an EMPTY salt, so the first copy was encrypted without one. Pretend to be rclone.
